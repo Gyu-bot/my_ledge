@@ -1,4 +1,4 @@
-# AGENTS.md — my_ledge v2
+# AGENTS.md
 
 개인 재무 대시보드. BankSalad 엑셀 내보내기를 데이터 소스로 사용하여 지출 분석과 자산 변동 tracking을 수행한다.
 상세 요구사항은 `PRD.md`를 참조한다.
@@ -11,6 +11,7 @@
 my_ledge/
 ├── AGENTS.md                # 이 파일
 ├── PRD.md                   # 상세 요구사항 문서
+├── STATUS.md                # 작업 현황 (모든 작업자가 읽고 갱신)
 ├── docker-compose.yml
 ├── .env                     # 환경변수 (DB_PASSWORD, EXCEL_PASSWORD 등)
 ├── backend/
@@ -269,3 +270,89 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 - **우리은행 마이너스 통장** — 자유입출금 자산에 음수(-6,093,150)로 잡힌다. 실질적으로 부채.
 - **해외주식 평가액** — 소수점 있음 (예: 9,019,507.114654869). `NUMERIC(15,2)` 사용.
 - **OpenClaw 연동** — 쓰기는 API 전용, 읽기는 PostgreSQL readonly 유저로 직접 SQL 실행 가능 (statement_timeout=30s).
+
+---
+
+## Collaboration Protocol
+
+이 프로젝트는 **사람과 복수의 AI 에이전트(Codex, OpenClaw, Claude 등)가 협업**한다.
+누가 작업하든 컨텍스트가 끊기지 않도록 아래 프로토콜을 **반드시** 따른다.
+
+### STATUS.md — 프로젝트 상태 파일
+
+프로젝트 루트의 `STATUS.md`는 **작업 시작 전 반드시 읽고, 작업 완료 후 반드시 갱신**하는 파일이다.
+
+```markdown
+# STATUS.md
+
+## Current State
+- **Phase:** Phase 1 — 기반 구축
+- **Last Worker:** codex (2026-03-24T14:30+09:00)
+- **Branch:** feat/upload-pipeline
+
+## Completed
+- [x] DB 스키마 설계 (alembic init + 첫 마이그레이션)
+- [x] transactions 모델 구현
+
+## In Progress
+- [ ] 엑셀 파싱 파이프라인 (backend/app/parsers/)
+  - msoffcrypto 복호화 완료
+  - 가계부 내역 파싱 완료
+  - **뱅샐현황 파싱 진행 중** ← 현재 작업 지점
+
+## Blocked
+- 없음
+
+## Next Up
+- 시간 커서 기반 증분 적재 로직
+- 업로드 API 엔드포인트
+
+## Key Decisions
+- 2026-03-24: 뱅샐현황 파싱은 정규식 대신 마커 텍스트 순회 방식 채택 (정규식은 셀 병합 때문에 불안정)
+- 2026-03-24: transactions 테이블 amount는 INTEGER 유지 (원 단위, 소수점 불필요)
+
+## Known Issues
+- openpyxl read_only 모드에서 max_row가 None 반환 — iter_rows로 순회 필요
+```
+
+### 작업 규칙
+
+**작업 시작 시:**
+1. `STATUS.md`를 읽고 현재 상태 파악
+2. `git log --oneline -10`으로 최근 커밋 확인
+3. In Progress 항목 중 자신이 이어받을 작업 확인
+
+**작업 중:**
+- 커밋 메시지 형식: `[영역] 작업 내용 (작업자)`
+  - 예: `[backend] 가계부 파싱 로직 구현 (codex)`
+  - 예: `[frontend] 지출 분석 페이지 레이아웃 (민규)`
+  - 예: `[infra] docker-compose 초기 설정 (openclaw)`
+- 영역 태그: `[backend]`, `[frontend]`, `[infra]`, `[docs]`, `[db]`
+- **설계 결정이 발생하면** Key Decisions에 날짜와 함께 기록 (무엇을, 왜, 대안은 뭐였는지)
+
+**작업 완료 시:**
+1. `STATUS.md` 갱신:
+   - Last Worker, 시간 업데이트
+   - 완료 항목을 Completed로 이동
+   - In Progress 현재 지점 업데이트
+   - 새로 발견한 이슈는 Known Issues에 추가
+   - 다음 작업자가 해야 할 일은 Next Up에 추가
+2. `STATUS.md` 변경도 커밋에 포함
+
+**핸드오프 시 (다른 작업자에게 넘길 때):**
+- In Progress에 **현재 작업 지점을 구체적으로** 표시 (파일명, 함수명, 어디까지 했는지)
+- Blocked가 있으면 원인과 해결 방향 기록
+- "context가 code에만 있고 STATUS.md에 없으면 핸드오프 실패"라고 간주
+
+### git 브랜치 전략
+
+```
+main                    ← 안정 버전, 직접 커밋 금지
+├── feat/upload-pipeline   ← Phase 1 기능
+├── feat/dashboard-core    ← Phase 2 기능
+├── feat/openclaw-integration ← Phase 3 기능
+└── fix/xxx                ← 버그 수정
+```
+
+- 기능 단위로 브랜치 생성, 완료 후 main에 머지
+- 머지 시 STATUS.md도 함께 업데이트
