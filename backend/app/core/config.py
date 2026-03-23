@@ -1,17 +1,27 @@
 from functools import lru_cache
 import json
+from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ROOT_DIR / ".env",
+        extra="ignore",
+    )
 
     database_url: str = Field(validation_alias="DATABASE_URL")
     excel_password: str | None = Field(default=None, validation_alias="EXCEL_PASSWORD")
-    api_key: str = Field(validation_alias="API_KEY")
-    cors_origins: list[str] = Field(default_factory=list, validation_alias="CORS_ORIGINS")
+    api_key: str | None = Field(default=None, validation_alias="API_KEY")
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        validation_alias="CORS_ORIGINS",
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -38,4 +48,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

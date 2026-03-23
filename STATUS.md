@@ -14,10 +14,10 @@
 - [x] Task 1 완료: backend 스캐폴딩 + `/api/v1/health` + 설정/보안 뼈대
 
 ## In Progress
-- [ ] Phase 1 MVP 구현 실행 중
+- [ ] Phase 1 MVP 구현 일시중지
   - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 현재 작업 지점: Task 2 `Define SQLAlchemy models and initial Alembic migration`
-  - 현재 상태: Task 1 완료, 다음 단계 진행 준비
+  - 마지막 완료 작업: Task 1 `Scaffold backend project and runtime configuration`
+  - 현재 상태: Task 1 리뷰 반영까지 완료, 사용자 요청으로 여기서 중단
 
 ## Blocked
 - 없음
