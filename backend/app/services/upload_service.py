@@ -18,6 +18,7 @@ from app.parsers.transactions import TransactionRow, parse_transactions
 
 @dataclass(slots=True)
 class TransactionImportResult:
+    upload_id: int
     tx_total: int
     tx_new: int
     tx_skipped: int
@@ -94,6 +95,7 @@ async def import_transactions_from_workbook(
     await db_session.commit()
 
     return TransactionImportResult(
+        upload_id=upload_log.id,
         tx_total=tx_total,
         tx_new=tx_new,
         tx_skipped=tx_skipped,

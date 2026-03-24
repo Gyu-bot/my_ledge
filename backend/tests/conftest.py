@@ -8,8 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.core.config import get_settings
+from app.core.database import get_db_session
 from app.main import app
 from app.models import Base
+from app.services.upload_service import import_transactions_from_workbook
 
 
 def _sample_workbook_path() -> Path:
@@ -29,14 +32,41 @@ def sample_workbook_bytes() -> bytes:
     return _sample_workbook_path().read_bytes()
 
 
+@pytest.fixture(autouse=True)
+def clear_settings_cache() -> AsyncIterator[None]:
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
-async def async_client() -> AsyncIterator[AsyncClient]:
+def api_headers() -> dict[str, str]:
+    return {"X-API-Key": "test-api-key"}
+
+
+@pytest.fixture
+async def async_client(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncIterator[AsyncClient]:
+    monkeypatch.setenv("API_KEY", "test-api-key")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://user:pass@localhost:5432/my_ledge",
+    )
+    get_settings.cache_clear()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = override_db_session
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
         base_url="http://testserver",
     ) as client:
         yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -57,3 +87,16 @@ async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
         yield session
 
     await engine.dispose()
+
+
+@pytest.fixture
+async def seeded_finance_data(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+) -> None:
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=sample_workbook_bytes,
+        filename="finance_sample.xlsx",
+        snapshot_date=None,
+    )

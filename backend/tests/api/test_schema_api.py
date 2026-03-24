@@ -1,3 +1,5 @@
+from httpx import AsyncClient
+
 from app.models import Base
 
 
@@ -34,3 +36,20 @@ def test_expected_tables_exist() -> None:
         for constraint in loans.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     } == {("snapshot_date", "lender", "product_name")}
+
+
+async def test_schema_endpoint_requires_api_key(async_client: AsyncClient) -> None:
+    response = await async_client.get("/api/v1/schema")
+
+    assert response.status_code == 401
+
+
+async def test_schema_endpoint_returns_tables(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+) -> None:
+    response = await async_client.get("/api/v1/schema", headers=api_headers)
+
+    assert response.status_code == 200
+    assert response.json()["tables"][0]["name"] == "asset_snapshots"
+    assert "transactions" in {table["name"] for table in response.json()["tables"]}
