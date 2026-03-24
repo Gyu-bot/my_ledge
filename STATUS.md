@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T19:54+0900, Task 5 upload/schema/assets API 구현)
+- **Last Worker:** codex (2026-03-24T20:01+0900, Task 6 거래 조회/편집 API 구현)
 - **Branch:** main
 
 ## Completed
@@ -18,22 +18,22 @@
 - [x] Task 4A.1 완료: Docker Compose 기반 PostgreSQL 기동 + migration/import smoke test
 - [x] Task 4B 완료: snapshot 적재 + `partial`/`failed` 업로드 정책 구현
 - [x] Task 5 완료: upload/schema/assets API + 인증/응답 스키마 구현
+- [x] Task 6 완료: 거래 조회/편집 API 구현 (`merge`는 501 stub)
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-24-phase1-task4b-6.md`
-  - 마지막 완료 작업: Task 5 `upload/schema/assets API`
-  - 현재 상태: `backend/app/api/v1/endpoints/upload.py`, `schema.py`, `assets.py` 추가 완료. `POST /api/v1/upload` 와 `GET /api/v1/schema` 는 API key 인증을 강제하고, assets/investments/loans API는 sqlite test DB 기준으로 응답 shape와 집계값 검증 완료
+  - 마지막 완료 작업: Task 6 `transactions query/edit API`
+  - 현재 상태: `backend/app/api/v1/endpoints/transactions.py` 와 `backend/app/services/transactions_service.py` 추가 완료. 조회 필터(`is_edited`, `include_deleted`, `include_merged`, `search`)와 summary/by-category/payment-methods, manual create/patch/delete/restore/bulk-update, merge 501 stub까지 테스트로 검증 완료
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Task 6 실행: 거래 조회/편집 API (`merge`는 501 stub)
-  - 목표: 목록/요약/카테고리/결제수단 조회와 manual create/edit/delete/restore/bulk-update 구현
-  - 우선 파일: `backend/app/api/v1/endpoints/transactions.py`, `backend/app/services/transactions_service.py`, `backend/app/schemas/transaction.py`, `backend/tests/api/test_transactions_api.py`
-  - 성공 기준: 조회 필터와 편집 API, `merge` 501 stub이 테스트로 검증됨
 - [ ] Task 7 실행: frontend 최소 스캐폴딩 + Docker Compose
+  - 목표: frontend Vite/Tailwind 최소 골격과 backend/frontend Dockerfile, `docker-compose.yml`, `.env.example` 정리
+  - 우선 파일: `frontend/`, `backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`, `.env.example`
+  - 성공 기준: `docker compose config` 와 healthcheck 기반 기동 경로가 정의되고, placeholder frontend가 backend와 함께 구동 가능
 - [ ] Task 8 실행: 검증 + STATUS 갱신
 
 ## Key Decisions
@@ -59,6 +59,7 @@
 - 2026-03-24: 로컬 migration/smoke script는 컨테이너 내부가 아니라 호스트에서 실행하므로 `.env.example` 의 `DATABASE_URL` 기본값은 `db` 가 아니라 `127.0.0.1:5432` 기준으로 둔다
 - 2026-03-24: snapshot 샘플에는 스키마 unique 키와 충돌하는 중복 `product_name` 이 있어, 적재 시 같은 key 반복분은 결정론적 suffix (`(2)`, `(3)`) 를 붙여 보존한다
 - 2026-03-24: assets/investments/loans API의 금액 응답은 DB `NUMERIC(15,2)` 저장 정밀도를 그대로 따라 소수 둘째 자리 문자열로 직렬화한다
+- 2026-03-24: 거래 summary/by-category/payment-methods 집계는 MVP 단계에서 SQLite/PostgreSQL 일관성을 우선해 필터된 transaction row를 Python에서 그룹핑하는 방식으로 구현한다
 
 ## Known Issues
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
