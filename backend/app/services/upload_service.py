@@ -176,7 +176,7 @@ async def _replace_snapshots(
     snapshot_date: date,
     parsed_snapshots: SnapshotParseResult,
 ) -> None:
-    normalized_snapshots = _normalize_snapshots_for_storage(parsed_snapshots)
+    normalized_snapshots = normalize_snapshots_for_storage(parsed_snapshots)
 
     await db_session.execute(
         delete(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
@@ -205,7 +205,7 @@ def _resolve_status(*, tx_success: bool, snapshot_success: bool) -> str:
     return "failed"
 
 
-def _normalize_snapshots_for_storage(parsed_snapshots: SnapshotParseResult) -> SnapshotParseResult:
+def normalize_snapshots_for_storage(parsed_snapshots: SnapshotParseResult) -> SnapshotParseResult:
     return SnapshotParseResult(
         asset_snapshots=_deduplicate_named_rows(
             parsed_snapshots.asset_snapshots,

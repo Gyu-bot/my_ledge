@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T20:01+0900, Task 6 거래 조회/편집 API 구현)
+- **Last Worker:** codex (2026-03-24T20:11+0900, 샘플 원본 대조 검증 자동화 추가)
 - **Branch:** main
 
 ## Completed
@@ -19,12 +19,13 @@
 - [x] Task 4B 완료: snapshot 적재 + `partial`/`failed` 업로드 정책 구현
 - [x] Task 5 완료: upload/schema/assets API + 인증/응답 스키마 구현
 - [x] Task 6 완료: 거래 조회/편집 API 구현 (`merge`는 501 stub)
+- [x] Task 8 일부 완료: 샘플 workbook 원본 대조 검증 자동화
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-24-phase1-task4b-6.md`
-  - 마지막 완료 작업: Task 6 `transactions query/edit API`
-  - 현재 상태: `backend/app/api/v1/endpoints/transactions.py` 와 `backend/app/services/transactions_service.py` 추가 완료. 조회 필터(`is_edited`, `include_deleted`, `include_merged`, `search`)와 summary/by-category/payment-methods, manual create/patch/delete/restore/bulk-update, merge 501 stub까지 테스트로 검증 완료
+  - 마지막 완료 작업: `sample workbook parity verification`
+  - 현재 상태: `backend/app/services/source_verification.py` 와 `backend/scripts/verify_import_parity.py` 추가 완료. transaction은 전체 행 수 + seed 고정 랜덤 12행 대조, snapshots/investments/loans는 원본 전건 대조가 자동화되었고 sqlite 기준 실행 검증까지 완료
 
 ## Blocked
 - 없음
@@ -35,6 +36,9 @@
   - 우선 파일: `frontend/`, `backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`, `.env.example`
   - 성공 기준: `docker compose config` 와 healthcheck 기반 기동 경로가 정의되고, placeholder frontend가 backend와 함께 구동 가능
 - [ ] Task 8 실행: 검증 + STATUS 갱신
+  - 목표: 실제 암호화 BankSalad workbook 기준 end-to-end 검증과 PostgreSQL parity 확인
+  - 우선 파일: `.env`, 실제 workbook 경로, `backend/scripts/verify_import_parity.py`
+  - 성공 기준: 암호화 실파일 복호화 포함 업로드 후 parity report에서 transaction sample mismatch 0, snapshot mismatch 0 확인
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -60,6 +64,7 @@
 - 2026-03-24: snapshot 샘플에는 스키마 unique 키와 충돌하는 중복 `product_name` 이 있어, 적재 시 같은 key 반복분은 결정론적 suffix (`(2)`, `(3)`) 를 붙여 보존한다
 - 2026-03-24: assets/investments/loans API의 금액 응답은 DB `NUMERIC(15,2)` 저장 정밀도를 그대로 따라 소수 둘째 자리 문자열로 직렬화한다
 - 2026-03-24: 거래 summary/by-category/payment-methods 집계는 MVP 단계에서 SQLite/PostgreSQL 일관성을 우선해 필터된 transaction row를 Python에서 그룹핑하는 방식으로 구현한다
+- 2026-03-24: 원본 대조 검증은 transaction 전건 비교 대신 전체 행 수 + seed 고정 랜덤 샘플 비교로 수행하고, snapshot/investment/loan은 전건 비교로 수행한다
 
 ## Known Issues
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
