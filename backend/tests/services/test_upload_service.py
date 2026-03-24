@@ -176,7 +176,7 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
     assert first_asset_amount == 123456789
 
 
-async def test_import_transactions_reconciles_rolling_window_to_latest_state(
+async def test_import_transactions_keeps_existing_rows_and_appends_exact_new_rows_from_rolling_window(
     db_session: AsyncSession,
     sample_workbook_bytes: bytes,
     rolling_window_workbook_bytes: bytes,
@@ -198,25 +198,20 @@ async def test_import_transactions_reconciles_rolling_window_to_latest_state(
     existing_transactions = list((await db_session.scalars(select(Transaction))).all())
     previous_rows = parse_transactions_from_bytes(sample_workbook_bytes)
     latest_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
-    window_start = min(transaction_datetime(row) for row in latest_rows)
-    window_end = max(transaction_datetime(row) for row in latest_rows)
-    preserved_previous_rows = [
-        row
-        for row in previous_rows
-        if not (window_start <= transaction_datetime(row) <= window_end)
-    ]
+    previous_counter = Counter(transaction_signature(row) for row in previous_rows)
+    latest_counter = Counter(transaction_signature(row) for row in latest_rows)
 
-    expected_counter = Counter(
-        transaction_signature(row) for row in [*preserved_previous_rows, *latest_rows]
-    )
+    expected_counter = previous_counter + (latest_counter - previous_counter)
     actual_counter = Counter(transaction_signature(row) for row in existing_transactions)
 
     assert result.status == "success"
     assert result.tx_total == len(latest_rows)
+    assert result.tx_new == 100
+    assert result.tx_skipped == 2126
     assert actual_counter == expected_counter
 
 
-async def test_import_transactions_preserves_user_fields_for_logically_matching_rows(
+async def test_import_transactions_preserves_existing_user_edited_row_when_later_window_has_changed_time(
     db_session: AsyncSession,
     sample_workbook_bytes: bytes,
     rolling_window_workbook_bytes: bytes,
@@ -249,19 +244,23 @@ async def test_import_transactions_preserves_user_fields_for_logically_matching_
         snapshot_date=date(2026, 3, 24),
     )
 
-    replaced_row = await db_session.scalar(
+    appended_row = await db_session.scalar(
         select(Transaction).where(*transaction_conditions(new_row))
     )
-    old_row_after_sync = await db_session.scalar(
+    old_row_after_import = await db_session.scalar(
         select(Transaction).where(*transaction_conditions(old_row))
     )
 
-    assert replaced_row is not None
-    assert replaced_row.category_major_user == "사용자수정"
-    assert replaced_row.category_minor_user == "세부수정"
-    assert replaced_row.memo == "preserve me"
-    assert replaced_row.is_deleted is True
-    assert old_row_after_sync is None
+    assert appended_row is not None
+    assert appended_row.category_major_user is None
+    assert appended_row.category_minor_user is None
+    assert appended_row.memo is None
+    assert appended_row.is_deleted is False
+    assert old_row_after_import is not None
+    assert old_row_after_import.category_major_user == "사용자수정"
+    assert old_row_after_import.category_minor_user == "세부수정"
+    assert old_row_after_import.memo == "preserve me"
+    assert old_row_after_import.is_deleted is True
 
 
 def parse_transactions_from_bytes(sample_workbook_bytes: bytes) -> list[dict[str, object]]:

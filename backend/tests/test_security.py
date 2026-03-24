@@ -7,7 +7,7 @@ from app.core.security import require_api_key
 
 def test_require_api_key_returns_500_when_api_key_is_missing(monkeypatch) -> None:
     get_settings.cache_clear()
-    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.setenv("API_KEY", "")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/my_ledge")
 
     with pytest.raises(HTTPException) as exc_info:
