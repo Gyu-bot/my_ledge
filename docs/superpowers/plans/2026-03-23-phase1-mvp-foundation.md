@@ -4,7 +4,7 @@
 
 **Goal:** Build the Phase 1 MVP foundation for `my_ledge`: project scaffolding, database schema, upload pipeline, initial analytics APIs, transaction editing APIs, and Docker-based local runtime.
 
-**Architecture:** The backend is an async FastAPI service backed by PostgreSQL and Alembic. Excel upload is handled as an application service that decrypts when needed, parses the `가계부 내역` and `뱅샐현황` sheets, applies incremental transaction import plus snapshot upserts, and records the result in `upload_logs`. The frontend is limited to minimal Vite scaffolding in this phase so backend/API delivery is not blocked, with Docker Compose wiring frontend, backend, and db together.
+**Architecture:** The backend is an async FastAPI service backed by PostgreSQL and Alembic. Excel upload is handled as an application service that decrypts when needed, parses the `가계부 내역` and `뱅샐현황` sheets, applies incremental transaction import plus snapshot upserts, and records the result in `upload_logs`. The frontend is limited to minimal Vite scaffolding in this phase so backend/API delivery is not blocked, with Docker Compose wiring frontend, backend, and db together. For analysis and future finance-agent integration, add a first canonical analysis view on top of `transactions` so API consumers and agents can share one stable interpretation layer before more specialized views are introduced.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest, httpx, `msoffcrypto-tool`, `openpyxl`, PostgreSQL 16, Vite, React, TypeScript, Tailwind CSS, Docker Compose.
 
@@ -32,6 +32,7 @@
 - Create: `backend/alembic/env.py`
 - Create: `backend/alembic/script.py.mako`
 - Create: `backend/alembic/versions/20260323_0001_initial_schema.py`
+- Create: later migration for canonical analysis view (first scope: `vw_transactions_effective`)
 
 ### Schemas and API layer
 - Create: `backend/app/schemas/common.py` — pagination/shared responses.
@@ -56,6 +57,7 @@
 - Create: `backend/app/services/transaction_query_service.py`
 - Create: `backend/app/services/transaction_edit_service.py`
 - Create: `backend/app/services/schema_service.py`
+- Modify: transaction query/schema services later so the first canonical analysis view can be reused by APIs and agent-facing schema docs
 
 ### Backend tests
 - Create: `backend/tests/conftest.py`
@@ -507,6 +509,50 @@ git add backend/app/api/v1/endpoints/transactions.py backend/app/schemas backend
 git commit -m "[backend] 거래 조회 및 편집 API 구현 (codex)"
 ```
 
+### Task 6A: Add the first canonical transaction analysis view
+
+**Files:**
+- Create: `backend/alembic/versions/<timestamp>_add_vw_transactions_effective.py`
+- Modify: `backend/app/services/schema_service.py`
+- Modify: `backend/tests/api/test_schema_api.py`
+- Modify: transaction query layer as needed to keep analysis rules aligned with the view definition
+
+- [ ] **Step 1: Write a failing schema/view metadata test**
+
+```python
+def test_schema_document_lists_vw_transactions_effective(...) -> None:
+    ...
+```
+
+- [ ] **Step 2: Add migration for `vw_transactions_effective`**
+
+Scope of the first canonical view:
+- expose raw and effective categories together
+- use `COALESCE(category_major_user, category_major)` and `COALESCE(category_minor_user, category_minor)`
+- exclude `is_deleted = TRUE`
+- exclude rows with `merged_into_id IS NOT NULL`
+- add simple analysis helpers such as `year_month`, `is_edited`, and normalized expense/income/transfer flags
+
+- [ ] **Step 3: Document the view in the schema layer**
+
+`GET /api/v1/schema` should describe `vw_transactions_effective` as the default read surface for agent-driven transaction analysis.
+
+- [ ] **Step 4: Keep follow-up views explicitly out of first scope**
+
+Do **not** implement `vw_monthly_cashflow`, `vw_category_monthly_spend`, or other derived views yet. Record them as future expansion once the first canonical layer is proven useful.
+
+- [ ] **Step 5: Run focused schema/API tests**
+
+Run: `cd backend && uv run pytest tests/api/test_schema_api.py -v`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md
+git commit -m "[db] 거래 canonical view 1차 레이어 추가 (codex)"
+```
+
 ### Task 7: Add frontend minimal scaffold and Docker runtime
 
 **Files:**
@@ -634,3 +680,4 @@ When executing this plan, keep `STATUS.md` synchronized with task progress:
 - Honor MVP scope: merge stays stubbed, not implemented.
 - Prefer explicit SQLAlchemy query helpers for the transaction filters `is_edited`, `include_deleted`, `include_merged`, and `search`.
 - Treat parser normalization as a boundary: parser output should already use backend field names rather than raw Excel headers.
+- First analysis-layer scope is exactly one canonical view: `vw_transactions_effective`. Future analysis views (for monthly cashflow, category aggregates, recurring merchants, etc.) are intentionally deferred until after the first view is in use.
