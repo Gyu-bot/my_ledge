@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-23T19:36+09:00)
+- **Last Worker:** codex (2026-03-24T12:26+09:00)
 - **Branch:** main (초기 설정)
 
 ## Completed
@@ -12,18 +12,18 @@
 - [x] 구현 전 요구사항 공백 점검 및 의사결정 반영
 - [x] Phase 1 구현계획 문서 작성 (`docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`)
 - [x] Task 1 완료: backend 스캐폴딩 + `/api/v1/health` + 설정/보안 뼈대
+- [x] Task 2 완료: SQLAlchemy 모델 + Alembic 초기 마이그레이션 추가
 
 ## In Progress
-- [ ] Phase 1 MVP 구현 일시중지
+- [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 마지막 완료 작업: Task 1 `Scaffold backend project and runtime configuration`
-  - 현재 상태: Task 1 리뷰 반영까지 완료, 사용자 요청으로 여기서 중단
+  - 마지막 완료 작업: Task 2 `Define SQLAlchemy models and initial Alembic migration`
+  - 현재 상태: `backend/app/models/`, `backend/alembic/`, `backend/tests/api/test_schema_api.py` 반영 완료
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Task 2 실행: SQLAlchemy 모델 + Alembic 초기 마이그레이션
 - [ ] Task 3 실행: 엑셀 복호화/파서 구현
 - [ ] Task 4 실행: 업로드 서비스 + incremental import + `partial` 정책
 - [ ] Task 5 실행: upload/schema/assets API
@@ -50,3 +50,4 @@
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
 - 현재 제공된 샘플 `/tmp/finance_sample.xlsx` 는 비암호화 파일이며, 실제 암호화 BankSalad 샘플 검증은 별도 필요
+- 로컬 PostgreSQL이 실행 중이지 않으면 `cd backend && uv run alembic upgrade head` 가 `127.0.0.1:5432` 연결 거부로 실패함
