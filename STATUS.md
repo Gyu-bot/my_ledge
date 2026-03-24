@@ -2,8 +2,8 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T12:46+0900, PRD/AGENTS 실데이터 비식별화)
-- **Branch:** main (초기 설정)
+- **Last Worker:** codex (2026-03-24T14:04+0900, Task 3 parser/decrypt 구현)
+- **Branch:** feat/upload-pipeline
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -13,18 +13,18 @@
 - [x] Phase 1 구현계획 문서 작성 (`docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`)
 - [x] Task 1 완료: backend 스캐폴딩 + `/api/v1/health` + 설정/보안 뼈대
 - [x] Task 2 완료: SQLAlchemy 모델 + Alembic 초기 마이그레이션 추가
+- [x] Task 3 완료: 엑셀 복호화 헬퍼 + 거래/스냅샷 파서 + 샘플 기반 parser 테스트
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 마지막 완료 작업: Task 2 `Define SQLAlchemy models and initial Alembic migration`
-  - 현재 상태: Task 2 검증, 스펙 리뷰, 코드 품질 리뷰까지 완료. 다음은 Task 3
+  - 마지막 완료 작업: Task 3 `Implement Excel decryption and parser modules`
+  - 현재 상태: parser/decrypt 구현 및 backend pytest 통과 완료. 다음은 Task 4 upload service와 incremental import 연결
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Task 3 실행: 엑셀 복호화/파서 구현
 - [ ] Task 4 실행: 업로드 서비스 + incremental import + `partial` 정책
 - [ ] Task 5 실행: upload/schema/assets API
 - [ ] Task 6 실행: 거래 조회/편집 API (`merge`는 501 stub)
@@ -47,9 +47,12 @@
 - 2026-03-23: 거래 병합 기능은 MVP 범위에서 제외
 - 2026-03-24: PRD 부록은 실데이터 원문 대신 익명화된 분포/규모 예시만 유지
 - 2026-03-24: AGENTS.md의 도메인 지식 예시는 실명 금융사/정확 금액 대신 일반화된 설명만 유지
+- 2026-03-24: 비암호화 개발 샘플 경로는 시스템 `/tmp` 가 아니라 저장소 내부 `./tmp/finance_sample.xlsx` 로 고정해 다음 세션 혼선을 방지
+- 2026-03-24: AGENTS.md에 Codex의 무확인 서브에이전트 스폰 허용 조건과 금지 조건을 명시해 매 세션 해석 차이를 줄임
 
 ## Known Issues
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
-- 현재 제공된 샘플 `/tmp/finance_sample.xlsx` 는 비암호화 파일이며, 실제 암호화 BankSalad 샘플 검증은 별도 필요
+- 현재 제공된 샘플 `./tmp/finance_sample.xlsx` 는 비암호화 파일이며, 실제 암호화 BankSalad 샘플 검증은 별도 필요
+- worktree에는 ignored `tmp/` 디렉터리가 자동 체크아웃되지 않으므로 parser 테스트는 루트 저장소의 `tmp/finance_sample.xlsx` 를 탐색해 사용
 - 로컬 PostgreSQL이 실행 중이지 않으면 `cd backend && uv run alembic upgrade head` 가 `127.0.0.1:5432` 연결 거부로 실패함

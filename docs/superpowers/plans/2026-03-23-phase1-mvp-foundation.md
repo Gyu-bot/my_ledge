@@ -629,7 +629,7 @@ When executing this plan, keep `STATUS.md` synchronized with task progress:
 
 ## Notes for the Implementer
 
-- Use `/tmp/finance_sample.xlsx` as the parser fixture for non-encrypted workbook coverage.
+- Use repository-local `./tmp/finance_sample.xlsx` as the parser fixture for non-encrypted workbook coverage.
 - Do not persist the provided Excel password or API secrets in tracked files.
 - Honor MVP scope: merge stays stubbed, not implemented.
 - Prefer explicit SQLAlchemy query helpers for the transaction filters `is_edited`, `include_deleted`, `include_merged`, and `search`.
