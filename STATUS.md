@@ -2,8 +2,8 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T23:38+0900, rolling-window transaction sync 구현)
-- **Branch:** main
+- **Last Worker:** codex (2026-03-25T00:32+0900, rolling-window import를 append-only exact dedupe로 재조정)
+- **Branch:** feat/rolling-window-import-sync
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -25,8 +25,8 @@
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 마지막 완료 작업: `rolling-window transaction sync`
-  - 현재 상태: `backend/app/services/upload_service.py` 가 workbook datetime window 기준 imported row reconciliation 방식으로 갱신되었고, `finance_sample.xlsx -> sample_260324.xlsx` 순서 검증에서 expected final 2286행과 actual final 2286행이 일치하며 `extra 0 / missing 0` 확인 완료. `backend/tests/services/test_upload_service.py` 에 rolling-window 동기화와 사용자 수정 필드 보존 테스트가 추가되었고 focused service/source verification tests는 통과
+  - 마지막 완료 작업: `rolling-window transaction import 정책 재조정`
+  - 현재 상태: `backend/app/services/upload_service.py` 는 workbook datetime window를 비교 범위로만 사용하고, 해당 범위 안 기존 `source='import'` 거래는 건드리지 않은 채 exact signature 중복만 skip하고 새 거래만 append한다. `finance_sample.xlsx -> sample_260324.xlsx` 순서 검증에서 두 번째 import는 `tx_new=100`, `tx_skipped=2126`, 최종 transaction row는 `2319`행이며, 시간만 달라진 논리적 동일 거래에서도 기존 사용자 수정 row는 유지된다. `backend/tests/services/test_upload_service.py` 와 `backend/tests/services/test_source_verification.py` focused tests 통과
 
 ## Blocked
 - 없음
@@ -35,7 +35,7 @@
 - [ ] Task 8 실행: 검증 + STATUS 갱신
   - 목표: 실제 최신 workbook 기준 end-to-end 검증과 PostgreSQL parity 확인
   - 우선 파일: `.env`, 실제 workbook 경로, `backend/scripts/verify_import_parity.py`
-  - 성공 기준: 최신 workbook 단독 import parity 통과와, rolling-window 연속 업로드 시 expected final state 대비 transaction 불일치(`extra/missing`) 0 확인
+  - 성공 기준: 최신 workbook 단독 import parity 통과와, rolling-window 연속 업로드 시 기존 imported row 보존 + exact-new append 정책에 맞는 `tx_new/tx_skipped/final row count` 확인
 - [ ] Task 9 후보: canonical analysis layer 1차 구현
   - 목표: `vw_transactions_effective`, `vw_category_monthly_spend` 추가와 `/api/v1/schema` 문서 반영
   - 우선 파일: `backend/alembic/versions/`, `backend/app/services/schema_service.py`, `backend/tests/api/test_schema_api.py`
@@ -70,6 +70,7 @@
 - 2026-03-24: 실제 BankSalad 소스는 현재 비암호화 workbook 기준으로 검증되었고, 기존 복호화 코드는 호환용 fallback으로만 유지한다
 - 2026-03-24: `sample_260324.xlsx` 검증 결과 최신 export는 strict cumulative snapshot이 아니라 rolling window + 일부 중간 구간 변경이 섞일 수 있어, 단순 max(date,time) 커서 방식만으로는 최종 상태 동기화를 보장하지 못한다
 - 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
+- 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지하며, workbook datetime window 안에서 exact signature로 아직 없는 거래만 append한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -79,4 +80,4 @@
 - 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
 - `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
 - frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
-- 로컬 루트 `.env` 가 존재하면 `tests/test_security.py::test_require_api_key_returns_500_when_api_key_is_missing` 가 `.env` 의 `API_KEY` 값을 읽어 401로 실패할 수 있다. 이번 rolling-window 변경과는 무관한 로컬 환경 이슈다
+- `backend/tests/api/test_assets_api.py` 는 `seeded_finance_data` fixture가 `snapshot_date=None` 으로 적재될 때 서버 현재 날짜를 사용한다는 사실을 반영하지 않아, 날짜가 `2026-03-24`로 고정된 기대값이 하루 지나면 실패한다. 현재 날짜 `2026-03-25` 기준 실제 응답은 `2026-03-25`를 반환한다
