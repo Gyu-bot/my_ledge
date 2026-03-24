@@ -2,8 +2,8 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T14:18+0900, Task 4A transaction import 구현)
-- **Branch:** feat/transaction-import
+- **Last Worker:** codex (2026-03-24T14:28+0900, Task 4A merge to main)
+- **Branch:** main
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
