@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T14:28+0900, Task 4A merge to main)
+- **Last Worker:** codex (2026-03-24T15:25+0900, Task 4A.1 PostgreSQL smoke test 재검증)
 - **Branch:** main
 
 ## Completed
@@ -15,18 +15,22 @@
 - [x] Task 2 완료: SQLAlchemy 모델 + Alembic 초기 마이그레이션 추가
 - [x] Task 3 완료: 엑셀 복호화 헬퍼 + 거래/스냅샷 파서 + 샘플 기반 parser 테스트
 - [x] Task 4A 완료: transaction-only 업로드 서비스 + incremental import + upload_logs 기록
+- [x] Task 4A.1 완료: Docker Compose 기반 PostgreSQL 기동 + migration/import smoke test
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-24-transaction-import-first.md`
-  - 마지막 완료 작업: Task 4A `transaction-only import`
-  - 현재 상태: `backend/app/services/upload_service.py` 로 workbook -> transactions -> upload_logs 적재 경로 구현 완료. sqlite 기반 실제 적재 smoke test 완료. 다음은 Task 4B snapshot 적재 또는 Task 5 API 연결
+  - 마지막 완료 작업: Task 4A.1 `PostgreSQL smoke test`
+  - 현재 상태: `docker-compose.yml`, `.env.example`, `backend/scripts/smoke_import_transactions.py` 추가. `docker compose up -d db` + `uv run alembic upgrade head` + sample workbook 1회 적재/재적재까지 PostgreSQL에서 검증 완료
 
 ## Blocked
 - 없음
 
 ## Next Up
 - [ ] Task 4B 실행: snapshot 적재 + `partial` 정책 확장
+  - 목표: transaction-only import를 snapshot/investments/loans 적재까지 확장하고 `partial` 상태를 실제로 기록
+  - 우선 파일: `backend/app/services/upload_service.py`, `backend/app/parsers/snapshots.py`, 관련 모델 upsert 로직, `backend/tests/services/test_upload_service.py`
+  - 성공 기준: transaction/snapshot 한쪽 실패 시 `upload_logs.status` 가 `partial` 또는 `failed` 로 정확히 기록되고, 성공분 유지 정책이 테스트로 검증됨
 - [ ] Task 5 실행: upload/schema/assets API
 - [ ] Task 6 실행: 거래 조회/편집 API (`merge`는 501 stub)
 - [ ] Task 7 실행: frontend 최소 스캐폴딩 + Docker Compose
@@ -52,12 +56,13 @@
 - 2026-03-24: AGENTS.md에 Codex의 무확인 서브에이전트 스폰 허용 조건과 금지 조건을 명시해 매 세션 해석 차이를 줄임
 - 2026-03-24: Task 4는 한 번에 끝내지 않고 `transaction-only import` 를 4A로 먼저 완료한 뒤 snapshot 적재를 4B로 분리
 - 2026-03-24: transaction import 검증은 먼저 sqlite async DB로 고정해 서비스 로직을 안정화하고, PostgreSQL smoke test는 `.env`/실DB 준비 후 별도로 수행
+- 2026-03-24: 로컬 migration/smoke script는 컨테이너 내부가 아니라 호스트에서 실행하므로 `.env.example` 의 `DATABASE_URL` 기본값은 `db` 가 아니라 `127.0.0.1:5432` 기준으로 둔다
 
 ## Known Issues
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
 - 현재 제공된 샘플 `./tmp/finance_sample.xlsx` 는 비암호화 파일이며, 실제 암호화 BankSalad 샘플 검증은 별도 필요
 - worktree에는 ignored `tmp/` 디렉터리가 자동 체크아웃되지 않으므로 parser 테스트는 루트 저장소의 `tmp/finance_sample.xlsx` 를 탐색해 사용
-- 현재 저장소에는 `docker-compose.yml`, `.env.example` 가 아직 없어 실제 DB smoke test는 로컬 `.env` 와 별도 PostgreSQL 준비 여부에 의존
-- 현재 셸 환경과 worktree 루트에는 `DATABASE_URL` / `.env` 가 없어 PostgreSQL 대상 migration/import smoke test는 아직 미수행
-- 로컬 PostgreSQL이 실행 중이지 않으면 `cd backend && uv run alembic upgrade head` 가 `127.0.0.1:5432` 연결 거부로 실패함
+- PostgreSQL smoke test는 `DB_PASSWORD=my_ledge_dev` / `DATABASE_URL=postgresql+asyncpg://my_ledge:my_ledge_dev@127.0.0.1:5432/my_ledge` 기준으로 검증했다. 실제 개발 환경에서는 `.env` 복사 후 비밀번호를 로컬 값으로 맞춰야 한다
+- 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
+- `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
