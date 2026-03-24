@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T20:11+0900, 샘플 원본 대조 검증 자동화 추가)
+- **Last Worker:** codex (2026-03-24T23:38+0900, rolling-window transaction sync 구현)
 - **Branch:** main
 
 ## Completed
@@ -20,25 +20,26 @@
 - [x] Task 5 완료: upload/schema/assets API + 인증/응답 스키마 구현
 - [x] Task 6 완료: 거래 조회/편집 API 구현 (`merge`는 501 stub)
 - [x] Task 8 일부 완료: 샘플 workbook 원본 대조 검증 자동화
+- [x] Task 7 완료: frontend 최소 스캐폴딩 + Docker runtime
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
-  - 계획 문서: `docs/superpowers/plans/2026-03-24-phase1-task4b-6.md`
-  - 마지막 완료 작업: `sample workbook parity verification`
-  - 현재 상태: `backend/app/services/source_verification.py` 와 `backend/scripts/verify_import_parity.py` 추가 완료. transaction은 전체 행 수 + seed 고정 랜덤 12행 대조, snapshots/investments/loans는 원본 전건 대조가 자동화되었고 sqlite 기준 실행 검증까지 완료
+  - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
+  - 마지막 완료 작업: `rolling-window transaction sync`
+  - 현재 상태: `backend/app/services/upload_service.py` 가 workbook datetime window 기준 imported row reconciliation 방식으로 갱신되었고, `finance_sample.xlsx -> sample_260324.xlsx` 순서 검증에서 expected final 2286행과 actual final 2286행이 일치하며 `extra 0 / missing 0` 확인 완료. `backend/tests/services/test_upload_service.py` 에 rolling-window 동기화와 사용자 수정 필드 보존 테스트가 추가되었고 focused service/source verification tests는 통과
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Task 7 실행: frontend 최소 스캐폴딩 + Docker Compose
-  - 목표: frontend Vite/Tailwind 최소 골격과 backend/frontend Dockerfile, `docker-compose.yml`, `.env.example` 정리
-  - 우선 파일: `frontend/`, `backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`, `.env.example`
-  - 성공 기준: `docker compose config` 와 healthcheck 기반 기동 경로가 정의되고, placeholder frontend가 backend와 함께 구동 가능
 - [ ] Task 8 실행: 검증 + STATUS 갱신
-  - 목표: 실제 암호화 BankSalad workbook 기준 end-to-end 검증과 PostgreSQL parity 확인
+  - 목표: 실제 최신 workbook 기준 end-to-end 검증과 PostgreSQL parity 확인
   - 우선 파일: `.env`, 실제 workbook 경로, `backend/scripts/verify_import_parity.py`
-  - 성공 기준: 암호화 실파일 복호화 포함 업로드 후 parity report에서 transaction sample mismatch 0, snapshot mismatch 0 확인
+  - 성공 기준: 최신 workbook 단독 import parity 통과와, rolling-window 연속 업로드 시 expected final state 대비 transaction 불일치(`extra/missing`) 0 확인
+- [ ] Task 9 후보: canonical analysis layer 1차 구현
+  - 목표: `vw_transactions_effective`, `vw_category_monthly_spend` 추가와 `/api/v1/schema` 문서 반영
+  - 우선 파일: `backend/alembic/versions/`, `backend/app/services/schema_service.py`, `backend/tests/api/test_schema_api.py`
+  - 성공 기준: 두 canonical view가 마이그레이션과 schema 문서에 반영되고 focused schema/API 테스트 통과
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -65,12 +66,17 @@
 - 2026-03-24: assets/investments/loans API의 금액 응답은 DB `NUMERIC(15,2)` 저장 정밀도를 그대로 따라 소수 둘째 자리 문자열로 직렬화한다
 - 2026-03-24: 거래 summary/by-category/payment-methods 집계는 MVP 단계에서 SQLite/PostgreSQL 일관성을 우선해 필터된 transaction row를 Python에서 그룹핑하는 방식으로 구현한다
 - 2026-03-24: 원본 대조 검증은 transaction 전건 비교 대신 전체 행 수 + seed 고정 랜덤 샘플 비교로 수행하고, snapshot/investment/loan은 전건 비교로 수행한다
+- 2026-03-24: Task 7 compose는 호스트 실행용 `.env.example` 의 `127.0.0.1:5432` `DATABASE_URL` 을 유지하고, 컨테이너 내부 `backend` 서비스에는 compose에서 `db:5432` 기준 값을 별도 주입한다
+- 2026-03-24: 실제 BankSalad 소스는 현재 비암호화 workbook 기준으로 검증되었고, 기존 복호화 코드는 호환용 fallback으로만 유지한다
+- 2026-03-24: `sample_260324.xlsx` 검증 결과 최신 export는 strict cumulative snapshot이 아니라 rolling window + 일부 중간 구간 변경이 섞일 수 있어, 단순 max(date,time) 커서 방식만으로는 최종 상태 동기화를 보장하지 못한다
+- 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
 
 ## Known Issues
-- 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
-- 현재 제공된 샘플 `./tmp/finance_sample.xlsx` 는 비암호화 파일이며, 실제 암호화 BankSalad 샘플 검증은 별도 필요
+- 현재 제공된 샘플 `./tmp/finance_sample.xlsx` 와 `./tmp/sample_260324.xlsx` 는 비암호화 파일이다. 복호화 코드는 fallback으로 유지하지만 현재 운영 검증 전제는 비암호화 workbook이다
 - worktree에는 ignored `tmp/` 디렉터리가 자동 체크아웃되지 않으므로 parser 테스트는 루트 저장소의 `tmp/finance_sample.xlsx` 를 탐색해 사용
 - PostgreSQL smoke test는 `DB_PASSWORD=my_ledge_dev` / `DATABASE_URL=postgresql+asyncpg://my_ledge:my_ledge_dev@127.0.0.1:5432/my_ledge` 기준으로 검증했다. 실제 개발 환경에서는 `.env` 복사 후 비밀번호를 로컬 값으로 맞춰야 한다
 - 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
 - `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
+- frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
+- 로컬 루트 `.env` 가 존재하면 `tests/test_security.py::test_require_api_key_returns_500_when_api_key_is_missing` 가 `.env` 의 `API_KEY` 값을 읽어 401로 실패할 수 있다. 이번 rolling-window 변경과는 무관한 로컬 환경 이슈다

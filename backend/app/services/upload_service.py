@@ -1,9 +1,10 @@
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
 
 from openpyxl import load_workbook
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
@@ -53,14 +54,14 @@ async def import_transactions_from_workbook(
     try:
         parsed_rows = parse_transactions(workbook)
         tx_total = len(parsed_rows)
-        last_transaction = await _get_last_transaction(db_session)
-        rows_to_insert = await _filter_new_rows(db_session, parsed_rows, last_transaction)
+        rows_to_insert, tx_new, tx_skipped = await _reconcile_transaction_rows(
+            db_session,
+            parsed_rows,
+        )
 
         db_session.add_all(Transaction(**row) for row in rows_to_insert)
         await db_session.commit()
 
-        tx_new = len(rows_to_insert)
-        tx_skipped = len(parsed_rows) - len(rows_to_insert)
         tx_success = True
     except Exception as exc:
         await db_session.rollback()
@@ -107,53 +108,67 @@ async def import_transactions_from_workbook(
     )
 
 
-async def _get_last_transaction(db_session: AsyncSession) -> Transaction | None:
-    result = await db_session.execute(
-        select(Transaction).order_by(Transaction.date.desc(), Transaction.time.desc()).limit(1)
-    )
-    return result.scalar_one_or_none()
-
-
-async def _filter_new_rows(
+async def _reconcile_transaction_rows(
     db_session: AsyncSession,
     parsed_rows: list[TransactionRow],
-    last_transaction: Transaction | None,
-) -> list[TransactionRow]:
-    if last_transaction is None:
-        return parsed_rows
+) -> tuple[list[TransactionRow], int, int]:
+    if not parsed_rows:
+        return [], 0, 0
 
-    cursor = datetime.combine(last_transaction.date, last_transaction.time)
-    existing_boundary_signatures = await _get_boundary_signatures(
+    window_start, window_end = _transaction_window_bounds(parsed_rows)
+    existing_rows = await _get_imported_transactions_in_window(
         db_session,
-        last_transaction.date,
-        last_transaction.time,
+        window_start,
+        window_end,
+    )
+    tx_new, tx_skipped = _calculate_transaction_delta(parsed_rows, existing_rows)
+    reconciled_rows = _build_reconciled_transaction_rows(parsed_rows, existing_rows)
+
+    await db_session.execute(
+        delete(Transaction)
+        .where(Transaction.source == "import")
+        .where(_transaction_window_clause(window_start, window_end))
     )
 
-    rows_to_insert: list[TransactionRow] = []
-    for row in parsed_rows:
-        row_dt = datetime.combine(row["date"], row["time"])
-        signature = _transaction_signature(row)
-        if row_dt > cursor:
-            rows_to_insert.append(row)
-            continue
-        if row_dt == cursor and signature not in existing_boundary_signatures:
-            rows_to_insert.append(row)
-    return rows_to_insert
+    return reconciled_rows, tx_new, tx_skipped
 
 
-async def _get_boundary_signatures(
+async def _get_imported_transactions_in_window(
     db_session: AsyncSession,
-    tx_date: date,
-    tx_time,
-) -> set[tuple[object, ...]]:
+    window_start: datetime,
+    window_end: datetime,
+) -> list[Transaction]:
     result = await db_session.execute(
-        select(Transaction).where(
-            Transaction.date == tx_date,
-            Transaction.time == tx_time,
+        select(Transaction)
+        .where(Transaction.source == "import")
+        .where(_transaction_window_clause(window_start, window_end))
+        .order_by(Transaction.date, Transaction.time, Transaction.id)
+    )
+    return list(result.scalars().all())
+
+
+def _transaction_window_bounds(parsed_rows: list[TransactionRow]) -> tuple[datetime, datetime]:
+    datetimes = [datetime.combine(row["date"], row["time"]) for row in parsed_rows]
+    return min(datetimes), max(datetimes)
+
+
+def _transaction_window_clause(window_start: datetime, window_end: datetime):
+    return and_(
+        or_(
+            Transaction.date > window_start.date(),
+            and_(
+                Transaction.date == window_start.date(),
+                Transaction.time >= window_start.time(),
+            ),
+        ),
+        or_(
+            Transaction.date < window_end.date(),
+            and_(
+                Transaction.date == window_end.date(),
+                Transaction.time <= window_end.time(),
+            ),
         )
     )
-    transactions = result.scalars().all()
-    return {_transaction_signature(transaction) for transaction in transactions}
 
 
 def _transaction_signature(row: TransactionRow | Transaction) -> tuple[object, ...]:
@@ -169,6 +184,94 @@ def _transaction_signature(row: TransactionRow | Transaction) -> tuple[object, .
         row.payment_method if isinstance(row, Transaction) else row["payment_method"],
         row.memo if isinstance(row, Transaction) else row["memo"],
     )
+
+
+def _transaction_comparison_signature(
+    row: TransactionRow | Transaction,
+) -> tuple[object, ...]:
+    return (
+        row.date if isinstance(row, Transaction) else row["date"],
+        row.time if isinstance(row, Transaction) else row["time"],
+        row.type if isinstance(row, Transaction) else row["type"],
+        row.category_major if isinstance(row, Transaction) else row["category_major"],
+        row.category_minor if isinstance(row, Transaction) else row["category_minor"],
+        row.description if isinstance(row, Transaction) else row["description"],
+        row.amount if isinstance(row, Transaction) else row["amount"],
+        row.currency if isinstance(row, Transaction) else row["currency"],
+        row.payment_method if isinstance(row, Transaction) else row["payment_method"],
+    )
+
+
+def _transaction_reconciliation_key(
+    row: TransactionRow | Transaction,
+) -> tuple[object, ...]:
+    return (
+        row.date if isinstance(row, Transaction) else row["date"],
+        row.type if isinstance(row, Transaction) else row["type"],
+        row.category_major if isinstance(row, Transaction) else row["category_major"],
+        row.category_minor if isinstance(row, Transaction) else row["category_minor"],
+        row.description if isinstance(row, Transaction) else row["description"],
+        row.amount if isinstance(row, Transaction) else row["amount"],
+        row.currency if isinstance(row, Transaction) else row["currency"],
+        row.payment_method if isinstance(row, Transaction) else row["payment_method"],
+    )
+
+
+def _calculate_transaction_delta(
+    parsed_rows: list[TransactionRow],
+    existing_rows: list[Transaction],
+) -> tuple[int, int]:
+    parsed_counter = Counter(_transaction_comparison_signature(row) for row in parsed_rows)
+    existing_counter = Counter(_transaction_comparison_signature(row) for row in existing_rows)
+    tx_new = sum((parsed_counter - existing_counter).values())
+    tx_total = len(parsed_rows)
+    return tx_new, tx_total - tx_new
+
+
+def _build_reconciled_transaction_rows(
+    parsed_rows: list[TransactionRow],
+    existing_rows: list[Transaction],
+) -> list[TransactionRow]:
+    existing_groups: dict[tuple[object, ...], list[Transaction]] = {}
+    parsed_groups: dict[tuple[object, ...], list[TransactionRow]] = {}
+
+    for row in existing_rows:
+        existing_groups.setdefault(_transaction_reconciliation_key(row), []).append(row)
+    for row in parsed_rows:
+        parsed_groups.setdefault(_transaction_reconciliation_key(row), []).append(row)
+
+    for rows in existing_groups.values():
+        rows.sort(key=_transaction_sort_key)
+    for rows in parsed_groups.values():
+        rows.sort(key=_transaction_sort_key)
+
+    reconciled_rows: list[TransactionRow] = []
+    for key, rows in parsed_groups.items():
+        existing_group = existing_groups.get(key, [])
+        for index, row in enumerate(rows):
+            reconciled_row = dict(row)
+            if index < len(existing_group):
+                _preserve_editable_transaction_fields(reconciled_row, existing_group[index])
+            reconciled_rows.append(reconciled_row)
+
+    return reconciled_rows
+
+
+def _transaction_sort_key(row: TransactionRow | Transaction) -> tuple[object, ...]:
+    if isinstance(row, Transaction):
+        return (row.time,)
+    return (row["time"],)
+
+
+def _preserve_editable_transaction_fields(
+    row: TransactionRow,
+    existing_row: Transaction,
+) -> None:
+    row["category_major_user"] = existing_row.category_major_user
+    row["category_minor_user"] = existing_row.category_minor_user
+    row["memo"] = existing_row.memo
+    row["is_deleted"] = existing_row.is_deleted
+    row["merged_into_id"] = existing_row.merged_into_id
 
 
 async def _replace_snapshots(
