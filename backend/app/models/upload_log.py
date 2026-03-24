@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -11,6 +11,7 @@ class UploadLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
     )
