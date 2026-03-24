@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T15:25+0900, Task 4A.1 PostgreSQL smoke test 재검증)
+- **Last Worker:** codex (2026-03-24T19:48+0900, Task 4B snapshot 적재 + partial 정책 구현)
 - **Branch:** main
 
 ## Completed
@@ -16,23 +16,26 @@
 - [x] Task 3 완료: 엑셀 복호화 헬퍼 + 거래/스냅샷 파서 + 샘플 기반 parser 테스트
 - [x] Task 4A 완료: transaction-only 업로드 서비스 + incremental import + upload_logs 기록
 - [x] Task 4A.1 완료: Docker Compose 기반 PostgreSQL 기동 + migration/import smoke test
+- [x] Task 4B 완료: snapshot 적재 + `partial`/`failed` 업로드 정책 구현
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
-  - 계획 문서: `docs/superpowers/plans/2026-03-24-transaction-import-first.md`
-  - 마지막 완료 작업: Task 4A.1 `PostgreSQL smoke test`
-  - 현재 상태: `docker-compose.yml`, `.env.example`, `backend/scripts/smoke_import_transactions.py` 추가. `docker compose up -d db` + `uv run alembic upgrade head` + sample workbook 1회 적재/재적재까지 PostgreSQL에서 검증 완료
+  - 계획 문서: `docs/superpowers/plans/2026-03-24-phase1-task4b-6.md`
+  - 마지막 완료 작업: Task 4B `snapshot import + partial upload policy`
+  - 현재 상태: `backend/app/services/upload_service.py` 가 transaction/snapshot 분리 커밋 구조와 `partial`/`failed` 상태 기록을 지원한다. 동일 snapshot 날짜 재업로드 시 snapshot rows 교체와 샘플 duplicate 이름 suffix 정규화까지 테스트로 검증 완료
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Task 4B 실행: snapshot 적재 + `partial` 정책 확장
-  - 목표: transaction-only import를 snapshot/investments/loans 적재까지 확장하고 `partial` 상태를 실제로 기록
-  - 우선 파일: `backend/app/services/upload_service.py`, `backend/app/parsers/snapshots.py`, 관련 모델 upsert 로직, `backend/tests/services/test_upload_service.py`
-  - 성공 기준: transaction/snapshot 한쪽 실패 시 `upload_logs.status` 가 `partial` 또는 `failed` 로 정확히 기록되고, 성공분 유지 정책이 테스트로 검증됨
 - [ ] Task 5 실행: upload/schema/assets API
+  - 목표: `POST /api/v1/upload`, `GET /api/v1/schema`, assets/investments/loans 조회 API 추가
+  - 우선 파일: `backend/app/api/v1/endpoints/upload.py`, `backend/app/api/v1/endpoints/schema.py`, `backend/app/api/v1/endpoints/assets.py`, `backend/app/schemas/upload.py`, `backend/app/schemas/asset.py`, `backend/app/schemas/schema_doc.py`
+  - 성공 기준: API key 보호가 필요한 엔드포인트가 인증을 강제하고, upload/schema/assets API가 테스트로 검증됨
 - [ ] Task 6 실행: 거래 조회/편집 API (`merge`는 501 stub)
+  - 목표: 목록/요약/카테고리/결제수단 조회와 manual create/edit/delete/restore/bulk-update 구현
+  - 우선 파일: `backend/app/api/v1/endpoints/transactions.py`, `backend/app/services/transactions_service.py`, `backend/app/schemas/transaction.py`, `backend/tests/api/test_transactions_api.py`
+  - 성공 기준: 조회 필터와 편집 API, `merge` 501 stub이 테스트로 검증됨
 - [ ] Task 7 실행: frontend 최소 스캐폴딩 + Docker Compose
 - [ ] Task 8 실행: 검증 + STATUS 갱신
 
@@ -57,6 +60,7 @@
 - 2026-03-24: Task 4는 한 번에 끝내지 않고 `transaction-only import` 를 4A로 먼저 완료한 뒤 snapshot 적재를 4B로 분리
 - 2026-03-24: transaction import 검증은 먼저 sqlite async DB로 고정해 서비스 로직을 안정화하고, PostgreSQL smoke test는 `.env`/실DB 준비 후 별도로 수행
 - 2026-03-24: 로컬 migration/smoke script는 컨테이너 내부가 아니라 호스트에서 실행하므로 `.env.example` 의 `DATABASE_URL` 기본값은 `db` 가 아니라 `127.0.0.1:5432` 기준으로 둔다
+- 2026-03-24: snapshot 샘플에는 스키마 unique 키와 충돌하는 중복 `product_name` 이 있어, 적재 시 같은 key 반복분은 결정론적 suffix (`(2)`, `(3)`) 를 붙여 보존한다
 
 ## Known Issues
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
