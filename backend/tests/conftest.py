@@ -15,21 +15,26 @@ from app.models import Base
 from app.services.upload_service import import_transactions_from_workbook
 
 
-def _sample_workbook_path() -> Path:
+def _workbook_path(filename: str) -> Path:
     current = Path(__file__).resolve()
     candidates = [
-        current.parents[2] / "tmp" / "finance_sample.xlsx",
-        current.parents[4] / "tmp" / "finance_sample.xlsx",
+        current.parents[2] / "tmp" / filename,
+        current.parents[4] / "tmp" / filename,
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    raise FileNotFoundError("finance_sample.xlsx fixture not found")
+    raise FileNotFoundError(f"{filename} fixture not found")
 
 
 @pytest.fixture
 def sample_workbook_bytes() -> bytes:
-    return _sample_workbook_path().read_bytes()
+    return _workbook_path("finance_sample.xlsx").read_bytes()
+
+
+@pytest.fixture
+def rolling_window_workbook_bytes() -> bytes:
+    return _workbook_path("sample_260324.xlsx").read_bytes()
 
 
 @pytest.fixture(autouse=True)

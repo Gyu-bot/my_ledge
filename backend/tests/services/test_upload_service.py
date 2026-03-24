@@ -1,4 +1,5 @@
-from datetime import date
+from collections import Counter
+from datetime import date, datetime
 from io import BytesIO
 
 from openpyxl import load_workbook
@@ -74,7 +75,7 @@ async def test_import_transactions_skips_rows_already_loaded(
     assert transaction_count == 2219
 
 
-async def test_import_transactions_keeps_unseen_rows_at_cursor_boundary(
+async def test_import_transactions_replaces_preexisting_imported_rows_inside_window(
     db_session: AsyncSession,
     sample_workbook_bytes: bytes,
 ) -> None:
@@ -90,15 +91,12 @@ async def test_import_transactions_keeps_unseen_rows_at_cursor_boundary(
     )
 
     matching_rows = await db_session.scalars(
-        select(Transaction).where(
-            Transaction.date == seeded_row["date"],
-            Transaction.time == seeded_row["time"],
-        )
+        select(Transaction).where(*transaction_conditions(seeded_row))
     )
 
-    assert result.tx_new == 2
-    assert result.tx_skipped == 2217
-    assert len(list(matching_rows)) == 2
+    assert result.tx_new == 2218
+    assert result.tx_skipped == 1
+    assert len(list(matching_rows)) == 1
 
 
 async def test_import_transactions_records_partial_when_snapshot_sheet_is_missing(
@@ -178,6 +176,196 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
     assert first_asset_amount == 123456789
 
 
+async def test_import_transactions_reconciles_rolling_window_to_latest_state(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+    rolling_window_workbook_bytes: bytes,
+) -> None:
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=sample_workbook_bytes,
+        filename="finance_sample.xlsx",
+        snapshot_date=date(2026, 3, 24),
+    )
+
+    result = await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=rolling_window_workbook_bytes,
+        filename="sample_260324.xlsx",
+        snapshot_date=date(2026, 3, 24),
+    )
+
+    existing_transactions = list((await db_session.scalars(select(Transaction))).all())
+    previous_rows = parse_transactions_from_bytes(sample_workbook_bytes)
+    latest_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
+    window_start = min(transaction_datetime(row) for row in latest_rows)
+    window_end = max(transaction_datetime(row) for row in latest_rows)
+    preserved_previous_rows = [
+        row
+        for row in previous_rows
+        if not (window_start <= transaction_datetime(row) <= window_end)
+    ]
+
+    expected_counter = Counter(
+        transaction_signature(row) for row in [*preserved_previous_rows, *latest_rows]
+    )
+    actual_counter = Counter(transaction_signature(row) for row in existing_transactions)
+
+    assert result.status == "success"
+    assert result.tx_total == len(latest_rows)
+    assert actual_counter == expected_counter
+
+
+async def test_import_transactions_preserves_user_fields_for_logically_matching_rows(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+    rolling_window_workbook_bytes: bytes,
+) -> None:
+    old_rows = parse_transactions_from_bytes(sample_workbook_bytes)
+    new_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
+    old_row, new_row = find_logically_matching_rows_with_changed_time(old_rows, new_rows)
+
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=sample_workbook_bytes,
+        filename="finance_sample.xlsx",
+        snapshot_date=date(2026, 3, 24),
+    )
+
+    existing_row = await db_session.scalar(
+        select(Transaction).where(*transaction_conditions(old_row))
+    )
+    assert existing_row is not None
+    existing_row.category_major_user = "사용자수정"
+    existing_row.category_minor_user = "세부수정"
+    existing_row.memo = "preserve me"
+    existing_row.is_deleted = True
+    await db_session.commit()
+
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=rolling_window_workbook_bytes,
+        filename="sample_260324.xlsx",
+        snapshot_date=date(2026, 3, 24),
+    )
+
+    replaced_row = await db_session.scalar(
+        select(Transaction).where(*transaction_conditions(new_row))
+    )
+    old_row_after_sync = await db_session.scalar(
+        select(Transaction).where(*transaction_conditions(old_row))
+    )
+
+    assert replaced_row is not None
+    assert replaced_row.category_major_user == "사용자수정"
+    assert replaced_row.category_minor_user == "세부수정"
+    assert replaced_row.memo == "preserve me"
+    assert replaced_row.is_deleted is True
+    assert old_row_after_sync is None
+
+
 def parse_transactions_from_bytes(sample_workbook_bytes: bytes) -> list[dict[str, object]]:
     workbook = load_workbook(BytesIO(sample_workbook_bytes), data_only=True)
     return parse_transactions(workbook)
+
+
+def transaction_datetime(row: dict[str, object] | Transaction) -> datetime:
+    if isinstance(row, Transaction):
+        return datetime.combine(row.date, row.time)
+    return datetime.combine(row["date"], row["time"])
+
+
+def transaction_signature(row: dict[str, object] | Transaction) -> tuple[object, ...]:
+    if isinstance(row, Transaction):
+        return (
+            row.date,
+            row.time,
+            row.type,
+            row.category_major,
+            row.category_minor,
+            row.description,
+            row.amount,
+            row.currency,
+            row.payment_method,
+            row.memo,
+        )
+    return (
+        row["date"],
+        row["time"],
+        row["type"],
+        row["category_major"],
+        row["category_minor"],
+        row["description"],
+        row["amount"],
+        row["currency"],
+        row["payment_method"],
+        row["memo"],
+    )
+
+
+def transaction_reconciliation_key(
+    row: dict[str, object] | Transaction,
+) -> tuple[object, ...]:
+    if isinstance(row, Transaction):
+        return (
+            row.date,
+            row.type,
+            row.category_major,
+            row.category_minor,
+            row.description,
+            row.amount,
+            row.currency,
+            row.payment_method,
+        )
+    return (
+        row["date"],
+        row["type"],
+        row["category_major"],
+        row["category_minor"],
+        row["description"],
+        row["amount"],
+        row["currency"],
+        row["payment_method"],
+    )
+
+
+def find_logically_matching_rows_with_changed_time(
+    old_rows: list[dict[str, object]],
+    new_rows: list[dict[str, object]],
+) -> tuple[dict[str, object], dict[str, object]]:
+    old_groups: dict[tuple[object, ...], list[dict[str, object]]] = {}
+    new_groups: dict[tuple[object, ...], list[dict[str, object]]] = {}
+
+    for row in old_rows:
+        old_groups.setdefault(transaction_reconciliation_key(row), []).append(row)
+    for row in new_rows:
+        new_groups.setdefault(transaction_reconciliation_key(row), []).append(row)
+
+    for key in old_groups.keys() & new_groups.keys():
+        old_group = sorted(old_groups[key], key=transaction_datetime)
+        new_group = sorted(new_groups[key], key=transaction_datetime)
+        for old_row, new_row in zip(old_group, new_group):
+            if transaction_signature(old_row) != transaction_signature(new_row):
+                return old_row, new_row
+
+    raise AssertionError("Expected at least one logical match with changed exact time")
+
+
+def transaction_conditions(row: dict[str, object]) -> tuple[object, ...]:
+    category_minor = row["category_minor"]
+    payment_method = row["payment_method"]
+    return (
+        Transaction.date == row["date"],
+        Transaction.time == row["time"],
+        Transaction.type == row["type"],
+        Transaction.category_major == row["category_major"],
+        Transaction.category_minor.is_(None)
+        if category_minor is None
+        else Transaction.category_minor == category_minor,
+        Transaction.description == row["description"],
+        Transaction.amount == row["amount"],
+        Transaction.currency == row["currency"],
+        Transaction.payment_method.is_(None)
+        if payment_method is None
+        else Transaction.payment_method == payment_method,
+    )

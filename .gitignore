@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 tmp/
 .worktrees/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
