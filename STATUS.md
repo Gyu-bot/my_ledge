@@ -2,8 +2,8 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-25T00:32+0900, rolling-window import를 append-only exact dedupe로 재조정)
-- **Branch:** feat/rolling-window-import-sync
+- **Last Worker:** codex (2026-03-25T00:40+0900, rolling-window import 변경을 main에 병합)
+- **Branch:** main
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
