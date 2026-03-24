@@ -254,6 +254,7 @@ EXCEL_PASSWORD=        # BankSalad 엑셀 암호
 
 # App
 SECRET_KEY=
+API_KEY=               # 내부 API 인증용 (X-API-Key)
 CORS_ORIGINS=          # 프론트엔드 도메인
 ```
 
@@ -267,9 +268,16 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 - **소분류 85%가 "미분류"** — 이번 버전에서는 수동 편집만 제공. 자동 분류는 다음 버전.
 - **이체 = 자산이동** — 수입/지출 분석에서 제외, 별도 tracking.
 - **지출인데 양수인 건** — 결제 취소/환불. 해당 월 지출에서 상계.
-- **우리은행 마이너스 통장** — 자유입출금 자산에 음수(-6,093,150)로 잡힌다. 실질적으로 부채.
-- **해외주식 평가액** — 소수점 있음 (예: 9,019,507.114654869). `NUMERIC(15,2)` 사용.
+- **마이너스 통장 자산 표기** — 자유입출금 자산에 음수로 잡힐 수 있다. 실질적으로는 부채로 해석해야 한다.
+- **해외주식 평가액** — 소수점 값이 포함될 수 있다. `NUMERIC(15,2)` 사용.
 - **OpenClaw 연동** — 쓰기는 API 전용, 읽기는 PostgreSQL readonly 유저로 직접 SQL 실행 가능 (statement_timeout=30s).
+- `snapshot_date`는 API 입력값 우선, 없으면 서버 업로드 날짜를 사용한다.
+- 업로드는 부분 성공(`partial`)을 허용한다. 한쪽 적재가 성공하면 성공분은 유지하고 실패 원인을 `upload_logs`에 남긴다.
+- 카테고리/결제수단 드롭다운은 `transactions`의 distinct 값으로 조회한다.
+- 조회 API는 `is_edited`, `include_deleted`, `include_merged`, `search` 필터를 지원해야 한다.
+- `POST /api/v1/upload`, `GET /api/v1/schema`, 쓰기성 거래 편집 API는 `X-API-Key` 인증을 사용한다.
+- 원본 업로드 파일은 `/data/uploads/`에 최근 5개만 보관한다.
+- 거래 병합 기능은 엔드포인트 정의만 유지하고 MVP 구현 범위에서는 제외한다.
 
 ---
 
