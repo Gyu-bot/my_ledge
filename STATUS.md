@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-24T12:36+0900)
+- **Last Worker:** codex (2026-03-24T12:36+0900, PRD 실데이터 비식별화)
 - **Branch:** main (초기 설정)
 
 ## Completed
@@ -45,6 +45,7 @@
 - 2026-03-23: 비공개/쓰기성 API는 `X-API-Key` 인증 방식 사용
 - 2026-03-23: 원본 업로드 파일은 최근 5개만 보관
 - 2026-03-23: 거래 병합 기능은 MVP 범위에서 제외
+- 2026-03-24: PRD 부록은 실데이터 원문 대신 익명화된 분포/규모 예시만 유지
 
 ## Known Issues
 - 엑셀 암호 미제공 상태 — `.env`에 `EXCEL_PASSWORD` 설정 필요
