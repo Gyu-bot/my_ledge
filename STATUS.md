@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-25T00:40+0900, rolling-window import 변경을 main에 병합)
+- **Last Worker:** codex (2026-03-25T17:26+0900, Task 9 canonical layer 범위 문서화)
 - **Branch:** main
 
 ## Completed
@@ -37,9 +37,9 @@
   - 우선 파일: `.env`, 실제 workbook 경로, `backend/scripts/verify_import_parity.py`
   - 성공 기준: 최신 workbook 단독 import parity 통과와, rolling-window 연속 업로드 시 기존 imported row 보존 + exact-new append 정책에 맞는 `tx_new/tx_skipped/final row count` 확인
 - [ ] Task 9 후보: canonical analysis layer 1차 구현
-  - 목표: `vw_transactions_effective`, `vw_category_monthly_spend` 추가와 `/api/v1/schema` 문서 반영
-  - 우선 파일: `backend/alembic/versions/`, `backend/app/services/schema_service.py`, `backend/tests/api/test_schema_api.py`
-  - 성공 기준: 두 canonical view가 마이그레이션과 schema 문서에 반영되고 focused schema/API 테스트 통과
+  - 목표: `vw_transactions_effective`, `vw_category_monthly_spend` 추가 후 `/api/v1/schema` 와 기존 거래 조회/분석 read path가 동일 canonical layer를 사용하도록 맞춘다
+  - 우선 파일: `backend/alembic/versions/`, `backend/app/services/schema_service.py`, `backend/app/services/transaction_query_service.py`, `backend/tests/api/test_schema_api.py`, `backend/tests/api/test_transactions_api.py`
+  - 성공 기준: 두 canonical view가 마이그레이션과 schema 문서에 반영되고, 기존 거래 조회/분석 엔드포인트가 해당 view 또는 그와 정의상 동일한 shared query path를 사용하며, focused schema/API 테스트가 통과한다
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -71,6 +71,7 @@
 - 2026-03-24: `sample_260324.xlsx` 검증 결과 최신 export는 strict cumulative snapshot이 아니라 rolling window + 일부 중간 구간 변경이 섞일 수 있어, 단순 max(date,time) 커서 방식만으로는 최종 상태 동기화를 보장하지 못한다
 - 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
 - 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지하며, workbook datetime window 안에서 exact signature로 아직 없는 거래만 append한다
+- 2026-03-25: Task 9 canonical analysis layer 1차 범위는 view 생성과 문서화에 그치지 않고, 기존 거래 조회/분석 런타임이 `vw_transactions_effective` / `vw_category_monthly_spend` 또는 그와 정의상 동일한 shared read path를 실제로 사용하도록 맞추는 것까지 포함한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

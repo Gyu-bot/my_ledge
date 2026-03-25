@@ -57,7 +57,7 @@
 - Create: `backend/app/services/transaction_query_service.py`
 - Create: `backend/app/services/transaction_edit_service.py`
 - Create: `backend/app/services/schema_service.py`
-- Modify: transaction query/schema services later so the first canonical analysis view can be reused by APIs and agent-facing schema docs
+- Modify: transaction query/schema services so the first canonical analysis view becomes the shared read surface for existing analysis APIs and agent-facing schema docs
 
 ### Backend tests
 - Create: `backend/tests/conftest.py`
@@ -549,16 +549,23 @@ Scope of `vw_category_monthly_spend`:
 - `vw_transactions_effective` as the default row-level read surface for agent-driven transaction analysis
 - `vw_category_monthly_spend` as the default monthly/category aggregate surface for dashboards and finance advice
 
-- [ ] **Step 5: Keep only later derived views out of first scope**
+- [ ] **Step 5: Switch the existing read path to the canonical layer**
+
+In first-pass runtime adoption scope:
+- existing transaction analysis/read endpoints should consume `vw_transactions_effective` and `vw_category_monthly_spend` directly, or through one shared query service abstraction that is backed by those views
+- the goal is to remove duplicated interpretation logic for `is_deleted`, `merged_into_id`, and effective category selection from per-endpoint code paths
+- if an endpoint cannot fully switch to direct SQL view reads in this task, it must still delegate its canonical filtering/category semantics to a shared path that is definitionally aligned with the view contracts
+
+- [ ] **Step 6: Keep only later derived views out of first scope**
 
 Do **not** implement `vw_monthly_cashflow`, recurring-merchant views, or other derived views yet. Record them as future expansion once the first canonical layer is proven useful.
 
-- [ ] **Step 6: Run focused schema/API tests**
+- [ ] **Step 7: Run focused schema/API tests**
 
 Run: `cd backend && uv run pytest tests/api/test_schema_api.py -v`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add backend docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md

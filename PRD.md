@@ -290,7 +290,7 @@ volumes:
 | 기능 | 경로 | 설명 |
 |---|---|---|
 | 데이터 업로드 (쓰기) | REST API 전용 | `POST /api/v1/upload` — 파일 수신 → 복호화 → 파싱 → 중복 제거 → 적재 |
-| 정형 분석 (읽기) | REST API | 월별 요약, 카테고리 합계 등 자주 쓰는 뷰 |
+| 정형 분석 (읽기) | REST API | 월별 요약, 카테고리 합계 등 자주 쓰는 뷰. 거래 분석 계층은 canonical view (`vw_transactions_effective`, `vw_category_monthly_spend`)를 공통 read surface로 사용한다 |
 | Ad-hoc 분석 (읽기) | DB 직접 접근 | `readonly` PostgreSQL 유저, `statement_timeout=30s` |
 
 **DB 접근 보안:**
@@ -368,6 +368,11 @@ GET /api/v1/transactions/payment-methods
   ?start_date=2025-04-01
   &end_date=2026-03-31
 ```
+
+구현 규칙:
+- 거래 조회/분석 API는 canonical analysis layer를 공통 해석 기준으로 사용한다.
+- row-level 해석은 `vw_transactions_effective` 기준으로 맞추고, 월별 카테고리 지출 집계는 `vw_category_monthly_spend`를 우선 사용한다.
+- 이 레이어는 `is_deleted = FALSE`, `merged_into_id IS NULL`, 사용자 수정 카테고리 우선(`COALESCE(category_*_user, category_*)`) 규칙을 API별로 중복 구현하지 않도록 하는 목적을 가진다.
 
 ### 5.3 거래 데이터 편집 API
 
@@ -678,6 +683,7 @@ CORS_ORIGINS=https://my-ledge.example.com
 - [ ] 엑셀 파싱 파이프라인 (복호화 → 파싱 → 시간 커서 기반 증분 적재)
 - [ ] 업로드 API (`POST /api/v1/upload`)
 - [ ] 기본 조회 API (transactions summary, by-category)
+- [ ] canonical analysis layer 1차 (`vw_transactions_effective`, `vw_category_monthly_spend`) + 기존 조회 read path 연결
 - [ ] 거래 편집 API (PATCH, DELETE, POST, merge, bulk-update)
 - [ ] Docker Compose 구성
 - [ ] 데이터 검증: 파싱 결과 vs 원본 엑셀 크로스체크
