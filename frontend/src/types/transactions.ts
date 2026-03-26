@@ -13,6 +13,8 @@ export interface TransactionResponse {
   amount: number;
   currency: string;
   payment_method: string | null;
+  cost_kind: string | null;
+  fixed_cost_necessity: string | null;
   memo: string | null;
   is_deleted: boolean;
   merged_into_id: number | null;

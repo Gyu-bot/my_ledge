@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현
-- **Last Worker:** codex (2026-03-26T18:04+0900, Phase 2 Task 3-5 핵심 화면 구현 완료)
+- **Last Worker:** codex (2026-03-26T19:41+0900, 지출 구조 분리·Tree Map 추가·렌더링 경계 분리)
 - **Branch:** main
 
 ## Completed
@@ -35,7 +35,7 @@
 - [ ] Phase 2 frontend 마감 정리 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
   - 마지막 완료 작업: `Phase 2 Task 3-5: 자산/지출/데이터 관리 화면 구현`
-  - 현재 상태: `/assets`, `/spending`, `/data` route가 모두 실제 화면으로 대체되었다. `assets`는 빈 스냅샷일 때 empty-state를 표시하고, `spending`은 지출 거래만 기준으로 결제수단 차트를 다시 그룹핑하며 월별 카테고리 stacked area chart를 추가했다. `data`는 업로드 카드와 거래 편집 작업대를 연결했고, 쓰기 API용 `VITE_API_KEY`가 없으면 read-only 경고를 표시한다. Playwright headless 캡처와 이미지 직접 검토까지 완료했으며, 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
+  - 현재 상태: `/assets`, `/spending`, `/data` route가 모두 실제 화면으로 대체되었다. `assets`는 빈 스냅샷일 때 empty-state를 표시하고, `spending`은 월별 카테고리 추이와 동기화된 범위 표시를 가진 `월별 고정비/변동비 추이` placeholder를 유지한다. 하단 집계 영역은 공용 기간 필터를 공유하는 `카테고리별 지출`, `하위 카테고리별 지출(차트만 유지)`, `결제수단별 지출(파이 차트)`, `거래처별 Tree Map`으로 재구성했고, 하위 카테고리 카드에는 상위 카테고리 필터가 있다. 거래 내역은 기본 접힘 아코디언이며 20행 페이지네이션과 기간·카테고리·결제수단·검색 필터를 지원한다. 지출 페이지 데이터 흐름은 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리해 관련 섹션만 갱신되도록 정리했다. 백엔드/DB에는 `cost_kind`, `fixed_cost_necessity` nullable 분류 필드를 예약했고, 로컬 개발 DB에는 `20260326_0003` 마이그레이션 적용까지 확인했다. `월별 고정비/변동비 추이` 실제 area chart는 분류 데이터가 들어온 뒤 후속 구현이 필요하다. `data`는 업로드 카드와 거래 편집 작업대를 연결했고, 쓰기 API용 `VITE_API_KEY`가 없으면 read-only 경고를 표시한다. Playwright headless 캡처와 이미지 직접 검토까지 완료했으며, 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
 
 ## Blocked
 - 없음
@@ -86,6 +86,13 @@
 - 2026-03-26: 지출 분석의 `결제수단별 지출`은 백엔드 endpoint가 아직 `type=지출` 필터를 지원하지 않아, 프론트에서 필터된 지출 거래 rows를 다시 그룹핑해 의미를 맞춘다
 - 2026-03-26: 지출 분석의 월별 카테고리 시계열은 `vw_category_monthly_spend` 계열 read path를 노출하는 `/transactions/by-category/timeline` endpoint로 내리고, 프론트에서는 상위 카테고리만 stacked area로 보여주고 나머지는 `기타`로 묶는다
 - 2026-03-26: 외부 리뷰용 dev server에서 direct API base URL을 쓸 수 있도록 backend 앱에 `CORS_ORIGINS` 기반 CORSMiddleware를 실제 적용한다
+- 2026-03-26: 지출 분석 필터는 하나로 묶지 않고, `월별 카테고리 추이` 카드에는 전용 기간 slider를 두며 하단 집계 카드와 거래 내역은 별도 공용 기간 필터를 쓴다. 카테고리/결제수단/검색은 거래 내역에만 적용한다
+- 2026-03-26: 지출 분석의 `월별 카테고리 추이` 기간 제어는 두 개의 독립 슬라이더 대신 dual-thumb range slider로 통합한다
+- 2026-03-26: 지출 분석의 `하위 카테고리`는 `카테고리별 지출` 카드 내부 토글로 욱여넣지 않고, 별도 `하위 카테고리별 지출` 섹션으로 분리한다. 거래 내역 표에도 상위/하위 카테고리를 함께 표시한다
+- 2026-03-26: 고정비/변동비 분류는 별도 테이블로 빼지 않고 `transactions.cost_kind`, `transactions.fixed_cost_necessity` nullable 컬럼으로 먼저 예약한다. 초기값은 전부 `NULL`로 두고, 프론트는 placeholder 섹션부터 연결한다
+- 2026-03-26: 지출 분석의 `결제수단별 지출`은 막대 차트 대신 파이 차트를 사용하고, 기간 필터는 `카테고리별 지출`/`하위 카테고리별 지출`과 동기화한다. 거래 내역은 기본 접힘 아코디언 + 20행 페이지네이션으로 유지한다
+- 2026-03-26: 지출 분석 렌더링 비용을 줄이기 위해 페이지 훅 하나에 데이터를 몰아넣지 않고 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리한다. 카테고리/검색 필터 변경 시 월별 시계열 섹션은 다시 fetch하지 않는다
+- 2026-03-26: `하위 카테고리별 지출`은 테이블을 제거하고 차트 전용 섹션으로 유지한다. `거래처별 Tree Map`은 별도 vendor 컬럼이 생기기 전까지 `description` 기준 집계로 우선 구현한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

@@ -12,17 +12,21 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatCategoryMajorMinor(major: string, minor: string | null) {
+  return minor ? `${major} / ${minor}` : major;
+}
+
 export function TransactionsTable({ rows }: TransactionsTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="hidden min-w-full border-separate border-spacing-y-2 md:table">
         <thead>
           <tr className="text-left text-xs uppercase tracking-[0.2em] text-[color:var(--color-text-subtle)]">
-            <th className="px-4 pb-2 font-medium">Date</th>
-            <th className="px-4 pb-2 font-medium">Description</th>
-            <th className="px-4 pb-2 font-medium">Category</th>
-            <th className="px-4 pb-2 font-medium">Payment</th>
-            <th className="px-4 pb-2 text-right font-medium">Amount</th>
+            <th className="px-4 pb-2 font-medium">일자</th>
+            <th className="px-4 pb-2 font-medium">내역</th>
+            <th className="px-4 pb-2 font-medium">카테고리</th>
+            <th className="px-4 pb-2 font-medium">결제수단</th>
+            <th className="px-4 pb-2 text-right font-medium">금액</th>
           </tr>
         </thead>
         <tbody>
@@ -35,7 +39,14 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
                 {row.description}
               </td>
               <td className="px-4 py-4 text-sm text-[color:var(--color-text-muted)]">
-                {row.effective_category_major}
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-[color:var(--color-text)]">
+                    {row.effective_category_major}
+                  </span>
+                  <span className="text-xs text-[color:var(--color-text-subtle)]">
+                    {row.effective_category_minor ?? '-'}
+                  </span>
+                </div>
               </td>
               <td className="px-4 py-4 text-sm text-[color:var(--color-text-muted)]">
                 {row.payment_method ?? 'N/A'}
@@ -68,7 +79,9 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
               </p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--color-text-muted)]">
-              <span className="rounded-full bg-blue-50 px-3 py-1">{row.effective_category_major}</span>
+              <span className="rounded-full bg-blue-50 px-3 py-1">
+                {formatCategoryMajorMinor(row.effective_category_major, row.effective_category_minor)}
+              </span>
               <span className="rounded-full bg-amber-50 px-3 py-1">
                 {row.payment_method ?? 'N/A'}
               </span>

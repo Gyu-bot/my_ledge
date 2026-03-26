@@ -16,6 +16,8 @@ export interface HorizontalBarDatum {
 interface HorizontalBarChartProps {
   data: HorizontalBarDatum[];
   ariaLabel: string;
+  heightClassName?: string;
+  labelWidth?: number;
 }
 
 function formatCurrency(value: number | string | readonly (number | string)[] | null | undefined) {
@@ -29,9 +31,14 @@ function formatCurrency(value: number | string | readonly (number | string)[] | 
   }).format(numericValue);
 }
 
-export function HorizontalBarChart({ ariaLabel, data }: HorizontalBarChartProps) {
+export function HorizontalBarChart({
+  ariaLabel,
+  data,
+  heightClassName = 'h-72',
+  labelWidth = 92,
+}: HorizontalBarChartProps) {
   return (
-    <div className="h-72 w-full" aria-label={ariaLabel}>
+    <div className={`${heightClassName} w-full`} aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={288}>
         <BarChart data={data} layout="vertical" margin={{ top: 8, right: 12, left: 12, bottom: 8 }}>
           <CartesianGrid horizontal={false} stroke="rgba(148, 163, 184, 0.18)" />
@@ -48,7 +55,7 @@ export function HorizontalBarChart({ ariaLabel, data }: HorizontalBarChartProps)
             tick={{ fill: '#1E3A8A', fontSize: 12 }}
             tickLine={false}
             type="category"
-            width={92}
+            width={labelWidth}
           />
           <Tooltip
             contentStyle={{

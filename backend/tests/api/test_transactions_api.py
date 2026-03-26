@@ -157,6 +157,8 @@ async def test_list_transactions_supports_is_edited_and_search(
     assert payload["total"] == 1
     assert payload["items"][0]["effective_category_major"] == "식비"
     assert payload["items"][0]["effective_category_minor"] == "배달"
+    assert payload["items"][0]["cost_kind"] is None
+    assert payload["items"][0]["fixed_cost_necessity"] is None
 
 
 async def test_summary_and_breakdown_endpoints_use_effective_rules(

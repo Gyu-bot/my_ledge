@@ -21,6 +21,8 @@ class TransactionResponse(BaseModel):
     amount: int
     currency: str
     payment_method: str | None
+    cost_kind: str | None
+    fixed_cost_necessity: str | None
     memo: str | None
     is_deleted: bool
     merged_into_id: int | None
@@ -80,12 +82,16 @@ class TransactionCreateRequest(BaseModel):
     description: str
     amount: int
     payment_method: str | None = None
+    cost_kind: str | None = None
+    fixed_cost_necessity: str | None = None
     memo: str | None = None
 
 
 class TransactionUpdateRequest(BaseModel):
     category_major_user: str | None = None
     category_minor_user: str | None = None
+    cost_kind: str | None = None
+    fixed_cost_necessity: str | None = None
     memo: str | None = None
 
 
@@ -93,6 +99,8 @@ class TransactionBulkUpdateRequest(BaseModel):
     ids: list[int] = Field(min_length=1)
     category_major_user: str | None = None
     category_minor_user: str | None = None
+    cost_kind: str | None = None
+    fixed_cost_necessity: str | None = None
 
 
 class TransactionBulkUpdateResponse(BaseModel):

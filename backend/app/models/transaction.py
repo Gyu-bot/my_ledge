@@ -27,6 +27,8 @@ class Transaction(TimestampMixin, Base):
         server_default="KRW",
     )
     payment_method: Mapped[str | None] = mapped_column(String(100))
+    cost_kind: Mapped[str | None] = mapped_column(String(20))
+    fixed_cost_necessity: Mapped[str | None] = mapped_column(String(20))
     memo: Mapped[str | None] = mapped_column(Text)
     is_deleted: Mapped[bool] = mapped_column(
         nullable=False,

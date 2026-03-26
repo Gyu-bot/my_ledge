@@ -35,6 +35,8 @@ describe('DataPage', () => {
             amount: -12000,
             currency: 'KRW',
             payment_method: '카드 A',
+            cost_kind: null,
+            fixed_cost_necessity: null,
             memo: null,
             is_deleted: false,
             merged_into_id: null,

@@ -87,6 +87,8 @@ async def test_build_transactions_effective_select_returns_raw_and_effective_col
     assert len(rows) == 2
     assert rows[0]["effective_category_major"] == "식비"
     assert rows[0]["effective_category_minor"] == "배달"
+    assert rows[0]["cost_kind"] is None
+    assert rows[0]["fixed_cost_necessity"] is None
     assert rows[0]["is_edited"] is True
     assert rows[1]["is_deleted"] is True
     assert rows[1]["merged_into_id"] == 99
