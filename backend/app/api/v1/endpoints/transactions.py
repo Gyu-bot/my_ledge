@@ -7,6 +7,7 @@ from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.transaction import (
     CategorySummaryResponse,
+    CategoryTimelineResponse,
     PaymentMethodSummaryResponse,
     TransactionBulkUpdateRequest,
     TransactionBulkUpdateResponse,
@@ -28,6 +29,7 @@ from app.services.transactions_service import (
     restore_transaction,
     soft_delete_transaction,
     summarize_by_category,
+    summarize_category_timeline,
     summarize_by_payment_method,
     summarize_transactions,
     update_transaction,
@@ -91,6 +93,23 @@ async def get_transactions_by_category(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> CategorySummaryResponse:
     return await summarize_by_category(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        level=level,
+        tx_type=type,
+    )
+
+
+@router.get("/transactions/by-category/timeline", response_model=CategoryTimelineResponse)
+async def get_transactions_by_category_timeline(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    level: TransactionCategoryLevel = Query(default="major"),
+    type: TransactionTypeFilter = Query(default="지출"),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> CategoryTimelineResponse:
+    return await summarize_category_timeline(
         db_session,
         start_date=start_date,
         end_date=end_date,

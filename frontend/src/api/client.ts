@@ -15,7 +15,7 @@ type QueryValue = string | number | boolean | null | undefined;
 
 export type QueryParams = Record<string, QueryValue>;
 
-type JsonBody = Record<string, unknown>;
+type JsonBody = object;
 
 export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   readonly body?: BodyInit | JsonBody | null;
@@ -23,6 +23,7 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
+const API_KEY = import.meta.env.VITE_API_KEY;
 
 function buildUrl(path: string, query?: QueryParams) {
   const baseUrl = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
@@ -43,6 +44,14 @@ function buildUrl(path: string, query?: QueryParams) {
 
 function isJsonBody(body: ApiRequestOptions['body']): body is JsonBody {
   return body !== null && body !== undefined && !(body instanceof FormData) && typeof body === 'object';
+}
+
+export function getApiKeyHeaders(): Record<string, string> {
+  return API_KEY ? { 'X-API-Key': API_KEY } : {};
+}
+
+export function hasApiKeyConfigured() {
+  return Boolean(API_KEY);
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {

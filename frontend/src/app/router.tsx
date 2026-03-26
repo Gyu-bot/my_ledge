@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AssetsPage } from '../pages/AssetsPage';
+import { DataPage } from '../pages/DataPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { PlaceholderApp } from '../pages/PlaceholderApp';
+import { SpendingPage } from '../pages/SpendingPage';
 import { AppLayout } from './AppLayout';
 
 const routeShells = [
@@ -29,7 +32,10 @@ export function AppRouter() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<DashboardPage />} />
-        {routeShells.map((route) => (
+        <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/spending" element={<SpendingPage />} />
+        <Route path="/data" element={<DataPage />} />
+        {routeShells.filter((route) => !['/assets', '/spending', '/data'].includes(route.path)).map((route) => (
           <Route
             key={route.path}
             path={route.path}

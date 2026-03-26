@@ -22,6 +22,24 @@ export interface TransactionResponse {
   updated_at: string;
 }
 
+export interface TransactionCreateRequest {
+  date: string;
+  time: string;
+  type: string;
+  category_major: string;
+  category_minor: string | null;
+  description: string;
+  amount: number;
+  payment_method: string | null;
+  memo: string | null;
+}
+
+export interface TransactionUpdateRequest {
+  category_major_user?: string | null;
+  category_minor_user?: string | null;
+  memo?: string | null;
+}
+
 export interface TransactionListResponse {
   total: number;
   page: number;
@@ -45,6 +63,16 @@ export interface CategorySummaryItem {
 
 export interface CategorySummaryResponse {
   items: CategorySummaryItem[];
+}
+
+export interface CategoryTimelineItem {
+  period: string;
+  category: string;
+  amount: number;
+}
+
+export interface CategoryTimelineResponse {
+  items: CategoryTimelineItem[];
 }
 
 export interface PaymentMethodSummaryItem {

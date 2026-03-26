@@ -52,6 +52,16 @@ class CategorySummaryResponse(BaseModel):
     items: list[CategorySummaryItem]
 
 
+class CategoryTimelineItem(BaseModel):
+    period: str
+    category: str
+    amount: int
+
+
+class CategoryTimelineResponse(BaseModel):
+    items: list[CategoryTimelineItem]
+
+
 class PaymentMethodSummaryItem(BaseModel):
     payment_method: str | None
     amount: int

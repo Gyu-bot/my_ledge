@@ -238,6 +238,15 @@ async def test_summary_and_breakdown_endpoints_use_effective_rules(
             "type": "지출",
         },
     )
+    by_category_timeline = await async_client.get(
+        "/api/v1/transactions/by-category/timeline",
+        params={
+            "start_date": "2026-02-01",
+            "end_date": "2026-03-31",
+            "level": "major",
+            "type": "지출",
+        },
+    )
     payment_methods = await async_client.get(
         "/api/v1/transactions/payment-methods",
         params={"start_date": "2026-02-01", "end_date": "2026-03-31"},
@@ -255,6 +264,13 @@ async def test_summary_and_breakdown_endpoints_use_effective_rules(
         "items": [
             {"category": "교통", "amount": -80},
             {"category": "식비", "amount": -50},
+        ]
+    }
+    assert by_category_timeline.status_code == 200
+    assert by_category_timeline.json() == {
+        "items": [
+            {"period": "2026-02", "category": "식비", "amount": -50},
+            {"period": "2026-03", "category": "교통", "amount": -80},
         ]
     }
     assert payment_methods.status_code == 200

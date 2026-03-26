@@ -11,6 +11,8 @@ from app.services.canonical_views import build_transactions_effective_select
 from app.schemas.transaction import (
     CategorySummaryItem,
     CategorySummaryResponse,
+    CategoryTimelineItem,
+    CategoryTimelineResponse,
     PaymentMethodSummaryItem,
     PaymentMethodSummaryResponse,
     TransactionBulkUpdateRequest,
@@ -161,6 +163,43 @@ async def summarize_by_payment_method(
         items=[
             PaymentMethodSummaryItem(payment_method=payment_method, amount=amount)
             for payment_method, amount in sorted(grouped.items(), key=lambda item: (item[1], item[0] or ""))
+        ]
+    )
+
+
+async def summarize_category_timeline(
+    db_session: AsyncSession,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    level: str,
+    tx_type: TransactionTypeFilter,
+) -> CategoryTimelineResponse:
+    transactions = await _load_filtered_transactions(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        category_major=None,
+        payment_method=None,
+        tx_type=tx_type,
+        is_edited="all",
+        include_deleted=False,
+        include_merged=False,
+        search=None,
+    )
+    grouped: dict[tuple[str, str], int] = defaultdict(int)
+    for transaction in transactions:
+        category = (
+            transaction["effective_category_major"]
+            if level == "major"
+            else transaction["effective_category_minor"]
+        )
+        grouped[(_period_key(transaction["date"], "month"), category or "미분류")] += transaction["amount"]
+
+    return CategoryTimelineResponse(
+        items=[
+            CategoryTimelineItem(period=period, category=category, amount=amount)
+            for (period, category), amount in sorted(grouped.items())
         ]
     )
 

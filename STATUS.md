@@ -1,9 +1,9 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 2 — 대시보드 Core 준비
-- **Last Worker:** codex (2026-03-26T16:16+0900, Phase 2 Task 2 메인 대시보드 구현 완료)
-- **Branch:** feat/dashboard-core
+- **Phase:** Phase 2 — 핵심 화면 구현
+- **Last Worker:** codex (2026-03-26T18:04+0900, Phase 2 Task 3-5 핵심 화면 구현 완료)
+- **Branch:** main
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -27,21 +27,24 @@
 - [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
 - [x] Phase 2 Task 1 완료: frontend app shell + data foundation
 - [x] Phase 2 Task 2 완료: 메인 대시보드 구현
+- [x] Phase 2 Task 3 완료: 자산 현황 페이지 구현
+- [x] Phase 2 Task 4 완료: 지출 분석 페이지 구현
+- [x] Phase 2 Task 5 완료: 데이터 관리 페이지 구현
 
 ## In Progress
-- [ ] Phase 2 dashboard core 진행 중
+- [ ] Phase 2 frontend 마감 정리 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
-  - 마지막 완료 작업: `Phase 2 Task 2: 메인 대시보드 구현`
-  - 현재 상태: `feat/dashboard-core` worktree에서 canonical API 기반 메인 대시보드 화면을 구현했고, summary card / 월별 지출 추이 / 카테고리 비중 / 최근 거래 섹션을 실제 데이터와 연결했다. 카테고리 비중 카드는 월 단위 필터를 가진 compact 패턴으로 정리했고, 사용자 피드백에 따라 범례/설명/상단 기간 뱃지를 제거했다. 현재 다음 작업은 `Phase 2 Task 3: 자산 현황 페이지 구현`이다
+  - 마지막 완료 작업: `Phase 2 Task 3-5: 자산/지출/데이터 관리 화면 구현`
+  - 현재 상태: `/assets`, `/spending`, `/data` route가 모두 실제 화면으로 대체되었다. `assets`는 빈 스냅샷일 때 empty-state를 표시하고, `spending`은 지출 거래만 기준으로 결제수단 차트를 다시 그룹핑하며 월별 카테고리 stacked area chart를 추가했다. `data`는 업로드 카드와 거래 편집 작업대를 연결했고, 쓰기 API용 `VITE_API_KEY`가 없으면 read-only 경고를 표시한다. Playwright headless 캡처와 이미지 직접 검토까지 완료했으며, 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 2 Task 3: 자산 현황 페이지 구현
-  - 목표: net worth history, investments summary, loans summary를 canonical/backend API와 연결한 자산 현황 화면 구현
-  - 우선 파일: `frontend/src/pages/AssetsPage.tsx`, `frontend/src/api/assets.ts`, `frontend/src/hooks/useAssets.ts`, 자산 전용 chart/list 컴포넌트
-  - 성공 기준: assets page test와 frontend lint/typecheck가 통과하고, `/assets` route가 placeholder에서 실제 화면으로 대체됨
+- [ ] Phase 2 Task 6: 프론트 통합 polish / write flow 실검증
+  - 목표: 데이터 관리 화면의 업로드/수정/삭제/복원 write flow를 실제 API 키 환경에서 수동 검증하고, 화면 polish와 chunk 분할 등 마감 정리를 수행
+  - 우선 파일: `frontend/src/pages/DataPage.tsx`, `frontend/src/hooks/useDataManagement.ts`, `frontend/src/app/router.tsx`, 필요 시 backend upload log 조회 endpoint
+  - 성공 기준: write flow 실검증 기록이 남고, 남은 Phase 2 polish 항목과 성능/번들 경고 대응 방향이 정리됨
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -79,6 +82,10 @@
 - 2026-03-26: 테스트 fixture에서 `snapshot_date=None` 을 쓰면 실행일에 따라 assets API 기대값이 흔들리므로, 공통 seed fixture는 고정 날짜를 명시한다
 - 2026-03-26: Phase 2 frontend 구현 순서는 `dashboard -> assets -> spending -> data` 로 고정하고, UI 디자인 작업마다 `ui-ux-pro-max` 를 기본 스킬로 사용한다
 - 2026-03-26: 메인 대시보드의 `카테고리 비중` 카드는 항상 펼쳐진 제어 패널 대신 compact filter 패턴을 사용하고, 월 단위 범위 선택만 허용한다
+- 2026-03-26: 데이터 관리 화면의 write API는 `X-API-Key`가 필요하므로 프론트는 선택적 `VITE_API_KEY` 헤더 지원을 넣고, 키가 없으면 read-only 경고를 먼저 노출한다
+- 2026-03-26: 지출 분석의 `결제수단별 지출`은 백엔드 endpoint가 아직 `type=지출` 필터를 지원하지 않아, 프론트에서 필터된 지출 거래 rows를 다시 그룹핑해 의미를 맞춘다
+- 2026-03-26: 지출 분석의 월별 카테고리 시계열은 `vw_category_monthly_spend` 계열 read path를 노출하는 `/transactions/by-category/timeline` endpoint로 내리고, 프론트에서는 상위 카테고리만 stacked area로 보여주고 나머지는 `기타`로 묶는다
+- 2026-03-26: 외부 리뷰용 dev server에서 direct API base URL을 쓸 수 있도록 backend 앱에 `CORS_ORIGINS` 기반 CORSMiddleware를 실제 적용한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -89,3 +96,5 @@
 - `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
 - frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
 - 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
+- Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
+- 데이터 관리 화면의 `최근 업로드 결과`는 현재 세션 내 마지막 업로드 결과만 보여준다. 서버 저장 `upload_logs` 조회 API는 아직 없어 과거 이력 타임라인은 후속 작업이다
