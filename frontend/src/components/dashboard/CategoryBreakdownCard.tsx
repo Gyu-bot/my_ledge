@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { getCategoryBreakdown } from '../../api/dashboard';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Input } from '../ui/input';
 import { CategoryDonutChart } from '../charts/CategoryDonutChart';
 import type { CategoryBreakdownSlice } from '../../types/dashboard';
 
@@ -205,21 +209,17 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
   }
 
   return (
-    <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)] xl:min-h-[25rem]">
-      <div className="flex h-full flex-col gap-3">
+    <Card className="xl:min-h-[25rem]">
+      <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-                카테고리 비중
-              </h3>
-              <div className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold tracking-[0.18em] text-amber-700">
-                비중
-              </div>
+              <CardTitle>카테고리 비중</CardTitle>
+              <Badge variant="accent">비중</Badge>
             </div>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+            <CardDescription className="mt-2">
               선택한 월 범위 기준 주요 지출 카테고리 비중을 보여줍니다.
-            </p>
+            </CardDescription>
           </div>
         </div>
 
@@ -236,18 +236,13 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
             </div>
             <div className="flex flex-wrap gap-2">
               {activePreset !== 'all' ? (
-                <button
-                  className="rounded-full border border-[color:var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[color:var(--color-text-muted)] transition hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
-                  onClick={() => handlePresetSelect('all')}
-                  type="button"
-                >
+                <Button onClick={() => handlePresetSelect('all')} type="button" variant="outline">
                   전체로 초기화
-                </button>
+                </Button>
               ) : null}
-              <button
+              <Button
                 aria-controls="category-range-panel"
                 aria-expanded={isFilterOpen}
-                className="rounded-full bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800"
                 onClick={() => {
                   setValidationMessage(null);
                   setIsFilterOpen((current) => !current);
@@ -255,7 +250,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
                 type="button"
               >
                 {isFilterOpen ? '기간 닫기' : '기간 변경'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -268,19 +263,15 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
                 {presetOptions.map((option) => {
                   const isActive = activePreset === option.key;
                   return (
-                    <button
+                    <Button
                       key={option.key}
                       aria-pressed={isActive}
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                        isActive
-                          ? 'bg-[color:var(--color-primary)] text-white shadow-[var(--shadow-soft)]'
-                          : 'border border-[color:var(--color-border)] bg-white text-[color:var(--color-text-muted)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
-                      }`}
                       onClick={() => handlePresetSelect(option.key)}
                       type="button"
+                      variant={isActive ? 'default' : 'outline'}
                     >
                       {option.label}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -290,8 +281,8 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
                   <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                     시작 월
                   </span>
-                  <input
-                    className="mt-1.5 w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition focus:border-[color:var(--color-primary)] focus:ring-2 focus:ring-blue-100"
+                  <Input
+                    className="mt-1.5"
                     onChange={(event) => setDraftStartMonth(event.target.value)}
                     type="month"
                     value={draftStartMonth}
@@ -302,8 +293,8 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
                   <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                     종료 월
                   </span>
-                  <input
-                    className="mt-1.5 w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition focus:border-[color:var(--color-primary)] focus:ring-2 focus:ring-blue-100"
+                  <Input
+                    className="mt-1.5"
                     onChange={(event) => setDraftEndMonth(event.target.value)}
                     type="month"
                     value={draftEndMonth}
@@ -315,13 +306,9 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
                 <p className="text-sm leading-5 text-[color:var(--color-text-muted)]">
                   월 단위로만 선택하며, 선택한 월의 1일부터 말일까지 자동 집계합니다.
                 </p>
-                <button
-                  className="inline-flex items-center justify-center rounded-2xl bg-[color:var(--color-primary)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-800"
-                  onClick={handleApplyCustomRange}
-                  type="button"
-                >
+                <Button onClick={handleApplyCustomRange} type="button">
                   적용
-                </button>
+                </Button>
               </div>
 
               {validationMessage ? (
@@ -332,23 +319,23 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
             </div>
           ) : null}
         </div>
+      </CardHeader>
 
-        <div className="flex flex-1 items-center">
-          {categoryQuery.isError && activePreset !== 'all' ? (
-            <div className="w-full rounded-[1.5rem] border border-rose-200 bg-rose-50 px-4 py-6 text-sm leading-6 text-rose-800">
-              선택한 월 범위의 카테고리 데이터를 불러오지 못했습니다.
-            </div>
-          ) : hasData ? (
-            <div className="w-full">
-              <CategoryDonutChart data={chartData} />
-            </div>
-          ) : (
-            <div className="w-full rounded-[1.5rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-10 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
-              선택한 기간에 표시할 카테고리 지출 데이터가 없습니다.
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
+      <CardContent className="flex flex-1 items-center">
+        {categoryQuery.isError && activePreset !== 'all' ? (
+          <div className="w-full rounded-[1.5rem] border border-rose-200 bg-rose-50 px-4 py-6 text-sm leading-6 text-rose-800">
+            선택한 월 범위의 카테고리 데이터를 불러오지 못했습니다.
+          </div>
+        ) : hasData ? (
+          <div className="w-full">
+            <CategoryDonutChart data={chartData} />
+          </div>
+        ) : (
+          <div className="w-full rounded-[1.5rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-10 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
+            선택한 기간에 표시할 카테고리 지출 데이터가 없습니다.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

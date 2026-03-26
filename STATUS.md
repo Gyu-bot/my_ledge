@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 2 — 핵심 화면 구현
-- **Last Worker:** codex (2026-03-26T19:49+0900, PRD/AGENTS 문서 요구사항 동기화)
+- **Phase:** Phase 2 — 핵심 화면 구현 완료
+- **Last Worker:** codex (2026-03-26T20:16+0900, shadcn/ui primitive 치환 + 전체 화면 검증)
 - **Branch:** main
 
 ## Completed
@@ -30,12 +30,13 @@
 - [x] Phase 2 Task 3 완료: 자산 현황 페이지 구현
 - [x] Phase 2 Task 4 완료: 지출 분석 페이지 구현
 - [x] Phase 2 Task 5 완료: 데이터 관리 페이지 구현
+- [x] Phase 2 Task 5.1 완료: 현재 구현된 frontend 화면 전반을 shadcn/ui primitive 중심으로 재정렬 (`dashboard`, `assets`, `spending`, `data`, app shell, 공통 필터/테이블/상태 카드)
 
 ## In Progress
 - [ ] Phase 2 frontend 마감 정리 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
-  - 마지막 완료 작업: `Phase 2 Task 3-5: 자산/지출/데이터 관리 화면 구현`
-  - 현재 상태: `/assets`, `/spending`, `/data` route가 모두 실제 화면으로 대체되었다. `assets`는 빈 스냅샷일 때 empty-state를 표시하고, `spending`은 월별 카테고리 추이와 동기화된 범위 표시를 가진 `월별 고정비/변동비 추이` placeholder를 유지한다. 하단 집계 영역은 공용 기간 필터를 공유하는 `카테고리별 지출`, `하위 카테고리별 지출(차트만 유지)`, `결제수단별 지출(파이 차트)`, `거래처별 Tree Map`으로 재구성했고, 하위 카테고리 카드에는 상위 카테고리 필터가 있다. 거래 내역은 기본 접힘 아코디언이며 20행 페이지네이션과 기간·카테고리·결제수단·검색 필터를 지원한다. 지출 페이지 데이터 흐름은 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리해 관련 섹션만 갱신되도록 정리했다. 백엔드/DB에는 `cost_kind`, `fixed_cost_necessity` nullable 분류 필드를 예약했고, 로컬 개발 DB에는 `20260326_0003` 마이그레이션 적용까지 확인했다. `월별 고정비/변동비 추이` 실제 area chart는 분류 데이터가 들어온 뒤 후속 구현이 필요하다. `data`는 업로드 카드와 거래 편집 작업대를 연결했고, 쓰기 API용 `VITE_API_KEY`가 없으면 read-only 경고를 표시한다. Playwright headless 캡처와 이미지 직접 검토까지 완료했으며, 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
+  - 마지막 완료 작업: `Phase 2 Task 5.1: shadcn/ui 기반 화면 전환`
+  - 현재 상태: `/`, `/assets`, `/spending`, `/data` route와 app shell, 공통 필터/테이블/상태 카드가 모두 shadcn/ui 스타일 primitive(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`) 중심으로 정렬되었다. 차트는 현재 요구사항상 Recharts를 유지하되 empty-state와 주변 chrome은 동일 톤으로 맞췄다. `spending`은 여전히 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리되어 관련 섹션만 갱신되고, `월별 고정비/변동비 추이`는 `cost_kind` 데이터가 비어 있어 placeholder 상태다. 최신 검증은 `npm test -- --runInBand`, `npm run typecheck`, `npm run lint`, `npm run build` 전부 통과했고, headless browser(`playwright-core + system Chrome`)로 `/`, `/assets`, `/spending`, `/data` 화면을 캡처한 뒤 이미지를 직접 검토했다. 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
 
 ## Blocked
 - 없음
@@ -93,6 +94,7 @@
 - 2026-03-26: 지출 분석의 `결제수단별 지출`은 막대 차트 대신 파이 차트를 사용하고, 기간 필터는 `카테고리별 지출`/`하위 카테고리별 지출`과 동기화한다. 거래 내역은 기본 접힘 아코디언 + 20행 페이지네이션으로 유지한다
 - 2026-03-26: 지출 분석 렌더링 비용을 줄이기 위해 페이지 훅 하나에 데이터를 몰아넣지 않고 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리한다. 카테고리/검색 필터 변경 시 월별 시계열 섹션은 다시 fetch하지 않는다
 - 2026-03-26: `하위 카테고리별 지출`은 테이블을 제거하고 차트 전용 섹션으로 유지한다. `거래처별 Tree Map`은 별도 vendor 컬럼이 생기기 전까지 `description` 기준 집계로 우선 구현한다
+- 2026-03-26: frontend 공통 primitive는 `shadcn/ui` 스타일(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`)을 우선 사용하고, 차트는 현재 기능 범위상 Recharts를 유지하되 주변 레이아웃과 empty-state는 동일 디자인 시스템으로 정렬한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

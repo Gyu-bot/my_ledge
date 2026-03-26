@@ -1,4 +1,14 @@
 import type { RecentTransaction } from '../../types/dashboard';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../ui/table';
+import { Card, CardContent } from '../ui/card';
+import { Badge } from '../ui/badge';
 
 interface TransactionsTableProps {
   rows: RecentTransaction[];
@@ -19,26 +29,27 @@ function formatCategoryMajorMinor(major: string, minor: string | null) {
 export function TransactionsTable({ rows }: TransactionsTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="hidden min-w-full border-separate border-spacing-y-2 md:table">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-[0.2em] text-[color:var(--color-text-subtle)]">
-            <th className="px-4 pb-2 font-medium">일자</th>
-            <th className="px-4 pb-2 font-medium">내역</th>
-            <th className="px-4 pb-2 font-medium">카테고리</th>
-            <th className="px-4 pb-2 font-medium">결제수단</th>
-            <th className="px-4 pb-2 text-right font-medium">금액</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div className="hidden rounded-[1.5rem] border border-[color:var(--color-border)] bg-white/80 md:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>일자</TableHead>
+              <TableHead>내역</TableHead>
+              <TableHead>카테고리</TableHead>
+              <TableHead>결제수단</TableHead>
+              <TableHead className="text-right">금액</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
           {rows.map((row) => (
-            <tr key={row.id} className="rounded-2xl bg-white/80 shadow-[0_12px_24px_-18px_rgba(30,64,175,0.35)]">
-              <td className="rounded-l-2xl px-4 py-4 text-sm text-[color:var(--color-text-muted)]">
+            <TableRow key={row.id}>
+              <TableCell className="text-[color:var(--color-text-muted)]">
                 {row.date ?? '-'}
-              </td>
-              <td className="px-4 py-4 text-sm font-medium text-[color:var(--color-text)]">
+              </TableCell>
+              <TableCell className="font-medium text-[color:var(--color-text)]">
                 {row.description}
-              </td>
-              <td className="px-4 py-4 text-sm text-[color:var(--color-text-muted)]">
+              </TableCell>
+              <TableCell className="text-[color:var(--color-text-muted)]">
                 <div className="flex flex-col gap-1">
                   <span className="font-medium text-[color:var(--color-text)]">
                     {row.effective_category_major}
@@ -47,24 +58,23 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
                     {row.effective_category_minor ?? '-'}
                   </span>
                 </div>
-              </td>
-              <td className="px-4 py-4 text-sm text-[color:var(--color-text-muted)]">
+              </TableCell>
+              <TableCell className="text-[color:var(--color-text-muted)]">
                 {row.payment_method ?? 'N/A'}
-              </td>
-              <td className="rounded-r-2xl px-4 py-4 text-right text-sm font-semibold text-[color:var(--color-text)]">
+              </TableCell>
+              <TableCell className="text-right font-semibold text-[color:var(--color-text)]">
                 {formatCurrency(row.amount)}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+          </TableBody>
+        </Table>
+      </div>
 
       <div className="space-y-3 md:hidden">
         {rows.map((row) => (
-          <article
-            key={row.id}
-            className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
-          >
+          <Card key={row.id} className="rounded-2xl bg-white/80">
+            <CardContent className="p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-[color:var(--color-text)]">
@@ -79,14 +89,15 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
               </p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--color-text-muted)]">
-              <span className="rounded-full bg-blue-50 px-3 py-1">
+              <Badge className="normal-case tracking-normal">
                 {formatCategoryMajorMinor(row.effective_category_major, row.effective_category_minor)}
-              </span>
-              <span className="rounded-full bg-amber-50 px-3 py-1">
+              </Badge>
+              <Badge className="normal-case tracking-normal" variant="accent">
                 {row.payment_method ?? 'N/A'}
-              </span>
+              </Badge>
             </div>
-          </article>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>

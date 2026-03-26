@@ -1,3 +1,5 @@
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+
 interface PlaceholderAppProps {
   eyebrow: string;
   title: string;
@@ -28,38 +30,43 @@ const nextSlices = [
 export function PlaceholderApp({ eyebrow, title, description }: PlaceholderAppProps) {
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.9fr)]">
-      <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)] sm:p-8">
-        <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
-          {eyebrow}
-        </p>
-        <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-4xl">
-          {title}
-        </h2>
-        <p className="mt-4 max-w-2xl text-sm leading-7 text-[color:var(--color-text-muted)] sm:text-base">
-          {description}
-        </p>
+      <Card className="sm:p-2">
+        <CardContent className="p-6 sm:p-8">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
+            {eyebrow}
+          </p>
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-4xl">
+            {title}
+          </h2>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-[color:var(--color-text-muted)] sm:text-base">
+            {description}
+          </p>
 
-        <dl className="mt-8 grid gap-4 sm:grid-cols-3">
-          {foundationItems.map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
-            >
-              <dt className="text-sm font-medium text-[color:var(--color-text-muted)]">{label}</dt>
-              <dd className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </article>
+          <dl className="mt-8 grid gap-4 sm:grid-cols-3">
+            {foundationItems.map(([label, value]) => (
+              <div
+                key={label}
+                className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
+              >
+                <dt className="text-sm font-medium text-[color:var(--color-text-muted)]">{label}</dt>
+                <dd className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </CardContent>
+      </Card>
 
-      <aside className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-        <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
-          Phase 2
-        </p>
-        <h3 className="mt-4 text-xl font-semibold text-[color:var(--color-text)]">다음 작업</h3>
-        <ul className="mt-6 space-y-4">
+      <Card>
+        <CardHeader>
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
+            Phase 2
+          </p>
+          <CardTitle className="mt-4 text-xl">다음 작업</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-4">
           {nextSlices.map((item) => (
             <li
               key={item.title}
@@ -71,8 +78,9 @@ export function PlaceholderApp({ eyebrow, title, description }: PlaceholderAppPr
               </p>
             </li>
           ))}
-        </ul>
-      </aside>
+          </ul>
+        </CardContent>
+      </Card>
     </section>
   );
 }

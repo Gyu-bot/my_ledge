@@ -1,5 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { SpendingBreakdownDatum } from '../../hooks/useSpending';
+import { SectionPlaceholder } from '../common/SectionPlaceholder';
 
 interface BreakdownPieChartProps {
   ariaLabel: string;
@@ -46,9 +47,10 @@ function TooltipContent({
 export function BreakdownPieChart({ ariaLabel, data }: BreakdownPieChartProps) {
   if (data.length === 0) {
     return (
-      <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-border)] bg-white/70 px-6 py-16 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
-        선택한 기간에 표시할 비중 데이터가 없습니다.
-      </div>
+      <SectionPlaceholder
+        title="결제수단 비중 데이터 없음"
+        description="선택한 기간에 표시할 결제수단 비중 데이터를 찾지 못했습니다."
+      />
     );
   }
 

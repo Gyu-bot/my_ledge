@@ -6,6 +6,8 @@ import { LoadingState } from '../components/common/LoadingState';
 import { StatusCard } from '../components/common/StatusCard';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TransactionsTable } from '../components/tables/TransactionsTable';
+import { Badge } from '../components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useDashboard } from '../hooks/useDashboard';
 
 export function DashboardPage() {
@@ -66,24 +68,20 @@ export function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:items-start xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.95fr)]">
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div className="flex items-center justify-between gap-4">
+        <Card>
+          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
             <div>
-              <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-                월별 지출 추이
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+              <CardTitle>월별 지출 추이</CardTitle>
+              <CardDescription className="mt-2">
                 canonical 거래 요약을 기준으로 월별 지출 흐름을 정리했습니다.
-              </p>
+              </CardDescription>
             </div>
-            <div className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold tracking-[0.18em] text-[color:var(--color-text-subtle)]">
-              지출
-            </div>
-          </div>
-          <div className="mt-6">
+            <Badge>지출</Badge>
+          </CardHeader>
+          <CardContent>
             <LineTrendChart data={monthly_spend} />
-          </div>
-        </article>
+          </CardContent>
+        </Card>
 
         <CategoryBreakdownCard
           data={category_breakdown}
@@ -91,24 +89,22 @@ export function DashboardPage() {
         />
       </section>
 
-      <section className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <Card>
+        <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
           <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              최근 거래
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+            <CardTitle>최근 거래</CardTitle>
+            <CardDescription className="mt-2">
               canonical read model 기준 최신 거래를 보여줍니다.
-            </p>
+            </CardDescription>
           </div>
           <p className="text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
             최근 {recent_transactions.length}건
           </p>
-        </div>
-        <div className="mt-6">
+        </CardHeader>
+        <CardContent>
           <TransactionsTable rows={recent_transactions} />
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </div>
   );
 }

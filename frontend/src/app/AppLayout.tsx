@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 
 const navigationItems = [
   { label: '대시보드', to: '/' },
@@ -15,18 +16,15 @@ export function AppLayout() {
       </a>
 
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <header className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] px-5 py-5 shadow-[var(--shadow-soft)] backdrop-blur">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <Card className="backdrop-blur">
+          <CardHeader className="gap-5 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
                 my_ledge
               </p>
-              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-3xl">
+              <CardTitle className="mt-3 text-2xl tracking-tight sm:text-3xl">
                 개인 재무 대시보드
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-text-muted)]">
-                대시보드 인사이트, 자산 추적, 거래 관리를 한 흐름으로 연결한 개인 재무 워크스페이스입니다.
-              </p>
+              </CardTitle>
             </div>
 
             <nav aria-label="Primary" className="flex flex-wrap items-center gap-2">
@@ -37,12 +35,10 @@ export function AppLayout() {
                   to={item.to}
                   className={({ isActive }) =>
                     [
-                      'inline-flex cursor-pointer items-center rounded-full px-4 py-2 text-sm font-medium',
-                      'transition-colors duration-200 motion-reduce:transition-none',
-                      'focus-visible:ring-2 focus-visible:ring-[color:var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                      'inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition',
                       isActive
-                        ? 'bg-[color:var(--color-primary)] text-white shadow-[var(--shadow-glow)]'
-                        : 'border border-[color:var(--color-border)] bg-white/80 text-[color:var(--color-text-muted)] hover:border-blue-200 hover:bg-blue-50',
+                        ? 'bg-[color:var(--color-primary)] text-white shadow-[var(--shadow-soft)]'
+                        : 'border border-[color:var(--color-border)] bg-white/80 text-[color:var(--color-text-muted)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]',
                     ].join(' ')
                   }
                 >
@@ -50,8 +46,13 @@ export function AppLayout() {
                 </NavLink>
               ))}
             </nav>
-          </div>
-        </header>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="max-w-2xl text-sm leading-6 text-[color:var(--color-text-muted)]">
+              대시보드 인사이트, 자산 추적, 거래 관리를 한 흐름으로 연결한 개인 재무 워크스페이스입니다.
+            </p>
+          </CardContent>
+        </Card>
 
         <main id="main-content" tabIndex={-1} className="mt-6 flex-1">
           <Outlet />

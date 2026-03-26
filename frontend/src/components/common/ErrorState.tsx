@@ -1,3 +1,6 @@
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+
 interface ErrorStateProps {
   title: string;
   description: string;
@@ -6,19 +9,24 @@ interface ErrorStateProps {
 
 export function ErrorState({ title, description, detail }: ErrorStateProps) {
   return (
-    <section className="rounded-[1.75rem] border border-red-200 bg-white p-8 shadow-[var(--shadow-soft)]">
-      <div className="inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-red-700">
-        Dashboard error
-      </div>
-      <h2 className="mt-4 text-2xl font-semibold text-[color:var(--color-text)]">{title}</h2>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-text-muted)]">
-        {description}
-      </p>
-      {detail ? (
-        <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {detail}
+    <Card className="border-red-200 bg-white">
+      <CardHeader>
+        <div className="inline-flex w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-red-700">
+          Dashboard error
+        </div>
+        <CardTitle className="mt-2 text-2xl">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="max-w-2xl text-sm leading-6 text-[color:var(--color-text-muted)]">
+          {description}
         </p>
-      ) : null}
-    </section>
+        {detail ? (
+          <Alert className="mt-4" variant="destructive">
+            <AlertTitle>상세 오류</AlertTitle>
+            <AlertDescription>{detail}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -1,5 +1,6 @@
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 import type { MerchantTreemapDatum } from '../../hooks/useSpending';
+import { SectionPlaceholder } from '../common/SectionPlaceholder';
 
 interface MerchantTreemapChartProps {
   ariaLabel: string;
@@ -98,9 +99,10 @@ function TreemapNode(props: {
 export function MerchantTreemapChart({ ariaLabel, data }: MerchantTreemapChartProps) {
   if (data.length === 0) {
     return (
-      <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-border)] bg-white/70 px-6 py-16 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
-        선택한 기간에 표시할 거래처 분포 데이터가 없습니다.
-      </div>
+      <SectionPlaceholder
+        title="거래처 분포 데이터 없음"
+        description="선택한 기간에 표시할 거래처 분포 데이터를 찾지 못했습니다."
+      />
     );
   }
 

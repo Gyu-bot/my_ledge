@@ -1,3 +1,5 @@
+import { Input } from '../ui/input';
+
 interface DateRangeFilterProps {
   startMonth: string;
   endMonth: string;
@@ -17,8 +19,8 @@ export function DateRangeFilter({
         <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
           시작 월
         </span>
-        <input
-          className="mt-1.5 w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition focus:border-[color:var(--color-primary)] focus:ring-2 focus:ring-blue-100"
+        <Input
+          className="mt-1.5"
           onChange={(event) => onStartMonthChange(event.target.value)}
           type="month"
           value={startMonth}
@@ -29,8 +31,8 @@ export function DateRangeFilter({
         <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
           종료 월
         </span>
-        <input
-          className="mt-1.5 w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition focus:border-[color:var(--color-primary)] focus:ring-2 focus:ring-blue-100"
+        <Input
+          className="mt-1.5"
           onChange={(event) => onEndMonthChange(event.target.value)}
           type="month"
           value={endMonth}

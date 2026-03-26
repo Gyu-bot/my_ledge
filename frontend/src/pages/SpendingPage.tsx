@@ -13,6 +13,23 @@ import {
 } from '../components/filters/TransactionFilterBar';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TransactionsTable } from '../components/tables/TransactionsTable';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 import {
   useSpendingPageState,
   useSpendingPeriodData,
@@ -84,15 +101,13 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
 
   return (
     <section className="grid gap-6">
-      <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-        <div className="flex flex-col gap-5">
+      <Card>
+        <CardHeader className="space-y-5">
           <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              월별 카테고리 추이
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+            <CardTitle>월별 카테고리 추이</CardTitle>
+            <CardDescription>
               월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다.
-            </p>
+            </CardDescription>
           </div>
           <TimelineRangeSlider
             months={timelineQuery.data.available_months}
@@ -100,42 +115,36 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
             onChange={setTimelineFilters}
             onReset={() => setTimelineFilters({ start_month: '', end_month: '' })}
           />
-        </div>
-        <div className="mt-6">
+        </CardHeader>
+        <CardContent>
           <CategoryTimelineAreaChart
             data={timelineQuery.data.category_timeline.points}
             categories={timelineQuery.data.category_timeline.categories}
           />
-        </div>
-      </article>
+        </CardContent>
+      </Card>
 
-      <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <Card>
+        <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
           <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              월별 고정비/변동비 추이
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+            <CardTitle>월별 고정비/변동비 추이</CardTitle>
+            <CardDescription>
               고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다.
-            </p>
+            </CardDescription>
           </div>
-          <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.14em] text-[color:var(--color-text-subtle)]">
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-[color:var(--color-primary)]">
-              {selectedStartMonth}
-            </span>
+          <div className="flex items-center gap-2">
+            <Badge>{selectedStartMonth}</Badge>
             <span>~</span>
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">
-              {selectedEndMonth}
-            </span>
+            <Badge variant="accent">{selectedEndMonth}</Badge>
           </div>
-        </div>
-        <div className="mt-6">
+        </CardHeader>
+        <CardContent>
           <SectionPlaceholder
             title="고정비/변동비 분류 데이터 준비 중"
             description="현재 슬라이더 기간과 동기화되도록 자리를 먼저 잡아두었고, 거래에 cost_kind 분류가 채워지면 area chart가 여기에 표시됩니다."
           />
-        </div>
-      </article>
+        </CardContent>
+      </Card>
     </section>
   );
 });
@@ -214,136 +223,127 @@ const BreakdownSection = memo(function BreakdownSection({
   return (
     <>
       <section className="grid gap-6 xl:grid-cols-2">
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              카테고리별 지출
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>카테고리별 지출</CardTitle>
+            <CardDescription>
               선택한 기간 기준 상위 카테고리 지출 금액을 비교합니다.
-            </p>
-          </div>
-          <div className="mt-6">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <HorizontalBarChart
               ariaLabel="카테고리별 지출 차트"
               data={breakdownQuery.data.category_breakdown}
               heightClassName="h-80"
             />
-          </div>
-        </article>
+          </CardContent>
+        </Card>
 
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              하위 카테고리별 지출
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>하위 카테고리별 지출</CardTitle>
+            <CardDescription>
               선택한 기간 기준 소분류 지출을 그래프로 정리했습니다. 상위 카테고리를 먼저 고르면 해당 범위만 좁혀서 볼 수 있습니다.
-            </p>
-          </div>
-          <div className="mt-5">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <label className="block max-w-xs">
               <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                 상위 카테고리 필터
               </span>
-              <select
-                aria-label="상위 카테고리 필터"
-                className="mt-1.5 w-full rounded-2xl border border-[color:var(--color-border)] bg-white px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition focus:border-[color:var(--color-primary)] focus:ring-2 focus:ring-blue-100"
-                value={subcategoryMajorFilter}
-                onChange={(event) => setSubcategoryMajorFilter(event.target.value)}
+              <Select
+                onValueChange={(value) => setSubcategoryMajorFilter(value === '__all__' ? '' : value)}
+                value={subcategoryMajorFilter || '__all__'}
               >
-                <option value="">전체</option>
-                {breakdownQuery.data.filter_options.subcategory_major_categories.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-label="상위 카테고리 필터" className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">전체</SelectItem>
+                  {breakdownQuery.data.filter_options.subcategory_major_categories.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
-          </div>
-          <div className="mt-6">
+            <div className="mt-6">
             <HorizontalBarChart
               ariaLabel="하위 카테고리별 지출 차트"
               data={breakdownQuery.data.subcategory_breakdown}
               heightClassName="h-96"
               labelWidth={160}
             />
-          </div>
-        </article>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              고정비 필수/비필수 비율
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>고정비 필수/비필수 비율</CardTitle>
+            <CardDescription>
               고정비가 입력되면 필수/비필수 비율을 비교합니다.
-            </p>
-          </div>
-          <div className="mt-6">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <SectionPlaceholder
               title="고정비 세부 분류 대기 중"
               description="fixed_cost_necessity 값이 채워지면 비율 그래프가 여기에 표시됩니다."
             />
-          </div>
-        </article>
+          </CardContent>
+        </Card>
 
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              변동비 비율
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>변동비 비율</CardTitle>
+            <CardDescription>
               변동비 분류가 채워지면 월별 비중과 구성 변화를 확인합니다.
-            </p>
-          </div>
-          <div className="mt-6">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <SectionPlaceholder
               title="변동비 비율 데이터 준비 중"
               description="cost_kind 분류가 채워지면 변동비 비율 그래프가 여기에 표시됩니다."
             />
-          </div>
-        </article>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              결제수단별 지출
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>결제수단별 지출</CardTitle>
+            <CardDescription>
               같은 기간 기준 결제수단별 지출 금액을 비교합니다.
-            </p>
-          </div>
-          <div className="mt-6 flex justify-center">
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
             <div className="w-full max-w-[28rem]">
               <BreakdownPieChart
                 ariaLabel="결제수단별 지출 파이 차트"
                 data={breakdownQuery.data.payment_methods}
               />
             </div>
-          </div>
-        </article>
+          </CardContent>
+        </Card>
 
-        <article className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-          <div>
-            <h3 className="text-xl font-semibold text-[color:var(--color-text)]">
-              거래처별 Tree Map
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>거래처별 Tree Map</CardTitle>
+            <CardDescription>
               현재는 거래 설명 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다.
-            </p>
-          </div>
-          <div className="mt-6">
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <MerchantTreemapChart
               ariaLabel="거래처별 지출 트리맵"
               data={breakdownQuery.data.merchant_breakdown}
             />
-          </div>
-        </article>
+          </CardContent>
+        </Card>
       </section>
     </>
   );
@@ -382,24 +382,28 @@ const TransactionsSection = memo(function TransactionsSection({
 
   if (transactionsQuery.isPending) {
     return (
-      <section className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-        <InlineSectionStatus
-          title="거래 내역을 준비 중입니다"
-          description="현재 필터 조건으로 거래 목록을 불러오고 있습니다."
-        />
-      </section>
+      <Card>
+        <CardContent className="p-6">
+          <InlineSectionStatus
+            title="거래 내역을 준비 중입니다"
+            description="현재 필터 조건으로 거래 목록을 불러오고 있습니다."
+          />
+        </CardContent>
+      </Card>
     );
   }
 
   if (transactionsQuery.isError || !transactionsQuery.data) {
     return (
-      <section className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-        <InlineSectionStatus
-          title="거래 내역을 불러올 수 없습니다"
-          description="현재 조건의 거래 목록을 가져오지 못했습니다."
-          tone="error"
-        />
-      </section>
+      <Card>
+        <CardContent className="p-6">
+          <InlineSectionStatus
+            title="거래 내역을 불러올 수 없습니다"
+            description="현재 조건의 거래 목록을 가져오지 못했습니다."
+            tone="error"
+          />
+        </CardContent>
+      </Card>
     );
   }
 
@@ -409,63 +413,66 @@ const TransactionsSection = memo(function TransactionsSection({
   );
 
   return (
-    <section className="rounded-[1.75rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] p-6 shadow-[var(--shadow-soft)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <Card>
+      <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
         <div>
-          <h3 className="text-xl font-semibold text-[color:var(--color-text)]">거래 내역</h3>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
+          <CardTitle>거래 내역</CardTitle>
+          <CardDescription>
             현재 조건에 맞는 최근 지출 거래를 확인합니다.
-          </p>
+          </CardDescription>
         </div>
         <p className="text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
           {transactionsQuery.data.transactions_page} / {totalPages} 페이지
         </p>
-      </div>
-
-      <details className="mt-6 rounded-[1.5rem] border border-[color:var(--color-border)] bg-white/70">
-        <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-[color:var(--color-text-muted)] marker:hidden">
-          거래 내역 펼치기
-        </summary>
-        <div className="border-t border-[color:rgba(148,163,184,0.16)] px-5 py-5">
-          <TransactionsTable rows={transactionsQuery.data.transactions} />
-          <div className="mt-5 flex items-center justify-between gap-4">
-            <button
-              type="button"
-              onClick={() => setTransactionsPage(Math.max(1, transactionsQuery.data.transactions_page - 1))}
-              disabled={transactionsQuery.data.transactions_page <= 1}
-              className="inline-flex items-center justify-center rounded-full border border-[color:var(--color-border)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--color-text-muted)] transition enabled:hover:border-[color:var(--color-primary)] enabled:hover:text-[color:var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              이전 페이지
-            </button>
-            <p className="text-sm text-[color:var(--color-text-muted)]">
-              총 {transactionsQuery.data.transactions_total}건 중{' '}
-              {(transactionsQuery.data.transactions_page - 1) *
-                transactionsQuery.data.transactions_per_page +
-                1}
-              {' '}-{' '}
-              {Math.min(
-                transactionsQuery.data.transactions_page *
-                  transactionsQuery.data.transactions_per_page,
-                transactionsQuery.data.transactions_total,
-              )}
-              건
-            </p>
-            <button
-              type="button"
-              onClick={() =>
-                setTransactionsPage(
-                  Math.min(totalPages, transactionsQuery.data.transactions_page + 1),
-                )
-              }
-              disabled={transactionsQuery.data.transactions_page >= totalPages}
-              className="inline-flex items-center justify-center rounded-full border border-[color:var(--color-border)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--color-text-muted)] transition enabled:hover:border-[color:var(--color-primary)] enabled:hover:text-[color:var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              다음 페이지
-            </button>
-          </div>
-        </div>
-      </details>
-    </section>
+      </CardHeader>
+      <CardContent>
+        <Accordion collapsible type="single">
+          <AccordionItem value="transactions">
+            <AccordionTrigger>거래 내역 펼치기</AccordionTrigger>
+            <AccordionContent>
+              <TransactionsTable rows={transactionsQuery.data.transactions} />
+              <div className="mt-5 flex items-center justify-between gap-4">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setTransactionsPage(Math.max(1, transactionsQuery.data.transactions_page - 1))
+                  }
+                  disabled={transactionsQuery.data.transactions_page <= 1}
+                  variant="outline"
+                >
+                  이전 페이지
+                </Button>
+                <p className="text-sm text-[color:var(--color-text-muted)]">
+                  총 {transactionsQuery.data.transactions_total}건 중{' '}
+                  {(transactionsQuery.data.transactions_page - 1) *
+                    transactionsQuery.data.transactions_per_page +
+                    1}
+                  {' '}-{' '}
+                  {Math.min(
+                    transactionsQuery.data.transactions_page *
+                      transactionsQuery.data.transactions_per_page,
+                    transactionsQuery.data.transactions_total,
+                  )}
+                  건
+                </p>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setTransactionsPage(
+                      Math.min(totalPages, transactionsQuery.data.transactions_page + 1),
+                    )
+                  }
+                  disabled={transactionsQuery.data.transactions_page >= totalPages}
+                  variant="outline"
+                >
+                  다음 페이지
+                </Button>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </CardContent>
+    </Card>
   );
 });
 

@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { SectionPlaceholder } from '../common/SectionPlaceholder';
 
 export interface CategoryTimelinePoint {
   period: string;
@@ -36,9 +37,10 @@ export function CategoryTimelineAreaChart({
 }: CategoryTimelineAreaChartProps) {
   if (data.length === 0 || categories.length === 0) {
     return (
-      <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-border)] bg-white/70 px-6 py-16 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
-        선택한 조건에서 월별 카테고리 시계열 데이터가 없습니다.
-      </div>
+      <SectionPlaceholder
+        title="월별 카테고리 추이 데이터 없음"
+        description="선택한 조건에서 월별 카테고리 시계열 데이터를 찾지 못했습니다."
+      />
     );
   }
 
