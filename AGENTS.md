@@ -86,8 +86,8 @@ cd frontend && npm run lint
 ### Frontend (React)
 
 - **빌드:** Vite + TypeScript
-- **UI:** Tailwind CSS — 별도 CSS 프레임워크 사용 금지
-- **차트:** Recharts only — 다른 차트 라이브러리(Chart.js, D3, Nivo 등) 사용 금지
+- **UI:** Tailwind CSS 기반. 공통 primitive는 `shadcn/ui` 스타일로 정리 가능하되, 별도 CSS 프레임워크 도입 금지
+- **차트:** `shadcn/ui` chart 패턴을 우선 검토하고, 커버되지 않는 시각화만 Recharts 사용
 - **상태관리:** TanStack Query (React Query) — 서버 상태 중심, Redux/Zustand 불필요
 - **라우팅:** React Router v6+
 - **컴포넌트:** 함수형 컴포넌트 + Hooks only, class 컴포넌트 사용 금지
@@ -106,7 +106,7 @@ cd frontend && npm run lint
 
 - pip, pip install, requirements.txt 사용 → `uv`와 `pyproject.toml` 사용
 - 카테고리 목록 하드코딩 → DB에서 동적 조회
-- Recharts 외 차트 라이브러리 사용
+- Chart.js, D3, Nivo 등 임의 차트 라이브러리 추가 사용
 - `openpyxl` 사용 시 `data_only=True` 누락
 - 프론트엔드에서 `any` 타입 사용 (TypeScript strict)
 - DB 스키마 직접 수정 → Alembic 마이그레이션으로만 변경

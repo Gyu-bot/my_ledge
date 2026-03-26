@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현
-- **Last Worker:** codex (2026-03-26T19:41+0900, 지출 구조 분리·Tree Map 추가·렌더링 경계 분리)
+- **Last Worker:** codex (2026-03-26T19:49+0900, PRD/AGENTS 문서 요구사항 동기화)
 - **Branch:** main
 
 ## Completed
