@@ -104,7 +104,7 @@ export function DataPage() {
                 </span>
                 <Input
                   accept=".xlsx,.xlsm"
-                  className="block w-full file:mr-4 file:rounded-full file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                  className="block w-full file:mr-4 file:rounded-[var(--radius-xs)] file:border-0 file:bg-[color:var(--color-accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
                   onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
                   type="file"
                 />
@@ -153,7 +153,7 @@ export function DataPage() {
           <CardContent>
             {last_upload ? (
               <div className="space-y-3">
-                <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/85 p-4">
+                <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/85 p-4">
                   <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                     상태
                   </p>
@@ -165,7 +165,7 @@ export function DataPage() {
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/85 p-4">
+                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/85 p-4">
                     <p className="text-sm font-semibold text-[color:var(--color-text)]">거래</p>
                     <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">
                       전체 {last_upload.transactions.total}건
@@ -174,7 +174,7 @@ export function DataPage() {
                       신규 {last_upload.transactions.new}건, 스킵 {last_upload.transactions.skipped}건
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/85 p-4">
+                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/85 p-4">
                     <p className="text-sm font-semibold text-[color:var(--color-text)]">스냅샷</p>
                     <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">
                       자산 {last_upload.snapshots.asset_snapshots}건

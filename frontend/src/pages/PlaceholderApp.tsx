@@ -46,7 +46,7 @@ export function PlaceholderApp({ eyebrow, title, description }: PlaceholderAppPr
             {foundationItems.map(([label, value]) => (
               <div
                 key={label}
-                className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
+                className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
               >
                 <dt className="text-sm font-medium text-[color:var(--color-text-muted)]">{label}</dt>
                 <dd className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
@@ -70,7 +70,7 @@ export function PlaceholderApp({ eyebrow, title, description }: PlaceholderAppPr
           {nextSlices.map((item) => (
             <li
               key={item.title}
-              className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
+              className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
             >
               <p className="font-semibold text-[color:var(--color-text)]">{item.title}</p>
               <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">

@@ -99,23 +99,28 @@ function toMonthRange(filters: TimelineRangeFilterValues) {
   return query;
 }
 
-function normalizeBarData(items: Array<{ amount: number; category?: string; payment_method?: string | null }>) {
-  return items
-    .map((item) => ({
-      label: item.category ?? item.payment_method ?? '미지정',
-      amount: Math.abs(item.amount),
-    }))
-    .sort((left, right) => right.amount - left.amount)
-    .slice(0, MAX_BREAKDOWN_ITEMS);
+function aggregateLabelAmounts(
+  items: Array<{ amount: number; category?: string; payment_method?: string | null }>,
+) {
+  const totals = new Map<string, number>();
+
+  for (const item of items) {
+    const label = item.category ?? item.payment_method ?? '미지정';
+    totals.set(label, (totals.get(label) ?? 0) + Math.abs(item.amount));
+  }
+
+  return Array.from(totals.entries())
+    .map(([label, amount]) => ({ label, amount }))
+    .sort((left, right) => right.amount - left.amount);
 }
 
 function buildBreakdownData(
   items: Array<{ amount: number; category?: string; payment_method?: string | null }>,
 ): SpendingBreakdownDatum[] {
-  const normalized = normalizeBarData(items);
-  const total = normalized.reduce((sum, item) => sum + item.amount, 0);
+  const aggregated = aggregateLabelAmounts(items);
+  const total = aggregated.reduce((sum, item) => sum + item.amount, 0);
 
-  return normalized.map((item) => ({
+  return aggregated.slice(0, MAX_BREAKDOWN_ITEMS).map((item) => ({
     ...item,
     share: total === 0 ? 0 : Number(((item.amount / total) * 100).toFixed(1)),
   }));

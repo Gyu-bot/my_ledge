@@ -13,7 +13,7 @@ export function PageHeader({ eyebrow, title, description, meta }: PageHeaderProp
     <Card className="sm:p-2">
       <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
         <div>
-          <Badge className="font-mono tracking-[0.28em]" variant="secondary">
+          <Badge className="tracking-normal" variant="secondary">
             {eyebrow}
           </Badge>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-4xl">

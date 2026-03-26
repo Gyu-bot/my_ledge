@@ -53,7 +53,7 @@ function InlineSectionStatus({
       : 'border-[color:var(--color-border)] bg-white/70 text-[color:var(--color-text-muted)]';
 
   return (
-    <div className={`rounded-[1.5rem] border px-6 py-16 text-center ${toneClasses}`}>
+    <div className={`rounded-[var(--radius)] border px-6 py-16 text-center ${toneClasses}`}>
       <p className="text-base font-semibold">{title}</p>
       <p className="mt-2 text-sm leading-6">{description}</p>
     </div>

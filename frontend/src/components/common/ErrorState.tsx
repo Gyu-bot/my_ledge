@@ -9,10 +9,10 @@ interface ErrorStateProps {
 
 export function ErrorState({ title, description, detail }: ErrorStateProps) {
   return (
-    <Card className="border-red-200 bg-white">
+    <Card className="border-red-200">
       <CardHeader>
-        <div className="inline-flex w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-red-700">
-          Dashboard error
+        <div className="inline-flex w-fit rounded-[var(--radius-xs)] bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
+          오류
         </div>
         <CardTitle className="mt-2 text-2xl">{title}</CardTitle>
       </CardHeader>

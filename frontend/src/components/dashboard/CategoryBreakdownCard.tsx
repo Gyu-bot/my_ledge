@@ -223,7 +223,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
           </div>
         </div>
 
-        <div className="rounded-[1.5rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/80 p-3">
+        <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/80 p-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold tracking-[0.18em] text-[color:var(--color-text-subtle)]">
@@ -256,7 +256,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
 
           {isFilterOpen ? (
             <div
-              className="mt-3 space-y-3 rounded-[1.25rem] border border-[color:var(--color-border)] bg-white px-3 py-3"
+              className="mt-3 space-y-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-3"
               id="category-range-panel"
             >
               <div className="flex flex-wrap gap-2">
@@ -312,7 +312,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
               </div>
 
               {validationMessage ? (
-                <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <p className="rounded-[var(--radius-sm)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                   {validationMessage}
                 </p>
               ) : null}
@@ -323,7 +323,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
 
       <CardContent className="flex flex-1 items-center">
         {categoryQuery.isError && activePreset !== 'all' ? (
-          <div className="w-full rounded-[1.5rem] border border-rose-200 bg-rose-50 px-4 py-6 text-sm leading-6 text-rose-800">
+          <div className="w-full rounded-[var(--radius)] border border-rose-200 bg-rose-50 px-4 py-6 text-sm leading-6 text-rose-800">
             선택한 월 범위의 카테고리 데이터를 불러오지 못했습니다.
           </div>
         ) : hasData ? (
@@ -331,7 +331,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
             <CategoryDonutChart data={chartData} />
           </div>
         ) : (
-          <div className="w-full rounded-[1.5rem] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-10 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
+          <div className="w-full rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-10 text-center text-sm leading-6 text-[color:var(--color-text-muted)]">
             선택한 기간에 표시할 카테고리 지출 데이터가 없습니다.
           </div>
         )}

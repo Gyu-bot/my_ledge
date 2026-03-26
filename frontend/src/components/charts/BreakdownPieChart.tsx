@@ -1,13 +1,14 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { SpendingBreakdownDatum } from '../../hooks/useSpending';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
+import { CHART_NEUTRALS, chartTooltipStyle } from './chartTheme';
 
 interface BreakdownPieChartProps {
   ariaLabel: string;
   data: SpendingBreakdownDatum[];
 }
 
-const chartColors = ['#1E40AF', '#3B82F6', '#60A5FA', '#F59E0B', '#FBBF24', '#93C5FD'];
+const chartColors = CHART_NEUTRALS;
 
 function formatCurrency(value: number | string | readonly (number | string)[] | null | undefined) {
   const normalized =
@@ -34,7 +35,7 @@ function TooltipContent({
   const item = payload[0].payload;
 
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)]">
+    <div className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 shadow-sm">
       <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.label}</p>
       <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{formatCurrency(item.amount)}</p>
       <p className="mt-1 text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
@@ -64,13 +65,15 @@ export function BreakdownPieChart({ ariaLabel, data }: BreakdownPieChartProps) {
             data={data}
             dataKey="amount"
             outerRadius={110}
-            paddingAngle={2}
+            paddingAngle={1}
+            stroke="#ffffff"
+            strokeWidth={1}
           >
             {data.map((entry, index) => (
               <Cell key={entry.label} fill={chartColors[index % chartColors.length]} />
             ))}
           </Pie>
-          <Tooltip content={<TooltipContent />} />
+          <Tooltip content={<TooltipContent />} contentStyle={chartTooltipStyle} />
         </PieChart>
       </ResponsiveContainer>
     </div>

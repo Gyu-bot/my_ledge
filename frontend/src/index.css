@@ -1,26 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: light;
-  --color-canvas: #f8fafc;
-  --color-surface: rgba(248, 250, 252, 0.92);
-  --color-surface-raised: rgba(255, 255, 255, 0.88);
-  --color-border: rgba(148, 163, 184, 0.24);
-  --color-primary: #1e40af;
-  --color-primary-strong: #1e3a8a;
-  --color-primary-soft: #dbeafe;
-  --color-accent: #f59e0b;
-  --color-accent-soft: #fef3c7;
-  --color-text: #1e3a8a;
-  --color-text-muted: #475569;
-  --color-text-subtle: rgba(30, 64, 175, 0.72);
-  --color-ring: #3b82f6;
-  --shadow-soft: 0 24px 48px -28px rgba(30, 64, 175, 0.38);
-  --shadow-glow: 0 18px 40px -20px rgba(59, 130, 246, 0.85);
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-xs: 0.375rem;
+  --color-canvas: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-border: #e4e4e7;
+  --color-primary: #2563eb;
+  --color-primary-strong: #1d4ed8;
+  --color-primary-soft: #eff6ff;
+  --color-accent: #2563eb;
+  --color-accent-strong: #1d4ed8;
+  --color-accent-soft: #eff6ff;
+  --color-text: #09090b;
+  --color-text-muted: #52525b;
+  --color-text-subtle: #71717a;
+  --color-ring: #2563eb;
+  --shadow-soft: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-glow: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
   background-color: var(--color-canvas);
 }
 
@@ -34,13 +36,8 @@ body {
   min-height: 100vh;
   margin: 0;
   background-color: var(--color-canvas);
-  background-image:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.1), transparent 32%),
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.96));
-  background-attachment: fixed;
   color: var(--color-text);
-  font-family: 'Fira Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -64,7 +61,7 @@ a {
   left: 1rem;
   top: -3rem;
   z-index: 50;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: #fff;
   padding: 0.75rem 1rem;
@@ -86,13 +83,7 @@ a {
 }
 
 .bg-dashboard-grid {
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 28%),
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 22%);
-  background-position: center;
-  background-size: 28px 28px, 28px 28px, auto, auto;
+  background-color: var(--color-canvas);
 }
 
 @media (prefers-reduced-motion: reduce) {

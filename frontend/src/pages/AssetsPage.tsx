@@ -116,7 +116,7 @@ export function AssetsPage() {
               {investments.items.length > 0 ? (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
                       <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                         총 투자원금
                       </p>
@@ -124,7 +124,7 @@ export function AssetsPage() {
                         {formatMoney(investments.totals.cost_basis)}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
                       <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                         총 평가액
                       </p>
@@ -137,7 +137,7 @@ export function AssetsPage() {
                     {investments.items.slice(0, 4).map((item) => (
                       <li
                         key={`${item.broker}-${item.product_name}`}
-                        className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
+                        className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -185,7 +185,7 @@ export function AssetsPage() {
               {loans.items.length > 0 ? (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
                       <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                         총 대출원금
                       </p>
@@ -193,7 +193,7 @@ export function AssetsPage() {
                         {formatMoney(loans.totals.principal)}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
                       <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                         총 잔액
                       </p>
@@ -206,7 +206,7 @@ export function AssetsPage() {
                     {loans.items.slice(0, 4).map((item) => (
                       <li
                         key={`${item.lender}-${item.product_name}`}
-                        className="rounded-2xl border border-[color:var(--color-border)] bg-white/80 p-4"
+                        className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>

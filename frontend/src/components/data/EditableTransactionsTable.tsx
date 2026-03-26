@@ -99,7 +99,7 @@ export function EditableTransactionsTable({
 
   return (
     <div className="overflow-x-auto">
-      <div className="hidden rounded-[1.5rem] border border-[color:var(--color-border)] bg-white/80 xl:block">
+      <div className="hidden rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 xl:block">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -281,7 +281,7 @@ export function EditableTransactionsTable({
           const isPending = pendingTransactionId === row.id;
 
           return (
-            <Card key={row.id} className="rounded-2xl bg-white/80">
+            <Card key={row.id} className="bg-white/80">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>

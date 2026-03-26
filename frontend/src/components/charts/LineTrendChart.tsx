@@ -8,6 +8,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { TrendPoint } from '../../types/dashboard';
+import { CHART_ACCENT, CHART_ACCENT_SOFT, chartTooltipStyle } from './chartTheme';
 
 interface LineTrendChartProps {
   data: TrendPoint[];
@@ -31,38 +32,34 @@ export function LineTrendChart({ data }: LineTrendChartProps) {
         <AreaChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="trendGradient" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.45} />
-              <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.04} />
+              <stop offset="0%" stopColor={CHART_ACCENT_SOFT} stopOpacity={0.45} />
+              <stop offset="100%" stopColor={CHART_ACCENT_SOFT} stopOpacity={0.04} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="4 4" />
+          <CartesianGrid stroke="#e4e4e7" strokeDasharray="4 4" />
           <XAxis
             axisLine={false}
             dataKey="period"
-            tick={{ fill: '#475569', fontSize: 12 }}
+            tick={{ fill: '#71717a', fontSize: 12 }}
             tickLine={false}
           />
           <YAxis
             axisLine={false}
-            tick={{ fill: '#475569', fontSize: 12 }}
+            tick={{ fill: '#71717a', fontSize: 12 }}
             tickFormatter={formatCurrency}
             tickLine={false}
             width={92}
           />
           <Tooltip
-            contentStyle={{
-              borderRadius: '1rem',
-              border: '1px solid rgba(148, 163, 184, 0.24)',
-              boxShadow: '0 24px 48px -28px rgba(30, 64, 175, 0.38)',
-            }}
+            contentStyle={chartTooltipStyle}
             formatter={(value) => formatCurrency(value)}
-            labelStyle={{ color: '#1E3A8A', fontWeight: 600 }}
+            labelStyle={{ color: '#18181b', fontWeight: 600 }}
           />
           <Area
             dataKey="amount"
             fill="url(#trendGradient)"
             fillOpacity={1}
-            stroke="#1E40AF"
+            stroke={CHART_ACCENT}
             strokeWidth={3}
             type="monotone"
           />

@@ -97,7 +97,7 @@ export function DataManagementFilterBar({
         </label>
 
         <label className="flex items-end">
-          <span className="flex h-11 w-full items-center gap-3 rounded-2xl border border-[color:var(--color-border)] bg-white/90 px-4 py-3 text-sm text-[color:var(--color-text)]">
+          <span className="flex h-11 w-full items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white/90 px-4 py-3 text-sm text-[color:var(--color-text)]">
             <Checkbox
               checked={values.include_deleted}
               onCheckedChange={(checked) =>

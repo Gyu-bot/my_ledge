@@ -1,13 +1,14 @@
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 import type { MerchantTreemapDatum } from '../../hooks/useSpending';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
+import { CHART_NEUTRALS, chartTooltipStyle } from './chartTheme';
 
 interface MerchantTreemapChartProps {
   ariaLabel: string;
   data: MerchantTreemapDatum[];
 }
 
-const BLOCK_COLORS = ['#1E40AF', '#2563EB', '#60A5FA', '#F59E0B', '#FB7185', '#0F766E'];
+const BLOCK_COLORS = CHART_NEUTRALS;
 
 function formatCurrency(value: number | string | readonly (number | string)[] | null | undefined) {
   const normalized = Array.isArray(value) && value.length > 0 ? value[0] : (value ?? 0);
@@ -34,7 +35,7 @@ function TooltipContent({
   const item = payload[0].payload;
 
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)]">
+    <div className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 shadow-sm">
       <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.name}</p>
       <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{formatCurrency(item.amount)}</p>
     </div>
@@ -74,12 +75,12 @@ function TreemapNode(props: {
         y={y}
         width={width}
         height={height}
-        rx={14}
-        ry={14}
+        rx={3}
+        ry={3}
         fill={background}
-        fillOpacity={0.9}
-        stroke="rgba(255,255,255,0.6)"
-        strokeWidth={2}
+        fillOpacity={0.96}
+        stroke="#ffffff"
+        strokeWidth={1}
       />
       {canShowLabel ? (
         <text
@@ -116,7 +117,7 @@ export function MerchantTreemapChart({ ariaLabel, data }: MerchantTreemapChartPr
           content={<TreemapNode />}
           isAnimationActive={false}
         >
-          <Tooltip content={<TooltipContent />} />
+          <Tooltip content={<TooltipContent />} contentStyle={chartTooltipStyle} />
         </Treemap>
       </ResponsiveContainer>
     </div>

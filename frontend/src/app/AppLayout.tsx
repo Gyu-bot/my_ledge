@@ -16,10 +16,10 @@ export function AppLayout() {
       </a>
 
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <Card className="backdrop-blur">
+        <Card>
           <CardHeader className="gap-5 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
+              <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--color-text-subtle)]">
                 my_ledge
               </p>
               <CardTitle className="mt-3 text-2xl tracking-tight sm:text-3xl">
@@ -35,10 +35,10 @@ export function AppLayout() {
                   to={item.to}
                   className={({ isActive }) =>
                     [
-                      'inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition',
+                      'inline-flex items-center justify-center rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium transition',
                       isActive
-                        ? 'bg-[color:var(--color-primary)] text-white shadow-[var(--shadow-soft)]'
-                        : 'border border-[color:var(--color-border)] bg-white/80 text-[color:var(--color-text-muted)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]',
+                        ? 'bg-[color:var(--color-accent)] text-white'
+                        : 'border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent)]',
                     ].join(' ')
                   }
                 >

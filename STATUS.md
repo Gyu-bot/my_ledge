@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-26T20:16+0900, shadcn/ui primitive 치환 + 전체 화면 검증)
+- **Last Worker:** codex (2026-03-26T22:14+0900, 전역 accent/radius 토큰 정렬 + 전체 화면 재검증)
 - **Branch:** main
 
 ## Completed
@@ -36,7 +36,7 @@
 - [ ] Phase 2 frontend 마감 정리 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
   - 마지막 완료 작업: `Phase 2 Task 5.1: shadcn/ui 기반 화면 전환`
-  - 현재 상태: `/`, `/assets`, `/spending`, `/data` route와 app shell, 공통 필터/테이블/상태 카드가 모두 shadcn/ui 스타일 primitive(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`) 중심으로 정렬되었다. 차트는 현재 요구사항상 Recharts를 유지하되 empty-state와 주변 chrome은 동일 톤으로 맞췄다. `spending`은 여전히 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리되어 관련 섹션만 갱신되고, `월별 고정비/변동비 추이`는 `cost_kind` 데이터가 비어 있어 placeholder 상태다. 최신 검증은 `npm test -- --runInBand`, `npm run typecheck`, `npm run lint`, `npm run build` 전부 통과했고, headless browser(`playwright-core + system Chrome`)로 `/`, `/assets`, `/spending`, `/data` 화면을 캡처한 뒤 이미지를 직접 검토했다. 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
+  - 현재 상태: `/`, `/assets`, `/spending`, `/data` route와 app shell, 공통 필터/테이블/상태 카드가 모두 shadcn/ui 스타일 primitive(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`) 중심으로 정렬되었다. 차트는 현재 요구사항상 Recharts를 유지하되 주변 chrome과 tooltip, 강조색은 메인 대시보드 `월별 지출 추이`의 blue accent 축으로 통일했고, 카드·아코디언·테이블 래퍼·내부 패널 반경도 `--radius`, `--radius-sm`, `--radius-xs` 토큰으로 맞췄다. `spending`은 여전히 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리되어 관련 섹션만 갱신되고, `월별 고정비/변동비 추이`는 `cost_kind` 데이터가 비어 있어 placeholder 상태다. 최신 검증은 `npm test -- --runInBand`, `npm run typecheck`, `npm run lint`, `npm run build` 전부 통과했고, headless browser(`playwright-core + system Chrome`)로 `/`, `/assets`, `/spending`, `/data` 화면을 캡처한 뒤 이미지를 직접 검토했다. 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
 
 ## Blocked
 - 없음
@@ -95,6 +95,7 @@
 - 2026-03-26: 지출 분석 렌더링 비용을 줄이기 위해 페이지 훅 하나에 데이터를 몰아넣지 않고 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리한다. 카테고리/검색 필터 변경 시 월별 시계열 섹션은 다시 fetch하지 않는다
 - 2026-03-26: `하위 카테고리별 지출`은 테이블을 제거하고 차트 전용 섹션으로 유지한다. `거래처별 Tree Map`은 별도 vendor 컬럼이 생기기 전까지 `description` 기준 집계로 우선 구현한다
 - 2026-03-26: frontend 공통 primitive는 `shadcn/ui` 스타일(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`)을 우선 사용하고, 차트는 현재 기능 범위상 Recharts를 유지하되 주변 레이아웃과 empty-state는 동일 디자인 시스템으로 정렬한다
+- 2026-03-26: frontend 전역 accent color는 메인 대시보드 `월별 지출 추이` 라인의 blue(`#2563eb`)를 기준으로 통일하고, 카드/아코디언/테이블/내부 패널 반경은 CSS radius 토큰(`--radius`, `--radius-sm`, `--radius-xs`)으로만 관리한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

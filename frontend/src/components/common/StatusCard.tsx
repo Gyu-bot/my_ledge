@@ -9,13 +9,13 @@ interface StatusCardProps extends SummaryCard {
 export function StatusCard({ label, value, detail, tone = 'primary' }: StatusCardProps) {
   const toneClass =
     tone === 'accent'
-      ? 'border-amber-200 bg-gradient-to-br from-white via-amber-50 to-amber-100/70'
-      : 'border-blue-200 bg-gradient-to-br from-white via-blue-50 to-slate-50';
+      ? 'border-[color:var(--color-accent-soft)] bg-[color:var(--color-accent-soft)]'
+      : 'border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)]';
 
   return (
     <Card
       className={cn(
-        'rounded-[1.5rem] p-0 transition-transform duration-200 motion-reduce:transition-none hover:-translate-y-0.5',
+        'p-0',
         toneClass,
       )}
     >
