@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-26T13:24+0900, Task 9 canonical analysis layer 1차 구현)
+- **Last Worker:** codex (2026-03-26T13:30+0900, Phase 1 backend test sweep 안정화)
 - **Branch:** main
 
 ## Completed
@@ -23,21 +23,22 @@
 - [x] Task 7 완료: frontend 최소 스캐폴딩 + Docker runtime
 - [x] Task 8 완료: 최신 workbook `fs_260326.xlsx` 기준 PostgreSQL parity + `finance_sample.xlsx -> sample_260324.xlsx -> fs_260326.xlsx` rolling-window 연속 업로드 검증
 - [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
+- [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과 (`31 passed`)
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 마지막 완료 작업: `Task 9 canonical analysis layer 1차 구현`
-  - 현재 상태: canonical transaction read model은 `backend/app/services/canonical_views.py` 로 분리됐다. `transactions_service.py` 의 `/transactions`, `/transactions/summary`, `/transactions/by-category`, `/transactions/payment-methods` read path는 `vw_transactions_effective` 와 정의상 동일한 shared select를 사용하고, `/api/v1/schema` 는 raw table과 canonical view를 함께 문서화한다. focused 검증은 `tests/api/test_schema_api.py`, `tests/services/test_transactions_service.py`, `tests/api/test_transactions_api.py` 기준 `9 passed` 이고, 임시 PostgreSQL DB `my_ledge_task9_verify` 에 `alembic upgrade head` 적용 후 두 view 생성까지 확인했다
+  - 마지막 완료 작업: `Phase 1 backend test sweep 안정화`
+  - 현재 상태: `backend/tests/conftest.py` 의 `seeded_finance_data` fixture가 `snapshot_date=date(2026, 3, 24)` 로 고정되어 assets API 테스트가 서버 현재 날짜에 의존하지 않게 됐다. backend 전체 테스트는 `UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q` 기준 `31 passed` 로 통과했고, canonical view/read path 변경 이후 회귀는 확인되지 않았다
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 1 마감 정리
-  - 목표: backend 전체 테스트 sweep과 기존 날짜 의존 fixture 불안정성 정리
-  - 우선 파일: `backend/tests/api/test_assets_api.py`, backend 전체 테스트 셋
-  - 성공 기준: 날짜 고정 실패 없이 backend test suite가 안정적으로 재실행 가능
+- [ ] Phase 2 착수 준비
+  - 목표: canonical API/read model을 기준으로 frontend 주요 페이지 연결 범위와 우선순위를 확정
+  - 우선 파일: `PRD.md`, `frontend/src/pages/`, `frontend/src/api/`
+  - 성공 기준: 다음 구현 배치의 페이지/API 연결 범위가 STATUS 또는 계획 문서에 명확히 정리됨
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -72,6 +73,7 @@
 - 2026-03-25: Task 9 canonical analysis layer 1차 범위는 view 생성과 문서화에 그치지 않고, 기존 거래 조회/분석 런타임이 `vw_transactions_effective` / `vw_category_monthly_spend` 또는 그와 정의상 동일한 shared read path를 실제로 사용하도록 맞추는 것까지 포함한다
 - 2026-03-26: Task 8 운영 검증은 메인 개발 데이터셋을 건드리지 않도록 임시 PostgreSQL DB `my_ledge_task8_verify` 에 마이그레이션 후 수행한다
 - 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
+- 2026-03-26: 테스트 fixture에서 `snapshot_date=None` 을 쓰면 실행일에 따라 assets API 기대값이 흔들리므로, 공통 seed fixture는 고정 날짜를 명시한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -81,4 +83,3 @@
 - 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
 - `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
 - frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
-- `backend/tests/api/test_assets_api.py` 는 `seeded_finance_data` fixture가 `snapshot_date=None` 으로 적재될 때 서버 현재 날짜를 사용한다는 사실을 반영하지 않아, 날짜가 `2026-03-24`로 고정된 기대값이 하루 지나면 실패한다. 현재 날짜 `2026-03-25` 기준 실제 응답은 `2026-03-25`를 반환한다

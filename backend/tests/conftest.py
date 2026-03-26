@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import date
 import sys
 from pathlib import Path
 
@@ -103,5 +104,5 @@ async def seeded_finance_data(
         db_session=db_session,
         file_bytes=sample_workbook_bytes,
         filename="finance_sample.xlsx",
-        snapshot_date=None,
+        snapshot_date=date(2026, 3, 24),
     )
