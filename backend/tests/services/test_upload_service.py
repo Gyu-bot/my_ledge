@@ -1,4 +1,3 @@
-from collections import Counter
 from datetime import date, datetime
 from io import BytesIO
 
@@ -198,27 +197,22 @@ async def test_import_transactions_keeps_existing_rows_and_appends_exact_new_row
     existing_transactions = list((await db_session.scalars(select(Transaction))).all())
     previous_rows = parse_transactions_from_bytes(sample_workbook_bytes)
     latest_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
-    previous_counter = Counter(transaction_signature(row) for row in previous_rows)
-    latest_counter = Counter(transaction_signature(row) for row in latest_rows)
-
-    expected_counter = previous_counter + (latest_counter - previous_counter)
-    actual_counter = Counter(transaction_signature(row) for row in existing_transactions)
 
     assert result.status == "success"
     assert result.tx_total == len(latest_rows)
-    assert result.tx_new == 100
-    assert result.tx_skipped == 2126
-    assert actual_counter == expected_counter
+    assert result.tx_new == 68
+    assert result.tx_skipped == 2158
+    assert len(existing_transactions) == len(previous_rows) + 68
 
 
-async def test_import_transactions_preserves_existing_user_edited_row_when_later_window_has_changed_time(
+async def test_import_transactions_does_not_append_duplicate_when_later_window_only_changes_time_or_category(
     db_session: AsyncSession,
     sample_workbook_bytes: bytes,
     rolling_window_workbook_bytes: bytes,
 ) -> None:
     old_rows = parse_transactions_from_bytes(sample_workbook_bytes)
     new_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
-    old_row, new_row = find_logically_matching_rows_with_changed_time(old_rows, new_rows)
+    old_row, new_row = find_logically_matching_rows_with_changed_exact_signature(old_rows, new_rows)
 
     await import_transactions_from_workbook(
         db_session=db_session,
@@ -237,7 +231,7 @@ async def test_import_transactions_preserves_existing_user_edited_row_when_later
     existing_row.is_deleted = True
     await db_session.commit()
 
-    await import_transactions_from_workbook(
+    result = await import_transactions_from_workbook(
         db_session=db_session,
         file_bytes=rolling_window_workbook_bytes,
         filename="sample_260324.xlsx",
@@ -251,11 +245,8 @@ async def test_import_transactions_preserves_existing_user_edited_row_when_later
         select(Transaction).where(*transaction_conditions(old_row))
     )
 
-    assert appended_row is not None
-    assert appended_row.category_major_user is None
-    assert appended_row.category_minor_user is None
-    assert appended_row.memo is None
-    assert appended_row.is_deleted is False
+    assert result.tx_new == 68
+    assert appended_row is None
     assert old_row_after_import is not None
     assert old_row_after_import.category_major_user == "사용자수정"
     assert old_row_after_import.category_minor_user == "세부수정"
@@ -328,7 +319,7 @@ def transaction_reconciliation_key(
     )
 
 
-def find_logically_matching_rows_with_changed_time(
+def find_logically_matching_rows_with_changed_exact_signature(
     old_rows: list[dict[str, object]],
     new_rows: list[dict[str, object]],
 ) -> tuple[dict[str, object], dict[str, object]]:
@@ -347,7 +338,7 @@ def find_logically_matching_rows_with_changed_time(
             if transaction_signature(old_row) != transaction_signature(new_row):
                 return old_row, new_row
 
-    raise AssertionError("Expected at least one logical match with changed exact time")
+    raise AssertionError("Expected at least one logical match with changed exact signature")
 
 
 def transaction_conditions(row: dict[str, object]) -> tuple[object, ...]:

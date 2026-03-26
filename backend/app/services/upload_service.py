@@ -188,16 +188,104 @@ def _build_rows_to_insert(
     existing_counter = Counter(
         _transaction_comparison_signature(row) for row in existing_rows
     )
-    rows_to_insert: list[TransactionRow] = []
+    existing_by_signature: dict[tuple[object, ...], list[Transaction]] = {}
+    for row in existing_rows:
+        existing_by_signature.setdefault(_transaction_comparison_signature(row), []).append(row)
 
+    unmatched_rows: list[TransactionRow] = []
     for row in parsed_rows:
         signature = _transaction_comparison_signature(row)
         if existing_counter[signature] > 0:
             existing_counter[signature] -= 1
             continue
+        unmatched_rows.append(row)
+
+    remaining_existing_rows = _remaining_existing_rows(
+        existing_counter,
+        existing_by_signature,
+    )
+    fallback_buckets = _build_fallback_buckets(remaining_existing_rows)
+    rows_to_insert: list[TransactionRow] = []
+
+    for row in unmatched_rows:
+        fallback_match = _pop_fallback_match(fallback_buckets, row)
+        if fallback_match is not None:
+            continue
         rows_to_insert.append(row)
 
     return rows_to_insert
+
+
+def _remaining_existing_rows(
+    existing_counter: Counter[tuple[object, ...]],
+    existing_by_signature: dict[tuple[object, ...], list[Transaction]],
+) -> list[Transaction]:
+    remaining_rows: list[Transaction] = []
+    for signature, count in existing_counter.items():
+        if count <= 0:
+            continue
+        remaining_rows.extend(existing_by_signature[signature][:count])
+    return remaining_rows
+
+
+def _transaction_fallback_signature(
+    row: TransactionRow | Transaction,
+) -> tuple[object, ...]:
+    return (
+        row.date if isinstance(row, Transaction) else row["date"],
+        row.type if isinstance(row, Transaction) else row["type"],
+        row.description if isinstance(row, Transaction) else row["description"],
+        row.amount if isinstance(row, Transaction) else row["amount"],
+        row.currency if isinstance(row, Transaction) else row["currency"],
+        row.payment_method if isinstance(row, Transaction) else row["payment_method"],
+    )
+
+
+def _seconds_since_midnight(row: TransactionRow | Transaction) -> int:
+    time_value = row.time if isinstance(row, Transaction) else row["time"]
+    return (
+        time_value.hour * 3600
+        + time_value.minute * 60
+        + time_value.second
+    )
+
+
+def _build_fallback_buckets(
+    existing_rows: list[Transaction],
+) -> dict[tuple[object, ...], list[Transaction]]:
+    buckets: dict[tuple[object, ...], list[Transaction]] = {}
+    for row in existing_rows:
+        key = _transaction_fallback_signature(row)
+        buckets.setdefault(key, []).append(row)
+    for rows in buckets.values():
+        rows.sort(key=_seconds_since_midnight)
+    return buckets
+
+
+def _pop_fallback_match(
+    fallback_buckets: dict[tuple[object, ...], list[Transaction]],
+    row: TransactionRow,
+) -> Transaction | None:
+    key = _transaction_fallback_signature(row)
+    candidates = fallback_buckets.get(key)
+    if not candidates:
+        return None
+
+    row_seconds = _seconds_since_midnight(row)
+    best_index: int | None = None
+    best_diff: int | None = None
+    for index, candidate in enumerate(candidates):
+        diff = abs(_seconds_since_midnight(candidate) - row_seconds)
+        if diff > 60:
+            continue
+        if best_diff is None or diff < best_diff:
+            best_index = index
+            best_diff = diff
+
+    if best_index is None:
+        return None
+
+    return candidates.pop(best_index)
 
 
 async def _replace_snapshots(
