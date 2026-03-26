@@ -53,3 +53,14 @@ async def test_schema_endpoint_returns_tables(
     assert response.status_code == 200
     assert response.json()["tables"][0]["name"] == "asset_snapshots"
     assert "transactions" in {table["name"] for table in response.json()["tables"]}
+    assert {view["name"] for view in response.json()["views"]} == {
+        "vw_category_monthly_spend",
+        "vw_transactions_effective",
+    }
+
+    effective_view = next(
+        view for view in response.json()["views"] if view["name"] == "vw_transactions_effective"
+    )
+    assert effective_view["recommended_for_ai"] is True
+    assert effective_view["kind"] == "view"
+    assert any(column["name"] == "effective_category_major" for column in effective_view["columns"])

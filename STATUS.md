@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-25T17:26+0900, Task 9 canonical layer 범위 문서화)
+- **Last Worker:** codex (2026-03-26T13:24+0900, Task 9 canonical analysis layer 1차 구현)
 - **Branch:** main
 
 ## Completed
@@ -21,25 +21,23 @@
 - [x] Task 6 완료: 거래 조회/편집 API 구현 (`merge`는 501 stub)
 - [x] Task 8 일부 완료: 샘플 workbook 원본 대조 검증 자동화
 - [x] Task 7 완료: frontend 최소 스캐폴딩 + Docker runtime
+- [x] Task 8 완료: 최신 workbook `fs_260326.xlsx` 기준 PostgreSQL parity + `finance_sample.xlsx -> sample_260324.xlsx -> fs_260326.xlsx` rolling-window 연속 업로드 검증
+- [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
 
 ## In Progress
 - [ ] Phase 1 MVP 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 마지막 완료 작업: `rolling-window transaction import 정책 재조정`
-  - 현재 상태: `backend/app/services/upload_service.py` 는 workbook datetime window를 비교 범위로만 사용하고, 해당 범위 안 기존 `source='import'` 거래는 건드리지 않은 채 exact signature 중복만 skip하고 새 거래만 append한다. `finance_sample.xlsx -> sample_260324.xlsx` 순서 검증에서 두 번째 import는 `tx_new=100`, `tx_skipped=2126`, 최종 transaction row는 `2319`행이며, 시간만 달라진 논리적 동일 거래에서도 기존 사용자 수정 row는 유지된다. `backend/tests/services/test_upload_service.py` 와 `backend/tests/services/test_source_verification.py` focused tests 통과
+  - 마지막 완료 작업: `Task 9 canonical analysis layer 1차 구현`
+  - 현재 상태: canonical transaction read model은 `backend/app/services/canonical_views.py` 로 분리됐다. `transactions_service.py` 의 `/transactions`, `/transactions/summary`, `/transactions/by-category`, `/transactions/payment-methods` read path는 `vw_transactions_effective` 와 정의상 동일한 shared select를 사용하고, `/api/v1/schema` 는 raw table과 canonical view를 함께 문서화한다. focused 검증은 `tests/api/test_schema_api.py`, `tests/services/test_transactions_service.py`, `tests/api/test_transactions_api.py` 기준 `9 passed` 이고, 임시 PostgreSQL DB `my_ledge_task9_verify` 에 `alembic upgrade head` 적용 후 두 view 생성까지 확인했다
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Task 8 실행: 검증 + STATUS 갱신
-  - 목표: 실제 최신 workbook 기준 end-to-end 검증과 PostgreSQL parity 확인
-  - 우선 파일: `.env`, 실제 workbook 경로, `backend/scripts/verify_import_parity.py`
-  - 성공 기준: 최신 workbook 단독 import parity 통과와, rolling-window 연속 업로드 시 기존 imported row 보존 + exact-new append 정책에 맞는 `tx_new/tx_skipped/final row count` 확인
-- [ ] Task 9 후보: canonical analysis layer 1차 구현
-  - 목표: `vw_transactions_effective`, `vw_category_monthly_spend` 추가 후 `/api/v1/schema` 와 기존 거래 조회/분석 read path가 동일 canonical layer를 사용하도록 맞춘다
-  - 우선 파일: `backend/alembic/versions/`, `backend/app/services/schema_service.py`, `backend/app/services/transaction_query_service.py`, `backend/tests/api/test_schema_api.py`, `backend/tests/api/test_transactions_api.py`
-  - 성공 기준: 두 canonical view가 마이그레이션과 schema 문서에 반영되고, 기존 거래 조회/분석 엔드포인트가 해당 view 또는 그와 정의상 동일한 shared query path를 사용하며, focused schema/API 테스트가 통과한다
+- [ ] Phase 1 마감 정리
+  - 목표: backend 전체 테스트 sweep과 기존 날짜 의존 fixture 불안정성 정리
+  - 우선 파일: `backend/tests/api/test_assets_api.py`, backend 전체 테스트 셋
+  - 성공 기준: 날짜 고정 실패 없이 backend test suite가 안정적으로 재실행 가능
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -72,6 +70,8 @@
 - 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
 - 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지하며, workbook datetime window 안에서 exact signature로 아직 없는 거래만 append한다
 - 2026-03-25: Task 9 canonical analysis layer 1차 범위는 view 생성과 문서화에 그치지 않고, 기존 거래 조회/분석 런타임이 `vw_transactions_effective` / `vw_category_monthly_spend` 또는 그와 정의상 동일한 shared read path를 실제로 사용하도록 맞추는 것까지 포함한다
+- 2026-03-26: Task 8 운영 검증은 메인 개발 데이터셋을 건드리지 않도록 임시 PostgreSQL DB `my_ledge_task8_verify` 에 마이그레이션 후 수행한다
+- 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

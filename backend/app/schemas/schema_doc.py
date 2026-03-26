@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -7,10 +9,14 @@ class SchemaColumnResponse(BaseModel):
     nullable: bool
 
 
-class SchemaTableResponse(BaseModel):
+class SchemaRelationResponse(BaseModel):
     name: str
+    kind: Literal["table", "view"]
+    description: str | None = None
+    recommended_for_ai: bool = False
     columns: list[SchemaColumnResponse]
 
 
 class SchemaDocumentResponse(BaseModel):
-    tables: list[SchemaTableResponse]
+    tables: list[SchemaRelationResponse]
+    views: list[SchemaRelationResponse] = []

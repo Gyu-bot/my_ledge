@@ -3,9 +3,11 @@ from datetime import date
 
 from fastapi import HTTPException, status
 from sqlalchemy import Select, func, or_, select
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
+from app.services.canonical_views import build_transactions_effective_select
 from app.schemas.transaction import (
     CategorySummaryItem,
     CategorySummaryResponse,
@@ -38,7 +40,7 @@ async def list_transactions(
     page: int,
     per_page: int,
 ) -> TransactionListResponse:
-    base_query = _build_transaction_query(
+    base_query, canonical = _build_transaction_query(
         start_date=start_date,
         end_date=end_date,
         category_major=category_major,
@@ -52,7 +54,7 @@ async def list_transactions(
     total = await db_session.scalar(select(func.count()).select_from(base_query.subquery())) or 0
     result = await db_session.execute(
         base_query
-        .order_by(Transaction.date.desc(), Transaction.time.desc(), Transaction.id.desc())
+        .order_by(canonical.c.date.desc(), canonical.c.time.desc(), canonical.c.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -60,7 +62,7 @@ async def list_transactions(
         total=total,
         page=page,
         per_page=per_page,
-        items=[_serialize_transaction(row) for row in result.scalars().all()],
+        items=[_serialize_transaction_row(row) for row in result.mappings().all()],
     )
 
 
@@ -87,7 +89,7 @@ async def summarize_transactions(
 
     grouped: dict[str, int] = defaultdict(int)
     for transaction in transactions:
-        grouped[_period_key(transaction.date, group_by)] += transaction.amount
+        grouped[_period_key(transaction["date"], group_by)] += transaction["amount"]
 
     return TransactionSummaryResponse(
         items=[
@@ -120,11 +122,11 @@ async def summarize_by_category(
     grouped: dict[str, int] = defaultdict(int)
     for transaction in transactions:
         category = (
-            _effective_category_major(transaction)
+            transaction["effective_category_major"]
             if level == "major"
-            else _effective_category_minor(transaction)
+            else transaction["effective_category_minor"]
         )
-        grouped[category or "미분류"] += transaction.amount
+        grouped[category or "미분류"] += transaction["amount"]
 
     items = [
         CategorySummaryItem(category=category, amount=amount)
@@ -153,7 +155,7 @@ async def summarize_by_payment_method(
     )
     grouped: dict[str | None, int] = defaultdict(int)
     for transaction in transactions:
-        grouped[transaction.payment_method] += transaction.amount
+        grouped[transaction["payment_method"]] += transaction["amount"]
 
     return PaymentMethodSummaryResponse(
         items=[
@@ -174,7 +176,7 @@ async def create_transaction(
     db_session.add(transaction)
     await db_session.commit()
     await db_session.refresh(transaction)
-    return _serialize_transaction(transaction)
+    return _serialize_transaction_model(transaction)
 
 
 async def update_transaction(
@@ -187,7 +189,7 @@ async def update_transaction(
         setattr(transaction, field, value)
     await db_session.commit()
     await db_session.refresh(transaction)
-    return _serialize_transaction(transaction)
+    return _serialize_transaction_model(transaction)
 
 
 async def soft_delete_transaction(
@@ -207,7 +209,7 @@ async def restore_transaction(
     transaction.is_deleted = False
     await db_session.commit()
     await db_session.refresh(transaction)
-    return _serialize_transaction(transaction)
+    return _serialize_transaction_model(transaction)
 
 
 async def bulk_update_transactions(
@@ -238,21 +240,22 @@ async def _load_filtered_transactions(
     include_deleted: bool,
     include_merged: bool,
     search: str | None,
-) -> list[Transaction]:
-    result = await db_session.execute(
-        _build_transaction_query(
-            start_date=start_date,
-            end_date=end_date,
-            category_major=category_major,
-            payment_method=payment_method,
-            tx_type=tx_type,
-            is_edited=is_edited,
-            include_deleted=include_deleted,
-            include_merged=include_merged,
-            search=search,
-        ).order_by(Transaction.date.asc(), Transaction.time.asc(), Transaction.id.asc())
+) -> list[RowMapping]:
+    query, canonical = _build_transaction_query(
+        start_date=start_date,
+        end_date=end_date,
+        category_major=category_major,
+        payment_method=payment_method,
+        tx_type=tx_type,
+        is_edited=is_edited,
+        include_deleted=include_deleted,
+        include_merged=include_merged,
+        search=search,
     )
-    return result.scalars().all()
+    result = await db_session.execute(
+        query.order_by(canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc())
+    )
+    return result.mappings().all()
 
 
 def _build_transaction_query(
@@ -266,46 +269,38 @@ def _build_transaction_query(
     include_deleted: bool,
     include_merged: bool,
     search: str | None,
-) -> Select[tuple[Transaction]]:
-    query = select(Transaction)
+) -> tuple[Select, object]:
+    canonical = build_transactions_effective_select().subquery("vw_transactions_effective")
+    query = select(canonical)
     if not include_deleted:
-        query = query.where(Transaction.is_deleted.is_(False))
+        query = query.where(canonical.c.is_deleted.is_(False))
     if not include_merged:
-        query = query.where(Transaction.merged_into_id.is_(None))
+        query = query.where(canonical.c.merged_into_id.is_(None))
     if start_date is not None:
-        query = query.where(Transaction.date >= start_date)
+        query = query.where(canonical.c.date >= start_date)
     if end_date is not None:
-        query = query.where(Transaction.date <= end_date)
+        query = query.where(canonical.c.date <= end_date)
     if payment_method is not None:
-        query = query.where(Transaction.payment_method == payment_method)
+        query = query.where(canonical.c.payment_method == payment_method)
     if category_major is not None:
-        query = query.where(
-            func.coalesce(Transaction.category_major_user, Transaction.category_major)
-            == category_major
-        )
+        query = query.where(canonical.c.effective_category_major == category_major)
     if tx_type != "all":
-        query = query.where(Transaction.type == tx_type)
-
-    edited_clause = or_(
-        Transaction.category_major_user.is_not(None),
-        Transaction.category_minor_user.is_not(None),
-        Transaction.memo.is_not(None),
-    )
+        query = query.where(canonical.c.type == tx_type)
     if is_edited == "true":
-        query = query.where(edited_clause)
+        query = query.where(canonical.c.is_edited.is_(True))
     elif is_edited == "false":
-        query = query.where(~edited_clause)
+        query = query.where(canonical.c.is_edited.is_(False))
 
     if search:
         pattern = f"%{search}%"
         query = query.where(
             or_(
-                Transaction.description.ilike(pattern),
-                Transaction.memo.ilike(pattern),
-                Transaction.payment_method.ilike(pattern),
+                canonical.c.description.ilike(pattern),
+                canonical.c.memo.ilike(pattern),
+                canonical.c.payment_method.ilike(pattern),
             )
         )
-    return query
+    return query, canonical
 
 
 async def _get_transaction_or_404(
@@ -318,7 +313,7 @@ async def _get_transaction_or_404(
     return transaction
 
 
-def _serialize_transaction(transaction: Transaction) -> TransactionResponse:
+def _serialize_transaction_model(transaction: Transaction) -> TransactionResponse:
     return TransactionResponse(
         id=transaction.id,
         date=transaction.date,
@@ -341,6 +336,32 @@ def _serialize_transaction(transaction: Transaction) -> TransactionResponse:
         source=transaction.source,
         created_at=transaction.created_at,
         updated_at=transaction.updated_at,
+    )
+
+
+def _serialize_transaction_row(transaction: RowMapping) -> TransactionResponse:
+    return TransactionResponse(
+        id=transaction["id"],
+        date=transaction["date"],
+        time=transaction["time"],
+        type=transaction["type"],
+        category_major=transaction["category_major"],
+        category_minor=transaction["category_minor"],
+        category_major_user=transaction["category_major_user"],
+        category_minor_user=transaction["category_minor_user"],
+        effective_category_major=transaction["effective_category_major"],
+        effective_category_minor=transaction["effective_category_minor"],
+        description=transaction["description"],
+        amount=transaction["amount"],
+        currency=transaction["currency"],
+        payment_method=transaction["payment_method"],
+        memo=transaction["memo"],
+        is_deleted=transaction["is_deleted"],
+        merged_into_id=transaction["merged_into_id"],
+        is_edited=transaction["is_edited"],
+        source=transaction["source"],
+        created_at=transaction["created_at"],
+        updated_at=transaction["updated_at"],
     )
 
 
