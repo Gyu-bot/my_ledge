@@ -5,23 +5,23 @@ interface PlaceholderAppProps {
 }
 
 const foundationItems = [
-  ['Router shell', 'Ready'],
-  ['Query provider', 'Ready'],
-  ['Typed API client', 'Ready'],
+  ['라우터 셸', '완료'],
+  ['Query Provider', '완료'],
+  ['타입드 API 클라이언트', '완료'],
 ];
 
 const nextSlices = [
   {
-    title: 'Dashboard cards and charts',
-    detail: 'Net worth, monthly trend, category mix, recent transactions',
+    title: '대시보드 카드와 차트',
+    detail: '순자산, 월별 추이, 카테고리 비중, 최근 거래',
   },
   {
-    title: 'Asset history and portfolio',
-    detail: 'Snapshots, investments, and loans over time',
+    title: '자산 추이와 포트폴리오',
+    detail: '스냅샷, 투자, 대출 데이터 연결',
   },
   {
-    title: 'Data operations workspace',
-    detail: 'Uploads, edits, and import log visibility',
+    title: '데이터 작업 공간',
+    detail: '업로드, 수정, import 로그 확인',
   },
 ];
 
@@ -58,7 +58,7 @@ export function PlaceholderApp({ eyebrow, title, description }: PlaceholderAppPr
         <p className="font-mono text-xs uppercase tracking-[0.28em] text-[color:var(--color-text-subtle)]">
           Phase 2
         </p>
-        <h3 className="mt-4 text-xl font-semibold text-[color:var(--color-text)]">Next slices</h3>
+        <h3 className="mt-4 text-xl font-semibold text-[color:var(--color-text)]">다음 작업</h3>
         <ul className="mt-6 space-y-4">
           {nextSlices.map((item) => (
             <li

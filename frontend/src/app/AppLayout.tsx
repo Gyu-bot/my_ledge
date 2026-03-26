@@ -1,17 +1,17 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const navigationItems = [
-  { label: 'Dashboard', to: '/' },
-  { label: 'Assets', to: '/assets' },
-  { label: 'Spending', to: '/spending' },
-  { label: 'Data', to: '/data' },
+  { label: '대시보드', to: '/' },
+  { label: '자산', to: '/assets' },
+  { label: '지출', to: '/spending' },
+  { label: '데이터', to: '/data' },
 ];
 
 export function AppLayout() {
   return (
     <div className="min-h-screen bg-dashboard-grid text-[color:var(--color-text)]">
       <a className="skip-link" href="#main-content">
-        Skip to main content
+        본문으로 건너뛰기
       </a>
 
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
@@ -22,11 +22,10 @@ export function AppLayout() {
                 my_ledge
               </p>
               <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-3xl">
-                Personal finance dashboard
+                개인 재무 대시보드
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-text-muted)]">
-                Canonical API-ready route shell for dashboard insights, asset tracking, and
-                transaction operations.
+                대시보드 인사이트, 자산 추적, 거래 관리를 한 흐름으로 연결한 개인 재무 워크스페이스입니다.
               </p>
             </div>
 

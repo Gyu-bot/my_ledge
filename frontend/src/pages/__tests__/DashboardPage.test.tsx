@@ -1,17 +1,21 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import App from '../App';
+import { describe, expect, it, vi } from 'vitest';
+import { DashboardPage } from '../DashboardPage';
 
-vi.mock('../hooks/useDashboard', () => ({
+vi.mock('../../hooks/useDashboard', () => ({
   useDashboard: vi.fn(),
 }));
 
-import { useDashboard } from '../hooks/useDashboard';
+vi.mock('../../components/dashboard/CategoryBreakdownCard', () => ({
+  CategoryBreakdownCard: () => <div>카테고리 비중 카드</div>,
+}));
+
+import { useDashboard } from '../../hooks/useDashboard';
 
 const mockedUseDashboard = vi.mocked(useDashboard);
 
-describe('App shell', () => {
-  beforeEach(() => {
+describe('DashboardPage', () => {
+  it('renders summary cards, a monthly trend chart, and recent transactions', () => {
     mockedUseDashboard.mockReturnValue({
       data: {
         snapshot_date: '2026-03-24',
@@ -59,37 +63,39 @@ describe('App shell', () => {
       isError: false,
       error: null,
     } as ReturnType<typeof useDashboard>);
-  });
 
-  it('renders the shared navigation and dashboard route by default', () => {
-    window.history.pushState({}, '', '/');
+    render(<DashboardPage />);
 
-    render(<App />);
-
-    expect(screen.getByRole('link', { name: '대시보드' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '자산' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '지출' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '데이터' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '본문으로 건너뛰기' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '개인 재무 대시보드' })).toBeInTheDocument();
+    expect(screen.getByText(/^순자산$/)).toBeInTheDocument();
     expect(screen.getByText(/월별 지출 추이/)).toBeInTheDocument();
+    expect(screen.getByText(/카테고리 비중 카드/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: '최근 거래' })).toBeInTheDocument();
+    expect(screen.getAllByText(/지하철/i)).toHaveLength(2);
   });
 
-  it('renders the assets route shell', () => {
-    window.history.pushState({}, '', '/assets');
+  it('renders a loading state while the dashboard query is pending', () => {
+    mockedUseDashboard.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useDashboard>);
 
-    render(<App />);
+    render(<DashboardPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '자산 현황' })).toBeInTheDocument();
-    expect(screen.getByText(/자산 스냅샷, 투자, 대출 화면/)).toBeInTheDocument();
+    expect(screen.getByText(/대시보드 불러오는 중/i)).toBeInTheDocument();
   });
 
-  it('redirects unknown routes to the dashboard shell', () => {
-    window.history.pushState({}, '', '/not-found');
+  it('renders an error state when the dashboard query fails', () => {
+    mockedUseDashboard.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error('boom'),
+    } as ReturnType<typeof useDashboard>);
 
-    render(<App />);
+    render(<DashboardPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '대시보드' })).toBeInTheDocument();
-    expect(screen.getByText(/월별 지출 추이/)).toBeInTheDocument();
+    expect(screen.getByText(/대시보드 데이터를 불러올 수 없습니다/i)).toBeInTheDocument();
   });
 });
