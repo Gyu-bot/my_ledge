@@ -39,6 +39,7 @@ describe('SpendingPage', () => {
         search: '',
       },
       subcategory_major_filter: '',
+      include_income: false,
       daily_calendar_month: '2026-03',
       transactions_page: 1,
       transactions_per_page: 20,
@@ -48,6 +49,7 @@ describe('SpendingPage', () => {
       updateDetailFilters: vi.fn(),
       resetDetailFilters: vi.fn(),
       updateSubcategoryMajorFilter: vi.fn(),
+      updateIncludeIncome: vi.fn(),
       updateDailyCalendarMonth: vi.fn(),
       updateTransactionsPage: vi.fn(),
       updateTransactionsAccordionOpen: vi.fn(),
@@ -162,6 +164,8 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '결제수단별 지출' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래처별 Tree Map' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '일별 지출액' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '수입 포함' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '거래내역 수입 포함' })).toBeInTheDocument();
     expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
     expect(screen.getByLabelText('결제수단별 지출 파이 차트')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 내역' })).toBeInTheDocument();

@@ -29,6 +29,7 @@ export interface SpendingPageState {
   timeline_filters: TimelineRangeFilterValues;
   detail_filters: TransactionFilterValues;
   subcategory_major_filter: string;
+  include_income: boolean;
   daily_calendar_month: string;
   transactions_page: number;
   transactions_per_page: number;
@@ -38,6 +39,7 @@ export interface SpendingPageState {
   updateDetailFilters: (next: TransactionFilterValues) => void;
   resetDetailFilters: () => void;
   updateSubcategoryMajorFilter: (next: string) => void;
+  updateIncludeIncome: (next: boolean) => void;
   updateDailyCalendarMonth: (next: string) => void;
   updateTransactionsPage: (next: number) => void;
   updateTransactionsAccordionOpen: (next: boolean) => void;
@@ -81,6 +83,10 @@ export interface SpendingDailyCalendarData {
   items: SpendingDailySpendItem[];
   total_amount: number;
   max_amount: number;
+}
+
+function shouldIncludeTransaction(type: string, includeIncome: boolean) {
+  return type === '지출' || (includeIncome && type === '수입');
 }
 
 const defaultTimelineFilters: TimelineRangeFilterValues = {
@@ -306,6 +312,7 @@ export function useSpendingPageState(): SpendingPageState {
   );
   const [detailFilters, setDetailFilters] = useState<TransactionFilterValues>(defaultDetailFilters);
   const [subcategoryMajorFilter, setSubcategoryMajorFilter] = useState('');
+  const [includeIncome, setIncludeIncome] = useState(false);
   const [dailyCalendarMonth, setDailyCalendarMonth] = useState('');
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [transactionsAccordionOpen, setTransactionsAccordionOpen] = useState(false);
@@ -315,6 +322,7 @@ export function useSpendingPageState(): SpendingPageState {
     timeline_filters: timelineFilters,
     detail_filters: detailFilters,
     subcategory_major_filter: subcategoryMajorFilter,
+    include_income: includeIncome,
     daily_calendar_month: dailyCalendarMonth,
     transactions_page: transactionsPage,
     transactions_per_page: transactionsPerPage,
@@ -332,6 +340,7 @@ export function useSpendingPageState(): SpendingPageState {
       setTransactionsPage(1);
     },
     updateSubcategoryMajorFilter: setSubcategoryMajorFilter,
+    updateIncludeIncome: setIncludeIncome,
     updateDailyCalendarMonth: setDailyCalendarMonth,
     updateTransactionsPage: setTransactionsPage,
     updateTransactionsAccordionOpen: setTransactionsAccordionOpen,
@@ -424,6 +433,7 @@ export function useSpendingPeriodData(
 
 export function useSpendingTransactionsData(
   filters: TransactionFilterValues,
+  includeIncome: boolean,
   page: number,
   perPage: number,
 ) {
@@ -435,6 +445,7 @@ export function useSpendingTransactionsData(
       filters.category_major,
       filters.payment_method,
       filters.search,
+      includeIncome,
       page,
       perPage,
     ],
@@ -445,7 +456,9 @@ export function useSpendingTransactionsData(
         payment_method: filters.payment_method || undefined,
         search: filters.search || undefined,
       });
-      const spendingTransactions = allTransactions.filter((item) => item.type === '지출');
+      const spendingTransactions = allTransactions.filter((item) =>
+        shouldIncludeTransaction(item.type, includeIncome),
+      );
       const total = spendingTransactions.length;
       const boundedPage = total === 0 ? 1 : Math.min(page, Math.ceil(total / perPage));
       const startIndex = (boundedPage - 1) * perPage;
@@ -464,13 +477,22 @@ export function useSpendingTransactionsData(
 
 export function useSpendingDailyCalendarData(
   filters: TimelineRangeFilterValues,
+  includeIncome: boolean,
   selectedMonth: string,
 ) {
   return useQuery({
-    queryKey: ['spending-daily-calendar', filters.start_month, filters.end_month, selectedMonth],
+    queryKey: [
+      'spending-daily-calendar',
+      filters.start_month,
+      filters.end_month,
+      includeIncome,
+      selectedMonth,
+    ],
     queryFn: async (): Promise<SpendingDailyCalendarData> => {
       const periodTransactions = await fetchAllTransactions(toMonthRange(filters));
-      const spendingTransactions = periodTransactions.filter((item) => item.type === '지출');
+      const spendingTransactions = periodTransactions.filter((item) =>
+        shouldIncludeTransaction(item.type, includeIncome),
+      );
       const availableMonths = Array.from(
         new Set(spendingTransactions.map((item) => item.date.slice(0, 7))),
       ).sort();

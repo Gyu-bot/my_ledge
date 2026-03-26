@@ -9,7 +9,11 @@ vi.mock('../../api/transactions', () => ({
 }));
 
 import { getTransactions } from '../../api/transactions';
-import { useSpendingDailyCalendarData, useSpendingPageState } from '../useSpending';
+import {
+  useSpendingDailyCalendarData,
+  useSpendingPageState,
+  useSpendingTransactionsData,
+} from '../useSpending';
 
 const mockedGetTransactions = vi.mocked(getTransactions);
 
@@ -41,6 +45,16 @@ describe('useSpendingPageState', () => {
 
     expect(result.current.transactions_accordion_open).toBe(true);
     expect(result.current.transactions_page).toBe(2);
+  });
+
+  it('tracks the shared include-income toggle', () => {
+    const { result } = renderHook(() => useSpendingPageState());
+
+    act(() => {
+      result.current.updateIncludeIncome(true);
+    });
+
+    expect(result.current.include_income).toBe(true);
   });
 });
 
@@ -186,6 +200,7 @@ describe('useSpendingDailyCalendarData', () => {
             start_month: '2026-03',
             end_month: '2026-03',
           },
+          false,
           '2026-03',
         ),
       { wrapper: createWrapper() },
@@ -200,5 +215,89 @@ describe('useSpendingDailyCalendarData', () => {
       amount: 14500,
     });
     expect(result.current.data?.total_amount).toBe(14500);
+  });
+
+  it('includes income rows in transaction results when requested', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 2,
+      page: 1,
+      per_page: 200,
+      items: [
+        {
+          id: 1,
+          date: '2026-03-05',
+          time: '09:00:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: '미분류',
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: '미분류',
+          description: '점심',
+          amount: -12000,
+          currency: 'KRW',
+          payment_method: '카드',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-26T14:16:36.843486Z',
+          updated_at: '2026-03-26T14:16:36.843486Z',
+        },
+        {
+          id: 2,
+          date: '2026-03-05',
+          time: '10:00:00',
+          type: '수입',
+          category_major: '급여',
+          category_minor: '미분류',
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '급여',
+          effective_category_minor: '미분류',
+          description: '환급',
+          amount: 8000,
+          currency: 'KRW',
+          payment_method: '계좌',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-26T14:16:36.843486Z',
+          updated_at: '2026-03-26T14:16:36.843486Z',
+        },
+      ],
+    });
+
+    const { result } = renderHook(
+      () =>
+        useSpendingTransactionsData(
+          {
+            start_month: '2026-03',
+            end_month: '2026-03',
+            category_major: '',
+            payment_method: '',
+            search: '',
+          },
+          true,
+          1,
+          20,
+        ),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    expect(result.current.data?.transactions).toHaveLength(2);
+    expect(result.current.data?.transactions_total).toBe(2);
   });
 });

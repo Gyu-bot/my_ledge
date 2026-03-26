@@ -17,6 +17,7 @@ import { TransactionsTable } from '../components/tables/TransactionsTable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
 import {
   Card,
   CardContent,
@@ -353,11 +354,15 @@ const BreakdownSection = memo(function BreakdownSection({
 
 const DailySpendSection = memo(function DailySpendSection({
   detailFilters,
+  includeIncome,
   selectedMonth,
+  setIncludeIncome,
   setSelectedMonth,
 }: {
   detailFilters: TransactionFilterValues;
+  includeIncome: boolean;
   selectedMonth: string;
+  setIncludeIncome: SpendingPageState['updateIncludeIncome'];
   setSelectedMonth: SpendingPageState['updateDailyCalendarMonth'];
 }) {
   const dailyQuery = useSpendingDailyCalendarData(
@@ -365,6 +370,7 @@ const DailySpendSection = memo(function DailySpendSection({
       start_month: detailFilters.start_month,
       end_month: detailFilters.end_month,
     },
+    includeIncome,
     selectedMonth,
   );
 
@@ -399,12 +405,22 @@ const DailySpendSection = memo(function DailySpendSection({
     <Card>
       <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between lg:space-y-0">
         <div>
-          <CardTitle>일별 지출액</CardTitle>
+          <CardTitle>{includeIncome ? '일별 수입/지출액' : '일별 지출액'}</CardTitle>
           <CardDescription>
-            선택한 기간 안에서 한 달을 골라 일자별 지출 금액을 달력으로 확인합니다.
+            {includeIncome
+              ? '선택한 기간 안에서 한 달을 골라 일자별 수입과 지출의 순변동을 달력으로 확인합니다.'
+              : '선택한 기간 안에서 한 달을 골라 일자별 지출 금액을 달력으로 확인합니다.'}
           </CardDescription>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm text-[color:var(--color-text)]">
+            <Checkbox
+              aria-label="수입 포함"
+              checked={includeIncome}
+              onCheckedChange={(checked) => setIncludeIncome(checked === true)}
+            />
+            수입 포함
+          </label>
           <Badge variant="accent">{dailyQuery.data.selected_month || '기간 데이터 없음'} 기준</Badge>
           <label className="block min-w-[10rem]">
             <span className="sr-only">일별 지출 월 선택</span>
@@ -437,7 +453,7 @@ const DailySpendSection = memo(function DailySpendSection({
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-4 py-3">
               <p className="text-sm text-[color:var(--color-text-muted)]">
-                총 일별 지출 합계
+                {includeIncome ? '총 일별 순변동 합계' : '총 일별 지출 합계'}
               </p>
               <p className="text-sm font-semibold text-[color:var(--color-text)]">
                 {new Intl.NumberFormat('ko-KR', {
@@ -467,11 +483,13 @@ const DailySpendSection = memo(function DailySpendSection({
 const TransactionsSection = memo(function TransactionsSection({
   categoryMajor,
   endMonth,
+  includeIncome,
   isAccordionOpen,
   page,
   paymentMethod,
   perPage,
   search,
+  setIncludeIncome,
   setTransactionsAccordionOpen,
   setTransactionsPage,
   startMonth,
@@ -481,9 +499,11 @@ const TransactionsSection = memo(function TransactionsSection({
   categoryMajor: string;
   paymentMethod: string;
   search: string;
+  includeIncome: boolean;
   page: number;
   perPage: number;
   isAccordionOpen: boolean;
+  setIncludeIncome: SpendingPageState['updateIncludeIncome'];
   setTransactionsPage: SpendingPageState['updateTransactionsPage'];
   setTransactionsAccordionOpen: SpendingPageState['updateTransactionsAccordionOpen'];
 }) {
@@ -495,6 +515,7 @@ const TransactionsSection = memo(function TransactionsSection({
       payment_method: paymentMethod,
       search,
     },
+    includeIncome,
     page,
     perPage,
   );
@@ -537,13 +558,25 @@ const TransactionsSection = memo(function TransactionsSection({
         <div>
           <CardTitle>거래 내역</CardTitle>
           <CardDescription>
-            현재 조건에 맞는 최근 지출 거래를 확인합니다.
+            {includeIncome
+              ? '현재 조건에 맞는 수입·지출 거래를 함께 확인합니다.'
+              : '현재 조건에 맞는 최근 지출 거래를 확인합니다.'}
           </CardDescription>
         </div>
-        <p className="text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-          {transactionsQuery.data.transactions_page} / {totalPages} 페이지
-          {transactionsQuery.isFetching ? ' · 불러오는 중' : ''}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm text-[color:var(--color-text)]">
+            <Checkbox
+              aria-label="거래내역 수입 포함"
+              checked={includeIncome}
+              onCheckedChange={(checked) => setIncludeIncome(checked === true)}
+            />
+            수입 포함
+          </label>
+          <p className="text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+            {transactionsQuery.data.transactions_page} / {totalPages} 페이지
+            {transactionsQuery.isFetching ? ' · 불러오는 중' : ''}
+          </p>
+        </div>
       </CardHeader>
       <CardContent>
         <Accordion
@@ -676,7 +709,9 @@ export function SpendingPage() {
 
       <DailySpendSection
         detailFilters={spendingState.detail_filters}
+        includeIncome={spendingState.include_income}
         selectedMonth={spendingState.daily_calendar_month}
+        setIncludeIncome={spendingState.updateIncludeIncome}
         setSelectedMonth={spendingState.updateDailyCalendarMonth}
       />
 
@@ -686,9 +721,11 @@ export function SpendingPage() {
         categoryMajor={spendingState.detail_filters.category_major}
         paymentMethod={spendingState.detail_filters.payment_method}
         search={spendingState.detail_filters.search}
+        includeIncome={spendingState.include_income}
         page={spendingState.transactions_page}
         perPage={spendingState.transactions_per_page}
         isAccordionOpen={spendingState.transactions_accordion_open}
+        setIncludeIncome={spendingState.updateIncludeIncome}
         setTransactionsAccordionOpen={spendingState.updateTransactionsAccordionOpen}
         setTransactionsPage={spendingState.updateTransactionsPage}
       />

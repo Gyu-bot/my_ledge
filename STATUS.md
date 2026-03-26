@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-26T22:14+0900, 전역 accent/radius 토큰 정렬 + 전체 화면 재검증)
+- **Last Worker:** codex (2026-03-27T00:31+0900, spending 수입 포함 토글 반영 + 문서/상태 정리)
 - **Branch:** main
 
 ## Completed
@@ -36,7 +36,7 @@
 - [ ] Phase 2 frontend 마감 정리 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
   - 마지막 완료 작업: `Phase 2 Task 5.1: shadcn/ui 기반 화면 전환`
-  - 현재 상태: `/`, `/assets`, `/spending`, `/data` route와 app shell, 공통 필터/테이블/상태 카드가 모두 shadcn/ui 스타일 primitive(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`) 중심으로 정렬되었다. 차트는 현재 요구사항상 Recharts를 유지하되 주변 chrome과 tooltip, 강조색은 메인 대시보드 `월별 지출 추이`의 blue accent 축으로 통일했고, 카드·아코디언·테이블 래퍼·내부 패널 반경도 `--radius`, `--radius-sm`, `--radius-xs` 토큰으로 맞췄다. `spending`은 여전히 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리되어 관련 섹션만 갱신되고, `월별 고정비/변동비 추이`는 `cost_kind` 데이터가 비어 있어 placeholder 상태다. 최신 검증은 `npm test -- --runInBand`, `npm run typecheck`, `npm run lint`, `npm run build` 전부 통과했고, headless browser(`playwright-core + system Chrome`)로 `/`, `/assets`, `/spending`, `/data` 화면을 캡처한 뒤 이미지를 직접 검토했다. 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`이다
+  - 현재 상태: `/`, `/assets`, `/spending`, `/data` route와 app shell, 공통 필터/테이블/상태 카드가 모두 shadcn/ui 스타일 primitive(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`) 중심으로 정렬되었다. 차트는 현재 요구사항상 Recharts를 유지하되 주변 chrome과 tooltip, 강조색은 메인 대시보드 `월별 지출 추이`의 blue accent 축으로 통일했고, 카드·아코디언·테이블 래퍼·내부 패널 반경도 `--radius`, `--radius-sm`, `--radius-xs` 토큰으로 맞췄다. `spending`은 `월별 시계열`, `기간 집계`, `일별 지출 달력`, `거래 내역` 훅으로 분리되어 관련 섹션만 갱신된다. 거래 내역 아코디언은 페이지네이션 시에도 열린 상태를 유지하도록 `placeholderData` 기반으로 보정했고, `월별 고정비/변동비 추이`는 `cost_kind` 데이터가 비어 있어 placeholder 상태다. 개발 DB에는 `finance_sample.xlsx(2026-03-12 가정) -> sample_260324.xlsx(2026-03-24) -> fs_260326.xlsx(2026-03-26)` 순서로 실제 `/api/v1/upload` 검증을 다시 수행해 snapshot row를 채웠고, rolling-window duplicate matching 보정 후 second upload 기대값은 `tx_new=68`, `tx_skipped=2158`, 최종 transaction row는 `2291`로 확인했다. 2026-03 지출 합계는 현재 API 기준 `-6,145,239원`이다. `일별 지출액`과 `거래 내역`은 공유 `수입 포함` 토글을 사용하며, 토글을 켜면 달력은 일별 순변동 기준으로, 거래 내역은 수입/지출 동시 보기 기준으로 동작한다. 최신 검증은 frontend `npm test -- --runInBand`, `npm run typecheck`, `npm run lint`, `npm run build`, 브라우저 자동화 기반 지출 화면 캡처(`output/playwright/spending-include-income-toggle.png`), backend `uv run pytest tests/services/test_upload_service.py tests/services/test_source_verification.py tests/api/test_upload_api.py -q`, `uv run ruff check app/services/upload_service.py tests/services/test_upload_service.py` 까지 통과했다. 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`의 나머지 범위다
 
 ## Blocked
 - 없음
@@ -45,7 +45,8 @@
 - [ ] Phase 2 Task 6: 프론트 통합 polish / write flow 실검증
   - 목표: 데이터 관리 화면의 업로드/수정/삭제/복원 write flow를 실제 API 키 환경에서 수동 검증하고, 화면 polish와 chunk 분할 등 마감 정리를 수행
   - 우선 파일: `frontend/src/pages/DataPage.tsx`, `frontend/src/hooks/useDataManagement.ts`, `frontend/src/app/router.tsx`, 필요 시 backend upload log 조회 endpoint
-  - 성공 기준: write flow 실검증 기록이 남고, 남은 Phase 2 polish 항목과 성능/번들 경고 대응 방향이 정리됨
+  - 현재까지: upload flow는 실제 `/api/v1/upload` 로 검증 완료, 자산/투자/대출 snapshot이 개발 DB에 적재되어 `/assets` 와 대시보드 상단 KPI에 반영됨
+  - 성공 기준: 남은 수정/삭제/복원 flow 실검증 기록이 남고, 남은 Phase 2 polish 항목과 성능/번들 경고 대응 방향이 정리됨
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -76,7 +77,7 @@
 - 2026-03-24: 실제 BankSalad 소스는 현재 비암호화 workbook 기준으로 검증되었고, 기존 복호화 코드는 호환용 fallback으로만 유지한다
 - 2026-03-24: `sample_260324.xlsx` 검증 결과 최신 export는 strict cumulative snapshot이 아니라 rolling window + 일부 중간 구간 변경이 섞일 수 있어, 단순 max(date,time) 커서 방식만으로는 최종 상태 동기화를 보장하지 못한다
 - 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
-- 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지하며, workbook datetime window 안에서 exact signature로 아직 없는 거래만 append한다
+- 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지한다. 중복 판정은 먼저 exact signature로 수행하고, exact 실패분에 한해 `date/type/description/amount/currency/payment_method` 동일 + 시간차 60초 이하인 fallback match를 적용해 category drift와 초 단위 truncation으로 인한 false duplicate를 줄인다
 - 2026-03-25: Task 9 canonical analysis layer 1차 범위는 view 생성과 문서화에 그치지 않고, 기존 거래 조회/분석 런타임이 `vw_transactions_effective` / `vw_category_monthly_spend` 또는 그와 정의상 동일한 shared read path를 실제로 사용하도록 맞추는 것까지 포함한다
 - 2026-03-26: Task 8 운영 검증은 메인 개발 데이터셋을 건드리지 않도록 임시 PostgreSQL DB `my_ledge_task8_verify` 에 마이그레이션 후 수행한다
 - 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
@@ -96,6 +97,8 @@
 - 2026-03-26: `하위 카테고리별 지출`은 테이블을 제거하고 차트 전용 섹션으로 유지한다. `거래처별 Tree Map`은 별도 vendor 컬럼이 생기기 전까지 `description` 기준 집계로 우선 구현한다
 - 2026-03-26: frontend 공통 primitive는 `shadcn/ui` 스타일(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`)을 우선 사용하고, 차트는 현재 기능 범위상 Recharts를 유지하되 주변 레이아웃과 empty-state는 동일 디자인 시스템으로 정렬한다
 - 2026-03-26: frontend 전역 accent color는 메인 대시보드 `월별 지출 추이` 라인의 blue(`#2563eb`)를 기준으로 통일하고, 카드/아코디언/테이블/내부 패널 반경은 CSS radius 토큰(`--radius`, `--radius-sm`, `--radius-xs`)으로만 관리한다
+- 2026-03-26: 개발 DB의 자산 검증용 snapshot_date는 workbook에 내장된 값이 없으므로 외부 입력으로 관리한다. 현재 검증에서는 `finance_sample.xlsx` 는 transaction window 기준으로 `2026-03-12` 를 가정해 적재했다
+- 2026-03-27: 거래 내역 페이지네이션은 query key 변경 시 로딩 카드로 섹션을 갈아끼우지 않고 `placeholderData`로 이전 페이지 내용을 유지한다. 그래야 아코디언 열린 상태와 스크롤 맥락이 유지된다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

@@ -78,8 +78,8 @@ export function AssetsPage() {
         ))}
       </section>
 
-      <section className="grid gap-6 xl:items-start xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)]">
-        <Card>
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card className="xl:col-span-2">
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
             <div>
               <CardTitle>순자산 추이</CardTitle>
@@ -101,145 +101,143 @@ export function AssetsPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
-          <Card>
-            <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-              <div>
-                <CardTitle>투자 요약</CardTitle>
-                <CardDescription className="mt-2">
-                  최신 투자 스냅샷 기준 평가액과 주요 포지션입니다.
-                </CardDescription>
-              </div>
-              <Badge variant="accent">{investments.snapshot_date ?? '기준일 없음'}</Badge>
-            </CardHeader>
-            <CardContent>
-              {investments.items.length > 0 ? (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
-                      <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                        총 투자원금
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                        {formatMoney(investments.totals.cost_basis)}
-                      </p>
-                    </div>
-                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
-                      <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                        총 평가액
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                        {formatMoney(investments.totals.market_value)}
-                      </p>
-                    </div>
+        <Card>
+          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+            <div>
+              <CardTitle>투자 요약</CardTitle>
+              <CardDescription className="mt-2">
+                최신 투자 스냅샷 기준 평가액과 주요 포지션입니다.
+              </CardDescription>
+            </div>
+            <Badge variant="accent">{investments.snapshot_date ?? '기준일 없음'}</Badge>
+          </CardHeader>
+          <CardContent>
+            {investments.items.length > 0 ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                      총 투자원금
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
+                      {formatMoney(investments.totals.cost_basis)}
+                    </p>
                   </div>
-                  <ul className="mt-5 space-y-3">
-                    {investments.items.slice(0, 4).map((item) => (
-                      <li
-                        key={`${item.broker}-${item.product_name}`}
-                        className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-[color:var(--color-text)]">
-                              {item.product_name}
-                            </p>
-                            <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                              {item.broker}
-                              {item.product_type ? ` · ${item.product_type}` : ''}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-[color:var(--color-text)]">
-                              {formatMoney(item.market_value ?? 0)}
-                            </p>
-                            <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                              {formatPercent(item.return_rate)}
-                            </p>
-                          </div>
+                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                      총 평가액
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
+                      {formatMoney(investments.totals.market_value)}
+                    </p>
+                  </div>
+                </div>
+                <ul className="mt-5 space-y-3">
+                  {investments.items.slice(0, 4).map((item) => (
+                    <li
+                      key={`${item.broker}-${item.product_name}`}
+                      className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[color:var(--color-text)]">
+                            {item.product_name}
+                          </p>
+                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+                            {item.broker}
+                            {item.product_type ? ` · ${item.product_type}` : ''}
+                          </p>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <SectionPlaceholder
-                  title="투자 스냅샷 없음"
-                  description="새 엑셀 업로드 후 이 영역에 주요 포지션과 평가액이 표시됩니다."
-                />
-              )}
-            </CardContent>
-          </Card>
+                        <div className="text-right">
+                          <p className="font-semibold text-[color:var(--color-text)]">
+                            {formatMoney(item.market_value ?? 0)}
+                          </p>
+                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+                            {formatPercent(item.return_rate)}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <SectionPlaceholder
+                title="투자 스냅샷 없음"
+                description="새 엑셀 업로드 후 이 영역에 주요 포지션과 평가액이 표시됩니다."
+              />
+            )}
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-              <div>
-                <CardTitle>대출 요약</CardTitle>
-                <CardDescription className="mt-2">
-                  최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다.
-                </CardDescription>
-              </div>
-              <Badge variant="destructive">{loans.snapshot_date ?? '기준일 없음'}</Badge>
-            </CardHeader>
-            <CardContent>
-              {loans.items.length > 0 ? (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
-                      <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                        총 대출원금
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                        {formatMoney(loans.totals.principal)}
-                      </p>
-                    </div>
-                    <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
-                      <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                        총 잔액
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                        {formatMoney(loans.totals.balance)}
-                      </p>
-                    </div>
+        <Card>
+          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+            <div>
+              <CardTitle>대출 요약</CardTitle>
+              <CardDescription className="mt-2">
+                최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다.
+              </CardDescription>
+            </div>
+            <Badge variant="destructive">{loans.snapshot_date ?? '기준일 없음'}</Badge>
+          </CardHeader>
+          <CardContent>
+            {loans.items.length > 0 ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                      총 대출원금
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
+                      {formatMoney(loans.totals.principal)}
+                    </p>
                   </div>
-                  <ul className="mt-5 space-y-3">
-                    {loans.items.slice(0, 4).map((item) => (
-                      <li
-                        key={`${item.lender}-${item.product_name}`}
-                        className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-[color:var(--color-text)]">
-                              {item.product_name}
-                            </p>
-                            <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                              {item.lender}
-                              {item.loan_type ? ` · ${item.loan_type}` : ''}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-[color:var(--color-text)]">
-                              {formatMoney(item.balance ?? 0)}
-                            </p>
-                            <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                              {item.interest_rate === null ? '금리 없음' : `${item.interest_rate.toFixed(2)}%`}
-                            </p>
-                          </div>
+                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                      총 잔액
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
+                      {formatMoney(loans.totals.balance)}
+                    </p>
+                  </div>
+                </div>
+                <ul className="mt-5 space-y-3">
+                  {loans.items.slice(0, 4).map((item) => (
+                    <li
+                      key={`${item.lender}-${item.product_name}`}
+                      className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[color:var(--color-text)]">
+                            {item.product_name}
+                          </p>
+                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+                            {item.lender}
+                            {item.loan_type ? ` · ${item.loan_type}` : ''}
+                          </p>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <SectionPlaceholder
-                  title="대출 스냅샷 없음"
-                  description="대출 데이터가 적재되면 이 영역에 잔액과 금리 정보가 표시됩니다."
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-[color:var(--color-text)]">
+                            {formatMoney(item.balance ?? 0)}
+                          </p>
+                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+                            {item.interest_rate === null ? '금리 없음' : `${item.interest_rate.toFixed(2)}%`}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <SectionPlaceholder
+                title="대출 스냅샷 없음"
+                description="대출 데이터가 적재되면 이 영역에 잔액과 금리 정보가 표시됩니다."
+              />
+            )}
+          </CardContent>
+        </Card>
       </section>
     </div>
   );
