@@ -2,8 +2,8 @@
 
 ## Current State
 - **Phase:** Phase 2 — 대시보드 Core 준비
-- **Last Worker:** codex (2026-03-26T14:13+0900, Phase 2 task decomposition + UI design baseline)
-- **Branch:** main
+- **Last Worker:** codex (2026-03-26T14:34+0900, Phase 2 Task 1 frontend foundation 정합성 보정 완료)
+- **Branch:** feat/dashboard-core
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -25,21 +25,22 @@
 - [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
 - [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과 (`31 passed`)
 - [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
+- [x] Phase 2 Task 1 완료: frontend app shell + data foundation
 
 ## In Progress
-- [ ] Phase 2 dashboard core 진행 준비 중
+- [ ] Phase 2 dashboard core 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
-  - 마지막 완료 작업: `Phase 2 task decomposition + UI baseline 확정`
-  - 현재 상태: Phase 2는 `dashboard -> assets -> spending -> data` 순서로 구현한다. `docs/superpowers/specs/2026-03-26-phase2-dashboard-core-design.md` 에 UI/구조 설계를 정리했고, `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md` 에 실행 Task를 쪼갰다. UI 방향은 `ui-ux-pro-max` 결과를 따라 밝은 배경의 data-dense finance dashboard, blue primary + amber accent, Fira typography를 기준선으로 사용한다
+  - 마지막 완료 작업: `Phase 2 Task 1: frontend app shell + data foundation`
+  - 현재 상태: `feat/dashboard-core` worktree에서 React Router 기반 app shell, Query provider, typed API client foundation, design tokens, route placeholders를 구현했고, 후속 리뷰 기준으로 `STATUS.md` 동기화, snake_case API 타입 정렬, `204 No Content` 처리, skip-link focus 보정과 관련 프론트 테스트를 반영했다. 현재 다음 작업은 `Phase 2 Task 2: 메인 대시보드 구현`이다
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 2 Task 1: frontend app shell + data foundation
-  - 목표: React Router, Query provider, typed API layer, 공통 레이아웃을 추가해 placeholder shell을 실제 앱 구조로 전환
-  - 우선 파일: `frontend/package.json`, `frontend/src/App.tsx`, `frontend/src/index.css`, `frontend/src/app/`, `frontend/src/api/`, `frontend/src/types/`
-  - 성공 기준: `/`, `/assets`, `/spending`, `/data` route shell이 뜨고 lint/typecheck/test가 통과
+- [ ] Phase 2 Task 2: 메인 대시보드 구현
+  - 목표: dashboard page에 summary cards, 월별 추이, 카테고리 구성, 최근 거래 섹션을 실제 canonical API 기반으로 연결
+  - 우선 파일: `frontend/src/pages/DashboardPage.tsx`, `frontend/src/api/dashboard.ts`, `frontend/src/hooks/useDashboard.ts`, chart/table 공통 컴포넌트
+  - 성공 기준: dashboard page test와 frontend lint/typecheck가 통과하고, route shell이 실제 dashboard screen으로 대체됨
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)

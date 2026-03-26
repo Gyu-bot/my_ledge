@@ -65,6 +65,10 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     body: serializedBody,
   });
 
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T;
+  }
+
   const contentType = response.headers.get('content-type') ?? '';
   const responseBody = contentType.includes('application/json')
     ? await response.json()

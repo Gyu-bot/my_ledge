@@ -16,4 +16,22 @@ describe('App shell', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/route shell ready for dashboard insights/i)).toBeInTheDocument();
   });
+
+  it('renders the assets route shell', () => {
+    window.history.pushState({}, '', '/assets');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { level: 2, name: /assets/i })).toBeInTheDocument();
+    expect(screen.getByText(/route shell ready for asset snapshots/i)).toBeInTheDocument();
+  });
+
+  it('redirects unknown routes to the dashboard shell', () => {
+    window.history.pushState({}, '', '/not-found');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { level: 2, name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByText(/route shell ready for dashboard insights/i)).toBeInTheDocument();
+  });
 });

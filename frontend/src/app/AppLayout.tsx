@@ -54,7 +54,7 @@ export function AppLayout() {
           </div>
         </header>
 
-        <main id="main-content" className="mt-6 flex-1">
+        <main id="main-content" tabIndex={-1} className="mt-6 flex-1">
           <Outlet />
         </main>
       </div>

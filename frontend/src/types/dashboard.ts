@@ -1,3 +1,5 @@
+import type { TransactionResponse } from './transactions';
+
 export interface SummaryCard {
   label: string;
   value: string;
@@ -9,9 +11,7 @@ export interface TrendPoint {
   amount: number;
 }
 
-export interface RecentTransaction {
-  id: number;
-  description: string;
-  amount: number;
-  effectiveCategoryMajor: string;
-}
+export type RecentTransaction = Pick<
+  TransactionResponse,
+  'id' | 'description' | 'amount' | 'effective_category_major'
+>;

@@ -1,19 +1,57 @@
-export interface TransactionRecord {
+export interface TransactionResponse {
   id: number;
   date: string;
   time: string;
   type: string;
-  effectiveCategoryMajor: string;
-  effectiveCategoryMinor: string | null;
+  category_major: string;
+  category_minor: string | null;
+  category_major_user: string | null;
+  category_minor_user: string | null;
+  effective_category_major: string;
+  effective_category_minor: string | null;
   description: string;
   amount: number;
-  paymentMethod: string | null;
-  isEdited: boolean;
+  currency: string;
+  payment_method: string | null;
+  memo: string | null;
+  is_deleted: boolean;
+  merged_into_id: number | null;
+  is_edited: boolean;
+  source: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TransactionListResponse {
   total: number;
   page: number;
-  perPage: number;
-  items: TransactionRecord[];
+  per_page: number;
+  items: TransactionResponse[];
+}
+
+export interface TransactionSummaryItem {
+  period: string;
+  amount: number;
+}
+
+export interface TransactionSummaryResponse {
+  items: TransactionSummaryItem[];
+}
+
+export interface CategorySummaryItem {
+  category: string;
+  amount: number;
+}
+
+export interface CategorySummaryResponse {
+  items: CategorySummaryItem[];
+}
+
+export interface PaymentMethodSummaryItem {
+  payment_method: string | null;
+  amount: number;
+}
+
+export interface PaymentMethodSummaryResponse {
+  items: PaymentMethodSummaryItem[];
 }
