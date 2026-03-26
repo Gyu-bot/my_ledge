@@ -6,23 +6,40 @@
 
 :root {
   color-scheme: light;
-  background-color: #f8fafc;
+  --color-canvas: #f8fafc;
+  --color-surface: rgba(248, 250, 252, 0.92);
+  --color-surface-raised: rgba(255, 255, 255, 0.88);
+  --color-border: rgba(148, 163, 184, 0.24);
+  --color-primary: #1e40af;
+  --color-primary-strong: #1e3a8a;
+  --color-primary-soft: #dbeafe;
+  --color-accent: #f59e0b;
+  --color-accent-soft: #fef3c7;
+  --color-text: #1e3a8a;
+  --color-text-muted: #475569;
+  --color-text-subtle: rgba(30, 64, 175, 0.72);
+  --color-ring: #3b82f6;
+  --shadow-soft: 0 24px 48px -28px rgba(30, 64, 175, 0.38);
+  --shadow-glow: 0 18px 40px -20px rgba(59, 130, 246, 0.85);
+  background-color: var(--color-canvas);
 }
 
 html {
   min-height: 100%;
-  background-color: #f8fafc;
+  background-color: var(--color-canvas);
+  scroll-behavior: smooth;
 }
 
 body {
   min-height: 100vh;
   margin: 0;
-  background-color: #f8fafc;
+  background-color: var(--color-canvas);
   background-image:
     radial-gradient(circle at top left, rgba(59, 130, 246, 0.1), transparent 32%),
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.08), transparent 28%);
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.96));
   background-attachment: fixed;
-  color: #1e3a8a;
+  color: var(--color-text);
   font-family: 'Fira Sans', ui-sans-serif, system-ui, sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -35,10 +52,54 @@ body {
 
 ::selection {
   background: rgba(59, 130, 246, 0.2);
-  color: #1e3a8a;
+  color: var(--color-text);
+}
+
+a {
+  color: inherit;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 50;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.2s ease;
+}
+
+.skip-link:focus-visible {
+  top: 1rem;
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+.bg-dashboard-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 22%);
+  background-position: center;
+  background-size: 28px 28px, 28px 28px, auto, auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {

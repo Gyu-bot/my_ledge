@@ -2,8 +2,8 @@
 
 ## Current State
 - **Phase:** Phase 2 — 대시보드 Core 준비
-- **Last Worker:** codex (2026-03-26T14:13+0900, Phase 2 task decomposition + UI design baseline)
-- **Branch:** main
+- **Last Worker:** codex (2026-03-26T16:16+0900, Phase 2 Task 2 메인 대시보드 구현 완료)
+- **Branch:** feat/dashboard-core
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -25,21 +25,23 @@
 - [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
 - [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과 (`31 passed`)
 - [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
+- [x] Phase 2 Task 1 완료: frontend app shell + data foundation
+- [x] Phase 2 Task 2 완료: 메인 대시보드 구현
 
 ## In Progress
-- [ ] Phase 2 dashboard core 진행 준비 중
+- [ ] Phase 2 dashboard core 진행 중
   - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
-  - 마지막 완료 작업: `Phase 2 task decomposition + UI baseline 확정`
-  - 현재 상태: Phase 2는 `dashboard -> assets -> spending -> data` 순서로 구현한다. `docs/superpowers/specs/2026-03-26-phase2-dashboard-core-design.md` 에 UI/구조 설계를 정리했고, `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md` 에 실행 Task를 쪼갰다. UI 방향은 `ui-ux-pro-max` 결과를 따라 밝은 배경의 data-dense finance dashboard, blue primary + amber accent, Fira typography를 기준선으로 사용한다
+  - 마지막 완료 작업: `Phase 2 Task 2: 메인 대시보드 구현`
+  - 현재 상태: `feat/dashboard-core` worktree에서 canonical API 기반 메인 대시보드 화면을 구현했고, summary card / 월별 지출 추이 / 카테고리 비중 / 최근 거래 섹션을 실제 데이터와 연결했다. 카테고리 비중 카드는 월 단위 필터를 가진 compact 패턴으로 정리했고, 사용자 피드백에 따라 범례/설명/상단 기간 뱃지를 제거했다. 현재 다음 작업은 `Phase 2 Task 3: 자산 현황 페이지 구현`이다
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 2 Task 1: frontend app shell + data foundation
-  - 목표: React Router, Query provider, typed API layer, 공통 레이아웃을 추가해 placeholder shell을 실제 앱 구조로 전환
-  - 우선 파일: `frontend/package.json`, `frontend/src/App.tsx`, `frontend/src/index.css`, `frontend/src/app/`, `frontend/src/api/`, `frontend/src/types/`
-  - 성공 기준: `/`, `/assets`, `/spending`, `/data` route shell이 뜨고 lint/typecheck/test가 통과
+- [ ] Phase 2 Task 3: 자산 현황 페이지 구현
+  - 목표: net worth history, investments summary, loans summary를 canonical/backend API와 연결한 자산 현황 화면 구현
+  - 우선 파일: `frontend/src/pages/AssetsPage.tsx`, `frontend/src/api/assets.ts`, `frontend/src/hooks/useAssets.ts`, 자산 전용 chart/list 컴포넌트
+  - 성공 기준: assets page test와 frontend lint/typecheck가 통과하고, `/assets` route가 placeholder에서 실제 화면으로 대체됨
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -76,6 +78,7 @@
 - 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
 - 2026-03-26: 테스트 fixture에서 `snapshot_date=None` 을 쓰면 실행일에 따라 assets API 기대값이 흔들리므로, 공통 seed fixture는 고정 날짜를 명시한다
 - 2026-03-26: Phase 2 frontend 구현 순서는 `dashboard -> assets -> spending -> data` 로 고정하고, UI 디자인 작업마다 `ui-ux-pro-max` 를 기본 스킬로 사용한다
+- 2026-03-26: 메인 대시보드의 `카테고리 비중` 카드는 항상 펼쳐진 제어 패널 대신 compact filter 패턴을 사용하고, 월 단위 범위 선택만 허용한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -85,3 +88,4 @@
 - 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
 - `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
 - frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
+- 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
