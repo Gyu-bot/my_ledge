@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 1 — 기반 구축 (MVP)
-- **Last Worker:** codex (2026-03-26T13:30+0900, Phase 1 backend test sweep 안정화)
+- **Phase:** Phase 2 — 대시보드 Core 준비
+- **Last Worker:** codex (2026-03-26T14:13+0900, Phase 2 task decomposition + UI design baseline)
 - **Branch:** main
 
 ## Completed
@@ -24,21 +24,22 @@
 - [x] Task 8 완료: 최신 workbook `fs_260326.xlsx` 기준 PostgreSQL parity + `finance_sample.xlsx -> sample_260324.xlsx -> fs_260326.xlsx` rolling-window 연속 업로드 검증
 - [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
 - [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과 (`31 passed`)
+- [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
 
 ## In Progress
-- [ ] Phase 1 MVP 진행 중
-  - 계획 문서: `docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`
-  - 마지막 완료 작업: `Phase 1 backend test sweep 안정화`
-  - 현재 상태: `backend/tests/conftest.py` 의 `seeded_finance_data` fixture가 `snapshot_date=date(2026, 3, 24)` 로 고정되어 assets API 테스트가 서버 현재 날짜에 의존하지 않게 됐다. backend 전체 테스트는 `UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q` 기준 `31 passed` 로 통과했고, canonical view/read path 변경 이후 회귀는 확인되지 않았다
+- [ ] Phase 2 dashboard core 진행 준비 중
+  - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
+  - 마지막 완료 작업: `Phase 2 task decomposition + UI baseline 확정`
+  - 현재 상태: Phase 2는 `dashboard -> assets -> spending -> data` 순서로 구현한다. `docs/superpowers/specs/2026-03-26-phase2-dashboard-core-design.md` 에 UI/구조 설계를 정리했고, `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md` 에 실행 Task를 쪼갰다. UI 방향은 `ui-ux-pro-max` 결과를 따라 밝은 배경의 data-dense finance dashboard, blue primary + amber accent, Fira typography를 기준선으로 사용한다
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 2 착수 준비
-  - 목표: canonical API/read model을 기준으로 frontend 주요 페이지 연결 범위와 우선순위를 확정
-  - 우선 파일: `PRD.md`, `frontend/src/pages/`, `frontend/src/api/`
-  - 성공 기준: 다음 구현 배치의 페이지/API 연결 범위가 STATUS 또는 계획 문서에 명확히 정리됨
+- [ ] Phase 2 Task 1: frontend app shell + data foundation
+  - 목표: React Router, Query provider, typed API layer, 공통 레이아웃을 추가해 placeholder shell을 실제 앱 구조로 전환
+  - 우선 파일: `frontend/package.json`, `frontend/src/App.tsx`, `frontend/src/index.css`, `frontend/src/app/`, `frontend/src/api/`, `frontend/src/types/`
+  - 성공 기준: `/`, `/assets`, `/spending`, `/data` route shell이 뜨고 lint/typecheck/test가 통과
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -74,6 +75,7 @@
 - 2026-03-26: Task 8 운영 검증은 메인 개발 데이터셋을 건드리지 않도록 임시 PostgreSQL DB `my_ledge_task8_verify` 에 마이그레이션 후 수행한다
 - 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
 - 2026-03-26: 테스트 fixture에서 `snapshot_date=None` 을 쓰면 실행일에 따라 assets API 기대값이 흔들리므로, 공통 seed fixture는 고정 날짜를 명시한다
+- 2026-03-26: Phase 2 frontend 구현 순서는 `dashboard -> assets -> spending -> data` 로 고정하고, UI 디자인 작업마다 `ui-ux-pro-max` 를 기본 스킬로 사용한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
