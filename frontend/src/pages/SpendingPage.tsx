@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
 import { CategoryTimelineAreaChart } from '../components/charts/CategoryTimelineAreaChart';
+import { DailySpendCalendar } from '../components/charts/DailySpendCalendar';
 import { HorizontalBarChart } from '../components/charts/HorizontalBarChart';
 import { MerchantTreemapChart } from '../components/charts/MerchantTreemapChart';
 import { EmptyState } from '../components/common/EmptyState';
@@ -32,6 +33,7 @@ import {
 } from '../components/ui/select';
 import {
   useSpendingPageState,
+  useSpendingDailyCalendarData,
   useSpendingPeriodData,
   useSpendingTimelineData,
   useSpendingTransactionsData,
@@ -349,13 +351,128 @@ const BreakdownSection = memo(function BreakdownSection({
   );
 });
 
+const DailySpendSection = memo(function DailySpendSection({
+  detailFilters,
+  selectedMonth,
+  setSelectedMonth,
+}: {
+  detailFilters: TransactionFilterValues;
+  selectedMonth: string;
+  setSelectedMonth: SpendingPageState['updateDailyCalendarMonth'];
+}) {
+  const dailyQuery = useSpendingDailyCalendarData(
+    {
+      start_month: detailFilters.start_month,
+      end_month: detailFilters.end_month,
+    },
+    selectedMonth,
+  );
+
+  if (dailyQuery.isPending) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <InlineSectionStatus
+            title="일별 지출 달력을 준비 중입니다"
+            description="선택한 기간의 일자별 지출액을 집계하고 있습니다."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (dailyQuery.isError || !dailyQuery.data) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <InlineSectionStatus
+            title="일별 지출 달력을 불러올 수 없습니다"
+            description="일자별 지출 집계를 가져오지 못했습니다."
+            tone="error"
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between lg:space-y-0">
+        <div>
+          <CardTitle>일별 지출액</CardTitle>
+          <CardDescription>
+            선택한 기간 안에서 한 달을 골라 일자별 지출 금액을 달력으로 확인합니다.
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant="accent">{dailyQuery.data.selected_month || '기간 데이터 없음'} 기준</Badge>
+          <label className="block min-w-[10rem]">
+            <span className="sr-only">일별 지출 월 선택</span>
+            <Select
+              onValueChange={setSelectedMonth}
+              value={dailyQuery.data.selected_month || '__empty__'}
+            >
+              <SelectTrigger aria-label="일별 지출 월 선택">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {dailyQuery.data.available_months.length === 0 ? (
+                  <SelectItem disabled value="__empty__">
+                    데이터 없음
+                  </SelectItem>
+                ) : (
+                  dailyQuery.data.available_months.map((month) => (
+                    <SelectItem key={month} value={month}>
+                      {month}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {dailyQuery.data.selected_month ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-4 py-3">
+              <p className="text-sm text-[color:var(--color-text-muted)]">
+                총 일별 지출 합계
+              </p>
+              <p className="text-sm font-semibold text-[color:var(--color-text)]">
+                {new Intl.NumberFormat('ko-KR', {
+                  style: 'currency',
+                  currency: 'KRW',
+                  maximumFractionDigits: 0,
+                }).format(dailyQuery.data.total_amount)}
+              </p>
+            </div>
+            <DailySpendCalendar
+              items={dailyQuery.data.items}
+              maxAmount={dailyQuery.data.max_amount}
+              month={dailyQuery.data.selected_month}
+            />
+          </>
+        ) : (
+          <InlineSectionStatus
+            title="표시할 일별 지출 데이터가 없습니다"
+            description="기간 필터를 조정하면 월별 달력 집계를 확인할 수 있습니다."
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+});
+
 const TransactionsSection = memo(function TransactionsSection({
   categoryMajor,
   endMonth,
+  isAccordionOpen,
   page,
   paymentMethod,
   perPage,
   search,
+  setTransactionsAccordionOpen,
   setTransactionsPage,
   startMonth,
 }: {
@@ -366,7 +483,9 @@ const TransactionsSection = memo(function TransactionsSection({
   search: string;
   page: number;
   perPage: number;
+  isAccordionOpen: boolean;
   setTransactionsPage: SpendingPageState['updateTransactionsPage'];
+  setTransactionsAccordionOpen: SpendingPageState['updateTransactionsAccordionOpen'];
 }) {
   const transactionsQuery = useSpendingTransactionsData(
     {
@@ -423,12 +542,18 @@ const TransactionsSection = memo(function TransactionsSection({
         </div>
         <p className="text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
           {transactionsQuery.data.transactions_page} / {totalPages} 페이지
+          {transactionsQuery.isFetching ? ' · 불러오는 중' : ''}
         </p>
       </CardHeader>
       <CardContent>
-        <Accordion collapsible type="single">
+        <Accordion
+          collapsible
+          type="single"
+          value={isAccordionOpen ? 'transactions' : undefined}
+          onValueChange={(value) => setTransactionsAccordionOpen(value === 'transactions')}
+        >
           <AccordionItem value="transactions">
-            <AccordionTrigger>거래 내역 펼치기</AccordionTrigger>
+            <AccordionTrigger>{isAccordionOpen ? '거래 내역 접기' : '거래 내역 펼치기'}</AccordionTrigger>
             <AccordionContent>
               <TransactionsTable rows={transactionsQuery.data.transactions} />
               <div className="mt-5 flex items-center justify-between gap-4">
@@ -437,7 +562,7 @@ const TransactionsSection = memo(function TransactionsSection({
                   onClick={() =>
                     setTransactionsPage(Math.max(1, transactionsQuery.data.transactions_page - 1))
                   }
-                  disabled={transactionsQuery.data.transactions_page <= 1}
+                  disabled={transactionsQuery.data.transactions_page <= 1 || transactionsQuery.isFetching}
                   variant="outline"
                 >
                   이전 페이지
@@ -462,7 +587,7 @@ const TransactionsSection = memo(function TransactionsSection({
                       Math.min(totalPages, transactionsQuery.data.transactions_page + 1),
                     )
                   }
-                  disabled={transactionsQuery.data.transactions_page >= totalPages}
+                  disabled={transactionsQuery.data.transactions_page >= totalPages || transactionsQuery.isFetching}
                   variant="outline"
                 >
                   다음 페이지
@@ -549,6 +674,12 @@ export function SpendingPage() {
         setSubcategoryMajorFilter={spendingState.updateSubcategoryMajorFilter}
       />
 
+      <DailySpendSection
+        detailFilters={spendingState.detail_filters}
+        selectedMonth={spendingState.daily_calendar_month}
+        setSelectedMonth={spendingState.updateDailyCalendarMonth}
+      />
+
       <TransactionsSection
         startMonth={spendingState.detail_filters.start_month}
         endMonth={spendingState.detail_filters.end_month}
@@ -557,6 +688,8 @@ export function SpendingPage() {
         search={spendingState.detail_filters.search}
         page={spendingState.transactions_page}
         perPage={spendingState.transactions_per_page}
+        isAccordionOpen={spendingState.transactions_accordion_open}
+        setTransactionsAccordionOpen={spendingState.updateTransactionsAccordionOpen}
         setTransactionsPage={spendingState.updateTransactionsPage}
       />
     </div>

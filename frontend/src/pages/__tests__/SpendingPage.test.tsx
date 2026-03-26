@@ -4,12 +4,14 @@ import { SpendingPage } from '../SpendingPage';
 
 vi.mock('../../hooks/useSpending', () => ({
   useSpendingPageState: vi.fn(),
+  useSpendingDailyCalendarData: vi.fn(),
   useSpendingPeriodData: vi.fn(),
   useSpendingTimelineData: vi.fn(),
   useSpendingTransactionsData: vi.fn(),
 }));
 
 import {
+  useSpendingDailyCalendarData,
   useSpendingPageState,
   useSpendingPeriodData,
   useSpendingTimelineData,
@@ -17,6 +19,7 @@ import {
 } from '../../hooks/useSpending';
 
 const mockedUseSpendingPageState = vi.mocked(useSpendingPageState);
+const mockedUseSpendingDailyCalendarData = vi.mocked(useSpendingDailyCalendarData);
 const mockedUseSpendingPeriodData = vi.mocked(useSpendingPeriodData);
 const mockedUseSpendingTimelineData = vi.mocked(useSpendingTimelineData);
 const mockedUseSpendingTransactionsData = vi.mocked(useSpendingTransactionsData);
@@ -36,14 +39,18 @@ describe('SpendingPage', () => {
         search: '',
       },
       subcategory_major_filter: '',
+      daily_calendar_month: '2026-03',
       transactions_page: 1,
       transactions_per_page: 20,
+      transactions_accordion_open: true,
       updateTimelineFilters: vi.fn(),
       resetTimelineFilters: vi.fn(),
       updateDetailFilters: vi.fn(),
       resetDetailFilters: vi.fn(),
       updateSubcategoryMajorFilter: vi.fn(),
+      updateDailyCalendarMonth: vi.fn(),
       updateTransactionsPage: vi.fn(),
+      updateTransactionsAccordionOpen: vi.fn(),
     });
 
     mockedUseSpendingTimelineData.mockReturnValue({
@@ -88,6 +95,21 @@ describe('SpendingPage', () => {
       isPending: false,
       isError: false,
     } as unknown as ReturnType<typeof useSpendingPeriodData>);
+
+    mockedUseSpendingDailyCalendarData.mockReturnValue({
+      data: {
+        available_months: ['2026-02', '2026-03'],
+        selected_month: '2026-03',
+        items: [
+          { date: '2026-03-01', amount: 12000 },
+          { date: '2026-03-03', amount: 34000 },
+        ],
+        total_amount: 46000,
+        max_amount: 34000,
+      },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSpendingDailyCalendarData>);
 
     mockedUseSpendingTransactionsData.mockReturnValue({
       data: {
@@ -139,9 +161,11 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '변동비 비율' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '결제수단별 지출' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래처별 Tree Map' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: '일별 지출액' })).toBeInTheDocument();
+    expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
     expect(screen.getByLabelText('결제수단별 지출 파이 차트')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 내역' })).toBeInTheDocument();
-    expect(screen.getByText('거래 내역 펼치기')).toBeInTheDocument();
+    expect(screen.getByText('거래 내역 접기')).toBeInTheDocument();
     expect(screen.getByText('1 / 3 페이지')).toBeInTheDocument();
   });
 });

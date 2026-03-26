@@ -12,6 +12,7 @@ vi.mock('../hooks/useAssets', () => ({
 
 vi.mock('../hooks/useSpending', () => ({
   useSpendingPageState: vi.fn(),
+  useSpendingDailyCalendarData: vi.fn(),
   useSpendingPeriodData: vi.fn(),
   useSpendingTimelineData: vi.fn(),
   useSpendingTransactionsData: vi.fn(),
@@ -25,6 +26,7 @@ import { useDashboard } from '../hooks/useDashboard';
 import { useAssets } from '../hooks/useAssets';
 import { useDataManagement } from '../hooks/useDataManagement';
 import {
+  useSpendingDailyCalendarData,
   useSpendingPageState,
   useSpendingPeriodData,
   useSpendingTimelineData,
@@ -35,6 +37,7 @@ const mockedUseDashboard = vi.mocked(useDashboard);
 const mockedUseAssets = vi.mocked(useAssets);
 const mockedUseDataManagement = vi.mocked(useDataManagement);
 const mockedUseSpendingPageState = vi.mocked(useSpendingPageState);
+const mockedUseSpendingDailyCalendarData = vi.mocked(useSpendingDailyCalendarData);
 const mockedUseSpendingPeriodData = vi.mocked(useSpendingPeriodData);
 const mockedUseSpendingTimelineData = vi.mocked(useSpendingTimelineData);
 const mockedUseSpendingTransactionsData = vi.mocked(useSpendingTransactionsData);
@@ -130,14 +133,18 @@ describe('App shell', () => {
         search: '',
       },
       subcategory_major_filter: '',
+      daily_calendar_month: '2026-03',
       transactions_page: 1,
       transactions_per_page: 20,
+      transactions_accordion_open: false,
       updateTimelineFilters: vi.fn(),
       resetTimelineFilters: vi.fn(),
       updateDetailFilters: vi.fn(),
       resetDetailFilters: vi.fn(),
       updateSubcategoryMajorFilter: vi.fn(),
+      updateDailyCalendarMonth: vi.fn(),
       updateTransactionsPage: vi.fn(),
+      updateTransactionsAccordionOpen: vi.fn(),
     });
 
     mockedUseSpendingTimelineData.mockReturnValue({
@@ -179,6 +186,18 @@ describe('App shell', () => {
       isPending: false,
       isError: false,
     } as unknown as ReturnType<typeof useSpendingPeriodData>);
+
+    mockedUseSpendingDailyCalendarData.mockReturnValue({
+      data: {
+        available_months: ['2026-02', '2026-03'],
+        selected_month: '2026-03',
+        items: [{ date: '2026-03-24', amount: 80000 }],
+        total_amount: 80000,
+        max_amount: 80000,
+      },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSpendingDailyCalendarData>);
 
     mockedUseSpendingTransactionsData.mockReturnValue({
       data: {

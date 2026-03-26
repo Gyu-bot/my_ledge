@@ -29,14 +29,18 @@ export interface SpendingPageState {
   timeline_filters: TimelineRangeFilterValues;
   detail_filters: TransactionFilterValues;
   subcategory_major_filter: string;
+  daily_calendar_month: string;
   transactions_page: number;
   transactions_per_page: number;
+  transactions_accordion_open: boolean;
   updateTimelineFilters: (next: TimelineRangeFilterValues) => void;
   resetTimelineFilters: () => void;
   updateDetailFilters: (next: TransactionFilterValues) => void;
   resetDetailFilters: () => void;
   updateSubcategoryMajorFilter: (next: string) => void;
+  updateDailyCalendarMonth: (next: string) => void;
   updateTransactionsPage: (next: number) => void;
+  updateTransactionsAccordionOpen: (next: boolean) => void;
 }
 
 export interface SpendingTimelineData {
@@ -64,6 +68,19 @@ export interface SpendingTransactionsData {
   transactions_total: number;
   transactions_page: number;
   transactions_per_page: number;
+}
+
+export interface SpendingDailySpendItem {
+  date: string;
+  amount: number;
+}
+
+export interface SpendingDailyCalendarData {
+  available_months: string[];
+  selected_month: string;
+  items: SpendingDailySpendItem[];
+  total_amount: number;
+  max_amount: number;
 }
 
 const defaultTimelineFilters: TimelineRangeFilterValues = {
@@ -289,15 +306,19 @@ export function useSpendingPageState(): SpendingPageState {
   );
   const [detailFilters, setDetailFilters] = useState<TransactionFilterValues>(defaultDetailFilters);
   const [subcategoryMajorFilter, setSubcategoryMajorFilter] = useState('');
+  const [dailyCalendarMonth, setDailyCalendarMonth] = useState('');
   const [transactionsPage, setTransactionsPage] = useState(1);
+  const [transactionsAccordionOpen, setTransactionsAccordionOpen] = useState(false);
   const transactionsPerPage = 20;
 
   return {
     timeline_filters: timelineFilters,
     detail_filters: detailFilters,
     subcategory_major_filter: subcategoryMajorFilter,
+    daily_calendar_month: dailyCalendarMonth,
     transactions_page: transactionsPage,
     transactions_per_page: transactionsPerPage,
+    transactions_accordion_open: transactionsAccordionOpen,
     updateTimelineFilters: setTimelineFilters,
     resetTimelineFilters: () => setTimelineFilters(defaultTimelineFilters),
     updateDetailFilters: (next) => {
@@ -307,10 +328,13 @@ export function useSpendingPageState(): SpendingPageState {
     resetDetailFilters: () => {
       setDetailFilters(defaultDetailFilters);
       setSubcategoryMajorFilter('');
+      setDailyCalendarMonth('');
       setTransactionsPage(1);
     },
     updateSubcategoryMajorFilter: setSubcategoryMajorFilter,
+    updateDailyCalendarMonth: setDailyCalendarMonth,
     updateTransactionsPage: setTransactionsPage,
+    updateTransactionsAccordionOpen: setTransactionsAccordionOpen,
   };
 }
 
@@ -433,6 +457,50 @@ export function useSpendingTransactionsData(
         transactions_per_page: perPage,
       };
     },
+    placeholderData: (previousData) => previousData,
     staleTime: 60 * 1000,
+  });
+}
+
+export function useSpendingDailyCalendarData(
+  filters: TimelineRangeFilterValues,
+  selectedMonth: string,
+) {
+  return useQuery({
+    queryKey: ['spending-daily-calendar', filters.start_month, filters.end_month, selectedMonth],
+    queryFn: async (): Promise<SpendingDailyCalendarData> => {
+      const periodTransactions = await fetchAllTransactions(toMonthRange(filters));
+      const spendingTransactions = periodTransactions.filter((item) => item.type === '지출');
+      const availableMonths = Array.from(
+        new Set(spendingTransactions.map((item) => item.date.slice(0, 7))),
+      ).sort();
+      const resolvedMonth =
+        selectedMonth && availableMonths.includes(selectedMonth)
+          ? selectedMonth
+          : availableMonths[availableMonths.length - 1] || '';
+
+      const totals = new Map<string, number>();
+      for (const item of spendingTransactions) {
+        if (!resolvedMonth || !item.date.startsWith(resolvedMonth)) {
+          continue;
+        }
+
+        totals.set(item.date, (totals.get(item.date) ?? 0) + item.amount);
+      }
+
+      const items = Array.from(totals.entries())
+        .map(([date, amount]) => ({ date, amount }))
+        .sort((left, right) => left.date.localeCompare(right.date));
+      const amounts = items.map((item) => Math.abs(item.amount));
+
+      return {
+        available_months: availableMonths,
+        selected_month: resolvedMonth,
+        items,
+        total_amount: items.reduce((sum, item) => sum + item.amount, 0),
+        max_amount: amounts.length > 0 ? Math.max(...amounts) : 0,
+      };
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
