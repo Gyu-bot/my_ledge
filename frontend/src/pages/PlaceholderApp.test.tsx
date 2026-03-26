@@ -1,17 +1,19 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { PlaceholderApp } from './PlaceholderApp';
+import App from '../App';
 
-describe('PlaceholderApp', () => {
-  it('renders the dashboard shell', () => {
-    render(<PlaceholderApp />);
+describe('App shell', () => {
+  it('renders the shared navigation and dashboard route by default', () => {
+    render(<App />);
 
+    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /assets/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /spending/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /data/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /skip to main content/i })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: /personal finance dashboard/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /upload data/i })).toBeEnabled();
-    expect(screen.getByRole('heading', { name: /live snapshot/i })).toBeInTheDocument();
-    expect(screen.getByText(/placeholder shell for banksalad imports/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /category mix/i })).toBeInTheDocument();
+    expect(screen.getByText(/route shell ready for dashboard insights/i)).toBeInTheDocument();
   });
 });
