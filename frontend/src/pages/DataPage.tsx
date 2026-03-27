@@ -50,6 +50,7 @@ export function DataPage() {
   }
 
   const {
+    upload_history,
     category_options,
     filters,
     has_write_access,
@@ -82,6 +83,18 @@ export function DataPage() {
       {!has_write_access ? (
         <Alert variant="warning">
           현재 `VITE_API_KEY`가 설정되지 않아 업로드와 수정, 삭제, 복원 동작은 비활성화됩니다.
+        </Alert>
+      ) : null}
+
+      {dataManagementQuery.actionFeedback ? (
+        <Alert
+          variant={
+            dataManagementQuery.actionFeedback.variant === 'success'
+              ? 'default'
+              : dataManagementQuery.actionFeedback.variant
+          }
+        >
+          {dataManagementQuery.actionFeedback.message}
         </Alert>
       ) : null}
 
@@ -194,6 +207,39 @@ export function DataPage() {
                 description="파일을 선택해 업로드하면 결과 요약이 여기에 표시됩니다."
               />
             )}
+
+            {upload_history.length > 0 ? (
+              <div className="mt-5 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                    서버 저장 최근 10건
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {upload_history.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white/80 px-3 py-3 text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-[color:var(--color-text)]">
+                          {item.filename ?? `upload-${item.id}`}
+                        </p>
+                        <Badge variant={item.status === 'failed' ? 'destructive' : 'secondary'}>
+                          {item.status ?? 'unknown'}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[color:var(--color-text-muted)]">
+                        거래 {item.tx_new ?? 0}건 신규 / {item.tx_skipped ?? 0}건 스킵
+                      </p>
+                      <p className="mt-1 text-xs text-[color:var(--color-text-subtle)]">
+                        기준일 {item.snapshot_date ?? '미지정'} · 업로드 {item.uploaded_at}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </section>

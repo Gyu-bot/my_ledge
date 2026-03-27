@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 from pydantic import BaseModel
 
 
@@ -19,3 +21,19 @@ class UploadResponse(BaseModel):
     transactions: UploadTransactionSummary
     snapshots: UploadSnapshotSummary
     error_message: str | None = None
+
+
+class UploadLogResponse(BaseModel):
+    id: int
+    uploaded_at: datetime
+    filename: str | None
+    snapshot_date: date | None
+    tx_total: int | None
+    tx_new: int | None
+    tx_skipped: int | None
+    status: str | None
+    error_message: str | None = None
+
+
+class UploadLogListResponse(BaseModel):
+    items: list[UploadLogResponse]

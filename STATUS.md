@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T00:31+0900, spending 수입 포함 토글 반영 + 문서/상태 정리)
+- **Last Worker:** codex (2026-03-27T09:08+0900, README 확장 + OpenClaw handoff 문서 작성)
 - **Branch:** main
 
 ## Completed
@@ -31,22 +31,26 @@
 - [x] Phase 2 Task 4 완료: 지출 분석 페이지 구현
 - [x] Phase 2 Task 5 완료: 데이터 관리 페이지 구현
 - [x] Phase 2 Task 5.1 완료: 현재 구현된 frontend 화면 전반을 shadcn/ui primitive 중심으로 재정렬 (`dashboard`, `assets`, `spending`, `data`, app shell, 공통 필터/테이블/상태 카드)
+- [x] Phase 2 Task 6A 완료: 데이터 관리 write flow 실검증
+- [x] Phase 2 Task 6B 완료: 최근 10건 `upload_logs` 조회 경로 추가 + 데이터 관리 화면 연동
+- [x] Phase 3 준비 문서화 완료: README 확장 + OpenClaw 연동/skill handoff 문서 추가 (`docs/openclaw/`)
 
 ## In Progress
-- [ ] Phase 2 frontend 마감 정리 진행 중
-  - 계획 문서: `docs/superpowers/plans/2026-03-26-phase2-dashboard-core.md`
-  - 마지막 완료 작업: `Phase 2 Task 5.1: shadcn/ui 기반 화면 전환`
-  - 현재 상태: `/`, `/assets`, `/spending`, `/data` route와 app shell, 공통 필터/테이블/상태 카드가 모두 shadcn/ui 스타일 primitive(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`) 중심으로 정렬되었다. 차트는 현재 요구사항상 Recharts를 유지하되 주변 chrome과 tooltip, 강조색은 메인 대시보드 `월별 지출 추이`의 blue accent 축으로 통일했고, 카드·아코디언·테이블 래퍼·내부 패널 반경도 `--radius`, `--radius-sm`, `--radius-xs` 토큰으로 맞췄다. `spending`은 `월별 시계열`, `기간 집계`, `일별 지출 달력`, `거래 내역` 훅으로 분리되어 관련 섹션만 갱신된다. 거래 내역 아코디언은 페이지네이션 시에도 열린 상태를 유지하도록 `placeholderData` 기반으로 보정했고, `월별 고정비/변동비 추이`는 `cost_kind` 데이터가 비어 있어 placeholder 상태다. 개발 DB에는 `finance_sample.xlsx(2026-03-12 가정) -> sample_260324.xlsx(2026-03-24) -> fs_260326.xlsx(2026-03-26)` 순서로 실제 `/api/v1/upload` 검증을 다시 수행해 snapshot row를 채웠고, rolling-window duplicate matching 보정 후 second upload 기대값은 `tx_new=68`, `tx_skipped=2158`, 최종 transaction row는 `2291`로 확인했다. 2026-03 지출 합계는 현재 API 기준 `-6,145,239원`이다. `일별 지출액`과 `거래 내역`은 공유 `수입 포함` 토글을 사용하며, 토글을 켜면 달력은 일별 순변동 기준으로, 거래 내역은 수입/지출 동시 보기 기준으로 동작한다. 최신 검증은 frontend `npm test -- --runInBand`, `npm run typecheck`, `npm run lint`, `npm run build`, 브라우저 자동화 기반 지출 화면 캡처(`output/playwright/spending-include-income-toggle.png`), backend `uv run pytest tests/services/test_upload_service.py tests/services/test_source_verification.py tests/api/test_upload_api.py -q`, `uv run ruff check app/services/upload_service.py tests/services/test_upload_service.py` 까지 통과했다. 현재 다음 작업은 `Phase 2 Task 6: 프론트 통합 polish / write flow 실검증`의 나머지 범위다
+- [ ] Phase 3 착수 준비
+  - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. 이 저장소는 OpenClaw skill package를 직접 배포하지 않고, OpenClaw 쪽에서 별도 패키징/배포할 수 있도록 연동 계약과 handoff 정보를 제공한다
+  - 남은 구현: PostgreSQL readonly 유저 실제 설정, OpenClaw 쪽 skill 패키징, OpenClaw -> my_ledge 업로드/조회 end-to-end 검증
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 2 Task 6: 프론트 통합 polish / write flow 실검증
-  - 목표: 데이터 관리 화면의 업로드/수정/삭제/복원 write flow를 실제 API 키 환경에서 수동 검증하고, 화면 polish와 chunk 분할 등 마감 정리를 수행
-  - 우선 파일: `frontend/src/pages/DataPage.tsx`, `frontend/src/hooks/useDataManagement.ts`, `frontend/src/app/router.tsx`, 필요 시 backend upload log 조회 endpoint
-  - 현재까지: upload flow는 실제 `/api/v1/upload` 로 검증 완료, 자산/투자/대출 snapshot이 개발 DB에 적재되어 `/assets` 와 대시보드 상단 KPI에 반영됨
-  - 성공 기준: 남은 수정/삭제/복원 flow 실검증 기록이 남고, 남은 Phase 2 polish 항목과 성능/번들 경고 대응 방향이 정리됨
+- [ ] Phase 3 실제 연동 작업
+  - `readonly` DB 유저 생성 + `statement_timeout=30s` 설정
+  - OpenClaw 쪽에서 skill 패키징/배포
+  - OpenClaw -> `schema` API / readonly DB / `upload` API end-to-end 검증
+- [ ] Phase 2 polish만 후순위로 진행
+  - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish
+  - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -99,6 +103,9 @@
 - 2026-03-26: frontend 전역 accent color는 메인 대시보드 `월별 지출 추이` 라인의 blue(`#2563eb`)를 기준으로 통일하고, 카드/아코디언/테이블/내부 패널 반경은 CSS radius 토큰(`--radius`, `--radius-sm`, `--radius-xs`)으로만 관리한다
 - 2026-03-26: 개발 DB의 자산 검증용 snapshot_date는 workbook에 내장된 값이 없으므로 외부 입력으로 관리한다. 현재 검증에서는 `finance_sample.xlsx` 는 transaction window 기준으로 `2026-03-12` 를 가정해 적재했다
 - 2026-03-27: 거래 내역 페이지네이션은 query key 변경 시 로딩 카드로 섹션을 갈아끼우지 않고 `placeholderData`로 이전 페이지 내용을 유지한다. 그래야 아코디언 열린 상태와 스크롤 맥락이 유지된다
+- 2026-03-27: Phase 2 남은 작업은 polish보다 기능 완결과 write flow 검증을 우선한다. 화면 미세 polish와 성능/번들 경고 정리는 다른 미완료 작업을 모두 닫은 뒤 마지막에 처리한다
+- 2026-03-27: `upload_logs`는 MVP에서 페이지네이션 없이 최근 10건만 읽는다. 데이터 관리 화면의 업로드 이력 확인 목적에는 이것으로 충분하고, 복잡도를 늘릴 이유가 없다
+- 2026-03-27: OpenClaw skill 자체는 이 저장소에서 배포하지 않는다. 대신 이 저장소는 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 README 진입점과 handoff 문서를 제공한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -110,4 +117,4 @@
 - frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
 - 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
 - Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
-- 데이터 관리 화면의 `최근 업로드 결과`는 현재 세션 내 마지막 업로드 결과만 보여준다. 서버 저장 `upload_logs` 조회 API는 아직 없어 과거 이력 타임라인은 후속 작업이다
+- 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
