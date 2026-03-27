@@ -25,6 +25,39 @@ const defaultFilters: DataManagementFilterValues = {
 };
 
 const DATA_MANAGEMENT_QUERY_KEY = ['data-management'] as const;
+const DATA_MANAGEMENT_ROWS_PER_PAGE = 20;
+
+async function loadAllTransactions(
+  filters: DataManagementFilterValues,
+): Promise<TransactionResponse[]> {
+  const items: TransactionResponse[] = [];
+  let page = 1;
+  let total = 0;
+
+  while (page === 1 || items.length < total) {
+    const response = await getTransactions({
+      page,
+      per_page: DATA_MANAGEMENT_ROWS_PER_PAGE,
+      include_deleted: filters.include_deleted,
+      include_merged: false,
+      category_major: filters.category_major || undefined,
+      payment_method: filters.payment_method || undefined,
+      search: filters.search || undefined,
+    });
+    const pageItems = ensureArray(response.items);
+
+    items.push(...pageItems);
+    total = typeof response.total === 'number' ? response.total : items.length;
+
+    if (pageItems.length === 0) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return items;
+}
 
 export interface DataManagementData {
   filters: DataManagementFilterValues;
@@ -69,27 +102,18 @@ export function useDataManagement(): UseDataManagementResult {
   const transactionsQuery = useQuery({
     queryKey: [...DATA_MANAGEMENT_QUERY_KEY, filters],
     queryFn: async (): Promise<DataManagementData> => {
-      const [response, uploadLogsResponse] = await Promise.all([
-        getTransactions({
-          page: 1,
-          per_page: 20,
-          include_deleted: filters.include_deleted,
-          include_merged: false,
-          category_major: filters.category_major || undefined,
-          payment_method: filters.payment_method || undefined,
-          search: filters.search || undefined,
-        }),
+      const [allTransactions, uploadLogsResponse] = await Promise.all([
+        loadAllTransactions(filters),
         getUploadLogs(),
       ]);
-      const transactionItems = ensureArray(response.items);
       const uploadHistory = ensureArray(uploadLogsResponse.items);
 
       const categoryOptions = Array.from(
-        new Set(transactionItems.map((item) => item.effective_category_major).filter(Boolean)),
+        new Set(allTransactions.map((item) => item.effective_category_major).filter(Boolean)),
       ).sort();
       const paymentMethodOptions = Array.from(
         new Set(
-          transactionItems
+          allTransactions
             .map((item) => item.payment_method)
             .filter((value): value is string => Boolean(value)),
         ),
@@ -97,8 +121,8 @@ export function useDataManagement(): UseDataManagementResult {
 
       return {
         filters,
-        transactions: transactionItems,
-        total: typeof response.total === 'number' ? response.total : transactionItems.length,
+        transactions: allTransactions.slice(0, DATA_MANAGEMENT_ROWS_PER_PAGE),
+        total: allTransactions.length,
         category_options: categoryOptions,
         payment_method_options: paymentMethodOptions,
         upload_history: uploadHistory,
@@ -106,6 +130,7 @@ export function useDataManagement(): UseDataManagementResult {
         has_write_access: hasApiKeyConfigured(),
       };
     },
+    refetchOnMount: 'always',
     staleTime: 60 * 1000,
   });
 

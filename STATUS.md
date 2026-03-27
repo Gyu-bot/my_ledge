@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T12:43+0900, frontend nginx `/api` reverse proxy 추가로 compose 배포 업로드 405 hotfix)
+- **Last Worker:** codex (2026-03-27T19:58+0900, 데이터 관리 거래 로드 경로를 전체 페이지 수집으로 보강 + empty placeholder 추가)
 - **Branch:** main
 
 ## Completed
@@ -41,6 +41,7 @@
 - [x] 운영 프론트 hotfix 확장: 자산/지출 화면에서도 `items`/`totals` 누락 응답을 빈 컬렉션·0 합계로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
 - [x] 운영 write 경로 정리: compose 배포 시 `API_KEY`를 frontend build의 `VITE_API_KEY`로 자동 주입하도록 연결하고, 업로드 API의 `snapshot_date`를 필수 입력값으로 고정
 - [x] 운영 프론트 hotfix: static nginx에 `/api/` reverse proxy와 업로드용 body size 한도를 추가해 compose 배포에서 상대경로 API POST가 405로 막히지 않도록 수정
+- [x] 운영 프론트 hotfix: 데이터 관리 화면이 첫 페이지만 읽어 빈 상태처럼 보일 수 있는 경로를 전체 페이지 수집 + mount 시 재조회로 보강하고, 거래 0건 시 placeholder를 표시하도록 수정
 
 ## In Progress
 - [ ] Phase 3 착수 준비
@@ -55,7 +56,7 @@
   - OpenClaw 쪽에서 skill 패키징/배포
   - OpenClaw -> `schema` API / readonly DB / `upload` API end-to-end 검증
 - [ ] Phase 2 polish만 후순위로 진행
-  - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish
+  - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish, UI 다크모드 토글/테마 시스템 설계 및 구현
   - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
 - [ ] 데이터 관리 후속 기능
   - 현재 거래내역 초기화 기능 추가: `거래내역만 초기화` 와 `스냅샷까지 모두 초기화` 를 별도 옵션으로 제공
@@ -122,6 +123,7 @@
 - 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리하고, frontend build 시 같은 값을 `VITE_API_KEY`로 주입한다. 키를 바꾸면 frontend 재빌드가 필요하다
 - 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
 - 2026-03-27: compose 배포의 frontend는 상대경로 `/api` 호출을 유지하고, 정적 nginx가 `backend:8000` 으로 reverse proxy 한다. 브라우저가 Docker 내부 DNS를 직접 알 수 없으므로 build-time 절대 URL 주입보다 single-origin proxy가 안전하다
+- 2026-03-27: 데이터 관리 화면의 거래 작업대는 서버 첫 페이지 응답만 신뢰하지 않고 전체 페이지를 수집한 뒤 상단 20건만 노출한다. spending 화면과 read path 일관성을 맞추고, 캐시/페이지네이션 편차로 빈 화면처럼 보이는 위험을 줄이는 쪽이 더 안전하다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

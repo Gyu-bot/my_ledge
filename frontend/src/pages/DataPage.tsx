@@ -265,15 +265,22 @@ export function DataPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <EditableTransactionsTable
-            rows={transactions}
-            categoryOptions={category_options}
-            hasWriteAccess={has_write_access}
-            pendingTransactionId={dataManagementQuery.pendingTransactionId}
-            onSave={dataManagementQuery.saveTransaction}
-            onDelete={dataManagementQuery.deleteTransactionRow}
-            onRestore={dataManagementQuery.restoreTransactionRow}
-          />
+          {transactions.length > 0 ? (
+            <EditableTransactionsTable
+              rows={transactions}
+              categoryOptions={category_options}
+              hasWriteAccess={has_write_access}
+              pendingTransactionId={dataManagementQuery.pendingTransactionId}
+              onSave={dataManagementQuery.saveTransaction}
+              onDelete={dataManagementQuery.deleteTransactionRow}
+              onRestore={dataManagementQuery.restoreTransactionRow}
+            />
+          ) : (
+            <SectionPlaceholder
+              title="표시할 거래가 없습니다"
+              description="현재 필터 조건에 맞는 거래가 없거나, 아직 거래 데이터가 적재되지 않았습니다."
+            />
+          )}
         </CardContent>
       </Card>
     </div>
