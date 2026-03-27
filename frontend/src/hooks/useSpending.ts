@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { QueryParams } from '../api/client';
+import { ensureArray } from '../lib/collections';
 import {
   getTransactions,
   getTransactionsByCategory,
@@ -292,11 +293,12 @@ async function fetchAllTransactions(query: QueryParams): Promise<TransactionResp
       include_deleted: false,
       include_merged: false,
     });
+    const pageItems = ensureArray(response.items);
 
-    items.push(...response.items);
-    total = response.total;
+    items.push(...pageItems);
+    total = typeof response.total === 'number' ? response.total : items.length;
 
-    if (response.items.length === 0) {
+    if (pageItems.length === 0) {
       break;
     }
 
@@ -356,7 +358,7 @@ export function useSpendingTimelineData(filters: TimelineRangeFilterValues) {
         type: '지출',
       });
 
-      const fullTimeline = buildCategoryTimeline(fullCategoryTimeline.items);
+      const fullTimeline = buildCategoryTimeline(ensureArray(fullCategoryTimeline.items));
 
       return {
         available_months: fullTimeline.points.map((point) => point.period),
@@ -383,6 +385,7 @@ export function useSpendingPeriodData(
         }),
         fetchAllTransactions(periodQuery),
       ]);
+      const categoryItems = ensureArray(majorCategoryBreakdown.items);
 
       const periodSpendingTransactions = periodTransactions.filter((item) => item.type === '지출');
       const filteredSubcategoryTransactions = periodSpendingTransactions.filter((item) =>
@@ -391,7 +394,7 @@ export function useSpendingPeriodData(
           : true,
       );
       const categories = Array.from(
-        new Set(majorCategoryBreakdown.items.map((item) => item.category)),
+        new Set(categoryItems.map((item) => item.category)),
       ).sort();
       const paymentMethodOptions = Array.from(
         new Set(
@@ -403,7 +406,7 @@ export function useSpendingPeriodData(
 
       return {
         category_breakdown: buildBreakdownData(
-          majorCategoryBreakdown.items.map((item) => ({
+          categoryItems.map((item) => ({
             category: item.category,
             amount: item.amount,
           })),

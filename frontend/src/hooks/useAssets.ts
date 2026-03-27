@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { getAssetsData, type AssetsApiResponse } from '../api/assets';
-import { ensureArray } from '../lib/collections';
+import { ensureArray, ensureObject } from '../lib/collections';
 
 export interface AssetsSummaryCard {
   label: string;
@@ -81,6 +81,7 @@ function formatDateLabel(value: string | null) {
 function buildSummaryCards(response: AssetsApiResponse): AssetsSummaryCard[] {
   const assetSnapshots = ensureArray(response.asset_snapshots?.items);
   const investmentItems = ensureArray(response.investments?.items);
+  const investmentTotals = ensureObject(response.investments?.totals);
   const latestSnapshot = assetSnapshots[assetSnapshots.length - 1];
 
   return [
@@ -103,7 +104,7 @@ function buildSummaryCards(response: AssetsApiResponse): AssetsSummaryCard[] {
       label: '투자 평가액',
       value:
         investmentItems.length > 0
-          ? formatMoney(toNumber(response.investments.totals.market_value))
+          ? formatMoney(toNumber(investmentTotals.market_value))
           : '데이터 없음',
       detail:
         investmentItems.length > 0
@@ -118,6 +119,10 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
   const netWorthHistory = ensureArray(response.net_worth_history?.items);
   const investmentItems = ensureArray(response.investments?.items);
   const loanItems = ensureArray(response.loans?.items);
+  const investments = ensureObject(response.investments);
+  const investmentTotals = ensureObject(response.investments?.totals);
+  const loans = ensureObject(response.loans);
+  const loanTotals = ensureObject(response.loans?.totals);
 
   return {
     snapshot_date: assetSnapshots[assetSnapshots.length - 1]?.snapshot_date ?? null,
@@ -127,10 +132,10 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
       amount: toNumber(item.net_worth),
     })),
     investments: {
-      snapshot_date: response.investments.snapshot_date,
+      snapshot_date: investments.snapshot_date ?? null,
       totals: {
-        cost_basis: toNumber(response.investments.totals.cost_basis),
-        market_value: toNumber(response.investments.totals.market_value),
+        cost_basis: toNumber(investmentTotals.cost_basis),
+        market_value: toNumber(investmentTotals.market_value),
       },
       items: investmentItems.map((item) => ({
         ...item,
@@ -140,10 +145,10 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
       })),
     },
     loans: {
-      snapshot_date: response.loans.snapshot_date,
+      snapshot_date: loans.snapshot_date ?? null,
       totals: {
-        principal: toNumber(response.loans.totals.principal),
-        balance: toNumber(response.loans.totals.balance),
+        principal: toNumber(loanTotals.principal),
+        balance: toNumber(loanTotals.balance),
       },
       items: loanItems.map((item) => ({
         ...item,

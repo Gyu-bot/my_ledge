@@ -8,14 +8,22 @@ vi.mock('../../api/transactions', () => ({
   getTransactionsByCategoryTimeline: vi.fn(),
 }));
 
-import { getTransactions } from '../../api/transactions';
 import {
+  getTransactions,
+  getTransactionsByCategory,
+  getTransactionsByCategoryTimeline,
+} from '../../api/transactions';
+import {
+  useSpendingPeriodData,
   useSpendingDailyCalendarData,
   useSpendingPageState,
+  useSpendingTimelineData,
   useSpendingTransactionsData,
 } from '../useSpending';
 
 const mockedGetTransactions = vi.mocked(getTransactions);
+const mockedGetTransactionsByCategory = vi.mocked(getTransactionsByCategory);
+const mockedGetTransactionsByCategoryTimeline = vi.mocked(getTransactionsByCategoryTimeline);
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -299,5 +307,69 @@ describe('useSpendingDailyCalendarData', () => {
 
     expect(result.current.data?.transactions).toHaveLength(2);
     expect(result.current.data?.transactions_total).toBe(2);
+  });
+});
+
+describe('spending payload hardening', () => {
+  it('falls back to an empty timeline when category timeline items are missing', async () => {
+    mockedGetTransactionsByCategoryTimeline.mockResolvedValue({} as never);
+
+    const { result } = renderHook(
+      () =>
+        useSpendingTimelineData({
+          start_month: '',
+          end_month: '',
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    expect(result.current.data).toEqual({
+      available_months: [],
+      category_timeline: {
+        categories: [],
+        points: [],
+      },
+    });
+  });
+
+  it('falls back to empty period breakdowns when category or transaction items are missing', async () => {
+    mockedGetTransactionsByCategory.mockResolvedValue({} as never);
+    mockedGetTransactions.mockResolvedValue({
+      total: 0,
+      page: 1,
+      per_page: 200,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSpendingPeriodData(
+          {
+            start_month: '',
+            end_month: '',
+          },
+          '',
+        ),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    expect(result.current.data).toEqual({
+      category_breakdown: [],
+      subcategory_breakdown: [],
+      payment_methods: [],
+      merchant_breakdown: [],
+      filter_options: {
+        categories: [],
+        subcategory_major_categories: [],
+        payment_methods: [],
+      },
+    });
   });
 });
