@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T12:31+0900, API_KEY 단일 소스 연결 + snapshot_date 필수화 + 후속 계획 반영)
+- **Last Worker:** codex (2026-03-27T12:43+0900, frontend nginx `/api` reverse proxy 추가로 compose 배포 업로드 405 hotfix)
 - **Branch:** main
 
 ## Completed
@@ -40,6 +40,7 @@
 - [x] 운영 프론트 hotfix: 대시보드/데이터 화면에서 배열 필드 누락 응답도 빈 컬렉션으로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
 - [x] 운영 프론트 hotfix 확장: 자산/지출 화면에서도 `items`/`totals` 누락 응답을 빈 컬렉션·0 합계로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
 - [x] 운영 write 경로 정리: compose 배포 시 `API_KEY`를 frontend build의 `VITE_API_KEY`로 자동 주입하도록 연결하고, 업로드 API의 `snapshot_date`를 필수 입력값으로 고정
+- [x] 운영 프론트 hotfix: static nginx에 `/api/` reverse proxy와 업로드용 body size 한도를 추가해 compose 배포에서 상대경로 API POST가 405로 막히지 않도록 수정
 
 ## In Progress
 - [ ] Phase 3 착수 준비
@@ -120,6 +121,7 @@
 - 2026-03-27: 자산/지출 read hook은 배열뿐 아니라 중첩 객체(`totals`, `snapshot_date`)도 누락될 수 있다고 가정하고 기본 객체/0 값으로 정규화한다. pagination loop와 집계 훅도 동일 규칙을 적용해 queryFn 내부 예외를 막는다
 - 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리하고, frontend build 시 같은 값을 `VITE_API_KEY`로 주입한다. 키를 바꾸면 frontend 재빌드가 필요하다
 - 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
+- 2026-03-27: compose 배포의 frontend는 상대경로 `/api` 호출을 유지하고, 정적 nginx가 `backend:8000` 으로 reverse proxy 한다. 브라우저가 Docker 내부 DNS를 직접 알 수 없으므로 build-time 절대 URL 주입보다 single-origin proxy가 안전하다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
