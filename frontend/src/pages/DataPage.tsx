@@ -61,11 +61,11 @@ export function DataPage() {
   } = dataManagementQuery.data;
 
   const handleUpload = async () => {
-    if (!selectedFile) {
+    if (!selectedFile || !snapshotDate) {
       return;
     }
 
-    await dataManagementQuery.uploadWorkbookFile(selectedFile, snapshotDate || undefined);
+    await dataManagementQuery.uploadWorkbookFile(selectedFile, snapshotDate);
     setSelectedFile(null);
     setSnapshotDate('');
   };
@@ -140,7 +140,7 @@ export function DataPage() {
                 {selectedFile ? `${selectedFile.name} 선택됨` : '아직 선택된 파일이 없습니다.'}
               </div>
               <Button
-                disabled={!has_write_access || !selectedFile || dataManagementQuery.isUploading}
+                disabled={!has_write_access || !selectedFile || !snapshotDate || dataManagementQuery.isUploading}
                 onClick={() => void handleUpload()}
                 type="button"
               >

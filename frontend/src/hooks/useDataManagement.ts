@@ -53,7 +53,7 @@ export interface UseDataManagementResult {
   actionFeedback: DataManagementActionFeedback | null;
   updateFilters: (next: DataManagementFilterValues) => void;
   resetFilters: () => void;
-  uploadWorkbookFile: (file: File, snapshotDate?: string) => Promise<void>;
+  uploadWorkbookFile: (file: File, snapshotDate: string) => Promise<void>;
   saveTransaction: (transactionId: number, payload: TransactionUpdateRequest) => Promise<void>;
   deleteTransactionRow: (transactionId: number) => Promise<void>;
   restoreTransactionRow: (transactionId: number) => Promise<void>;
@@ -114,7 +114,7 @@ export function useDataManagement(): UseDataManagementResult {
   };
 
   const uploadMutation = useMutation({
-    mutationFn: ({ file, snapshotDate }: { file: File; snapshotDate?: string }) =>
+    mutationFn: ({ file, snapshotDate }: { file: File; snapshotDate: string }) =>
       uploadWorkbook({ file, snapshot_date: snapshotDate }),
     onSuccess: async (result) => {
       setLastUpload(result);
@@ -231,7 +231,7 @@ export function useDataManagement(): UseDataManagementResult {
       actionFeedback,
       updateFilters: (next: DataManagementFilterValues) => setFilters(next),
       resetFilters: () => setFilters(defaultFilters),
-      uploadWorkbookFile: async (file: File, snapshotDate?: string) => {
+      uploadWorkbookFile: async (file: File, snapshotDate: string) => {
         await uploadMutation.mutateAsync({ file, snapshotDate });
       },
       saveTransaction: async (transactionId: number, payload: TransactionUpdateRequest) => {

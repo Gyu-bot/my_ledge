@@ -34,12 +34,11 @@ async def import_transactions_from_workbook(
     db_session: AsyncSession,
     file_bytes: bytes,
     filename: str,
-    snapshot_date: date | None = None,
+    snapshot_date: date,
     excel_password: str | None = None,
 ) -> TransactionImportResult:
     workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
     workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
-    effective_snapshot_date = snapshot_date or date.today()
 
     tx_total = 0
     tx_new = 0
@@ -69,7 +68,7 @@ async def import_transactions_from_workbook(
 
     try:
         parsed_snapshots = parse_snapshots(workbook)
-        await _replace_snapshots(db_session, effective_snapshot_date, parsed_snapshots)
+        await _replace_snapshots(db_session, snapshot_date, parsed_snapshots)
         await db_session.commit()
 
         asset_snapshot_count = len(parsed_snapshots.asset_snapshots)
@@ -85,7 +84,7 @@ async def import_transactions_from_workbook(
 
     upload_log = UploadLog(
         filename=filename,
-        snapshot_date=effective_snapshot_date,
+        snapshot_date=snapshot_date,
         tx_total=tx_total,
         tx_new=tx_new,
         tx_skipped=tx_skipped,

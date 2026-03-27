@@ -24,6 +24,26 @@ async def test_upload_requires_api_key(
     assert response.status_code == 401
 
 
+async def test_upload_requires_snapshot_date(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    sample_workbook_bytes: bytes,
+) -> None:
+    response = await async_client.post(
+        "/api/v1/upload",
+        headers=api_headers,
+        files={
+            "file": (
+                "finance_sample.xlsx",
+                sample_workbook_bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 422
+
+
 async def test_upload_returns_import_summary(
     async_client: AsyncClient,
     api_headers: dict[str, str],

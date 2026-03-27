@@ -34,7 +34,7 @@ export interface UploadLogListResponse {
 
 interface UploadWorkbookParams {
   file: File;
-  snapshot_date?: string;
+  snapshot_date: string;
 }
 
 export async function uploadWorkbook({

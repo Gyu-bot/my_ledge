@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T12:22+0900, 자산/지출 화면 운영 응답 누락 hotfix 확장)
+- **Last Worker:** codex (2026-03-27T12:31+0900, API_KEY 단일 소스 연결 + snapshot_date 필수화 + 후속 계획 반영)
 - **Branch:** main
 
 ## Completed
@@ -39,6 +39,7 @@
 - [x] 운영 배포 자동화: `docker compose up -d --build` 시 `migrate` one-shot 서비스로 Alembic migration 자동 적용
 - [x] 운영 프론트 hotfix: 대시보드/데이터 화면에서 배열 필드 누락 응답도 빈 컬렉션으로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
 - [x] 운영 프론트 hotfix 확장: 자산/지출 화면에서도 `items`/`totals` 누락 응답을 빈 컬렉션·0 합계로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
+- [x] 운영 write 경로 정리: compose 배포 시 `API_KEY`를 frontend build의 `VITE_API_KEY`로 자동 주입하도록 연결하고, 업로드 API의 `snapshot_date`를 필수 입력값으로 고정
 
 ## In Progress
 - [ ] Phase 3 착수 준비
@@ -55,6 +56,9 @@
 - [ ] Phase 2 polish만 후순위로 진행
   - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish
   - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
+- [ ] 데이터 관리 후속 기능
+  - 현재 거래내역 초기화 기능 추가: `거래내역만 초기화` 와 `스냅샷까지 모두 초기화` 를 별도 옵션으로 제공
+  - 프론트엔드 거래 편집 고급 기능 추가: 설명, 카테고리명, 상태, 메모 등의 일괄 편집과 다건 선택 UX 확장
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -114,6 +118,8 @@
 - 2026-03-27: 운영 배포는 `docker compose up -d --build` 한 번으로 끝나도록 `migrate` one-shot 서비스를 추가한다. backend는 `db healthy + migrate success` 이후에만 기동한다
 - 2026-03-27: 운영 프론트 read hook은 응답의 배열 필드(`items`)가 누락되거나 레거시 형태여도 즉시 crash하지 않도록 빈 배열로 정규화한다. 서버 계약이 깨졌을 때도 화면은 비워서 유지하고, 상세 원인은 별도 조사한다
 - 2026-03-27: 자산/지출 read hook은 배열뿐 아니라 중첩 객체(`totals`, `snapshot_date`)도 누락될 수 있다고 가정하고 기본 객체/0 값으로 정규화한다. pagination loop와 집계 훅도 동일 규칙을 적용해 queryFn 내부 예외를 막는다
+- 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리하고, frontend build 시 같은 값을 `VITE_API_KEY`로 주입한다. 키를 바꾸면 frontend 재빌드가 필요하다
+- 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

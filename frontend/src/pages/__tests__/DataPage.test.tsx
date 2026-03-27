@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useDataManagement } from '../../hooks/useDataManagement';
 import { DataPage } from '../DataPage';
@@ -10,8 +10,8 @@ vi.mock('../../hooks/useDataManagement', () => ({
 const mockedUseDataManagement = vi.mocked(useDataManagement);
 
 describe('DataPage', () => {
-  it('renders upload and transaction workbench sections', () => {
-    mockedUseDataManagement.mockReturnValue({
+  function buildUseDataManagementResult() {
+    return {
       data: {
         filters: {
           search: '',
@@ -62,11 +62,15 @@ describe('DataPage', () => {
       actionFeedback: null,
       updateFilters: () => undefined,
       resetFilters: () => undefined,
-      uploadWorkbookFile: async () => undefined,
+      uploadWorkbookFile: vi.fn(async () => undefined),
       saveTransaction: async () => undefined,
       deleteTransactionRow: async () => undefined,
       restoreTransactionRow: async () => undefined,
-    } as ReturnType<typeof useDataManagement>);
+    } as ReturnType<typeof useDataManagement>;
+  }
+
+  it('renders upload and transaction workbench sections', () => {
+    mockedUseDataManagement.mockReturnValue(buildUseDataManagementResult());
 
     render(<DataPage />);
 
@@ -74,5 +78,33 @@ describe('DataPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '엑셀 업로드' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '최근 업로드 결과' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 편집 작업대' })).toBeInTheDocument();
+  });
+
+  it('keeps upload disabled until both file and snapshot date are provided', () => {
+    mockedUseDataManagement.mockReturnValue(buildUseDataManagementResult());
+
+    render(<DataPage />);
+
+    const uploadButton = screen.getByRole('button', { name: '업로드 실행' });
+    const fileInput = screen.getByLabelText('엑셀 파일');
+    const snapshotDateInput = screen.getByLabelText('스냅샷 기준일');
+
+    expect(uploadButton).toBeDisabled();
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(['ledger'], 'finance_sample.xlsx')],
+      },
+    });
+
+    expect(uploadButton).toBeDisabled();
+
+    fireEvent.change(snapshotDateInput, {
+      target: {
+        value: '2026-03-24',
+      },
+    });
+
+    expect(uploadButton).toBeEnabled();
   });
 });

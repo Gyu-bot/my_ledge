@@ -40,7 +40,7 @@ async def get_upload_logs(
 @router.post("/upload", response_model=UploadResponse, dependencies=[Depends(require_api_key)])
 async def upload_workbook(
     file: Annotated[UploadFile, File(...)],
-    snapshot_date: Annotated[date | None, Form()] = None,
+    snapshot_date: Annotated[date, Form(...)],
     db_session: AsyncSession = Depends(get_db_session),
 ) -> UploadResponse:
     result = await import_transactions_from_workbook(
