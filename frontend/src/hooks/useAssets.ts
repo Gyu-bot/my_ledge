@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { getAssetsData, type AssetsApiResponse } from '../api/assets';
+import { ensureArray } from '../lib/collections';
 
 export interface AssetsSummaryCard {
   label: string;
@@ -78,7 +79,9 @@ function formatDateLabel(value: string | null) {
 }
 
 function buildSummaryCards(response: AssetsApiResponse): AssetsSummaryCard[] {
-  const latestSnapshot = response.asset_snapshots.items[response.asset_snapshots.items.length - 1];
+  const assetSnapshots = ensureArray(response.asset_snapshots?.items);
+  const investmentItems = ensureArray(response.investments?.items);
+  const latestSnapshot = assetSnapshots[assetSnapshots.length - 1];
 
   return [
     {
@@ -99,24 +102,27 @@ function buildSummaryCards(response: AssetsApiResponse): AssetsSummaryCard[] {
     {
       label: '투자 평가액',
       value:
-        response.investments.items.length > 0
+        investmentItems.length > 0
           ? formatMoney(toNumber(response.investments.totals.market_value))
           : '데이터 없음',
       detail:
-        response.investments.items.length > 0
-          ? `${response.investments.items.length}개 자산`
+        investmentItems.length > 0
+          ? `${investmentItems.length}개 자산`
           : '투자 스냅샷 없음',
     },
   ];
 }
 
 function buildAssetsData(response: AssetsApiResponse): AssetsData {
+  const assetSnapshots = ensureArray(response.asset_snapshots?.items);
+  const netWorthHistory = ensureArray(response.net_worth_history?.items);
+  const investmentItems = ensureArray(response.investments?.items);
+  const loanItems = ensureArray(response.loans?.items);
+
   return {
-    snapshot_date:
-      response.asset_snapshots.items[response.asset_snapshots.items.length - 1]?.snapshot_date ??
-      null,
+    snapshot_date: assetSnapshots[assetSnapshots.length - 1]?.snapshot_date ?? null,
     summary_cards: buildSummaryCards(response),
-    net_worth_history: response.net_worth_history.items.map((item) => ({
+    net_worth_history: netWorthHistory.map((item) => ({
       period: item.snapshot_date,
       amount: toNumber(item.net_worth),
     })),
@@ -126,7 +132,7 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
         cost_basis: toNumber(response.investments.totals.cost_basis),
         market_value: toNumber(response.investments.totals.market_value),
       },
-      items: response.investments.items.map((item) => ({
+      items: investmentItems.map((item) => ({
         ...item,
         cost_basis: item.cost_basis === null ? null : toNumber(item.cost_basis),
         market_value: item.market_value === null ? null : toNumber(item.market_value),
@@ -139,7 +145,7 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
         principal: toNumber(response.loans.totals.principal),
         balance: toNumber(response.loans.totals.balance),
       },
-      items: response.loans.items.map((item) => ({
+      items: loanItems.map((item) => ({
         ...item,
         principal: item.principal === null ? null : toNumber(item.principal),
         balance: item.balance === null ? null : toNumber(item.balance),

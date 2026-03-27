@@ -164,4 +164,24 @@ describe('useDataManagement', () => {
       message: '거래 1번을 삭제했습니다.',
     });
   });
+
+  it('falls back to an empty upload history when the upload log payload is missing items', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 0,
+      page: 1,
+      per_page: 20,
+      items: [],
+    });
+    mockedGetUploadLogs.mockResolvedValue({} as Awaited<ReturnType<typeof getUploadLogs>>);
+
+    const { result } = renderHook(() => useDataManagement(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    expect(result.current.data?.upload_history).toEqual([]);
+  });
 });

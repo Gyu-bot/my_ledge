@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T09:32+0900, compose migrate 자동화 + 운영 배포 절차 정리)
+- **Last Worker:** codex (2026-03-27T12:11+0900, 운영 응답 배열 누락 대응 프론트 hotfix)
 - **Branch:** main
 
 ## Completed
@@ -37,6 +37,7 @@
 - [x] Phase 3 인프라 준비 일부 완료: docker compose DB init 단계에 readonly 유저 + `statement_timeout=30s` 자동 bootstrap 추가
 - [x] 운영 서버 설치 절차 문서화: `README.md` 에 production `.env`, compose 기동, readonly bootstrap, OpenClaw 전달값 추가
 - [x] 운영 배포 자동화: `docker compose up -d --build` 시 `migrate` one-shot 서비스로 Alembic migration 자동 적용
+- [x] 운영 프론트 hotfix: 대시보드/데이터 화면에서 배열 필드 누락 응답도 빈 컬렉션으로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
 
 ## In Progress
 - [ ] Phase 3 착수 준비
@@ -110,6 +111,7 @@
 - 2026-03-27: OpenClaw skill 자체는 이 저장소에서 배포하지 않는다. 대신 이 저장소는 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 README 진입점과 handoff 문서를 제공한다
 - 2026-03-27: readonly DB 유저는 문서 수동 절차만 두지 않고 `docker-entrypoint-initdb.d` bootstrap으로 자동 생성한다. 그래야 새 compose 환경에서 OpenClaw 읽기 경로가 바로 재현된다
 - 2026-03-27: 운영 배포는 `docker compose up -d --build` 한 번으로 끝나도록 `migrate` one-shot 서비스를 추가한다. backend는 `db healthy + migrate success` 이후에만 기동한다
+- 2026-03-27: 운영 프론트 read hook은 응답의 배열 필드(`items`)가 누락되거나 레거시 형태여도 즉시 crash하지 않도록 빈 배열로 정규화한다. 서버 계약이 깨졌을 때도 화면은 비워서 유지하고, 상세 원인은 별도 조사한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

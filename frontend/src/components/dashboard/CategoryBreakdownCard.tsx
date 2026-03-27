@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { getCategoryBreakdown } from '../../api/dashboard';
+import { ensureArray } from '../../lib/collections';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -162,7 +163,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
     activePreset === 'all'
       ? data
       : categoryQuery.data
-        ? buildCategoryBreakdown(categoryQuery.data.items)
+        ? buildCategoryBreakdown(ensureArray(categoryQuery.data.items))
         : [];
 
   const hasData = chartData.length > 0;

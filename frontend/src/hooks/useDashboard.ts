@@ -1,6 +1,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { DashboardApiResponse } from '../api/dashboard';
 import { getDashboardData } from '../api/dashboard';
+import { ensureArray } from '../lib/collections';
 import type {
   CategoryBreakdownSlice,
   DashboardData,
@@ -147,17 +148,20 @@ function buildRecentTransactions(items: TransactionRecord[]): RecentTransaction[
 }
 
 function buildDashboardData(response: DashboardApiResponse): DashboardData {
-  const snapshots = sortBySnapshotDate(response.asset_snapshots.items);
-  const monthlyTrend = sortByPeriod(response.monthly_spend.items).map<TrendPoint>((item) => ({
+  const snapshots = sortBySnapshotDate(ensureArray(response.asset_snapshots?.items));
+  const monthlySpendItems = ensureArray(response.monthly_spend?.items);
+  const categoryBreakdownItems = ensureArray(response.category_breakdown?.items);
+  const recentTransactionItems = ensureArray(response.recent_transactions?.items);
+  const monthlyTrend = sortByPeriod(monthlySpendItems).map<TrendPoint>((item) => ({
     period: item.period,
     amount: Math.abs(item.amount),
   }));
-  const categoryBreakdown = buildCategoryBreakdown(response.category_breakdown.items);
-  const recentTransactions = buildRecentTransactions(response.recent_transactions.items);
+  const categoryBreakdown = buildCategoryBreakdown(categoryBreakdownItems);
+  const recentTransactions = buildRecentTransactions(recentTransactionItems);
 
   return {
     snapshot_date: snapshots[snapshots.length - 1]?.snapshot_date ?? null,
-    summary_cards: buildSummaryCards(snapshots, monthlyTrend, response.category_breakdown.items),
+    summary_cards: buildSummaryCards(snapshots, monthlyTrend, categoryBreakdownItems),
     monthly_spend: monthlyTrend,
     category_breakdown: categoryBreakdown,
     recent_transactions: recentTransactions,

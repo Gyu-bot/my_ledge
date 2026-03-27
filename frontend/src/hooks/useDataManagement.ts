@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hasApiKeyConfigured } from '../api/client';
+import { ensureArray } from '../lib/collections';
 import {
   deleteTransaction,
   getTransactions,
@@ -80,13 +81,15 @@ export function useDataManagement(): UseDataManagementResult {
         }),
         getUploadLogs(),
       ]);
+      const transactionItems = ensureArray(response.items);
+      const uploadHistory = ensureArray(uploadLogsResponse.items);
 
       const categoryOptions = Array.from(
-        new Set(response.items.map((item) => item.effective_category_major).filter(Boolean)),
+        new Set(transactionItems.map((item) => item.effective_category_major).filter(Boolean)),
       ).sort();
       const paymentMethodOptions = Array.from(
         new Set(
-          response.items
+          transactionItems
             .map((item) => item.payment_method)
             .filter((value): value is string => Boolean(value)),
         ),
@@ -94,11 +97,11 @@ export function useDataManagement(): UseDataManagementResult {
 
       return {
         filters,
-        transactions: response.items,
-        total: response.total,
+        transactions: transactionItems,
+        total: typeof response.total === 'number' ? response.total : transactionItems.length,
         category_options: categoryOptions,
         payment_method_options: paymentMethodOptions,
-        upload_history: uploadLogsResponse.items,
+        upload_history: uploadHistory,
         last_upload: lastUpload,
         has_write_access: hasApiKeyConfigured(),
       };
