@@ -19,6 +19,17 @@ services:
       retries: 20
       start_period: 5s
 
+  migrate:
+    build:
+      context: ./backend
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-my_ledge}:${DB_PASSWORD:-my_ledge_dev}@db:5432/${POSTGRES_DB:-my_ledge}
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+
   backend:
     build:
       context: ./backend
@@ -26,6 +37,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-my_ledge}:${DB_PASSWORD:-my_ledge_dev}@db:5432/${POSTGRES_DB:-my_ledge}
       API_KEY: ${API_KEY:-replace-me}

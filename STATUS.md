@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T09:08+0900, README 확장 + OpenClaw handoff 문서 작성)
+- **Last Worker:** codex (2026-03-27T09:32+0900, compose migrate 자동화 + 운영 배포 절차 정리)
 - **Branch:** main
 
 ## Completed
@@ -36,10 +36,11 @@
 - [x] Phase 3 준비 문서화 완료: README 확장 + OpenClaw 연동/skill handoff 문서 추가 (`docs/openclaw/`)
 - [x] Phase 3 인프라 준비 일부 완료: docker compose DB init 단계에 readonly 유저 + `statement_timeout=30s` 자동 bootstrap 추가
 - [x] 운영 서버 설치 절차 문서화: `README.md` 에 production `.env`, compose 기동, readonly bootstrap, OpenClaw 전달값 추가
+- [x] 운영 배포 자동화: `docker compose up -d --build` 시 `migrate` one-shot 서비스로 Alembic migration 자동 적용
 
 ## In Progress
 - [ ] Phase 3 착수 준비
-  - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. `docker compose` 의 새 PostgreSQL 볼륨 초기화 시 `readonly` 유저와 `statement_timeout=30s` 도 자동 bootstrap 된다. 기존 볼륨 환경은 init script 수동 재실행이 필요하다
+  - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. `docker compose` 의 새 PostgreSQL 볼륨 초기화 시 `readonly` 유저와 `statement_timeout=30s` 도 자동 bootstrap 된다. 운영 배포 시에는 `migrate` one-shot 서비스가 Alembic migration까지 자동 적용한다. 기존 볼륨 환경은 readonly init script 수동 재실행이 필요할 수 있다
   - 남은 구현: OpenClaw 쪽 skill 패키징, OpenClaw -> my_ledge 업로드/조회 end-to-end 검증
 
 ## Blocked
@@ -108,6 +109,7 @@
 - 2026-03-27: `upload_logs`는 MVP에서 페이지네이션 없이 최근 10건만 읽는다. 데이터 관리 화면의 업로드 이력 확인 목적에는 이것으로 충분하고, 복잡도를 늘릴 이유가 없다
 - 2026-03-27: OpenClaw skill 자체는 이 저장소에서 배포하지 않는다. 대신 이 저장소는 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 README 진입점과 handoff 문서를 제공한다
 - 2026-03-27: readonly DB 유저는 문서 수동 절차만 두지 않고 `docker-entrypoint-initdb.d` bootstrap으로 자동 생성한다. 그래야 새 compose 환경에서 OpenClaw 읽기 경로가 바로 재현된다
+- 2026-03-27: 운영 배포는 `docker compose up -d --build` 한 번으로 끝나도록 `migrate` one-shot 서비스를 추가한다. backend는 `db healthy + migrate success` 이후에만 기동한다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

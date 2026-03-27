@@ -33,8 +33,10 @@ docker compose up -d --build
 - backend health: `http://localhost:8000/api/v1/health`
 
 `docker compose ps` 기준으로 `db`, `backend`, `frontend` 가 모두 `healthy` 상태여야 한다.
+`migrate` 서비스는 one-shot 으로 실행된 뒤 `Exited (0)` 상태가 정상이다.
 
 새 PostgreSQL 볼륨에서는 `readonly` 유저와 `statement_timeout=30s` 가 init script로 자동 구성된다.
+compose 전체 기동 시에는 `migrate` 서비스가 Alembic migration을 자동 적용하므로, 운영에서는 별도 수동 migration 없이 `docker compose up -d --build` 한 번으로 배포할 수 있다.
 
 ## 운영 서버 설치
 
@@ -94,11 +96,13 @@ docker compose up -d --build
 ```bash
 docker compose ps
 docker compose logs -f backend
+docker compose logs migrate
 ```
 
 정상 기준:
 
 - `db`, `backend`, `frontend` 가 모두 `healthy`
+- `migrate` 는 `Exited (0)` 상태
 - backend health endpoint 응답:
 
 ```bash
@@ -145,10 +149,12 @@ git pull
 docker compose up -d --build
 ```
 
+이 명령은 이미지 재빌드와 migration 자동 적용까지 포함한다.
+
 환경 변수만 바뀐 경우에도 관련 서비스는 재기동하는 편이 안전하다.
 
 ```bash
-docker compose up -d --build backend frontend db
+docker compose up -d --build db migrate backend frontend
 ```
 
 ### 백엔드 단독 실행
@@ -239,7 +245,7 @@ npm run build
 - 현재 저장소 샘플은 비암호화 파일이지만, 복호화 fallback 코드는 유지한다.
 - `.env.example` 의 `DATABASE_URL` 은 호스트에서 migration/smoke script를 실행할 수 있도록 `127.0.0.1:5432` 기준으로 둔다.
 - 컨테이너 내부 `backend` 서비스는 compose에서 `db:5432` 기준 `DATABASE_URL` 을 별도 주입한다.
-- `docker compose up -d db` 직후 바로 migration을 치면 Postgres healthcheck가 끝나기 전에 연결이 튕길 수 있으니, `docker compose ps` 등으로 `healthy` 상태를 확인하고 진행하는 게 안전하다.
+- compose 전체 기동 시에는 `migrate` 서비스가 `db` healthcheck 이후 자동 실행되므로 별도 수동 migration은 필요 없다.
 - 기존 `pgdata` 볼륨을 재사용 중이면 `readonly` 계정 bootstrap은 자동 재실행되지 않는다. 이 경우 `docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh` 로 수동 적용한다.
 - 거래 분석에서 `이체`는 수입/지출에서 제외하고 별도 자산이동으로 해석한다.
 - 사용자 수정 카테고리는 원본 카테고리보다 우선한다.
