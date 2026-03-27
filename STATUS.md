@@ -34,18 +34,19 @@
 - [x] Phase 2 Task 6A 완료: 데이터 관리 write flow 실검증
 - [x] Phase 2 Task 6B 완료: 최근 10건 `upload_logs` 조회 경로 추가 + 데이터 관리 화면 연동
 - [x] Phase 3 준비 문서화 완료: README 확장 + OpenClaw 연동/skill handoff 문서 추가 (`docs/openclaw/`)
+- [x] Phase 3 인프라 준비 일부 완료: docker compose DB init 단계에 readonly 유저 + `statement_timeout=30s` 자동 bootstrap 추가
+- [x] 운영 서버 설치 절차 문서화: `README.md` 에 production `.env`, compose 기동, readonly bootstrap, OpenClaw 전달값 추가
 
 ## In Progress
 - [ ] Phase 3 착수 준비
-  - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. 이 저장소는 OpenClaw skill package를 직접 배포하지 않고, OpenClaw 쪽에서 별도 패키징/배포할 수 있도록 연동 계약과 handoff 정보를 제공한다
-  - 남은 구현: PostgreSQL readonly 유저 실제 설정, OpenClaw 쪽 skill 패키징, OpenClaw -> my_ledge 업로드/조회 end-to-end 검증
+  - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. `docker compose` 의 새 PostgreSQL 볼륨 초기화 시 `readonly` 유저와 `statement_timeout=30s` 도 자동 bootstrap 된다. 기존 볼륨 환경은 init script 수동 재실행이 필요하다
+  - 남은 구현: OpenClaw 쪽 skill 패키징, OpenClaw -> my_ledge 업로드/조회 end-to-end 검증
 
 ## Blocked
 - 없음
 
 ## Next Up
 - [ ] Phase 3 실제 연동 작업
-  - `readonly` DB 유저 생성 + `statement_timeout=30s` 설정
   - OpenClaw 쪽에서 skill 패키징/배포
   - OpenClaw -> `schema` API / readonly DB / `upload` API end-to-end 검증
 - [ ] Phase 2 polish만 후순위로 진행
@@ -106,6 +107,7 @@
 - 2026-03-27: Phase 2 남은 작업은 polish보다 기능 완결과 write flow 검증을 우선한다. 화면 미세 polish와 성능/번들 경고 정리는 다른 미완료 작업을 모두 닫은 뒤 마지막에 처리한다
 - 2026-03-27: `upload_logs`는 MVP에서 페이지네이션 없이 최근 10건만 읽는다. 데이터 관리 화면의 업로드 이력 확인 목적에는 이것으로 충분하고, 복잡도를 늘릴 이유가 없다
 - 2026-03-27: OpenClaw skill 자체는 이 저장소에서 배포하지 않는다. 대신 이 저장소는 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 README 진입점과 handoff 문서를 제공한다
+- 2026-03-27: readonly DB 유저는 문서 수동 절차만 두지 않고 `docker-entrypoint-initdb.d` bootstrap으로 자동 생성한다. 그래야 새 compose 환경에서 OpenClaw 읽기 경로가 바로 재현된다
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

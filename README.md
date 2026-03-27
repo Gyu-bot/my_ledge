@@ -34,6 +34,123 @@ docker compose up -d --build
 
 `docker compose ps` 기준으로 `db`, `backend`, `frontend` 가 모두 `healthy` 상태여야 한다.
 
+새 PostgreSQL 볼륨에서는 `readonly` 유저와 `statement_timeout=30s` 가 init script로 자동 구성된다.
+
+## 운영 서버 설치
+
+운영 서버에서도 기본 절차는 동일하다. 차이는 `.env`에 개발 기본값 대신 실제 운영 비밀값과 도메인 설정을 넣는 점이다.
+
+### 1. 서버 준비
+
+- Docker Engine과 Docker Compose plugin 설치
+- 80/443 또는 현재 사용할 reverse proxy / frontend port 정책 결정
+- 이 저장소를 서버에 clone
+
+예시:
+
+```bash
+git clone <repo-url>
+cd my_ledge
+```
+
+### 2. 운영용 `.env` 작성
+
+```bash
+cp .env.example .env
+```
+
+운영 배포 전 최소한 아래 값은 실제 값으로 교체한다.
+
+```env
+DB_PASSWORD=
+DB_READONLY_PASSWORD=
+API_KEY=
+EXCEL_PASSWORD=
+CORS_ORIGINS=
+```
+
+권장:
+
+- `DB_PASSWORD`: PostgreSQL 앱 계정 비밀번호
+- `DB_READONLY_PASSWORD`: OpenClaw 등 readonly DB 접근용 비밀번호
+- `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증용 비밀값
+- `EXCEL_PASSWORD`: 실제 BankSalad 암호화 파일을 사용할 경우 필요
+- `CORS_ORIGINS`: 실제 프론트엔드 도메인으로 설정
+
+랜덤값 생성 예시:
+
+```bash
+openssl rand -hex 32
+```
+
+### 3. 컨테이너 기동
+
+```bash
+docker compose up -d --build
+```
+
+상태 확인:
+
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+정상 기준:
+
+- `db`, `backend`, `frontend` 가 모두 `healthy`
+- backend health endpoint 응답:
+
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+### 4. readonly 계정 bootstrap 확인
+
+새 PostgreSQL 데이터 볼륨이라면 `readonly` 유저와 `statement_timeout=30s` 가 자동으로 적용된다.
+
+기존 `pgdata` 볼륨을 재사용하는 서버에서 `DB_READONLY_PASSWORD`를 새로 넣었거나 바꿨다면 아래를 한 번 실행한다.
+
+```bash
+docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
+```
+
+### 5. OpenClaw 연동에 전달할 값
+
+운영 서버에서 OpenClaw 쪽에 넘겨야 하는 최소 정보:
+
+```env
+MY_LEDGE_API_BASE_URL=http://<server>:8000/api/v1
+MY_LEDGE_API_KEY=<API_KEY>
+
+MY_LEDGE_DB_HOST=<server>
+MY_LEDGE_DB_PORT=5432
+MY_LEDGE_DB_NAME=my_ledge
+MY_LEDGE_DB_USER=readonly
+MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
+```
+
+함께 전달할 문서:
+
+- [docs/openclaw/README.md](/home/gyurin/projects/my_ledge/docs/openclaw/README.md)
+- [docs/openclaw/integration-guide.md](/home/gyurin/projects/my_ledge/docs/openclaw/integration-guide.md)
+- [docs/openclaw/skill-handoff.md](/home/gyurin/projects/my_ledge/docs/openclaw/skill-handoff.md)
+
+### 6. 업데이트 절차
+
+애플리케이션 코드 업데이트:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+환경 변수만 바뀐 경우에도 관련 서비스는 재기동하는 편이 안전하다.
+
+```bash
+docker compose up -d --build backend frontend db
+```
+
 ### 백엔드 단독 실행
 
 ```bash
@@ -76,6 +193,25 @@ CORS_ORIGINS=
 - `DB_READONLY_PASSWORD`: OpenClaw 등 외부 에이전트의 readonly DB 접근에 사용
 - `EXCEL_PASSWORD`: 실제 암호화된 BankSalad 파일 복호화에 사용
 
+## PostgreSQL readonly 계정
+
+`docker compose up -d` 로 새 DB를 초기화할 때 아래가 자동 적용된다.
+
+- `readonly` 로그인 role 생성
+- `public` schema `SELECT` 권한 부여
+- 이후 생성 테이블/시퀀스에 대한 default privileges 설정
+- `ALTER ROLE readonly SET statement_timeout = '30s'`
+
+주의:
+
+- 이 자동 bootstrap은 **새 PostgreSQL 데이터 볼륨 초기화 시점**에만 실행된다.
+- 이미 생성된 `pgdata` 볼륨을 계속 쓰는 환경에서는 init script가 다시 자동 실행되지 않는다.
+- 기존 DB에 다시 적용하려면 아래처럼 수동 실행한다.
+
+```bash
+docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
+```
+
 ## 검증 명령
 
 ### Backend
@@ -104,6 +240,7 @@ npm run build
 - `.env.example` 의 `DATABASE_URL` 은 호스트에서 migration/smoke script를 실행할 수 있도록 `127.0.0.1:5432` 기준으로 둔다.
 - 컨테이너 내부 `backend` 서비스는 compose에서 `db:5432` 기준 `DATABASE_URL` 을 별도 주입한다.
 - `docker compose up -d db` 직후 바로 migration을 치면 Postgres healthcheck가 끝나기 전에 연결이 튕길 수 있으니, `docker compose ps` 등으로 `healthy` 상태를 확인하고 진행하는 게 안전하다.
+- 기존 `pgdata` 볼륨을 재사용 중이면 `readonly` 계정 bootstrap은 자동 재실행되지 않는다. 이 경우 `docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh` 로 수동 적용한다.
 - 거래 분석에서 `이체`는 수입/지출에서 제외하고 별도 자산이동으로 해석한다.
 - 사용자 수정 카테고리는 원본 카테고리보다 우선한다.
 

@@ -94,6 +94,13 @@ ALTER ROLE readonly SET statement_timeout = '30s';
 DB_READONLY_PASSWORD=...
 ```
 
+로컬/compose 환경에서는 새 PostgreSQL 볼륨 초기화 시 `readonly` 유저와 `statement_timeout=30s` 가 자동 bootstrap 된다.
+기존 볼륨에서는 아래를 수동 실행해야 한다.
+
+```bash
+docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
+```
+
 ## 권장 조회 순서
 
 ### 1. 스키마 파악

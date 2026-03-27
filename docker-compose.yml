@@ -6,10 +6,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-my_ledge}
       POSTGRES_USER: ${POSTGRES_USER:-my_ledge}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-my_ledge_dev}
+      DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:-readonly_dev}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-my_ledge} -d ${POSTGRES_DB:-my_ledge}"]
       interval: 5s
