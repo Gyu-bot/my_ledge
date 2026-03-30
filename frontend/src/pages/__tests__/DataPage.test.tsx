@@ -58,11 +58,22 @@ describe('DataPage', () => {
       error: null,
       pendingTransactionId: null,
       isUploading: false,
+      isResetting: false,
       uploadError: null,
       actionFeedback: null,
       updateFilters: () => undefined,
       resetFilters: () => undefined,
       uploadWorkbookFile: vi.fn(async () => undefined),
+      resetDataScope: vi.fn(async () => ({
+        scope: 'transactions_only',
+        deleted: {
+          transactions: 0,
+          asset_snapshots: 0,
+          investments: 0,
+          loans: 0,
+        },
+        upload_logs_retained: true,
+      })),
       saveTransaction: async () => undefined,
       deleteTransactionRow: async () => undefined,
       restoreTransactionRow: async () => undefined,
@@ -77,6 +88,7 @@ describe('DataPage', () => {
     expect(screen.getByRole('heading', { level: 2, name: '데이터 관리' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '엑셀 업로드' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '최근 업로드 결과' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Danger Zone' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 편집 작업대' })).toBeInTheDocument();
   });
 
@@ -106,5 +118,24 @@ describe('DataPage', () => {
     });
 
     expect(uploadButton).toBeEnabled();
+  });
+
+  it('keeps reset disabled until the confirmation text matches the selected scope', () => {
+    mockedUseDataManagement.mockReturnValue(buildUseDataManagementResult());
+
+    render(<DataPage />);
+
+    const resetButton = screen.getByRole('button', { name: '초기화 실행' });
+    const confirmationInput = screen.getByPlaceholderText('실행하려면 거래초기화 입력');
+
+    expect(resetButton).toBeDisabled();
+
+    fireEvent.change(confirmationInput, {
+      target: {
+        value: '거래초기화',
+      },
+    });
+
+    expect(resetButton).toBeEnabled();
   });
 });

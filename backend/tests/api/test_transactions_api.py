@@ -161,6 +161,70 @@ async def test_list_transactions_supports_is_edited_and_search(
     assert payload["items"][0]["fixed_cost_necessity"] is None
 
 
+async def test_list_transactions_can_include_deleted_and_merged_rows(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 3, 10),
+                tx_time=time(12, 0),
+                tx_type="지출",
+                category_major="교통",
+                category_minor="택시",
+                description="정상 거래",
+                amount=-10000,
+                payment_method="카드 A",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 9),
+                tx_time=time(12, 0),
+                tx_type="지출",
+                category_major="기타",
+                category_minor=None,
+                description="삭제 거래",
+                amount=-1000,
+                payment_method="카드 B",
+                is_deleted=True,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 8),
+                tx_time=time(12, 0),
+                tx_type="지출",
+                category_major="기타",
+                category_minor=None,
+                description="병합 거래",
+                amount=-2000,
+                payment_method="카드 C",
+                merged_into_id=1,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/transactions",
+        params={
+            "include_deleted": "true",
+            "include_merged": "true",
+            "page": 1,
+            "per_page": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 3
+    assert [item["description"] for item in payload["items"]] == [
+        "정상 거래",
+        "삭제 거래",
+        "병합 거래",
+    ]
+    assert payload["items"][1]["is_deleted"] is True
+    assert payload["items"][2]["merged_into_id"] == 1
+
+
 async def test_summary_and_breakdown_endpoints_use_effective_rules(
     async_client: AsyncClient,
     db_session: AsyncSession,

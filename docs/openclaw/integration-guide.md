@@ -126,6 +126,11 @@ docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
 - 사용자 수정 카테고리 우선 규칙이 반영돼 있다
 - API read path와 같은 해석층을 공유한다
 
+주의:
+
+- `vw_transactions_effective` 는 canonical 분석 surface라서 삭제/병합 row를 직접 노출하지 않는다
+- 삭제/병합 상태를 포함한 감사성 조회가 필요하면 raw `transactions` 를 직접 보거나 `GET /api/v1/transactions?include_deleted=true&include_merged=true` 를 사용한다
+
 ### 3. raw table은 정합성 점검이나 세부 분석에만 사용
 
 예:
