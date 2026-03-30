@@ -309,12 +309,11 @@ def _build_transaction_query(
     include_merged: bool,
     search: str | None,
 ) -> tuple[Select, object]:
-    canonical = build_transactions_effective_select().subquery("vw_transactions_effective")
+    canonical = build_transactions_effective_select(
+        include_deleted=include_deleted,
+        include_merged=include_merged,
+    ).subquery("vw_transactions_effective")
     query = select(canonical)
-    if not include_deleted:
-        query = query.where(canonical.c.is_deleted.is_(False))
-    if not include_merged:
-        query = query.where(canonical.c.merged_into_id.is_(None))
     if start_date is not None:
         query = query.where(canonical.c.date >= start_date)
     if end_date is not None:

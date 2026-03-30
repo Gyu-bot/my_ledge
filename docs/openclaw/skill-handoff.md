@@ -82,6 +82,7 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - `이체`는 수입/지출에서 제외
 - 사용자 카테고리 수정값 우선
 - 삭제/병합 건 제외
+- 삭제/병합 상태까지 봐야 하면 canonical view 대신 raw `transactions` 또는 `GET /api/v1/transactions?include_deleted=true&include_merged=true` 사용
 
 ### 보안 규칙
 

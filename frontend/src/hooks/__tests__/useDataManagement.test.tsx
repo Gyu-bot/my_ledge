@@ -7,6 +7,10 @@ vi.mock('../../api/client', () => ({
   hasApiKeyConfigured: vi.fn(() => true),
 }));
 
+vi.mock('../../api/dataManagement', () => ({
+  resetData: vi.fn(),
+}));
+
 vi.mock('../../api/transactions', () => ({
   deleteTransaction: vi.fn(),
   getTransactions: vi.fn(),
@@ -19,6 +23,7 @@ vi.mock('../../api/upload', () => ({
   uploadWorkbook: vi.fn(),
 }));
 
+import { resetData } from '../../api/dataManagement';
 import { deleteTransaction, getTransactions } from '../../api/transactions';
 import { getUploadLogs } from '../../api/upload';
 import { useDataManagement } from '../useDataManagement';
@@ -26,6 +31,7 @@ import { useDataManagement } from '../useDataManagement';
 const mockedGetTransactions = vi.mocked(getTransactions);
 const mockedGetUploadLogs = vi.mocked(getUploadLogs);
 const mockedDeleteTransaction = vi.mocked(deleteTransaction);
+const mockedResetData = vi.mocked(resetData);
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -268,5 +274,43 @@ describe('useDataManagement', () => {
     expect(result.current.data?.transactions).toHaveLength(20);
     expect(result.current.data?.category_options).toEqual(['급여', '식비']);
     expect(result.current.data?.payment_method_options).toEqual(['계좌 A', '카드 A']);
+  });
+
+  it('reports reset feedback after clearing transaction rows only', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 0,
+      page: 1,
+      per_page: 20,
+      items: [],
+    });
+    mockedGetUploadLogs.mockResolvedValue({ items: [] });
+    mockedResetData.mockResolvedValue({
+      scope: 'transactions_only',
+      deleted: {
+        transactions: 12,
+        asset_snapshots: 0,
+        investments: 0,
+        loans: 0,
+      },
+      upload_logs_retained: true,
+    });
+
+    const { result } = renderHook(() => useDataManagement(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    await act(async () => {
+      await result.current.resetDataScope('transactions_only');
+    });
+
+    expect(mockedResetData).toHaveBeenCalledWith('transactions_only');
+    expect(result.current.actionFeedback).toEqual({
+      variant: 'success',
+      message: '거래 12건을 초기화했습니다. 업로드 이력은 유지됩니다.',
+    });
   });
 });

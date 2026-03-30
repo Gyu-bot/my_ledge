@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-27T19:58+0900, 데이터 관리 거래 로드 경로를 전체 페이지 수집으로 보강 + empty placeholder 추가)
+- **Last Worker:** codex (2026-03-30T17:01+0900, canonical view 계약 불일치 수정 + compose migration 반영 경로 확인)
 - **Branch:** main
 
 ## Completed
@@ -42,10 +42,15 @@
 - [x] 운영 write 경로 정리: compose 배포 시 `API_KEY`를 frontend build의 `VITE_API_KEY`로 자동 주입하도록 연결하고, 업로드 API의 `snapshot_date`를 필수 입력값으로 고정
 - [x] 운영 프론트 hotfix: static nginx에 `/api/` reverse proxy와 업로드용 body size 한도를 추가해 compose 배포에서 상대경로 API POST가 405로 막히지 않도록 수정
 - [x] 운영 프론트 hotfix: 데이터 관리 화면이 첫 페이지만 읽어 빈 상태처럼 보일 수 있는 경로를 전체 페이지 수집 + mount 시 재조회로 보강하고, 거래 0건 시 placeholder를 표시하도록 수정
+- [x] 문서 운영 정비: `docs/STATUS.md` 생성 + `docs/daily/2026-03-30/` 일일 로그 추가
+- [x] 데이터 관리 Track A 완료: `POST /api/v1/data/reset` 추가 + 거래 전용/거래+스냅샷 reset 지원 + 데이터 관리 Danger Zone UI 연결
+- [x] 테스트 환경 정비: backend `greenlet` 의존성 추가, frontend `npm install` 수행, reset 관련 backend test / frontend test·l int·typecheck 재실행
+- [x] OpenClaw read contract hotfix: `vw_transactions_effective` 기본 계약을 삭제/병합 제외로 수정 + API include 플래그 경로 유지 + Alembic view migration 및 문서/테스트 반영
 
 ## In Progress
 - [ ] Phase 3 착수 준비
   - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. `docker compose` 의 새 PostgreSQL 볼륨 초기화 시 `readonly` 유저와 `statement_timeout=30s` 도 자동 bootstrap 된다. 운영 배포 시에는 `migrate` one-shot 서비스가 Alembic migration까지 자동 적용한다. 기존 볼륨 환경은 readonly init script 수동 재실행이 필요할 수 있다
+  - 현재 지점: OpenClaw가 지적한 `vw_transactions_effective` 문서/구현 불일치를 수정했다. canonical view와 schema 설명은 이제 삭제/병합 제외 계약을 따른다. `/api/v1/transactions` 는 `include_deleted` / `include_merged` opt-in 경로를 유지한다. 이번 DB view 변경은 compose 기준 `docker compose up -d --build` 로 migrate 서비스가 자동 적용한다
   - 남은 구현: OpenClaw 쪽 skill 패키징, OpenClaw -> my_ledge 업로드/조회 end-to-end 검증
 
 ## Blocked
@@ -55,12 +60,20 @@
 - [ ] Phase 3 실제 연동 작업
   - OpenClaw 쪽에서 skill 패키징/배포
   - OpenClaw -> `schema` API / readonly DB / `upload` API end-to-end 검증
+- [ ] 데이터 관리 후속 기능
+  - Track B. bulk edit v1
+    - [ ] 거래 작업대 다건 선택 UX 추가: row checkbox, select-all, bulk toolbar
+    - [ ] bulk-update endpoint에 `memo` 포함 확장 및 프론트 연결
+    - [ ] bulk delete / bulk restore API 추가 및 프론트 연결
+    - [ ] bulk edit v1 테스트 및 문서 반영
+  - Track C. bulk edit v2
+    - [ ] `description_user` nullable 컬럼 추가 + Alembic migration 작성
+    - [ ] canonical read path 확장: `effective_description`, `is_edited`, schema 문서 갱신
+    - [ ] rolling import 사용자 수정 보존 규칙에 `description_user` 이월 추가
+    - [ ] 설명 단건/다건 수정 UI 및 회귀 테스트 추가
 - [ ] Phase 2 polish만 후순위로 진행
   - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish, UI 다크모드 토글/테마 시스템 설계 및 구현
   - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
-- [ ] 데이터 관리 후속 기능
-  - 현재 거래내역 초기화 기능 추가: `거래내역만 초기화` 와 `스냅샷까지 모두 초기화` 를 별도 옵션으로 제공
-  - 프론트엔드 거래 편집 고급 기능 추가: 설명, 카테고리명, 상태, 메모 등의 일괄 편집과 다건 선택 UX 확장
 
 ## Key Decisions
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
@@ -124,6 +137,9 @@
 - 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
 - 2026-03-27: compose 배포의 frontend는 상대경로 `/api` 호출을 유지하고, 정적 nginx가 `backend:8000` 으로 reverse proxy 한다. 브라우저가 Docker 내부 DNS를 직접 알 수 없으므로 build-time 절대 URL 주입보다 single-origin proxy가 안전하다
 - 2026-03-27: 데이터 관리 화면의 거래 작업대는 서버 첫 페이지 응답만 신뢰하지 않고 전체 페이지를 수집한 뒤 상단 20건만 노출한다. spending 화면과 read path 일관성을 맞추고, 캐시/페이지네이션 편차로 빈 화면처럼 보이는 위험을 줄이는 쪽이 더 안전하다
+- 2026-03-30: `docs/STATUS.md` 를 루트 `STATUS.md`의 concise mirror로 유지한다. 상위 작업 지침이 docs 경로를 요구하므로 에이전트 간 진입점 혼선을 줄이는 편이 안전하다
+- 2026-03-30: reset 기능은 `POST /api/v1/data/reset` 단일 endpoint로 두고 `scope` 값으로 거래 전용/거래+스냅샷 전체 초기화를 분기한다. `upload_logs`는 운영 이력 성격이 강하므로 reset 대상에서 제외한다.
+- 2026-03-30: `vw_transactions_effective` 는 OpenClaw와 AI 분석의 canonical row surface이므로 기본적으로 삭제/병합 row를 제외한다. 삭제/병합까지 포함한 조회는 canonical view가 아니라 raw `transactions` 또는 API의 `include_deleted` / `include_merged` 플래그를 사용한다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -136,3 +152,4 @@
 - 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
 - Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
 - 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
+- 현재 저장소에는 `tmp/finance_sample.xlsx`, `tmp/sample_260324.xlsx` fixture가 없어 전체 backend `pytest`는 fixture 로딩 단계에서 실패한다. 이번 세션에서는 reset 기능 대상 테스트만 독립 데이터로 검증했다

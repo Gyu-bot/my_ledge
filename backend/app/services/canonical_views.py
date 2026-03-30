@@ -30,8 +30,12 @@ def transaction_is_edited_clause() -> ColumnElement[bool]:
     )
 
 
-def build_transactions_effective_select() -> Select:
-    return select(
+def build_transactions_effective_select(
+    *,
+    include_deleted: bool = False,
+    include_merged: bool = False,
+) -> Select:
+    query = select(
         Transaction.id.label("id"),
         Transaction.date.label("date"),
         Transaction.time.label("time"),
@@ -60,6 +64,11 @@ def build_transactions_effective_select() -> Select:
         Transaction.created_at.label("created_at"),
         Transaction.updated_at.label("updated_at"),
     ).select_from(Transaction)
+    if not include_deleted:
+        query = query.where(Transaction.is_deleted.is_(False))
+    if not include_merged:
+        query = query.where(Transaction.merged_into_id.is_(None))
+    return query
 
 
 CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
@@ -81,7 +90,8 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         name="vw_transactions_effective",
         description=(
             "Canonical transaction read model. Prefer this for AI and analysis queries; "
-            "use raw transactions when auditing import fidelity or low-level mutations."
+            "it excludes deleted or merged rows while preserving effective category columns. "
+            "Use raw transactions when auditing import fidelity or low-level mutations."
         ),
         recommended_for_ai=True,
         columns=(

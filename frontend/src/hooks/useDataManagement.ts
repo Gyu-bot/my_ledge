@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hasApiKeyConfigured } from '../api/client';
+import { resetData, type DataResetResponse, type DataResetScope } from '../api/dataManagement';
 import { ensureArray } from '../lib/collections';
 import {
   deleteTransaction,
@@ -82,11 +83,13 @@ export interface UseDataManagementResult {
   error: Error | null;
   pendingTransactionId: number | null;
   isUploading: boolean;
+  isResetting: boolean;
   uploadError: Error | null;
   actionFeedback: DataManagementActionFeedback | null;
   updateFilters: (next: DataManagementFilterValues) => void;
   resetFilters: () => void;
   uploadWorkbookFile: (file: File, snapshotDate: string) => Promise<void>;
+  resetDataScope: (scope: DataResetScope) => Promise<DataResetResponse>;
   saveTransaction: (transactionId: number, payload: TransactionUpdateRequest) => Promise<void>;
   deleteTransactionRow: (transactionId: number) => Promise<void>;
   restoreTransactionRow: (transactionId: number) => Promise<void>;
@@ -138,6 +141,18 @@ export function useDataManagement(): UseDataManagementResult {
     await queryClient.invalidateQueries({ queryKey: DATA_MANAGEMENT_QUERY_KEY });
   };
 
+  const invalidateDependentQueries = async () => {
+    await invalidateTransactions();
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['assets-page'] }),
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('spending-'),
+      }),
+    ]);
+  };
+
   const uploadMutation = useMutation({
     mutationFn: ({ file, snapshotDate }: { file: File; snapshotDate: string }) =>
       uploadWorkbook({ file, snapshot_date: snapshotDate }),
@@ -156,6 +171,33 @@ export function useDataManagement(): UseDataManagementResult {
       setActionFeedback({
         variant: 'destructive',
         message: error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.',
+      });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async (scope: DataResetScope) => {
+      setActionFeedback(null);
+      return resetData(scope);
+    },
+    onSuccess: async (result) => {
+      const deletedSnapshotRows =
+        result.deleted.asset_snapshots + result.deleted.investments + result.deleted.loans;
+      setLastUpload(null);
+      setActionFeedback({
+        variant: 'success',
+        message:
+          result.scope === 'transactions_only'
+            ? `거래 ${result.deleted.transactions}건을 초기화했습니다. 업로드 이력은 유지됩니다.`
+            : `거래 ${result.deleted.transactions}건과 스냅샷 ${deletedSnapshotRows}건을 초기화했습니다. 업로드 이력은 유지됩니다.`,
+      });
+      await invalidateDependentQueries();
+    },
+    onError: (error) => {
+      setActionFeedback({
+        variant: 'destructive',
+        message:
+          error instanceof Error ? error.message : '데이터 초기화 중 오류가 발생했습니다.',
       });
     },
   });
@@ -252,6 +294,7 @@ export function useDataManagement(): UseDataManagementResult {
       ...transactionsQuery,
       pendingTransactionId,
       isUploading: uploadMutation.isPending,
+      isResetting: resetMutation.isPending,
       uploadError: uploadMutation.error,
       actionFeedback,
       updateFilters: (next: DataManagementFilterValues) => setFilters(next),
@@ -259,6 +302,7 @@ export function useDataManagement(): UseDataManagementResult {
       uploadWorkbookFile: async (file: File, snapshotDate: string) => {
         await uploadMutation.mutateAsync({ file, snapshotDate });
       },
+      resetDataScope: async (scope: DataResetScope) => resetMutation.mutateAsync(scope),
       saveTransaction: async (transactionId: number, payload: TransactionUpdateRequest) => {
         await updateMutation.mutateAsync({ transactionId, payload });
       },
@@ -272,6 +316,7 @@ export function useDataManagement(): UseDataManagementResult {
     [
       deleteMutation,
       pendingTransactionId,
+      resetMutation,
       restoreMutation,
       transactionsQuery,
       updateMutation,

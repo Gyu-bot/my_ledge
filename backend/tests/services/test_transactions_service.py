@@ -45,7 +45,7 @@ def _transaction(
     )
 
 
-async def test_build_transactions_effective_select_returns_raw_and_effective_columns(
+async def test_build_transactions_effective_select_excludes_deleted_and_merged_rows(
     db_session: AsyncSession,
 ) -> None:
     db_session.add_all(
@@ -84,11 +84,11 @@ async def test_build_transactions_effective_select_returns_raw_and_effective_col
         await db_session.execute(select(canonical).order_by(canonical.c.date.desc(), canonical.c.time.desc()))
     ).mappings().all()
 
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert rows[0]["effective_category_major"] == "식비"
     assert rows[0]["effective_category_minor"] == "배달"
     assert rows[0]["cost_kind"] is None
     assert rows[0]["fixed_cost_necessity"] is None
     assert rows[0]["is_edited"] is True
-    assert rows[1]["is_deleted"] is True
-    assert rows[1]["merged_into_id"] == 99
+    assert rows[0]["is_deleted"] is False
+    assert rows[0]["merged_into_id"] is None

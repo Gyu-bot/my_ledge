@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { DataResetScope } from '../api/dataManagement';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { LoadingState } from '../components/common/LoadingState';
@@ -20,6 +21,8 @@ export function DataPage() {
   const dataManagementQuery = useDataManagement();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [snapshotDate, setSnapshotDate] = useState('');
+  const [resetScope, setResetScope] = useState<DataResetScope>('transactions_only');
+  const [resetConfirmation, setResetConfirmation] = useState('');
 
   if (dataManagementQuery.isPending) {
     return (
@@ -71,6 +74,18 @@ export function DataPage() {
   };
 
   const uploadButtonLabel = dataManagementQuery.isUploading ? '업로드 중...' : '업로드 실행';
+  const resetButtonLabel = dataManagementQuery.isResetting ? '초기화 중...' : '초기화 실행';
+  const resetConfirmationText =
+    resetScope === 'transactions_only' ? '거래초기화' : '전체초기화';
+
+  const handleReset = async () => {
+    if (resetConfirmation !== resetConfirmationText) {
+      return;
+    }
+
+    await dataManagementQuery.resetDataScope(resetScope);
+    setResetConfirmation('');
+  };
 
   return (
     <div className="space-y-6">
@@ -243,6 +258,67 @@ export function DataPage() {
           </CardContent>
         </Card>
       </section>
+
+      <Card className="border-rose-200/80 bg-rose-50/70">
+        <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+          <div>
+            <CardTitle>Danger Zone</CardTitle>
+            <CardDescription className="mt-2">
+              거래만 비우거나 스냅샷까지 함께 초기화할 수 있습니다. 업로드 이력은 유지됩니다.
+            </CardDescription>
+          </div>
+          <Badge variant="destructive">reset</Badge>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]">
+            <label className="space-y-2">
+              <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                초기화 범위
+              </span>
+              <select
+                className="flex h-11 w-full rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 text-sm text-[color:var(--color-text)]"
+                onChange={(event) => setResetScope(event.target.value as DataResetScope)}
+                value={resetScope}
+              >
+                <option value="transactions_only">거래내역만 초기화</option>
+                <option value="transactions_and_snapshots">거래 + 스냅샷 전체 초기화</option>
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+                확인 문구
+              </span>
+              <Input
+                onChange={(event) => setResetConfirmation(event.target.value)}
+                placeholder={`실행하려면 ${resetConfirmationText} 입력`}
+                value={resetConfirmation}
+              />
+            </label>
+
+            <div className="flex items-end">
+              <Button
+                disabled={
+                  !has_write_access ||
+                  dataManagementQuery.isResetting ||
+                  resetConfirmation !== resetConfirmationText
+                }
+                onClick={() => void handleReset()}
+                type="button"
+                variant="destructive"
+              >
+                {resetButtonLabel}
+              </Button>
+            </div>
+          </div>
+
+          <Alert variant="warning">
+            {resetScope === 'transactions_only'
+              ? '거래 테이블만 비웁니다. 자산/투자/대출 스냅샷과 업로드 이력은 유지됩니다.'
+              : '거래와 자산/투자/대출 스냅샷을 모두 비웁니다. 업로드 이력은 유지됩니다.'}
+          </Alert>
+        </CardContent>
+      </Card>
 
       <DataManagementFilterBar
         values={filters}
