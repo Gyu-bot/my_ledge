@@ -18,6 +18,10 @@
 ### Read via API
 
 - `GET /api/v1/schema`
+- `GET /api/v1/analytics/monthly-cashflow`
+- `GET /api/v1/analytics/category-mom`
+- `GET /api/v1/analytics/fixed-cost-summary`
+- `GET /api/v1/analytics/merchant-spend`
 - `GET /api/v1/transactions`
 - `GET /api/v1/transactions/summary`
 - `GET /api/v1/transactions/by-category`
@@ -125,6 +129,7 @@ docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
 - 삭제/병합 제외 규칙이 반영돼 있다
 - 사용자 수정 카테고리 우선 규칙이 반영돼 있다
 - API read path와 같은 해석층을 공유한다
+- P0 advisor analytics endpoint 4종도 모두 같은 canonical row surface를 재사용한다
 
 주의:
 
@@ -169,6 +174,20 @@ COALESCE(category_minor_user, category_minor) AS category_minor
 1. `GET /api/v1/schema` 로 canonical view 확인
 2. 가능하면 `/api/v1/transactions/summary?type=지출`
 3. 세부 drill-down 이 필요하면 readonly DB에서 `vw_transactions_effective` 조회
+
+### advisor analytics 우선 사용
+
+OpenClaw가 아래 질문을 바로 처리해야 할 때는 raw SQL 조합보다 analytics endpoint를 먼저 사용한다.
+
+- 월별 현금흐름: `GET /api/v1/analytics/monthly-cashflow`
+- 전월 대비 카테고리 변화: `GET /api/v1/analytics/category-mom`
+- 고정비 구조 요약: `GET /api/v1/analytics/fixed-cost-summary`
+- 상위 거래처 지출 집중도: `GET /api/v1/analytics/merchant-spend`
+
+주의:
+
+- `monthly-cashflow.transfer` 는 순이체가 아니라 activity volume 이다
+- `merchant-spend` v1은 raw `description` 기준이라 alias 정규화가 덜 된 상태다
 
 ### ad-hoc category 분석
 

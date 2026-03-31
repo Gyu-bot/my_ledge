@@ -6,6 +6,7 @@
 - 결과를 `PRD.md`, `STATUS.md`, `docs/STATUS.md`에 반영하고 advisor analytics 구현 계획 문서를 추가했다.
 - 사용자 확인 기준으로 OpenClaw 실연동 검증(readonly DB, `/api/v1/schema`, upload/read flow)이 완료된 상태를 STATUS 계열 문서에 반영했다.
 - 이번 턴은 문서 갱신만 포함하므로 별도 테스트 재실행은 하지 않았다.
+- 후속 턴에서 P0 advisor analytics 4종 endpoint를 실제 구현하고 OpenClaw handoff 문서까지 동기화했다.
 
 ## Feasibility Assessment
 - P0 즉시 구현 가능:
@@ -48,3 +49,26 @@
 1. 별도 브랜치에서 P0 analytics 4종 endpoint + 최소 canonical aggregate view 구현
 2. OpenClaw 실사용 결과를 바탕으로 merchant normalization / liquidity mapping 필요성을 판정
 3. 이후 P1 rule-based diagnostics와 P2 asset/liability health API 순차 구현
+
+## Implementation Update
+- 추가 파일
+  - `backend/app/api/v1/endpoints/analytics.py`
+  - `backend/app/schemas/analytics.py`
+  - `backend/app/services/analytics_service.py`
+  - `backend/tests/api/test_analytics_api.py`
+  - `backend/tests/services/test_analytics_service.py`
+- 구현 endpoint
+  - `GET /api/v1/analytics/monthly-cashflow`
+  - `GET /api/v1/analytics/category-mom`
+  - `GET /api/v1/analytics/fixed-cost-summary`
+  - `GET /api/v1/analytics/merchant-spend`
+- 구현 메모
+  - 모두 `vw_transactions_effective` 계약과 같은 canonical select helper 위에서 계산한다
+  - `monthly-cashflow.transfer` 는 `ABS(amount)` 합계로 제공하고 `net_cashflow`에는 넣지 않는다
+  - `fixed-cost-summary.unclassified_*` 는 `cost_kind IS NULL` 공백을 노출한다
+  - `merchant-spend` 는 raw `description` 기준 v1 구현이다
+- 검증
+  - `cd backend && uv run pytest tests/services/test_analytics_service.py -q`
+  - `cd backend && uv run pytest tests/api/test_analytics_api.py -q`
+  - `cd backend && uv run ruff check app/api/v1/endpoints/analytics.py app/schemas/analytics.py app/services/analytics_service.py tests/api/test_analytics_api.py tests/services/test_analytics_service.py`
+  - `cd backend && uv run pytest -q` -> `45 passed`

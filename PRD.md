@@ -813,11 +813,11 @@ CORS_ORIGINS=https://my-ledge.example.com
 
 ### Phase 4 — 고급 분석 + 운영 안정화
 
-- [ ] Phase 4A — advisor analytics foundation
-  - [ ] `GET /api/v1/analytics/monthly-cashflow`
-  - [ ] `GET /api/v1/analytics/category-mom`
-  - [ ] `GET /api/v1/analytics/fixed-cost-summary`
-  - [ ] `GET /api/v1/analytics/merchant-spend`
+- [x] Phase 4A — advisor analytics foundation
+  - [x] `GET /api/v1/analytics/monthly-cashflow`
+  - [x] `GET /api/v1/analytics/category-mom`
+  - [x] `GET /api/v1/analytics/fixed-cost-summary`
+  - [x] `GET /api/v1/analytics/merchant-spend`
   - [ ] canonical aggregate view 보강 (`vw_monthly_cashflow`, `vw_merchant_monthly_spend`)
 - [ ] Phase 4B — advisor diagnostics
   - [ ] `GET /api/v1/analytics/recurring-payments`

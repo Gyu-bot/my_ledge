@@ -39,7 +39,8 @@ skill이 직접 책임지지 않아야 하는 범위:
 
 1. `GET /api/v1/schema`
 2. 정형 endpoint 사용 가능 여부 판단
-3. 필요 시 readonly DB로 `vw_transactions_effective` 또는 `vw_category_monthly_spend` 조회
+3. advisor 질문이면 analytics endpoint 우선 사용
+4. 필요 시 readonly DB로 `vw_transactions_effective` 또는 `vw_category_monthly_spend` 조회
 4. raw table은 검증성/보조성 조회에만 사용
 
 ### 3. Write workflow
@@ -79,10 +80,13 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 ### 분석 규칙
 
 - 거래 분석은 canonical view 우선
+- advisor용 해석은 가능하면 analytics endpoint 우선
 - `이체`는 수입/지출에서 제외
 - 사용자 카테고리 수정값 우선
 - 삭제/병합 건 제외
 - 삭제/병합 상태까지 봐야 하면 canonical view 대신 raw `transactions` 또는 `GET /api/v1/transactions?include_deleted=true&include_merged=true` 사용
+- `monthly-cashflow.transfer` 는 `ABS(amount)` 기준 activity volume 이며 `net_cashflow` 계산에는 포함하지 않음
+- `merchant-spend` v1은 raw `description` 기준이라 alias 분산 가능성이 있음
 
 ### 보안 규칙
 
@@ -104,8 +108,9 @@ skill은 대략 아래 행동을 강제하면 된다.
 ### 분석 요청 시
 
 1. `schema`를 먼저 확인했는가
-2. API로 해결 가능한가
-3. 아니면 readonly DB에서 canonical view로 해결할 수 있는가
+2. analytics endpoint로 바로 해결 가능한가
+3. 아니면 일반 read API로 해결 가능한가
+4. 아니면 readonly DB에서 canonical view로 해결할 수 있는가
 4. raw table이 정말 필요한가
 
 ### 업로드 요청 시
@@ -161,13 +166,17 @@ OpenClaw 작업자는 skill 패키징 전 아래를 확인해야 한다.
 최소 검증 시나리오:
 
 1. `GET /api/v1/schema`
-2. readonly DB로 `vw_transactions_effective` 조회
-3. `GET /api/v1/transactions/summary?type=지출`
-4. `POST /api/v1/upload`
-5. `GET /api/v1/upload/logs`
-6. `PATCH /api/v1/transactions/{id}`
-7. `DELETE /api/v1/transactions/{id}`
-8. `POST /api/v1/transactions/{id}/restore`
+2. `GET /api/v1/analytics/monthly-cashflow`
+3. `GET /api/v1/analytics/category-mom`
+4. `GET /api/v1/analytics/fixed-cost-summary`
+5. `GET /api/v1/analytics/merchant-spend`
+6. readonly DB로 `vw_transactions_effective` 조회
+7. `GET /api/v1/transactions/summary?type=지출`
+8. `POST /api/v1/upload`
+9. `GET /api/v1/upload/logs`
+10. `PATCH /api/v1/transactions/{id}`
+11. `DELETE /api/v1/transactions/{id}`
+12. `POST /api/v1/transactions/{id}/restore`
 
 ## 참고 문서
 

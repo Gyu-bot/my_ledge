@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 3 — 실제 연동 검증 완료, Phase 4A advisor analytics 구현 대기
-- **Last Worker:** codex (2026-03-31T19:19+0900, OpenClaw 검증 완료 반영 + 문서 정리)
+- **Phase:** Phase 4A — P0 advisor analytics 4종 구현 완료, P1 rule-based diagnostics 대기
+- **Last Worker:** codex (2026-03-31T20:05+0900, P0 advisor analytics 4종 구현)
 - **Branch:** main
 
 ## Completed
@@ -23,7 +23,7 @@
 - [x] Task 7 완료: frontend 최소 스캐폴딩 + Docker runtime
 - [x] Task 8 완료: 최신 workbook `fs_260326.xlsx` 기준 PostgreSQL parity + `finance_sample.xlsx -> sample_260324.xlsx -> fs_260326.xlsx` rolling-window 연속 업로드 검증
 - [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
-- [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과 (`31 passed`)
+- [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과
 - [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
 - [x] Phase 2 Task 1 완료: frontend app shell + data foundation
 - [x] Phase 2 Task 2 완료: 메인 대시보드 구현
@@ -48,19 +48,20 @@
 - [x] OpenClaw read contract hotfix: `vw_transactions_effective` 기본 계약을 삭제/병합 제외로 수정 + API include 플래그 경로 유지 + Alembic view migration 및 문서/테스트 반영
 - [x] Advisor analytics 확장 문서화: `docs/additional_feature.md` feasibility 평가 반영 + `PRD.md` 범위 확장 + 구현 계획 문서 추가 (`docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`)
 - [x] Phase 3 실검증 완료: OpenClaw 환경에서 readonly DB / `/api/v1/schema` / upload-read flow 검증 완료, 현재 API contract 이상 없음
+- [x] Phase 4A P0 advisor analytics 구현 완료: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend` 추가 + backend 서비스/API 테스트 통과
+- [x] backend 전체 테스트 재검증 완료: 저장소 `./tmp` fixture 기준 `uv run pytest -q` 통과 (`45 passed`)
 
 ## In Progress
-- [ ] Phase 4 설계 고정
-  - 현재 상태: advisor analytics 요구사항을 P0/P1/P2로 재분류했다. P0 4종(`monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`)은 현재 스키마만으로 구현 가능하다
-  - 현재 지점: OpenClaw 검증은 끝났고, 다음 작업은 P0 analytics 구현이다. P1은 rule-based v1로 시작하고, P2는 `*_est` / liquidity mapping / loan repayment metadata 전제를 명시하는 방향으로 문서화했다
-  - 남은 구현: P0 구현 브랜치 착수, 이후 merchant normalization / cash-equivalent mapping / debt metadata 보강 여부 판단
+- [ ] Advisor analytics Phase 4 후속 설계/구현
+  - 현재 상태: P0 4종 endpoint는 `vw_transactions_effective` 기반으로 구현했고, transfer는 activity volume 기준 `ABS(amount)` 합계로 정리했다
+  - 현재 지점: 다음 우선순위는 P1 rule-based diagnostics (`recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`)다
+  - 남은 구현: OpenClaw 실사용으로 P0 응답 품질 확인, 이후 P1 heuristic 계약과 fixture 설계
 
 ## Blocked
 - 없음
 
 ## Next Up
 - [ ] Advisor analytics 구현
-  - Phase 4A. P0 endpoint 4종 구현: `monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`
   - Phase 4B. rule-based diagnostics: `recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`
   - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
 - [ ] 데이터 관리 후속 기능
@@ -146,6 +147,7 @@
 - 2026-03-31: advisor analytics는 P0/P1/P2로 나눠 rollout한다. P0는 현재 스키마만으로 구현하고, P1은 conservative rule-based heuristic, P2는 `*_est`와 mapping 기반 자산·부채 건강도 API로 설계한다.
 - 2026-03-31: `merchant_normalized`, 현금성 자산 분류, 대출 상환 메타데이터는 P0 blocker가 아니다. 실제 OpenClaw 응답 품질을 확인한 뒤 Phase 4B/4C에서 schema enrichment 여부를 결정한다.
 - 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주한다. 이후 최우선 작업은 P0 advisor analytics 구현이다.
+- 2026-03-31: `monthly-cashflow.transfer` 는 자산이동의 순증감이 아니라 activity volume 으로 해석해 `ABS(amount)` 월합계로 제공한다. 단일 양수 필드 계약과 OpenClaw 설명 안정성을 우선했다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -158,7 +160,6 @@
 - 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
 - Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
 - 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
-- 현재 저장소에는 `tmp/finance_sample.xlsx`, `tmp/sample_260324.xlsx` fixture가 없어 전체 backend `pytest`는 fixture 로딩 단계에서 실패한다. 이번 세션에서는 reset 기능 대상 테스트만 독립 데이터로 검증했다
 - `merchant_normalized` 부재로 recurring/anomaly/merchant aggregation v1은 raw `description` alias 품질에 영향을 받는다
 - `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다
 - `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다
