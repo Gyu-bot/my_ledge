@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 2 — 핵심 화면 구현 완료
-- **Last Worker:** codex (2026-03-30T17:01+0900, canonical view 계약 불일치 수정 + compose migration 반영 경로 확인)
+- **Phase:** Phase 3 — 실제 연동 검증 완료, Phase 4A advisor analytics 구현 대기
+- **Last Worker:** codex (2026-03-31T19:19+0900, OpenClaw 검증 완료 반영 + 문서 정리)
 - **Branch:** main
 
 ## Completed
@@ -46,20 +46,23 @@
 - [x] 데이터 관리 Track A 완료: `POST /api/v1/data/reset` 추가 + 거래 전용/거래+스냅샷 reset 지원 + 데이터 관리 Danger Zone UI 연결
 - [x] 테스트 환경 정비: backend `greenlet` 의존성 추가, frontend `npm install` 수행, reset 관련 backend test / frontend test·l int·typecheck 재실행
 - [x] OpenClaw read contract hotfix: `vw_transactions_effective` 기본 계약을 삭제/병합 제외로 수정 + API include 플래그 경로 유지 + Alembic view migration 및 문서/테스트 반영
+- [x] Advisor analytics 확장 문서화: `docs/additional_feature.md` feasibility 평가 반영 + `PRD.md` 범위 확장 + 구현 계획 문서 추가 (`docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`)
+- [x] Phase 3 실검증 완료: OpenClaw 환경에서 readonly DB / `/api/v1/schema` / upload-read flow 검증 완료, 현재 API contract 이상 없음
 
 ## In Progress
-- [ ] Phase 3 착수 준비
-  - 현재 상태: OpenClaw 작업자가 바로 참고할 수 있도록 `README.md` 에 문서 진입점을 추가했고, `docs/openclaw/README.md`, `docs/openclaw/integration-guide.md`, `docs/openclaw/skill-handoff.md` 를 작성했다. `docker compose` 의 새 PostgreSQL 볼륨 초기화 시 `readonly` 유저와 `statement_timeout=30s` 도 자동 bootstrap 된다. 운영 배포 시에는 `migrate` one-shot 서비스가 Alembic migration까지 자동 적용한다. 기존 볼륨 환경은 readonly init script 수동 재실행이 필요할 수 있다
-  - 현재 지점: OpenClaw가 지적한 `vw_transactions_effective` 문서/구현 불일치를 수정했다. canonical view와 schema 설명은 이제 삭제/병합 제외 계약을 따른다. `/api/v1/transactions` 는 `include_deleted` / `include_merged` opt-in 경로를 유지한다. 이번 DB view 변경은 compose 기준 `docker compose up -d --build` 로 migrate 서비스가 자동 적용한다
-  - 남은 구현: OpenClaw 쪽 skill 패키징, OpenClaw -> my_ledge 업로드/조회 end-to-end 검증
+- [ ] Phase 4 설계 고정
+  - 현재 상태: advisor analytics 요구사항을 P0/P1/P2로 재분류했다. P0 4종(`monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`)은 현재 스키마만으로 구현 가능하다
+  - 현재 지점: OpenClaw 검증은 끝났고, 다음 작업은 P0 analytics 구현이다. P1은 rule-based v1로 시작하고, P2는 `*_est` / liquidity mapping / loan repayment metadata 전제를 명시하는 방향으로 문서화했다
+  - 남은 구현: P0 구현 브랜치 착수, 이후 merchant normalization / cash-equivalent mapping / debt metadata 보강 여부 판단
 
 ## Blocked
 - 없음
 
 ## Next Up
-- [ ] Phase 3 실제 연동 작업
-  - OpenClaw 쪽에서 skill 패키징/배포
-  - OpenClaw -> `schema` API / readonly DB / `upload` API end-to-end 검증
+- [ ] Advisor analytics 구현
+  - Phase 4A. P0 endpoint 4종 구현: `monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`
+  - Phase 4B. rule-based diagnostics: `recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`
+  - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
 - [ ] 데이터 관리 후속 기능
   - Track B. bulk edit v1
     - [ ] 거래 작업대 다건 선택 UX 추가: row checkbox, select-all, bulk toolbar
@@ -140,6 +143,9 @@
 - 2026-03-30: `docs/STATUS.md` 를 루트 `STATUS.md`의 concise mirror로 유지한다. 상위 작업 지침이 docs 경로를 요구하므로 에이전트 간 진입점 혼선을 줄이는 편이 안전하다
 - 2026-03-30: reset 기능은 `POST /api/v1/data/reset` 단일 endpoint로 두고 `scope` 값으로 거래 전용/거래+스냅샷 전체 초기화를 분기한다. `upload_logs`는 운영 이력 성격이 강하므로 reset 대상에서 제외한다.
 - 2026-03-30: `vw_transactions_effective` 는 OpenClaw와 AI 분석의 canonical row surface이므로 기본적으로 삭제/병합 row를 제외한다. 삭제/병합까지 포함한 조회는 canonical view가 아니라 raw `transactions` 또는 API의 `include_deleted` / `include_merged` 플래그를 사용한다.
+- 2026-03-31: advisor analytics는 P0/P1/P2로 나눠 rollout한다. P0는 현재 스키마만으로 구현하고, P1은 conservative rule-based heuristic, P2는 `*_est`와 mapping 기반 자산·부채 건강도 API로 설계한다.
+- 2026-03-31: `merchant_normalized`, 현금성 자산 분류, 대출 상환 메타데이터는 P0 blocker가 아니다. 실제 OpenClaw 응답 품질을 확인한 뒤 Phase 4B/4C에서 schema enrichment 여부를 결정한다.
+- 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주한다. 이후 최우선 작업은 P0 advisor analytics 구현이다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -153,3 +159,6 @@
 - Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
 - 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
 - 현재 저장소에는 `tmp/finance_sample.xlsx`, `tmp/sample_260324.xlsx` fixture가 없어 전체 backend `pytest`는 fixture 로딩 단계에서 실패한다. 이번 세션에서는 reset 기능 대상 테스트만 독립 데이터로 검증했다
+- `merchant_normalized` 부재로 recurring/anomaly/merchant aggregation v1은 raw `description` alias 품질에 영향을 받는다
+- `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다
+- `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다
