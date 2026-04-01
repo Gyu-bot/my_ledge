@@ -1,61 +1,166 @@
-# STATUS
-
-## Current Objective
-P1 rule-based diagnostics 4종 구현 완료. 다음 우선순위는 P2 asset/liability health 또는 bulk edit v1.
+# STATUS.md
 
 ## Current State
-- phase: Phase 4B P1 rule-based diagnostics 구현 완료
-- last update: 2026-04-01T00:00+0900
-- branch: feature/p1-diagnostics
-- summary: P1 advisor analytics 4종(`payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies`)을 구현했고 backend 전체 테스트 57개 통과. rule-based heuristic endpoint는 confidence/reason/assumptions를 노출한다.
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기
+- **Last Worker:** codex (2026-04-01T10:24+0900, `.env` ignore 추가 및 최신 커밋 history 정리)
+- **Branch:** main
 
----
+## Completed
+- [x] PRD 작성 (`PRD.md`)
+- [x] AGENTS.md 작성
+- [x] STATUS.md 초기화
+- [x] 구현 전 요구사항 공백 점검 및 의사결정 반영
+- [x] Phase 1 구현계획 문서 작성 (`docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`)
+- [x] Task 1 완료: backend 스캐폴딩 + `/api/v1/health` + 설정/보안 뼈대
+- [x] Task 2 완료: SQLAlchemy 모델 + Alembic 초기 마이그레이션 추가
+- [x] Task 3 완료: 엑셀 복호화 헬퍼 + 거래/스냅샷 파서 + 샘플 기반 parser 테스트
+- [x] Task 4A 완료: transaction-only 업로드 서비스 + incremental import + upload_logs 기록
+- [x] Task 4A.1 완료: Docker Compose 기반 PostgreSQL 기동 + migration/import smoke test
+- [x] Task 4B 완료: snapshot 적재 + `partial`/`failed` 업로드 정책 구현
+- [x] Task 5 완료: upload/schema/assets API + 인증/응답 스키마 구현
+- [x] Task 6 완료: 거래 조회/편집 API 구현 (`merge`는 501 stub)
+- [x] Task 8 일부 완료: 샘플 workbook 원본 대조 검증 자동화
+- [x] Task 7 완료: frontend 최소 스캐폴딩 + Docker runtime
+- [x] Task 8 완료: 최신 workbook `fs_260326.xlsx` 기준 PostgreSQL parity + `finance_sample.xlsx -> sample_260324.xlsx -> fs_260326.xlsx` rolling-window 연속 업로드 검증
+- [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
+- [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과
+- [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
+- [x] Phase 2 Task 1 완료: frontend app shell + data foundation
+- [x] Phase 2 Task 2 완료: 메인 대시보드 구현
+- [x] Phase 2 Task 3 완료: 자산 현황 페이지 구현
+- [x] Phase 2 Task 4 완료: 지출 분석 페이지 구현
+- [x] Phase 2 Task 5 완료: 데이터 관리 페이지 구현
+- [x] Phase 2 Task 5.1 완료: 현재 구현된 frontend 화면 전반을 shadcn/ui primitive 중심으로 재정렬 (`dashboard`, `assets`, `spending`, `data`, app shell, 공통 필터/테이블/상태 카드)
+- [x] Phase 2 Task 6A 완료: 데이터 관리 write flow 실검증
+- [x] Phase 2 Task 6B 완료: 최근 10건 `upload_logs` 조회 경로 추가 + 데이터 관리 화면 연동
+- [x] Phase 3 준비 문서화 완료: README 확장 + OpenClaw 연동/skill handoff 문서 추가 (`docs/openclaw/`)
+- [x] Phase 3 인프라 준비 일부 완료: docker compose DB init 단계에 readonly 유저 + `statement_timeout=30s` 자동 bootstrap 추가
+- [x] 운영 서버 설치 절차 문서화: `README.md` 에 production `.env`, compose 기동, readonly bootstrap, OpenClaw 전달값 추가
+- [x] 운영 배포 자동화: `docker compose up -d --build` 시 `migrate` one-shot 서비스로 Alembic migration 자동 적용
+- [x] 운영 프론트 hotfix: 대시보드/데이터 화면에서 배열 필드 누락 응답도 빈 컬렉션으로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
+- [x] 운영 프론트 hotfix 확장: 자산/지출 화면에서도 `items`/`totals` 누락 응답을 빈 컬렉션·0 합계로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
+- [x] 운영 write 경로 정리: compose 배포 시 `API_KEY`를 frontend build의 `VITE_API_KEY`로 자동 주입하도록 연결하고, 업로드 API의 `snapshot_date`를 필수 입력값으로 고정
+- [x] 운영 프론트 hotfix: static nginx에 `/api/` reverse proxy와 업로드용 body size 한도를 추가해 compose 배포에서 상대경로 API POST가 405로 막히지 않도록 수정
+- [x] 운영 프론트 hotfix: 데이터 관리 화면이 첫 페이지만 읽어 빈 상태처럼 보일 수 있는 경로를 전체 페이지 수집 + mount 시 재조회로 보강하고, 거래 0건 시 placeholder를 표시하도록 수정
+- [x] 문서 운영 정비: `docs/STATUS.md` 단일화 (루트 STATUS.md 제거)
+- [x] 데이터 관리 Track A 완료: `POST /api/v1/data/reset` 추가 + 거래 전용/거래+스냅샷 reset 지원 + 데이터 관리 Danger Zone UI 연결
+- [x] 테스트 환경 정비: backend `greenlet` 의존성 추가, frontend `npm install` 수행, reset 관련 backend test / frontend test·lint·typecheck 재실행
+- [x] OpenClaw read contract hotfix: `vw_transactions_effective` 기본 계약을 삭제/병합 제외로 수정 + API include 플래그 경로 유지 + Alembic view migration 및 문서/테스트 반영
+- [x] Advisor analytics 확장 문서화: `docs/additional_feature.md` feasibility 평가 반영 + `PRD.md` 범위 확장 + 구현 계획 문서 추가 (`docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`)
+- [x] Phase 3 실검증 완료: OpenClaw 환경에서 readonly DB / `/api/v1/schema` / upload-read flow 검증 완료, 현재 API contract 이상 없음
+- [x] Phase 4A P0 advisor analytics 구현 완료: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend` 추가 + backend 서비스/API 테스트 통과
+- [x] Phase 4B P1 rule-based diagnostics 구현 완료: `GET /api/v1/analytics/payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies` 추가 + 전체 테스트 통과 (`57 passed`)
+- [x] 운영 git hygiene hotfix: `.env` 를 `.gitignore` 에 추가하고 latest commit 재작성으로 로컬 history 추적 제거
 
-## Progress
-- Phase 1, Phase 2 핵심 기능 구현 완료
-- OpenClaw handoff 문서와 canonical read contract 정리 완료
-- OpenClaw readonly DB / `schema` API / upload-read flow 실검증 완료
-- advisor analytics 확장 요구사항 feasibility review 완료
-- `PRD.md`와 advisor analytics 구현 계획 문서 동기화 완료
-- P0 advisor analytics 4종 endpoint 구현 완료
-- P1 rule-based diagnostics 4종 endpoint 구현 완료: `payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies`
-- backend 전체 test suite 통과: `cd backend && uv run pytest -q` (`57 passed`)
+## In Progress
+- [ ] Advisor analytics Phase 4 후속 설계/구현
+  - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
+  - 현재 지점: bulk edit v1 또는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 중 우선순위 결정 필요
+  - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
 
----
+## Blocked
+- 없음
 
-## Short-term TODO
-- merchant normalization / liquidity mapping / loan repayment metadata 필요성 재판단 (OpenClaw 실사용 후)
-- 데이터 관리 bulk edit v1 구현
-- P2 asset/liability health endpoint (net-worth-breakdown, investment-performance, debt-burden, emergency-fund)
+## Next Up
+- [ ] Advisor analytics 구현
+  - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
+- [ ] 데이터 관리 후속 기능
+  - Track B. bulk edit v1
+    - [ ] 거래 작업대 다건 선택 UX 추가: row checkbox, select-all, bulk toolbar
+    - [ ] bulk-update endpoint에 `memo` 포함 확장 및 프론트 연결
+    - [ ] bulk delete / bulk restore API 추가 및 프론트 연결
+    - [ ] bulk edit v1 테스트 및 문서 반영
+  - Track C. bulk edit v2
+    - [ ] `description_user` nullable 컬럼 추가 + Alembic migration 작성
+    - [ ] canonical read path 확장: `effective_description`, `is_edited`, schema 문서 갱신
+    - [ ] rolling import 사용자 수정 보존 규칙에 `description_user` 이월 추가
+    - [ ] 설명 단건/다건 수정 UI 및 회귀 테스트 추가
+- [ ] Phase 2 polish만 후순위로 진행
+  - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish, UI 다크모드 토글/테마 시스템 설계 및 구현
+  - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
 
----
+## Key Decisions
+- 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
+- 2026-03-23: 중복 처리는 복합 유니크 대신 시간 커서 기반 증분 적재 방식 채택
+- 2026-03-23: OpenClaw 연동은 하이브리드 (DB readonly + 업로드 API)
+- 2026-03-23: 소분류 자동 분류는 다음 버전으로 미룸, 이번 버전은 수동 편집만
+- 2026-03-23: 뱅샐현황은 스냅샷 시계열 누적 (덮어쓰기 X)
+- 2026-03-23: 이체 타입은 수입/지출 분석에서 제외, 별도 '자산이동' tracking
+- 2026-03-23: `snapshot_date`는 API 입력값 우선, 없으면 서버 업로드 날짜 사용
+- 2026-03-23: 업로드는 부분 성공(`partial`) 허용, 성공분은 유지하고 실패 정보는 `upload_logs`에 기록
+- 2026-03-23: 카테고리/결제수단 선택지는 `transactions` distinct 값 기반으로 조회
+- 2026-03-23: 조회 API는 `is_edited`, `include_deleted`, `include_merged`, `search` 필터 포함
+- 2026-03-23: 비공개/쓰기성 API는 `X-API-Key` 인증 방식 사용
+- 2026-03-23: 원본 업로드 파일은 최근 5개만 보관
+- 2026-03-23: 거래 병합 기능은 MVP 범위에서 제외
+- 2026-03-24: PRD 부록은 실데이터 원문 대신 익명화된 분포/규모 예시만 유지
+- 2026-03-24: AGENTS.md의 도메인 지식 예시는 실명 금융사/정확 금액 대신 일반화된 설명만 유지
+- 2026-03-24: 비암호화 개발 샘플 경로는 시스템 `/tmp` 가 아니라 저장소 내부 `./tmp/finance_sample.xlsx` 로 고정해 다음 세션 혼선을 방지
+- 2026-03-24: AGENTS.md에 Codex의 무확인 서브에이전트 스폰 허용 조건과 금지 조건을 명시해 매 세션 해석 차이를 줄임
+- 2026-03-24: Task 4는 한 번에 끝내지 않고 `transaction-only import` 를 4A로 먼저 완료한 뒤 snapshot 적재를 4B로 분리
+- 2026-03-24: transaction import 검증은 먼저 sqlite async DB로 고정해 서비스 로직을 안정화하고, PostgreSQL smoke test는 `.env`/실DB 준비 후 별도로 수행
+- 2026-03-24: 로컬 migration/smoke script는 컨테이너 내부가 아니라 호스트에서 실행하므로 `.env.example` 의 `DATABASE_URL` 기본값은 `db` 가 아니라 `127.0.0.1:5432` 기준으로 둔다
+- 2026-03-24: snapshot 샘플에는 스키마 unique 키와 충돌하는 중복 `product_name` 이 있어, 적재 시 같은 key 반복분은 결정론적 suffix (`(2)`, `(3)`) 를 붙여 보존한다
+- 2026-03-24: assets/investments/loans API의 금액 응답은 DB `NUMERIC(15,2)` 저장 정밀도를 그대로 따라 소수 둘째 자리 문자열로 직렬화한다
+- 2026-03-24: 거래 summary/by-category/payment-methods 집계는 MVP 단계에서 SQLite/PostgreSQL 일관성을 우선해 필터된 transaction row를 Python에서 그룹핑하는 방식으로 구현한다
+- 2026-03-24: 원본 대조 검증은 transaction 전건 비교 대신 전체 행 수 + seed 고정 랜덤 샘플 비교로 수행하고, snapshot/investment/loan은 전건 비교로 수행한다
+- 2026-03-24: Task 7 compose는 호스트 실행용 `.env.example` 의 `127.0.0.1:5432` `DATABASE_URL` 을 유지하고, 컨테이너 내부 `backend` 서비스에는 compose에서 `db:5432` 기준 값을 별도 주입한다
+- 2026-03-24: 실제 BankSalad 소스는 현재 비암호화 workbook 기준으로 검증되었고, 기존 복호화 코드는 호환용 fallback으로만 유지한다
+- 2026-03-24: `sample_260324.xlsx` 검증 결과 최신 export는 strict cumulative snapshot이 아니라 rolling window + 일부 중간 구간 변경이 섞일 수 있어, 단순 max(date,time) 커서 방식만으로는 최종 상태 동기화를 보장하지 못한다
+- 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
+- 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지한다. 중복 판정은 먼저 exact signature로 수행하고, exact 실패분에 한해 `date/type/description/amount/currency/payment_method` 동일 + 시간차 60초 이하인 fallback match를 적용해 category drift와 초 단위 truncation으로 인한 false duplicate를 줄인다
+- 2026-03-25: Task 9 canonical analysis layer 1차 범위는 view 생성과 문서화에 그치지 않고, 기존 거래 조회/분석 런타임이 `vw_transactions_effective` / `vw_category_monthly_spend` 또는 그와 정의상 동일한 shared read path를 실제로 사용하도록 맞추는 것까지 포함한다
+- 2026-03-26: Task 8 운영 검증은 메인 개발 데이터셋을 건드리지 않도록 임시 PostgreSQL DB `my_ledge_task8_verify` 에 마이그레이션 후 수행한다
+- 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
+- 2026-03-26: 테스트 fixture에서 `snapshot_date=None` 을 쓰면 실행일에 따라 assets API 기대값이 흔들리므로, 공통 seed fixture는 고정 날짜를 명시한다
+- 2026-03-26: Phase 2 frontend 구현 순서는 `dashboard -> assets -> spending -> data` 로 고정하고, UI 디자인 작업마다 `ui-ux-pro-max` 를 기본 스킬로 사용한다
+- 2026-03-26: 메인 대시보드의 `카테고리 비중` 카드는 항상 펼쳐진 제어 패널 대신 compact filter 패턴을 사용하고, 월 단위 범위 선택만 허용한다
+- 2026-03-26: 데이터 관리 화면의 write API는 `X-API-Key`가 필요하므로 프론트는 선택적 `VITE_API_KEY` 헤더 지원을 넣고, 키가 없으면 read-only 경고를 먼저 노출한다
+- 2026-03-26: 지출 분석의 `결제수단별 지출`은 백엔드 endpoint가 아직 `type=지출` 필터를 지원하지 않아, 프론트에서 필터된 지출 거래 rows를 다시 그룹핑해 의미를 맞춘다
+- 2026-03-26: 지출 분석의 월별 카테고리 시계열은 `vw_category_monthly_spend` 계열 read path를 노출하는 `/transactions/by-category/timeline` endpoint로 내리고, 프론트에서는 상위 카테고리만 stacked area로 보여주고 나머지는 `기타`로 묶는다
+- 2026-03-26: 외부 리뷰용 dev server에서 direct API base URL을 쓸 수 있도록 backend 앱에 `CORS_ORIGINS` 기반 CORSMiddleware를 실제 적용한다
+- 2026-03-26: 지출 분석 필터는 하나로 묶지 않고, `월별 카테고리 추이` 카드에는 전용 기간 slider를 두며 하단 집계 카드와 거래 내역은 별도 공용 기간 필터를 쓴다. 카테고리/결제수단/검색은 거래 내역에만 적용한다
+- 2026-03-26: 지출 분석의 `월별 카테고리 추이` 기간 제어는 두 개의 독립 슬라이더 대신 dual-thumb range slider로 통합한다
+- 2026-03-26: 지출 분석의 `하위 카테고리`는 `카테고리별 지출` 카드 내부 토글로 욱여넣지 않고, 별도 `하위 카테고리별 지출` 섹션으로 분리한다. 거래 내역 표에도 상위/하위 카테고리를 함께 표시한다
+- 2026-03-26: 고정비/변동비 분류는 별도 테이블로 빼지 않고 `transactions.cost_kind`, `transactions.fixed_cost_necessity` nullable 컬럼으로 먼저 예약한다. 초기값은 전부 `NULL`로 두고, 프론트는 placeholder 섹션부터 연결한다
+- 2026-03-26: 지출 분석의 `결제수단별 지출`은 막대 차트 대신 파이 차트를 사용하고, 기간 필터는 `카테고리별 지출`/`하위 카테고리별 지출`과 동기화한다. 거래 내역은 기본 접힘 아코디언 + 20행 페이지네이션으로 유지한다
+- 2026-03-26: 지출 분석 렌더링 비용을 줄이기 위해 페이지 훅 하나에 데이터를 몰아넣지 않고 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리한다. 카테고리/검색 필터 변경 시 월별 시계열 섹션은 다시 fetch하지 않는다
+- 2026-03-26: `하위 카테고리별 지출`은 테이블을 제거하고 차트 전용 섹션으로 유지한다. `거래처별 Tree Map`은 별도 vendor 컬럼이 생기기 전까지 `description` 기준 집계로 우선 구현한다
+- 2026-03-26: frontend 공통 primitive는 `shadcn/ui` 스타일(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`)을 우선 사용하고, 차트는 현재 기능 범위상 Recharts를 유지하되 주변 레이아웃과 empty-state는 동일 디자인 시스템으로 정렬한다
+- 2026-03-26: frontend 전역 accent color는 메인 대시보드 `월별 지출 추이` 라인의 blue(`#2563eb`)를 기준으로 통일하고, 카드/아코디언/테이블/내부 패널 반경은 CSS radius 토큰(`--radius`, `--radius-sm`, `--radius-xs`)으로만 관리한다
+- 2026-03-26: 개발 DB의 자산 검증용 snapshot_date는 workbook에 내장된 값이 없으므로 외부 입력으로 관리한다. 현재 검증에서는 `finance_sample.xlsx` 는 transaction window 기준으로 `2026-03-12` 를 가정해 적재했다
+- 2026-03-27: 거래 내역 페이지네이션은 query key 변경 시 로딩 카드로 섹션을 갈아끼우지 않고 `placeholderData`로 이전 페이지 내용을 유지한다. 그래야 아코디언 열린 상태와 스크롤 맥락이 유지된다
+- 2026-03-27: Phase 2 남은 작업은 polish보다 기능 완결과 write flow 검증을 우선한다. 화면 미세 polish와 성능/번들 경고 정리는 다른 미완료 작업을 모두 닫은 뒤 마지막에 처리한다
+- 2026-03-27: `upload_logs`는 MVP에서 페이지네이션 없이 최근 10건만 읽는다. 데이터 관리 화면의 업로드 이력 확인 목적에는 이것으로 충분하고, 복잡도를 늘릴 이유가 없다
+- 2026-03-27: OpenClaw skill 자체는 이 저장소에서 배포하지 않는다. 대신 이 저장소는 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 README 진입점과 handoff 문서를 제공한다
+- 2026-03-27: readonly DB 유저는 문서 수동 절차만 두지 않고 `docker-entrypoint-initdb.d` bootstrap으로 자동 생성한다. 그래야 새 compose 환경에서 OpenClaw 읽기 경로가 바로 재현된다
+- 2026-03-27: 운영 배포는 `docker compose up -d --build` 한 번으로 끝나도록 `migrate` one-shot 서비스를 추가한다. backend는 `db healthy + migrate success` 이후에만 기동한다
+- 2026-03-27: 운영 프론트 read hook은 응답의 배열 필드(`items`)가 누락되거나 레거시 형태여도 즉시 crash하지 않도록 빈 배열로 정규화한다. 서버 계약이 깨졌을 때도 화면은 비워서 유지하고, 상세 원인은 별도 조사한다
+- 2026-03-27: 자산/지출 read hook은 배열뿐 아니라 중첩 객체(`totals`, `snapshot_date`)도 누락될 수 있다고 가정하고 기본 객체/0 값으로 정규화한다. pagination loop와 집계 훅도 동일 규칙을 적용해 queryFn 내부 예외를 막는다
+- 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리하고, frontend build 시 같은 값을 `VITE_API_KEY`로 주입한다. 키를 바꾸면 frontend 재빌드가 필요하다
+- 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
+- 2026-03-27: compose 배포의 frontend는 상대경로 `/api` 호출을 유지하고, 정적 nginx가 `backend:8000` 으로 reverse proxy 한다. 브라우저가 Docker 내부 DNS를 직접 알 수 없으므로 build-time 절대 URL 주입보다 single-origin proxy가 안전하다
+- 2026-03-27: 데이터 관리 화면의 거래 작업대는 서버 첫 페이지 응답만 신뢰하지 않고 전체 페이지를 수집한 뒤 상단 20건만 노출한다. spending 화면과 read path 일관성을 맞추고, 캐시/페이지네이션 편차로 빈 화면처럼 보이는 위험을 줄이는 쪽이 더 안전하다
+- 2026-03-30: STATUS.md는 `docs/STATUS.md` 단일 파일로 관리한다. 루트 `STATUS.md`는 제거했다.
+- 2026-03-30: reset 기능은 `POST /api/v1/data/reset` 단일 endpoint로 두고 `scope` 값으로 거래 전용/거래+스냅샷 전체 초기화를 분기한다. `upload_logs`는 운영 이력 성격이 강하므로 reset 대상에서 제외한다.
+- 2026-03-30: `vw_transactions_effective` 는 OpenClaw와 AI 분석의 canonical row surface이므로 기본적으로 삭제/병합 row를 제외한다. 삭제/병합까지 포함한 조회는 canonical view가 아니라 raw `transactions` 또는 API의 `include_deleted` / `include_merged` 플래그를 사용한다.
+- 2026-03-31: advisor analytics는 P0/P1/P2로 나눠 rollout한다. P0는 현재 스키마만으로 구현하고, P1은 conservative rule-based heuristic, P2는 `*_est`와 mapping 기반 자산·부채 건강도 API로 설계한다.
+- 2026-03-31: `merchant_normalized`, 현금성 자산 분류, 대출 상환 메타데이터는 P0 blocker가 아니다. 실제 OpenClaw 응답 품질을 확인한 뒤 Phase 4B/4C에서 schema enrichment 여부를 결정한다.
+- 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주한다. 이후 최우선 작업은 P0 advisor analytics 구현이다.
+- 2026-03-31: `monthly-cashflow.transfer` 는 자산이동의 순증감이 아니라 activity volume 으로 해석해 `ABS(amount)` 월합계로 제공한다. 단일 양수 필드 계약과 OpenClaw 설명 안정성을 우선했다.
+- 2026-04-01: 루트 비밀값 파일 `.env` 는 저장소에 절대 추적하지 않는다. HEAD에 실수로 포함된 경우 전체 filter 대신 latest commit rewrite로 우선 제거한다.
 
-## Next Step
-`feature/p1-diagnostics` 브랜치를 main에 merge하고, bulk edit v1 또는 P2 endpoint 중 우선순위를 결정한다.
-
----
-
-## Long-term Plan
-- OpenClaw 연동 완료
-- advisor analytics P0 -> P1 -> P2 순차 구현
-- 데이터 관리 후속 기능 확장
-- Phase 2 UI/성능 polish 정리
-
----
-
-## Decisions
-- 2026-03-30: `docs/STATUS.md`를 루트 `STATUS.md`의 concise mirror로 유지한다. 상위 지침에서 docs 경로를 요구하므로 에이전트 진입점 혼선을 줄이는 쪽이 안전하다.
-- 2026-03-30: 데이터 관리 후속 기능은 `reset 기능`과 `bulk edit 기능`을 분리해 진행한다. 특히 설명 일괄 수정은 단순 UI 변경이 아니라 `description_user`와 canonical read path 보강이 필요하므로 별도 단계로 떼는 편이 안전하다.
-- 2026-03-30: reset 기능은 `POST /api/v1/data/reset` 단일 endpoint + `scope` 분기 방식으로 구현하고, `upload_logs`는 유지한다.
-- 2026-03-30: `vw_transactions_effective` 는 canonical 분석 surface로서 기본적으로 삭제/병합 row를 제외한다. 삭제/병합 상태가 필요한 조회는 raw `transactions` 또는 `GET /api/v1/transactions?include_deleted=true&include_merged=true` 로 우회한다.
-- 2026-03-31: advisor analytics는 P0/P1/P2로 분리해 rollout한다. P0는 현재 스키마만으로 구현하고, P1은 rule-based heuristic, P2는 `*_est`/mapping 전제를 둔 자산·부채 건강도 API로 설계한다.
-- 2026-03-31: `merchant_normalized`, cash-equivalent 분류, loan repayment metadata는 P0 blocker가 아니다. 실제 OpenClaw 사용에서 품질 부족이 확인되면 Phase 4B/4C에서 schema enrichment로 보강한다.
-- 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주하고, Phase 3의 남은 문서 작업은 별도 blocker가 없는 한 끝낸다.
-- 2026-03-31: `monthly-cashflow.transfer` 는 자산이동 activity volume 으로 해석해 `ABS(amount)` 합계로 반환한다. 순현금흐름에는 포함하지 않는다.
-
----
-
-## Risks / Blockers
-- `merchant_normalized`가 없어 recurring/anomaly/merchant aggregation 품질은 raw `description` alias에 영향을 받는다.
-- `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다.
-- `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`)로만 제공 가능하다.
+## Known Issues
+- openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
+- 현재 제공된 샘플 `./tmp/finance_sample.xlsx` 와 `./tmp/sample_260324.xlsx` 는 비암호화 파일이다. 복호화 코드는 fallback으로 유지하지만 현재 운영 검증 전제는 비암호화 workbook이다
+- worktree에는 ignored `tmp/` 디렉터리가 자동 체크아웃되지 않으므로 parser 테스트는 루트 저장소의 `tmp/finance_sample.xlsx` 를 탐색해 사용
+- PostgreSQL smoke test는 `DB_PASSWORD=my_ledge_dev` / `DATABASE_URL=postgresql+asyncpg://my_ledge:my_ledge_dev@127.0.0.1:5432/my_ledge` 기준으로 검증했다. 실제 개발 환경에서는 `.env` 복사 후 비밀번호를 로컬 값으로 맞춰야 한다
+- 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
+- `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
+- frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
+- 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
+- Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
+- 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
+- `merchant_normalized` 부재로 recurring/anomaly/merchant aggregation v1은 raw `description` alias 품질에 영향을 받는다
+- `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다
+- `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다

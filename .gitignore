@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+.env
 tmp/
 .worktrees/
 frontend/node_modules/
