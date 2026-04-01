@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기
-- **Last Worker:** codex (2026-04-01T10:24+0900, `.env` ignore 추가 및 최신 커밋 history 정리)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기 / frontend 재설계 구현 계획 정리 병행
+- **Last Worker:** codex (2026-04-01T11:22+0900, frontend 재설계 implementation plan 작성)
 - **Branch:** main
 
 ## Completed
@@ -57,11 +57,21 @@
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
   - 현재 지점: bulk edit v1 또는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 중 우선순위 결정 필요
   - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
+- [ ] Frontend 재설계 wireframe 설계
+  - 현재 상태: 기존 frontend 라우트/훅/API surface 검토 완료, 상세 wireframe 승인 완료
+  - 현재 지점: `docs/frontend-design-tokens.md` 작성 완료, `docs/DESIGN.md` 제거 완료
+  - 남은 작업: 구현 방식 선택 후 execution 시작
 
 ## Blocked
 - 없음
 
 ## Next Up
+- [ ] Frontend 재설계
+  - [x] 상세 wireframe 승인 반영
+  - [x] `docs/superpowers/specs/` 아래 redesign spec 작성
+  - [x] `docs/frontend-design-tokens.md` 작성 및 legacy `docs/DESIGN.md` 제거
+  - [x] 구현 범위와 단계별 migration plan 정리
+  - [ ] execution 방식 선택 및 구현 시작
 - [ ] Advisor analytics 구현
   - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
 - [ ] 데이터 관리 후속 기능
@@ -149,6 +159,9 @@
 - 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주한다. 이후 최우선 작업은 P0 advisor analytics 구현이다.
 - 2026-03-31: `monthly-cashflow.transfer` 는 자산이동의 순증감이 아니라 activity volume 으로 해석해 `ABS(amount)` 월합계로 제공한다. 단일 양수 필드 계약과 OpenClaw 설명 안정성을 우선했다.
 - 2026-04-01: 루트 비밀값 파일 `.env` 는 저장소에 절대 추적하지 않는다. HEAD에 실수로 포함된 경우 전체 filter 대신 latest commit rewrite로 우선 제거한다.
+- 2026-04-01: frontend 재설계는 모바일 대응을 위해 좌측 사이드바 중심 구조 대신 `상단 섹션(개요/분석/운영) + 섹션 내부 탭` 혼합형 IA를 우선 검토한다. `income`/`transfers`는 독립 페이지보다 현금흐름/인사이트 surface로 흡수하는 쪽을 기본안으로 둔다.
+- 2026-04-01: 운영 섹션에서는 업로드보다 거래 편집이 주 사용 흐름이므로 `거래 작업대`를 랜딩 본문으로 두고, `업로드`/`최근 업로드 이력`/`Danger Zone`은 모두 접힌 아코디언으로 내린다.
+- 2026-04-01: legacy `docs/DESIGN.md` 의 PipelinePro 시스템은 CRM/pipeline 도메인 언어와 상태 의미를 강하게 내장하고 있어 my_ledge에는 그대로 적용하지 않는다. spacing/radius/input/button 같은 중립 토큰만 선별 차용해 `docs/frontend-design-tokens.md`로 재정의한다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
