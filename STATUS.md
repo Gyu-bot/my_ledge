@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4A — P0 advisor analytics 4종 구현 완료, P1 rule-based diagnostics 대기
-- **Last Worker:** codex (2026-03-31T20:05+0900, P0 advisor analytics 4종 구현)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기
+- **Last Worker:** claude (2026-04-01T00:00+0900, P1 rule-based diagnostics 4종 구현)
 - **Branch:** main
 
 ## Completed
@@ -49,20 +49,19 @@
 - [x] Advisor analytics 확장 문서화: `docs/additional_feature.md` feasibility 평가 반영 + `PRD.md` 범위 확장 + 구현 계획 문서 추가 (`docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`)
 - [x] Phase 3 실검증 완료: OpenClaw 환경에서 readonly DB / `/api/v1/schema` / upload-read flow 검증 완료, 현재 API contract 이상 없음
 - [x] Phase 4A P0 advisor analytics 구현 완료: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend` 추가 + backend 서비스/API 테스트 통과
-- [x] backend 전체 테스트 재검증 완료: 저장소 `./tmp` fixture 기준 `uv run pytest -q` 통과 (`45 passed`)
+- [x] Phase 4B P1 rule-based diagnostics 구현 완료: `GET /api/v1/analytics/payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies` 추가 + 전체 테스트 통과 (`57 passed`)
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
-  - 현재 상태: P0 4종 endpoint는 `vw_transactions_effective` 기반으로 구현했고, transfer는 activity volume 기준 `ABS(amount)` 합계로 정리했다
-  - 현재 지점: 다음 우선순위는 P1 rule-based diagnostics (`recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`)다
-  - 남은 구현: OpenClaw 실사용으로 P0 응답 품질 확인, 이후 P1 heuristic 계약과 fixture 설계
+  - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
+  - 현재 지점: bulk edit v1 또는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 중 우선순위 결정 필요
+  - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
 
 ## Blocked
 - 없음
 
 ## Next Up
 - [ ] Advisor analytics 구현
-  - Phase 4B. rule-based diagnostics: `recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`
   - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
 - [ ] 데이터 관리 후속 기능
   - Track B. bulk edit v1
