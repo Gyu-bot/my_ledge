@@ -7,15 +7,23 @@ from app.core.database import get_db_session
 from app.schemas.analytics import (
     CategoryMoMResponse,
     FixedCostSummaryResponse,
+    IncomeStabilityResponse,
     MerchantSpendResponse,
     MonthlyCashflowResponse,
+    PaymentMethodPatternsResponse,
+    RecurringPaymentsResponse,
+    SpendingAnomaliesResponse,
 )
 from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
 from app.services.analytics_service import (
     get_category_mom,
     get_fixed_cost_summary,
+    get_income_stability,
     get_merchant_spend,
     get_monthly_cashflow,
+    get_payment_method_patterns,
+    get_recurring_payments,
+    get_spending_anomalies,
 )
 
 router = APIRouter()
@@ -78,4 +86,62 @@ async def get_analytics_merchant_spend(
         end_date=end_date,
         tx_type=type,
         limit=limit,
+    )
+
+
+@router.get("/analytics/payment-method-patterns", response_model=PaymentMethodPatternsResponse)
+async def get_analytics_payment_method_patterns(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    type: TransactionTypeFilter = Query(default="지출"),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> PaymentMethodPatternsResponse:
+    return await get_payment_method_patterns(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        tx_type=type,
+    )
+
+
+@router.get("/analytics/income-stability", response_model=IncomeStabilityResponse)
+async def get_analytics_income_stability(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> IncomeStabilityResponse:
+    return await get_income_stability(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/analytics/recurring-payments", response_model=RecurringPaymentsResponse)
+async def get_analytics_recurring_payments(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    min_occurrences: int = Query(default=2, ge=2),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> RecurringPaymentsResponse:
+    return await get_recurring_payments(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        min_occurrences=min_occurrences,
+    )
+
+
+@router.get("/analytics/spending-anomalies", response_model=SpendingAnomaliesResponse)
+async def get_analytics_spending_anomalies(
+    end_date: date | None = Query(default=None),
+    baseline_months: int = Query(default=3, ge=1, le=12),
+    anomaly_threshold: float = Query(default=0.5, ge=0.0),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> SpendingAnomaliesResponse:
+    return await get_spending_anomalies(
+        db_session,
+        end_date=end_date,
+        baseline_months=baseline_months,
+        anomaly_threshold=anomaly_threshold,
     )

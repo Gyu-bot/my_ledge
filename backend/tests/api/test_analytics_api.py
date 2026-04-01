@@ -296,3 +296,201 @@ async def test_merchant_spend_endpoint_returns_ranked_merchants(
             },
         ]
     }
+
+
+# ── P1: payment-method-patterns ──────────────────────────────────────────────
+
+async def test_payment_method_patterns_endpoint_returns_aggregation(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from datetime import time
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="스타벅스",
+            amount=-10000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 1, 2),
+            tx_time=time(10, 0),
+            tx_type="지출",
+            category_major="교통",
+            category_minor=None,
+            description="지하철",
+            amount=-10000,
+            payment_method="현금",
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/payment-method-patterns",
+        params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert len(data["items"]) == 2
+    methods = {item["payment_method"] for item in data["items"]}
+    assert methods == {"카드", "현금"}
+
+
+# ── P1: income-stability ──────────────────────────────────────────────────────
+
+async def test_income_stability_endpoint_returns_stats(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from datetime import time
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/income-stability",
+        params={"start_date": "2026-01-01", "end_date": "2026-02-28"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["avg"] == 3000000
+    assert "items" in data
+    assert len(data["items"]) == 2
+    assert "assumptions" in data
+
+
+# ── P1: recurring-payments ────────────────────────────────────────────────────
+
+async def test_recurring_payments_endpoint_detects_monthly(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from datetime import time
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="구독",
+            category_minor=None,
+            description="넷플릭스",
+            amount=-15000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="구독",
+            category_minor=None,
+            description="넷플릭스",
+            amount=-15000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="구독",
+            category_minor=None,
+            description="넷플릭스",
+            amount=-15000,
+            payment_method="카드",
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/recurring-payments",
+        params={"start_date": "2026-01-01", "end_date": "2026-03-31"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert "assumptions" in data
+    assert len(data["items"]) == 1
+    assert data["items"][0]["interval_type"] == "monthly"
+    assert data["items"][0]["description"] == "넷플릭스"
+
+
+# ── P1: spending-anomalies ────────────────────────────────────────────────────
+
+async def test_spending_anomalies_endpoint_detects_spike(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from datetime import time
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-200000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={"end_date": "2026-03-31", "baseline_months": 2, "anomaly_threshold": 0.5},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert "assumptions" in data
+    assert len(data["items"]) >= 1
+    assert data["items"][0]["category"] == "식비"
+    assert "급증" in data["items"][0]["reason"]

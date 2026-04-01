@@ -6,8 +6,12 @@ from app.models.transaction import Transaction
 from app.services.analytics_service import (
     get_category_mom,
     get_fixed_cost_summary,
+    get_income_stability,
     get_merchant_spend,
     get_monthly_cashflow,
+    get_payment_method_patterns,
+    get_recurring_payments,
+    get_spending_anomalies,
 )
 
 
@@ -454,3 +458,325 @@ async def test_get_merchant_spend_groups_by_description_and_limits_results(
             },
         ]
     }
+
+
+# ── P1: payment-method-patterns ──────────────────────────────────────────────
+
+async def test_get_payment_method_patterns_aggregates_by_method(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="스타벅스",
+            amount=-10000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 1, 2),
+            tx_time=time(10, 0),
+            tx_type="지출",
+            category_major="교통",
+            category_minor=None,
+            description="지하철",
+            amount=-10000,
+            payment_method="현금",
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_payment_method_patterns(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        tx_type="지출",
+    )
+
+    assert len(response.items) == 2
+    methods = {item.payment_method for item in response.items}
+    assert methods == {"카드", "현금"}
+    for item in response.items:
+        assert item.total_amount == 10000
+        assert item.transaction_count == 1
+        assert item.avg_amount == 10000
+        assert item.pct_of_total == 50.0
+
+
+async def test_get_payment_method_patterns_none_becomes_unknown(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="편의점",
+            amount=-5000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_payment_method_patterns(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        tx_type="지출",
+    )
+
+    assert len(response.items) == 1
+    assert response.items[0].payment_method == "알 수 없음"
+
+
+# ── P1: income-stability ──────────────────────────────────────────────────────
+
+async def test_get_income_stability_returns_monthly_series_and_stats(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=2000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=2000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_income_stability(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 28),
+    )
+
+    assert response.avg == 2000
+    assert response.stdev == 0.0
+    assert response.coefficient_of_variation == 0.0
+    assert response.assumptions == "월별 수입 기준, 이체 제외"
+    assert [item.model_dump() for item in response.items] == [
+        {"period": "2026-01", "income": 2000},
+        {"period": "2026-02", "income": 2000},
+    ]
+
+
+async def test_get_income_stability_empty_returns_defaults(
+    db_session: AsyncSession,
+) -> None:
+    response = await get_income_stability(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+    assert response.avg == 0
+    assert response.stdev is None
+    assert response.coefficient_of_variation is None
+    assert response.items == []
+
+
+# ── P1: recurring-payments ────────────────────────────────────────────────────
+
+async def test_get_recurring_payments_detects_monthly(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="구독",
+            category_minor=None,
+            description="넷플릭스",
+            amount=-15000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="구독",
+            category_minor=None,
+            description="넷플릭스",
+            amount=-15000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="구독",
+            category_minor=None,
+            description="넷플릭스",
+            amount=-15000,
+            payment_method="카드",
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_recurring_payments(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 3, 31),
+        min_occurrences=2,
+    )
+
+    assert len(response.items) == 1
+    item = response.items[0]
+    assert item.description == "넷플릭스"
+    assert item.interval_type == "monthly"
+    assert item.occurrences == 3
+    assert item.avg_amount == 15000
+    assert item.last_date == date(2026, 3, 1)
+    assert 0.0 <= item.confidence <= 1.0
+
+
+async def test_get_recurring_payments_filters_by_min_occurrences(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="일회성결제",
+            amount=-5000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_recurring_payments(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 3, 31),
+        min_occurrences=2,
+    )
+
+    assert response.items == []
+
+
+# ── P1: spending-anomalies ────────────────────────────────────────────────────
+
+async def test_get_spending_anomalies_detects_spike(
+    db_session: AsyncSession,
+) -> None:
+    # baseline: 2026-01, 2026-02 각 100000, target: 2026-03 = 200000
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-200000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_spending_anomalies(
+        db_session,
+        end_date=date(2026, 3, 31),
+        baseline_months=2,
+        anomaly_threshold=0.5,
+    )
+
+    assert len(response.items) == 1
+    item = response.items[0]
+    assert item.period == "2026-03"
+    assert item.category == "식비"
+    assert item.amount == 200000
+    assert item.baseline_avg == 100000
+    assert item.anomaly_score >= 0.5
+    assert "급증" in item.reason
+
+
+async def test_get_spending_anomalies_filters_by_threshold(
+    db_session: AsyncSession,
+) -> None:
+    # baseline과 동일한 지출 → anomaly_score = 0
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_spending_anomalies(
+        db_session,
+        end_date=date(2026, 3, 31),
+        baseline_months=2,
+        anomaly_threshold=0.5,
+    )
+
+    assert response.items == []

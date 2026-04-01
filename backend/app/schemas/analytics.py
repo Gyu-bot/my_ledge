@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -51,3 +51,63 @@ class MerchantSpendItem(BaseModel):
 
 class MerchantSpendResponse(BaseModel):
     items: list[MerchantSpendItem]
+
+
+# P1 ── payment-method-patterns
+class PaymentMethodPatternItem(BaseModel):
+    payment_method: str
+    total_amount: int
+    transaction_count: int
+    avg_amount: int
+    pct_of_total: float | None
+
+
+class PaymentMethodPatternsResponse(BaseModel):
+    items: list[PaymentMethodPatternItem]
+
+
+# P1 ── income-stability
+class IncomeMonthlyItem(BaseModel):
+    period: str
+    income: int
+
+
+class IncomeStabilityResponse(BaseModel):
+    items: list[IncomeMonthlyItem]
+    avg: int
+    stdev: float | None
+    coefficient_of_variation: float | None
+    assumptions: str
+
+
+# P1 ── recurring-payments
+class RecurringPaymentItem(BaseModel):
+    description: str
+    category: str
+    avg_amount: int
+    interval_type: str
+    avg_interval_days: float
+    occurrences: int
+    confidence: float
+    last_date: date
+
+
+class RecurringPaymentsResponse(BaseModel):
+    items: list[RecurringPaymentItem]
+    assumptions: str
+
+
+# P1 ── spending-anomalies
+class SpendingAnomalyItem(BaseModel):
+    period: str
+    category: str
+    amount: int
+    baseline_avg: int
+    delta_pct: float | None
+    anomaly_score: float
+    reason: str
+
+
+class SpendingAnomaliesResponse(BaseModel):
+    items: list[SpendingAnomalyItem]
+    assumptions: str

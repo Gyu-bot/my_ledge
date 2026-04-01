@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from datetime import date, datetime
 
@@ -9,10 +10,18 @@ from app.schemas.analytics import (
     CategoryMoMItem,
     CategoryMoMResponse,
     FixedCostSummaryResponse,
+    IncomeMonthlyItem,
+    IncomeStabilityResponse,
     MerchantSpendItem,
     MerchantSpendResponse,
     MonthlyCashflowItem,
     MonthlyCashflowResponse,
+    PaymentMethodPatternItem,
+    PaymentMethodPatternsResponse,
+    RecurringPaymentItem,
+    RecurringPaymentsResponse,
+    SpendingAnomalyItem,
+    SpendingAnomaliesResponse,
 )
 from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
 from app.services.canonical_views import build_transactions_effective_select
@@ -208,6 +217,248 @@ async def get_merchant_spend(
     ]
     items.sort(key=lambda item: (-item.amount, item.merchant))
     return MerchantSpendResponse(items=items[:limit])
+
+
+async def get_payment_method_patterns(
+    db_session: AsyncSession,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    tx_type: TransactionTypeFilter,
+) -> PaymentMethodPatternsResponse:
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        tx_type=tx_type,
+    )
+
+    grouped: dict[str, dict[str, int]] = defaultdict(lambda: {"amount": 0, "count": 0})
+    for row in rows:
+        method = row["payment_method"] or "알 수 없음"
+        grouped[method]["amount"] += _amount_for_analytics(row["type"], row["amount"])
+        grouped[method]["count"] += 1
+
+    total_amount = sum(v["amount"] for v in grouped.values())
+    items = [
+        PaymentMethodPatternItem(
+            payment_method=method,
+            total_amount=values["amount"],
+            transaction_count=values["count"],
+            avg_amount=round(values["amount"] / values["count"]) if values["count"] else 0,
+            pct_of_total=_safe_ratio(values["amount"] * 100, total_amount),
+        )
+        for method, values in grouped.items()
+    ]
+    items.sort(key=lambda item: (-item.total_amount, item.payment_method))
+    return PaymentMethodPatternsResponse(items=items)
+
+
+async def get_income_stability(
+    db_session: AsyncSession,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+) -> IncomeStabilityResponse:
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        tx_type="수입",
+    )
+
+    monthly: dict[str, int] = defaultdict(int)
+    for row in rows:
+        monthly[_month_key(row["date"])] += row["amount"]
+
+    items = [IncomeMonthlyItem(period=p, income=monthly[p]) for p in sorted(monthly)]
+    values = [item.income for item in items]
+
+    if not values:
+        return IncomeStabilityResponse(
+            items=[],
+            avg=0,
+            stdev=None,
+            coefficient_of_variation=None,
+            assumptions="월별 수입 기준, 이체 제외",
+        )
+
+    avg = round(sum(values) / len(values))
+    variance = sum((v - avg) ** 2 for v in values) / len(values)
+    stdev = round(math.sqrt(variance), 2) if len(values) > 1 else None
+    cv = round(stdev / avg, 4) if (stdev is not None and avg > 0) else None
+    return IncomeStabilityResponse(
+        items=items,
+        avg=avg,
+        stdev=stdev,
+        coefficient_of_variation=cv,
+        assumptions="월별 수입 기준, 이체 제외",
+    )
+
+
+async def get_recurring_payments(
+    db_session: AsyncSession,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    min_occurrences: int,
+) -> RecurringPaymentsResponse:
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        tx_type="지출",
+    )
+
+    desc_data: dict[str, dict] = defaultdict(
+        lambda: {"dates": [], "amounts": [], "category": "미분류"}
+    )
+    for row in rows:
+        desc = row["description"] or "미분류"
+        desc_data[desc]["dates"].append(row["date"])
+        desc_data[desc]["amounts"].append(-row["amount"])
+        desc_data[desc]["category"] = row["effective_category_major"] or "미분류"
+
+    items = []
+    for desc, data in desc_data.items():
+        dates = sorted(data["dates"])
+        if len(dates) < min_occurrences:
+            continue
+
+        gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+        avg_gap = sum(gaps) / len(gaps)
+
+        if 25 <= avg_gap <= 35:
+            interval_type = "monthly"
+        elif 6 <= avg_gap <= 8:
+            interval_type = "weekly"
+        else:
+            interval_type = "irregular"
+
+        if len(gaps) > 1:
+            gap_variance = sum((g - avg_gap) ** 2 for g in gaps) / len(gaps)
+            gap_stdev = math.sqrt(gap_variance)
+            confidence = round(max(0.0, 1.0 - gap_stdev / avg_gap), 4) if avg_gap > 0 else 0.0
+        else:
+            confidence = 0.5
+
+        avg_amount = round(sum(data["amounts"]) / len(data["amounts"]))
+        items.append(
+            RecurringPaymentItem(
+                description=desc,
+                category=data["category"],
+                avg_amount=avg_amount,
+                interval_type=interval_type,
+                avg_interval_days=round(avg_gap, 2),
+                occurrences=len(dates),
+                confidence=confidence,
+                last_date=dates[-1],
+            )
+        )
+
+    items.sort(key=lambda item: (-item.confidence, -item.occurrences, item.description))
+    return RecurringPaymentsResponse(
+        items=items,
+        assumptions="지출 거래 기준, 동일 description의 반복 간격으로 판단. 25-35일=monthly, 6-8일=weekly",
+    )
+
+
+async def get_spending_anomalies(
+    db_session: AsyncSession,
+    *,
+    end_date: date | None,
+    baseline_months: int,
+    anomaly_threshold: float,
+) -> SpendingAnomaliesResponse:
+    ref_date = end_date or date.today()
+    target_period = _month_key(ref_date)
+
+    # baseline: baseline_months개월 이전부터 target 전달까지
+    year_int = int(target_period[:4])
+    month_int = int(target_period[5:7])
+    baseline_start_month = month_int - baseline_months
+    baseline_start_year = year_int
+    while baseline_start_month <= 0:
+        baseline_start_month += 12
+        baseline_start_year -= 1
+
+    load_start = date(baseline_start_year, baseline_start_month, 1)
+    load_end = ref_date
+
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=load_start,
+        end_date=load_end,
+        tx_type="지출",
+    )
+
+    # (period, category) → amount
+    grouped: dict[tuple[str, str], int] = defaultdict(int)
+    for row in rows:
+        period = _month_key(row["date"])
+        category = row["effective_category_major"] or "미분류"
+        grouped[(period, category)] += -row["amount"]
+
+    # baseline periods
+    baseline_periods: list[str] = []
+    y, m = baseline_start_year, baseline_start_month
+    while _month_key(date(y, m, 1)) < target_period:
+        baseline_periods.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    # 카테고리별 baseline 통계
+    all_categories = {cat for (_, cat) in grouped.keys()}
+    items = []
+    for category in all_categories:
+        target_amount = grouped.get((target_period, category), 0)
+        baseline_amounts = [grouped.get((p, category), 0) for p in baseline_periods]
+        if not baseline_periods:
+            continue
+        baseline_avg = round(sum(baseline_amounts) / len(baseline_amounts))
+        if len(baseline_amounts) > 1:
+            b_var = sum((v - baseline_avg) ** 2 for v in baseline_amounts) / len(baseline_amounts)
+            b_stdev = math.sqrt(b_var)
+        else:
+            b_stdev = 0.0
+
+        delta = target_amount - baseline_avg
+        delta_pct = _safe_ratio(delta * 100, baseline_avg)
+
+        if b_stdev > 0:
+            anomaly_score = round(abs(delta) / b_stdev, 4)
+        elif baseline_avg > 0:
+            anomaly_score = round(abs(delta) / baseline_avg, 4)
+        else:
+            anomaly_score = 0.0
+
+        if anomaly_score < anomaly_threshold:
+            continue
+
+        if delta > 0:
+            reason = f"지출 급증 (+{round(delta_pct or 0):.0f}%)"
+        else:
+            reason = f"지출 급감 ({round(delta_pct or 0):.0f}%)"
+
+        items.append(
+            SpendingAnomalyItem(
+                period=target_period,
+                category=category,
+                amount=target_amount,
+                baseline_avg=baseline_avg,
+                delta_pct=delta_pct,
+                anomaly_score=anomaly_score,
+                reason=reason,
+            )
+        )
+
+    items.sort(key=lambda item: (-item.anomaly_score, item.category))
+    return SpendingAnomaliesResponse(
+        items=items,
+        assumptions=f"기준월={target_period}, baseline={baseline_months}개월 평균 대비, threshold={anomaly_threshold}",
+    )
 
 
 async def _load_analytics_transactions(

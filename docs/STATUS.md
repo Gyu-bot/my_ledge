@@ -1,13 +1,13 @@
 # STATUS
 
 ## Current Objective
-P0 advisor analytics 4종 구현을 완료했고, 다음 우선순위인 P1 rule-based diagnostics 설계/구현으로 넘어간다.
+P1 rule-based diagnostics 4종 구현 완료. 다음 우선순위는 P2 asset/liability health 또는 bulk edit v1.
 
 ## Current State
-- phase: Phase 4A P0 advisor analytics 구현 완료, Phase 4B diagnostics 대기
-- last update: 2026-03-31T20:05+0900
-- branch: main
-- summary: `vw_transactions_effective` 기반으로 P0 advisor analytics 4종(`monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`)을 구현했고 backend 서비스/API 테스트를 통과시켰다. 다음 작업은 OpenClaw 실사용을 염두에 둔 P1 heuristic endpoint 설계와 fixture 보강이다.
+- phase: Phase 4B P1 rule-based diagnostics 구현 완료
+- last update: 2026-04-01T00:00+0900
+- branch: feature/p1-diagnostics
+- summary: P1 advisor analytics 4종(`payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies`)을 구현했고 backend 전체 테스트 57개 통과. rule-based heuristic endpoint는 confidence/reason/assumptions를 노출한다.
 
 ---
 
@@ -18,20 +18,20 @@ P0 advisor analytics 4종 구현을 완료했고, 다음 우선순위인 P1 rule
 - advisor analytics 확장 요구사항 feasibility review 완료
 - `PRD.md`와 advisor analytics 구현 계획 문서 동기화 완료
 - P0 advisor analytics 4종 endpoint 구현 완료
-- backend targeted test 통과: `tests/services/test_analytics_service.py`, `tests/api/test_analytics_api.py`
-- backend 전체 test suite 통과: `cd backend && uv run pytest -q` (`45 passed`)
+- P1 rule-based diagnostics 4종 endpoint 구현 완료: `payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies`
+- backend 전체 test suite 통과: `cd backend && uv run pytest -q` (`57 passed`)
 
 ---
 
 ## Short-term TODO
-- P1 rule-based diagnostics endpoint contract 구현
-- merchant normalization / liquidity mapping / loan repayment metadata 필요성 재판단
+- merchant normalization / liquidity mapping / loan repayment metadata 필요성 재판단 (OpenClaw 실사용 후)
 - 데이터 관리 bulk edit v1 구현
+- P2 asset/liability health endpoint (net-worth-breakdown, investment-performance, debt-burden, emergency-fund)
 
 ---
 
 ## Next Step
-`GET /api/v1/analytics/payment-method-patterns` 또는 `income-stability` 부터 P1 diagnostics 설계를 시작한다.
+`feature/p1-diagnostics` 브랜치를 main에 merge하고, bulk edit v1 또는 P2 endpoint 중 우선순위를 결정한다.
 
 ---
 
