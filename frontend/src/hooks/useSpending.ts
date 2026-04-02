@@ -95,17 +95,43 @@ const defaultTimelineFilters: TimelineRangeFilterValues = {
   end_month: '',
 };
 
-const defaultDetailFilters: TransactionFilterValues = {
-  start_month: '',
-  end_month: '',
-  category_major: '',
-  payment_method: '',
-  search: '',
-};
-
 const MAX_TIMELINE_CATEGORIES = 5;
 const MAX_BREAKDOWN_ITEMS = 8;
 const MAX_TREEMAP_ITEMS = 12;
+
+export function getSystemMonth(date = new Date()) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+
+  return `${year}-${month}`;
+}
+
+export function createDefaultDetailFilters(month = getSystemMonth()): TransactionFilterValues {
+  return {
+    start_month: month,
+    end_month: month,
+    category_major: '',
+    payment_method: '',
+    search: '',
+  };
+}
+
+export function resolvePreferredMonth(availableMonths: string[], targetMonth: string) {
+  if (availableMonths.length === 0) {
+    return '';
+  }
+
+  if (availableMonths.includes(targetMonth)) {
+    return targetMonth;
+  }
+
+  const previousMonths = availableMonths.filter((month) => month < targetMonth);
+  if (previousMonths.length > 0) {
+    return previousMonths[previousMonths.length - 1];
+  }
+
+  return availableMonths[0];
+}
 
 function toMonthRange(filters: TimelineRangeFilterValues) {
   const query: Record<string, string> = {};
@@ -154,7 +180,7 @@ function buildMerchantTreemapData(items: TransactionResponse[]): MerchantTreemap
   const totals = new Map<string, number>();
 
   for (const item of items) {
-    const key = item.description.trim() || '미지정';
+    const key = item.merchant?.trim() || item.description.trim() || '미지정';
     totals.set(key, (totals.get(key) ?? 0) + Math.abs(item.amount));
   }
 
@@ -312,10 +338,12 @@ export function useSpendingPageState(): SpendingPageState {
   const [timelineFilters, setTimelineFilters] = useState<TimelineRangeFilterValues>(
     defaultTimelineFilters,
   );
-  const [detailFilters, setDetailFilters] = useState<TransactionFilterValues>(defaultDetailFilters);
+  const [detailFilters, setDetailFilters] = useState<TransactionFilterValues>(() =>
+    createDefaultDetailFilters(),
+  );
   const [subcategoryMajorFilter, setSubcategoryMajorFilter] = useState('');
   const [includeIncome, setIncludeIncome] = useState(false);
-  const [dailyCalendarMonth, setDailyCalendarMonth] = useState('');
+  const [dailyCalendarMonth, setDailyCalendarMonth] = useState(() => getSystemMonth());
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [transactionsAccordionOpen, setTransactionsAccordionOpen] = useState(false);
   const transactionsPerPage = 20;
@@ -336,9 +364,11 @@ export function useSpendingPageState(): SpendingPageState {
       setTransactionsPage(1);
     },
     resetDetailFilters: () => {
-      setDetailFilters(defaultDetailFilters);
+      const resetMonth = getSystemMonth();
+
+      setDetailFilters(createDefaultDetailFilters(resetMonth));
       setSubcategoryMajorFilter('');
-      setDailyCalendarMonth('');
+      setDailyCalendarMonth(resetMonth);
       setTransactionsPage(1);
     },
     updateSubcategoryMajorFilter: setSubcategoryMajorFilter,

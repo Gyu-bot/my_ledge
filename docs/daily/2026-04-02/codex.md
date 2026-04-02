@@ -211,3 +211,252 @@
     - `import.meta.env.VITE_API_KEY = "replace-me"` 가 실제 주입되는 것 확인
 - 최신 캡처 갱신:
   - `output/playwright/operations-workbench-desktop.png`
+
+## Merchant Field Separation
+- 사용자 요구:
+  - 거래 설명 `description` 은 원본 보존용으로 그대로 둔다
+  - 별도 `거래처(merchant)` 컬럼을 추가하고 초기값은 `description` 으로 채운다
+  - 거래 편집 작업대에서는 `description` 은 수정하지 않고 `merchant` 만 수정 가능해야 한다
+  - 지출 분석 `거래처별 Tree Map` 과 merchant analytics 는 이 새 컬럼을 사용해야 한다
+- 설계:
+  - override 컬럼(`merchant_user`) 대신 단일 `transactions.merchant` 컬럼을 도입
+  - 기존/신규 row는 모두 `description -> merchant` 로 backfill / default
+  - `merchant != description` 인 경우를 사용자 수정으로 간주해 `is_edited` 와 검색 필터에 반영
+- TDD red:
+  - backend:
+    - `tests/services/test_transactions_service.py`
+    - `tests/services/test_analytics_service.py`
+    - `tests/services/test_upload_service.py`
+    - `tests/api/test_transactions_api.py`
+    - `tests/api/test_analytics_api.py`
+    - `tests/api/test_schema_api.py`
+    - `tests/api/test_data_management_api.py`
+    - `tests/parsers/test_transactions_parser.py`
+  - frontend:
+    - `src/hooks/__tests__/useSpending.test.tsx`
+    - `src/hooks/__tests__/useDataManagement.test.tsx`
+    - `src/components/data/EditableTransactionsTable.test.tsx`
+- 구현:
+  - backend:
+    - `backend/app/models/transaction.py`
+      - `merchant` non-null column 추가
+    - `backend/app/parsers/transactions.py`
+      - parsed row에 `merchant=description` 기본값 추가
+    - `backend/app/schemas/transaction.py`
+      - create/update/response 스키마에 merchant 반영
+    - `backend/app/services/canonical_views.py`
+      - canonical select/view schema에 merchant 추가
+      - `merchant != description` 을 `is_edited` 규칙에 추가
+    - `backend/app/services/transactions_service.py`
+      - create/update 시 merchant normalize
+      - list search 에 merchant 포함
+      - response serialization 에 merchant 포함
+    - `backend/app/services/analytics_service.py`
+      - `merchant-spend` 집계를 `description` 대신 `merchant` 기반으로 전환
+    - `backend/alembic/versions/20260402_0005_add_merchant_to_transactions.py`
+      - 기존 DB backfill + canonical view 재생성
+  - frontend:
+    - `frontend/src/components/data/EditableTransactionsTable.tsx`
+      - desktop/mobile 모두 `description` read-only 유지
+      - 별도 `merchant` 입력 필드 추가
+    - `frontend/src/hooks/useSpending.ts`
+      - merchant treemap 집계를 `merchant ?? description` 기준으로 변경
+    - `frontend/src/pages/SpendingPage.tsx`
+      - description 기반 안내 문구 제거
+    - `frontend/src/types/transactions.ts`
+      - merchant 필드 추가
+- verification:
+  - backend:
+    - `cd backend && uv run pytest` → `58 passed`
+    - `cd backend && uv run ruff check .` → passed
+    - `cd backend && uv run alembic upgrade head` → `20260402_0005` 적용
+    - smoke:
+      - `curl http://127.0.0.1:8000/api/v1/transactions?page=1&per_page=1 | jq '.items[0] | {description, merchant, is_edited}'`
+      - `curl 'http://127.0.0.1:8000/api/v1/analytics/merchant-spend?...' | jq '.items[:3]'`
+  - frontend:
+    - `cd frontend && npm test` → `20 files / 49 tests` 통과
+    - `cd frontend && npm run typecheck` → 통과
+    - `cd frontend && npm run lint` → 통과
+- 결과:
+  - 기존 데이터와 신규 업로드 데이터는 모두 `merchant` 기본값을 가진다
+  - 작업대에서 거래처를 별도로 수정할 수 있고, `description` 원본은 보존된다
+  - merchant analytics 와 spending treemap 이 같은 편집 필드를 기준으로 동작한다
+
+## Workbench Above-The-Fold Cleanup
+- 사용자 요구:
+  - 거래 작업대 상단의 `작업대 요약`, `현재 필터`, `최근 업로드 맥락` 카드가 실제 편집 테이블을 아래로 밀어 첫 화면 밀도를 떨어뜨린다
+  - 필터 행의 날짜 input 폭이 너무 길어 `삭제된 거래 포함`, `사용자 수정만` 체크 라벨 줄바꿈이 어색하다
+- TDD red:
+  - `frontend/src/pages/__tests__/OperationsWorkbenchPage.test.tsx`
+    - 기본 canonical workbench 화면에 위 3개 heading/card가 더 이상 렌더되지 않는지 검증 추가
+  - `frontend/src/components/data/DataManagementFilterBar.test.tsx`
+    - 두 날짜 입력에 compact width class가 붙는지
+    - 체크박스 row가 `whitespace-nowrap` 로 유지되는지 검증 추가
+  - red 확인:
+    - `npm test -- --run src/pages/__tests__/OperationsWorkbenchPage.test.tsx src/components/data/DataManagementFilterBar.test.tsx`
+- 구현:
+  - `frontend/src/pages/OperationsWorkbenchPage.tsx`
+    - `WorkbenchSidebar` 제거
+    - 기본 화면을 `PageHeader + filter bar + 거래 편집 작업대 + accordion 보조 도구` 구조로 단순화
+  - `frontend/src/components/data/DataManagementFilterBar.tsx`
+    - 두 날짜 입력에 `max-w-[10.5rem]` 적용
+    - 2번째 필터 행을 `결제수단 + 시작일 + 종료일 + 체크박스 2개 + 초기화 버튼` 의 compact auto-column 배치로 재조정
+    - 체크박스 row에 `whitespace-nowrap` 를 부여해 라벨 잘림/줄바꿈 방지
+- verification:
+  - `cd frontend && npm test -- --run src/pages/__tests__/OperationsWorkbenchPage.test.tsx src/components/data/DataManagementFilterBar.test.tsx` → 통과
+  - `cd frontend && npm test` → `21 files / 50 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+- 결과:
+  - canonical workbench 첫 화면에서 거래 편집 테이블이 더 빨리 보인다
+  - 필터 날짜 입력 폭이 줄어 체크박스 라벨이 한 줄로 유지된다
+
+## Overview Cashflow Mixed Chart
+- 사용자 요구:
+  - 개요 페이지 `월간 현금흐름` 카드에서 `transfer` 그래프 항목은 제거한다
+  - `income`, `expense` 는 막대, `net_cashflow` 는 선으로 겹치는 혼합 차트로 바꾼다
+- 설계:
+  - 개요 카드에서는 자산이동 activity volume 보다 실제 현금 유입/유출과 결과 순현금흐름을 더 직접적으로 보여주는 편이 낫다
+  - 따라서 `income/expense` 를 양수 bar로 두고 `net_cashflow` 만 강조 line으로 겹친다
+- TDD red:
+  - `frontend/src/pages/__tests__/OverviewPage.test.tsx`
+    - 차트 설명 문구가 새 계약으로 바뀌는지
+    - `income/expense` 는 bar series, `net_cashflow` 는 line series 인지
+    - `transfer` series 가 렌더되지 않는지 검증 추가
+  - `npm test -- --run src/pages/__tests__/OverviewPage.test.tsx` 로 red 확인
+- 구현:
+  - `frontend/src/pages/OverviewPage.tsx`
+    - `LineChart` 를 `ComposedChart` 로 교체
+    - `Bar` series 두 개(`income`, `expense`) 추가
+    - `transfer` line 제거
+    - 카드 설명 문구를 혼합 차트 기준으로 수정
+- verification:
+  - `cd frontend && npm test -- --run src/pages/__tests__/OverviewPage.test.tsx` → 통과
+  - `cd frontend && npm test` → `21 files / 51 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+- 결과:
+  - 개요 카드가 `income/expense` 비교와 `net_cashflow` 추세에 더 직접적으로 집중한다
+  - `transfer` 보조 시리즈가 빠져 시각적 잡음이 줄었다
+
+## Global Chart Palette And Radius Cleanup
+- 사용자 요구:
+  - 그래프 색이 같은 계열에 몰려 가독성이 떨어진다
+  - 디자인 토큰 차원에서 `primary`, `secondary`, 보색 계열이 섞인 팔레트로 프로젝트 전체 차트 색을 재정의해야 한다
+  - bar chart roundness는 훨씬 줄여야 한다
+- 설계:
+  - single-series 기본축은 `primary blue` 를 유지하되, multi-series 차트는 `accent teal`, `secondary orange`, `info violet`, `danger red`, `muted slate` 를 함께 쓰는 cross-hue 팔레트로 전환
+  - bar radius는 vertical `[2, 2, 0, 0]`, horizontal `[0, 2, 2, 0]` 으로 낮춰 pill 느낌을 제거
+- TDD red:
+  - `frontend/src/components/charts/chartTheme.test.ts`
+    - 새 공통 팔레트와 bar radius 상수를 기대값으로 고정
+  - `frontend/src/components/charts/HorizontalBarChart.test.tsx`
+    - 공통 primary fill과 낮은 radius 사용 검증
+  - `frontend/src/pages/__tests__/OverviewPage.test.tsx`
+    - overview bar series radius가 낮은 값으로 바뀌는지 검증 추가
+  - `npm test -- --run src/components/charts/chartTheme.test.ts src/components/charts/HorizontalBarChart.test.tsx src/pages/__tests__/OverviewPage.test.tsx` 로 red 확인
+- 구현:
+  - `frontend/src/components/charts/chartTheme.ts`
+    - 공통 chart palette 상수 추가:
+      - primary blue
+      - accent teal
+      - secondary orange
+      - info violet
+      - danger red
+      - muted slate
+    - `CHART_SERIES_COLORS`, `CHART_BAR_RADIUS_VERTICAL`, `CHART_BAR_RADIUS_HORIZONTAL` 추가
+  - `frontend/src/pages/OverviewPage.tsx`
+    - 혼합 차트의 income/expense/net_cashflow 색을 새 팔레트 기준으로 재배치
+    - vertical bar radius를 공통 상수로 연결
+  - `frontend/src/components/charts/HorizontalBarChart.tsx`
+    - horizontal bar radius를 공통 상수로 연결
+    - tooltip cursor fill도 새 primary soft 값으로 정렬
+  - `frontend/src/index.css`
+    - `--color-secondary*` 토큰 추가
+    - `--color-primary-soft`, `--color-info*` 색상 조정
+    - dashboard background radial tint도 blue/orange/teal 혼합으로 업데이트
+  - `docs/frontend-design-tokens.md`
+    - 새 secondary/info 토큰과 chart palette, low-roundness bar 규칙 반영
+- verification:
+  - `cd frontend && npm test -- --run src/components/charts/chartTheme.test.ts src/components/charts/HorizontalBarChart.test.tsx src/pages/__tests__/OverviewPage.test.tsx` → 통과
+  - `cd frontend && npm test` → `23 files / 54 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+- 결과:
+  - pie/treemap/area/mixed chart 전반에서 hue separation이 좋아져 시리즈 구분이 쉬워졌다
+  - overview와 horizontal bar 모두 bar 모서리가 거의 직각에 가까워져 더 단정하게 보인다
+
+## Soft Surface Palette Alignment
+- 사용자 요구:
+  - 카드 배경, badge 배경, slider 배경 등이 새 팔레트와 따로 노는 느낌이다
+  - 같은 팔레트를 쓰되 배경은 더 연한 `soft` 톤으로 맞춰 과하게 튀지 않도록 일관성만 유지해야 한다
+- 설계:
+  - 정보 전달용 강조색은 그대로 두고, surface 계층은 가능한 한 `primary-soft`, `accent-soft`, `warning-soft`, `danger-soft` 배경으로 정리
+  - `zinc`, `amber`, `rose`, `white/80` 같은 하드코딩 surface는 우선 제거 대상
+- TDD red:
+  - `frontend/src/components/ui/badge.test.tsx`
+    - `secondary`, `accent`, `destructive` badge가 soft palette background/text 조합을 쓰는지 검증 추가
+  - `frontend/src/components/filters/__tests__/TimelineRangeSlider.test.tsx`
+    - slider card, base track, active track가 soft token 기반 배경을 쓰는지 검증 추가
+  - `npm test -- --run src/components/ui/badge.test.tsx src/components/filters/__tests__/TimelineRangeSlider.test.tsx` 로 red 확인
+- 구현:
+  - `frontend/src/components/ui/badge.tsx`
+    - badge variant를 soft token 기반 background/text 조합으로 재정의
+  - `frontend/src/components/ui/alert.tsx`
+    - warning/destructive alert를 `warning-soft` / `danger-soft` 기준으로 변경
+  - `frontend/src/components/ui/button.tsx`
+    - secondary/destructive/ghost hover tone을 soft palette 기준으로 조정
+  - `frontend/src/components/filters/TimelineRangeSlider.tsx`
+    - slider card를 primary soft tint로 변경
+    - base track/active track/thumb shadow를 soft palette 기준으로 변경
+  - `frontend/src/components/common/EmptyState.tsx`
+  - `frontend/src/components/common/SectionPlaceholder.tsx`
+  - `frontend/src/components/common/StatusCard.tsx`
+  - `frontend/src/pages/SpendingPage.tsx`
+  - `frontend/src/components/dashboard/CategoryBreakdownCard.tsx`
+    - empty/error/warning surface를 hardcoded white/amber/rose 대신 soft token surface로 교체
+- verification:
+  - `cd frontend && npm test -- --run src/components/ui/badge.test.tsx src/components/filters/__tests__/TimelineRangeSlider.test.tsx` → 통과
+  - `cd frontend && npm test` → `24 files / 55 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+- 결과:
+  - 배지, 슬라이더, 경고/빈상태 패널 배경이 같은 팔레트 체계 안에서 더 부드럽게 정렬됐다
+  - 강조색은 유지하면서도 전체 카드/패널 배경 톤이 한 세트처럼 보이게 됐다
+
+## Spending Filter Scope Separation
+- 사용자 요구:
+  - `월별 카테고리 추이`, `월별 고정비/변동비 추이` 아래에 separator를 넣어 상단 시계열 범위와 하단 상세 필터 범위를 구분해야 한다
+  - 시계열 구간 슬라이더는 `월별 카테고리 추이` 카드 안이 아니라 카드 밖 공통 컨트롤로 빼야 한다
+  - 하단 `카테고리별/하위 카테고리별/일별/거래내역` 영역의 초기 월 필터는 시스템 날짜의 월로 설정해야 한다
+- 설계:
+  - 상단 두 카드는 하나의 타임라인 영역으로 유지하되, `TimelineRangeSlider`를 카드 밖 섹션 상단으로 분리
+  - 두 카드 아래에는 `Separator + 설명 라벨`을 두어 아래부터 월 필터 적용 범위임을 명시
+  - 상세 필터 기본값은 `getSystemMonth()` 기반으로 초기화하고, 해당 월 데이터가 없을 때만 사용 가능한 가장 가까운 월로 fallback
+- TDD red:
+  - `frontend/src/pages/__tests__/SpendingPage.test.tsx`
+    - 시계열 슬라이더가 `월별 카테고리 추이` 카드 바깥에 렌더되는지 검증
+    - 상세 필터 범위 separator 라벨이 노출되는지 검증
+  - `frontend/src/hooks/__tests__/useSpending.test.tsx`
+    - `useSpendingPageState`가 상세 필터와 일별 달력 월을 시스템 월로 초기화하고 reset 시에도 같은 월로 복원하는지 검증
+- 구현:
+  - `frontend/src/hooks/useSpending.ts`
+    - `getSystemMonth`, `createDefaultDetailFilters`, `resolvePreferredMonth` 추가
+    - 상세 월 필터와 일별 달력 선택 월의 초기값을 시스템 월로 변경
+    - reset 동작도 시스템 월 기준으로 복원되게 정리
+  - `frontend/src/components/ui/separator.tsx`
+    - 페이지 구간 구분용 lightweight separator primitive 추가
+  - `frontend/src/pages/SpendingPage.tsx`
+    - timeline query를 page 레벨로 hoist
+    - 시계열 슬라이더를 카드 바깥 공통 컨트롤로 이동
+    - 추이 카드 아래에 `아래 카드부터 월 필터 적용` separator 섹션 추가
+    - 시스템 월 데이터 부재 시 하단 월 필터를 가장 가까운 사용 가능 월로 재정렬하는 effect 추가
+- verification:
+  - `cd frontend && npm test -- --run src/hooks/__tests__/useSpending.test.tsx` → 통과
+  - `cd frontend && npm test -- --run src/pages/__tests__/SpendingPage.test.tsx` → 통과
+  - `cd frontend && npm test` → `24 files / 56 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+- 결과:
+  - 지출 분석 상단의 시계열 범위와 하단 상세 월 필터 범위가 구조적으로 분리됐다
+  - 하단 분석 카드들은 초기 진입 시 현재 월 기준으로 바로 의미 있는 집계를 보여주고, 현재 월 데이터가 없을 때도 인접 월로 안전하게 fallback 한다

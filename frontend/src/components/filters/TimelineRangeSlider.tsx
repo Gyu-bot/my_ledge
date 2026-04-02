@@ -72,7 +72,7 @@ export function TimelineRangeSlider({
   };
 
   return (
-    <Card className="bg-white/80">
+    <Card className="bg-[color:var(--color-primary-soft)]/25" data-testid="timeline-slider-card">
       <CardContent className="space-y-5 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -90,11 +90,15 @@ export function TimelineRangeSlider({
           </Button>
         </div>
 
-        <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-4">
+        <div className="rounded-[var(--radius)] border border-[color:var(--color-primary-soft)] bg-[color:var(--color-surface-raised)] px-4 py-4">
           <div className="relative h-10">
-            <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-zinc-200" />
             <div
-              className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-[color:var(--color-accent)]"
+              className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[color:var(--color-primary-soft)]/70"
+              data-testid="timeline-track-base"
+            />
+            <div
+              className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-[color:var(--color-accent-soft)]"
+              data-testid="timeline-track-active"
               style={trackStyle}
             />
             <input
@@ -105,7 +109,7 @@ export function TimelineRangeSlider({
               step={1}
               value={normalizedStartIndex}
               onChange={(event) => applyIndexes(Number(event.target.value), normalizedEndIndex)}
-              className="pointer-events-none absolute inset-x-0 top-1/2 h-2 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[color:var(--color-accent)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[color:var(--color-accent)] [&::-webkit-slider-thumb]:shadow-[0_8px_18px_-10px_rgba(37,99,235,0.45)]"
+              className="pointer-events-none absolute inset-x-0 top-1/2 h-2 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[color:var(--color-accent)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[color:var(--color-accent)] [&::-webkit-slider-thumb]:shadow-[0_8px_18px_-10px_rgba(15,118,110,0.35)]"
               style={{ zIndex: 2 }}
             />
             <input
@@ -116,7 +120,7 @@ export function TimelineRangeSlider({
               step={1}
               value={normalizedEndIndex}
               onChange={(event) => applyIndexes(normalizedStartIndex, Number(event.target.value))}
-              className="pointer-events-none absolute inset-x-0 top-1/2 h-2 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[color:var(--color-accent-strong)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[color:var(--color-accent-strong)] [&::-webkit-slider-thumb]:shadow-[0_8px_18px_-10px_rgba(29,78,216,0.45)]"
+              className="pointer-events-none absolute inset-x-0 top-1/2 h-2 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[color:var(--color-accent-strong)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[color:var(--color-accent-strong)] [&::-webkit-slider-thumb]:shadow-[0_8px_18px_-10px_rgba(15,94,89,0.35)]"
               style={{ zIndex: 3 }}
             />
           </div>

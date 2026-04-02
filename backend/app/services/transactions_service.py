@@ -208,8 +208,13 @@ async def create_transaction(
     db_session: AsyncSession,
     payload: TransactionCreateRequest,
 ) -> TransactionResponse:
+    payload_data = payload.model_dump()
+    payload_data["merchant"] = _normalized_merchant(
+        merchant=payload_data.get("merchant"),
+        description=payload_data["description"],
+    )
     transaction = Transaction(
-        **payload.model_dump(),
+        **payload_data,
         source="manual",
     )
     db_session.add(transaction)
@@ -225,6 +230,8 @@ async def update_transaction(
 ) -> TransactionResponse:
     transaction = await _get_transaction_or_404(db_session, transaction_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "merchant":
+            value = _normalized_merchant(merchant=value, description=transaction.description)
         setattr(transaction, field, value)
     await db_session.commit()
     await db_session.refresh(transaction)
@@ -334,6 +341,7 @@ def _build_transaction_query(
         query = query.where(
             or_(
                 canonical.c.description.ilike(pattern),
+                canonical.c.merchant.ilike(pattern),
                 canonical.c.memo.ilike(pattern),
                 canonical.c.payment_method.ilike(pattern),
             )
@@ -364,6 +372,7 @@ def _serialize_transaction_model(transaction: Transaction) -> TransactionRespons
         effective_category_major=_effective_category_major(transaction),
         effective_category_minor=_effective_category_minor(transaction),
         description=transaction.description,
+        merchant=transaction.merchant,
         amount=transaction.amount,
         currency=transaction.currency,
         payment_method=transaction.payment_method,
@@ -392,6 +401,7 @@ def _serialize_transaction_row(transaction: RowMapping) -> TransactionResponse:
         effective_category_major=transaction["effective_category_major"],
         effective_category_minor=transaction["effective_category_minor"],
         description=transaction["description"],
+        merchant=transaction["merchant"],
         amount=transaction["amount"],
         currency=transaction["currency"],
         payment_method=transaction["payment_method"],
@@ -417,13 +427,21 @@ def _effective_category_minor(transaction: Transaction) -> str | None:
 
 def _is_edited(transaction: Transaction) -> bool:
     return any(
-        value is not None
-        for value in (
-            transaction.category_major_user,
-            transaction.category_minor_user,
-            transaction.memo,
+        (
+            transaction.category_major_user is not None,
+            transaction.category_minor_user is not None,
+            transaction.memo is not None,
+            transaction.merchant != transaction.description,
         )
     )
+
+
+def _normalized_merchant(*, merchant: str | None, description: str) -> str:
+    if merchant is None:
+        return description
+
+    normalized = merchant.strip()
+    return normalized or description
 
 
 def _period_key(tx_date: date, group_by: TransactionGroupBy) -> str:

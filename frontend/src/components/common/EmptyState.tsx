@@ -7,7 +7,7 @@ interface EmptyStateProps {
 
 export function EmptyState({ title, description }: EmptyStateProps) {
   return (
-    <Card className="border-dashed bg-white/70 text-center">
+    <Card className="border-dashed border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]/18 text-center">
       <CardHeader>
         <CardTitle className="text-2xl">{title}</CardTitle>
       </CardHeader>

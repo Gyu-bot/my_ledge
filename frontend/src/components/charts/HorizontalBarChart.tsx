@@ -7,7 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { CHART_ACCENT } from './chartTheme';
+import { CHART_ACCENT, CHART_ACCENT_SOFT, CHART_BAR_RADIUS_HORIZONTAL } from './chartTheme';
 
 export interface HorizontalBarDatum {
   label: string;
@@ -79,8 +79,8 @@ export function HorizontalBarChart({
             type="category"
             width={labelWidth}
           />
-          <Tooltip content={<TooltipContent />} cursor={{ fill: '#eff6ff' }} />
-          <Bar dataKey="amount" fill={CHART_ACCENT} radius={[0, 2, 2, 0]} />
+          <Tooltip content={<TooltipContent />} cursor={{ fill: CHART_ACCENT_SOFT }} />
+          <Bar dataKey="amount" fill={CHART_ACCENT} radius={CHART_BAR_RADIUS_HORIZONTAL} />
         </BarChart>
       </ResponsiveContainer>
     </div>

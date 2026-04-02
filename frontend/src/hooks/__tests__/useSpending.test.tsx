@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../api/transactions', () => ({
   getTransactions: vi.fn(),
@@ -25,6 +25,10 @@ const mockedGetTransactions = vi.mocked(getTransactions);
 const mockedGetTransactionsByCategory = vi.mocked(getTransactionsByCategory);
 const mockedGetTransactionsByCategoryTimeline = vi.mocked(getTransactionsByCategoryTimeline);
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -40,6 +44,39 @@ function createWrapper() {
 }
 
 describe('useSpendingPageState', () => {
+  it('initializes detail filters and daily month to the current system month', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-15T09:00:00+09:00'));
+
+    const { result } = renderHook(() => useSpendingPageState());
+
+    expect(result.current.detail_filters.start_month).toBe('2026-03');
+    expect(result.current.detail_filters.end_month).toBe('2026-03');
+    expect(result.current.daily_calendar_month).toBe('2026-03');
+
+    act(() => {
+      result.current.updateDetailFilters({
+        start_month: '2026-02',
+        end_month: '2026-02',
+        category_major: '식비',
+        payment_method: '카드',
+        search: '점심',
+      });
+      result.current.updateDailyCalendarMonth('2026-02');
+    });
+
+    act(() => {
+      result.current.resetDetailFilters();
+    });
+
+    expect(result.current.detail_filters.start_month).toBe('2026-03');
+    expect(result.current.detail_filters.end_month).toBe('2026-03');
+    expect(result.current.detail_filters.category_major).toBe('');
+    expect(result.current.detail_filters.payment_method).toBe('');
+    expect(result.current.detail_filters.search).toBe('');
+    expect(result.current.daily_calendar_month).toBe('2026-03');
+  });
+
   it('keeps transaction accordion open when page changes', () => {
     const { result } = renderHook(() => useSpendingPageState());
 
@@ -334,6 +371,121 @@ describe('spending payload hardening', () => {
         points: [],
       },
     });
+  });
+
+  it('builds merchant treemap data from merchant instead of raw description', async () => {
+    mockedGetTransactionsByCategory.mockResolvedValue({
+      items: [
+        { category: '식비', amount: -12000 },
+        { category: '교통', amount: -5000 },
+      ],
+    } as never);
+    mockedGetTransactions.mockResolvedValue({
+      total: 3,
+      page: 1,
+      per_page: 200,
+      items: [
+        {
+          id: 1,
+          date: '2026-03-24',
+          time: '09:30:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: '스타벅스 리저브 종로점',
+          merchant: '스타벅스',
+          amount: -7000,
+          currency: 'KRW',
+          payment_method: '카드 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: true,
+          source: 'import',
+          created_at: '2026-03-24T09:30:00',
+          updated_at: '2026-03-24T09:30:00',
+        },
+        {
+          id: 2,
+          date: '2026-03-24',
+          time: '10:00:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: '스타벅스 광화문점',
+          merchant: '스타벅스',
+          amount: -5000,
+          currency: 'KRW',
+          payment_method: '카드 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: true,
+          source: 'import',
+          created_at: '2026-03-24T10:00:00',
+          updated_at: '2026-03-24T10:00:00',
+        },
+        {
+          id: 3,
+          date: '2026-03-24',
+          time: '12:00:00',
+          type: '지출',
+          category_major: '교통',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '교통',
+          effective_category_minor: null,
+          description: '카카오택시',
+          merchant: '카카오택시',
+          amount: -5000,
+          currency: 'KRW',
+          payment_method: '카드 B',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-24T12:00:00',
+          updated_at: '2026-03-24T12:00:00',
+        },
+      ],
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSpendingPeriodData(
+          {
+            start_month: '',
+            end_month: '',
+          },
+          '',
+        ),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    expect(result.current.data?.merchant_breakdown).toEqual([
+      { name: '스타벅스', amount: 12000 },
+      { name: '카카오택시', amount: 5000 },
+    ]);
   });
 
   it('falls back to empty period breakdowns when category or transaction items are missing', async () => {

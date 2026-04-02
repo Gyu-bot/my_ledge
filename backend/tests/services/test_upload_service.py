@@ -46,6 +46,9 @@ async def test_import_transactions_inserts_all_rows_on_first_upload(
     assert upload_log.filename == "finance_sample.xlsx"
     assert upload_log.tx_new == 2219
     assert upload_log.status == "success"
+    first_transaction = await db_session.scalar(select(Transaction).order_by(Transaction.id.asc()))
+    assert first_transaction is not None
+    assert first_transaction.merchant == first_transaction.description
 
 
 async def test_import_transactions_skips_rows_already_loaded(

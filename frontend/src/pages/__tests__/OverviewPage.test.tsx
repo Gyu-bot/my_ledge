@@ -7,8 +7,36 @@ vi.mock('../../hooks/useOverview', () => ({
   useOverview: vi.fn(),
 }));
 
-vi.mock('../../components/charts/LineTrendChart', () => ({
-  LineTrendChart: () => <div>월간 현금흐름 차트</div>,
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="responsive-container">{children}</div>
+  ),
+  LineChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="monthly-cashflow-line-chart">{children}</div>
+  ),
+  ComposedChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="monthly-cashflow-chart">{children}</div>
+  ),
+  CartesianGrid: () => <div data-testid="cartesian-grid" />,
+  XAxis: () => <div data-testid="x-axis" />,
+  YAxis: () => <div data-testid="y-axis" />,
+  Tooltip: () => <div data-testid="tooltip" />,
+  Bar: ({
+    dataKey,
+    radius,
+    fill,
+  }: {
+    dataKey: string;
+    radius?: number[];
+    fill?: string;
+  }) => (
+    <div
+      data-fill={fill}
+      data-radius={radius?.join(',')}
+      data-testid={`bar-series-${dataKey}`}
+    />
+  ),
+  Line: ({ dataKey }: { dataKey: string }) => <div data-testid={`line-series-${dataKey}`} />,
 }));
 
 import { useOverview } from '../../hooks/useOverview';
@@ -104,6 +132,30 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '카테고리 요약 Top 5' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '최근 거래' })).toBeInTheDocument();
     expect(screen.getAllByText('지하철')).toHaveLength(2);
+  });
+
+  it('renders monthly cashflow as income/expense bars with a net cashflow line and no transfer series', () => {
+    mockedUseOverview.mockReturnValue({
+      data: buildOverviewData(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof useOverview>);
+
+    render(<OverviewPage />);
+
+    expect(
+      screen.getByText('수입과 지출은 막대로, 순현금흐름은 선으로 월 단위 비교합니다.'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('bar-series-income')).toBeInTheDocument();
+    expect(screen.getByTestId('bar-series-expense')).toBeInTheDocument();
+    expect(screen.getByTestId('line-series-net_cashflow')).toBeInTheDocument();
+    expect(screen.getByTestId('bar-series-income')).toHaveAttribute('data-radius', '2,2,0,0');
+    expect(screen.getByTestId('bar-series-expense')).toHaveAttribute('data-radius', '2,2,0,0');
+    expect(screen.queryByTestId('bar-series-transfer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('line-series-transfer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('line-series-income')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('line-series-expense')).not.toBeInTheDocument();
   });
 
   it('gives recent transactions more width than category top 5 on desktop', () => {

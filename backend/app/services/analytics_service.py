@@ -198,7 +198,7 @@ async def get_merchant_spend(
         }
     )
     for row in rows:
-        merchant = row["description"] or "미분류"
+        merchant = row["merchant"] or "미분류"
         grouped[merchant]["amount"] += _amount_for_analytics(row["type"], row["amount"])
         grouped[merchant]["count"] += 1
         last_seen_at = datetime.combine(row["date"], row["time"])

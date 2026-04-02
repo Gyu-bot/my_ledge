@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기 / frontend 재설계 1차 구현 진행
-- **Last Worker:** codex (2026-04-02T11:28+0900, workbench full-width 전환 및 API_KEY 승계)
+- **Last Worker:** codex (2026-04-02T13:07+0900, spending filter scope 분리/기본 월 정렬)
 - **Branch:** main
 
 ## Completed
@@ -57,6 +57,7 @@
 - [x] Frontend 재설계 1차 검증 완료: frontend 전체 테스트, lint, typecheck 통과
 - [x] Frontend 실브라우저 점검 일부 완료: 실제 서버 기준 desktop canonical route 4종(`개요`, `지출`, `자산`, `인사이트`) 캡처 확보, 런타임 오류는 `favicon.ico` 404만 확인
 - [x] Frontend 레이아웃 보정 완료: 극단적 저축률 표시를 compact label로 정규화하고, 단일 포인트 시계열은 빈 차트 대신 summary fallback으로 전환
+- [x] 거래처 컬럼 도입 완료: `transactions.merchant` 추가, 기존/신규 row 기본값을 `description` 으로 백필하고 거래 편집 작업대에서 `description` 은 read-only, `merchant` 는 editable 로 분리
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
@@ -65,8 +66,8 @@
   - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
 - [ ] Frontend 재설계 구현
   - 현재 상태: approved wireframe/spec/plan 기준으로 shell, overview, insights, operations workbench 구현 완료
-  - 현재 지점: global shell hero와 각 페이지 title card를 compact header로 전환했고, `DashboardPage` / `DataPage` / `PlaceholderApp` 및 관련 테스트를 제거했다. `/data` 는 wrapper가 아니라 canonical workbench로 redirect 된다. overview 하단 2열은 `카테고리 요약 Top 5` 를 더 좁히고 `최근 거래` 를 더 넓혀 desktop 줄바꿈을 완화했다. operations workbench는 우측 sidebar를 제거하고 상단 compact summary strip + full-width 편집 작업대 + 페이지네이션 구조로 재배치했다
-  - 남은 작업: spending/assets 본문 redesign 정교화, placeholder/empty-state visual polish, redirect(`/spending`, `/assets`) 브라우저 마무리 확인
+  - 현재 지점: global shell hero와 각 페이지 title card를 compact header로 전환했고, `DashboardPage` / `DataPage` / `PlaceholderApp` 및 관련 테스트를 제거했다. `/data` 는 wrapper가 아니라 canonical workbench로 redirect 된다. overview 하단 2열은 `카테고리 요약 Top 5` 를 더 좁히고 `최근 거래` 를 더 넓혀 desktop 줄바꿈을 완화했다. overview `월간 현금흐름` 카드는 `transfer` 시리즈를 제거하고 `income/expense` bar + `net_cashflow` line 혼합 차트로 단순화했다. 전역 차트 팔레트는 단색 블루 계열 대신 `primary/secondary/accent/info/danger/muted` 혼합 팔레트로 재정의했고, bar radius는 프로젝트 전체에서 낮은 roundness를 기본값으로 통일했다. badge, alert, slider, empty/placeholder, 상태 패널도 같은 팔레트의 `*-soft` surface를 쓰도록 정리해 배경 톤을 통일했다. operations workbench는 우측 sidebar를 제거한 뒤, 사용자 피드백에 맞춰 `작업대 요약` / `현재 필터` / `최근 업로드 맥락` 상단 카드도 기본 화면에서 숨기고 full-width 편집 작업대 + 페이지네이션만 남겼다. 필터 바의 날짜 입력폭도 줄여 체크박스 라벨 줄바꿈을 방지했다. 거래 편집 작업대는 `merchant` 편집을 지원하고, spending `거래처별 Tree Map` 은 `description` 대신 `merchant` 를 집계 키로 사용한다. spending 상단 시계열 영역은 슬라이더를 카드 밖 공통 컨트롤로 분리했고, 그 아래에 separator를 두어 상세 월 필터 적용 범위를 시각적으로 구분했다. 상세 집계/달력/거래내역의 기본 월 필터는 시스템 월로 초기화하고, 시스템 월 데이터가 없으면 사용 가능한 가장 가까운 월로 fallback 하도록 정렬했다
+  - 남은 작업: spending/assets 본문 redesign 정교화, placeholder/empty-state visual polish, redirect(`/spending`, `/assets`) 브라우저 마무리 확인, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/` 정리 후 compact header 반영본 desktop 5장 + mobile 5장(canonical route) 재수집 완료, overview/operations desktop 캡처는 최신 반영본으로 다시 갱신했다
   - 현재 지점: 분석/운영 화면의 동시 로드 오류는 프론트 코드 regressions가 아니라 backend dev server 종료로 인한 `/api/*` 500이었다. backend 재기동 후 `transactions/summary`, `assets/net-worth-history`, `analytics/monthly-cashflow`, `upload/logs` 프록시 응답 200을 재확인했다. frontend dev server는 root `.env` 의 `API_KEY` 를 `VITE_API_KEY` 로 승계하도록 조정해 작업대 write access 경고가 사라지는 상태다
@@ -86,7 +87,13 @@
   - [x] overview / insights 신규 페이지 구현
   - [x] 캡처 기준 레이아웃 보정 1차 완료
   - [ ] spending / assets 본문 redesign 정교화
+  - [x] spending 시계열/상세 필터 범위 separator 및 시스템 월 기본값 정렬
   - [ ] 최종 visual polish 및 legacy 컴포넌트 정리
+  - [x] workbench 상단 보조 카드 제거 및 필터 행 압축
+- [ ] 거래처 데이터 정리
+  - [x] `transactions.merchant` 컬럼 추가 및 기존 row 백필
+  - [x] 작업대 merchant 편집 지원 + analytics merchant 집계 전환
+  - [ ] 실제 데이터 기준 merchant 정규화 룰/일괄 편집 방식 결정
 - [ ] Frontend 실브라우저 점검 보강
   - [x] desktop route 4종 캡처 및 console smoke 확인
   - [x] 로컬 사용자 리뷰용 dev server 재기동 (`4173`/`8000`, Tailscale 접속 확인)
@@ -195,8 +202,13 @@
 - 2026-04-02: 화면 진단 결과 페이지 제목/설명/메타는 `Card` 안에 두지 않고 page-level compact header로 분리한다. 첫 화면 정보 밀도를 높이고 모바일에서 제목 줄바꿈과 불필요한 상단 여백을 줄이는 쪽이 더 중요하다.
 - 2026-04-02: 새 IA로 대체된 이후에는 legacy page 컴포넌트(`DashboardPage`, `DataPage`, `PlaceholderApp`)를 남겨두지 않는다. `/data` 는 wrapper가 아니라 canonical `operations/workbench` 로 redirect 해 route 호환만 유지한다.
 - 2026-04-02: overview 하단 2열은 거래 가독성을 우선해 `카테고리 요약 Top 5` 보다 `최근 거래` 에 더 큰 폭을 준다. 테이블에서는 날짜/결제수단/금액 컬럼을 `nowrap` 으로 고정해 설명 열이 먼저 폭을 가져가게 한다.
+- 2026-04-02: overview `월간 현금흐름` 카드는 정보 밀도를 위해 `transfer` 시리즈를 제거하고, `income` / `expense` 는 양수 bar, `net_cashflow` 는 line 으로 겹치는 혼합 차트를 기본 표현으로 사용한다.
+- 2026-04-02: 차트 색상은 단일 블루 계열을 피하고 `primary`, `secondary`, `accent`, `info`, `danger`, `muted` 축을 함께 쓰는 공통 팔레트를 사용한다. bar chart radius는 pill 형태 대신 거의 직각에 가까운 낮은 roundness를 기본값으로 유지한다.
+- 2026-04-02: badge, alert, slider, empty state, 상태 패널 같은 보조 surface는 순색 배경이나 neutral 하드코딩보다 공통 팔레트의 `*-soft` 배경을 우선 사용한다. 같은 hue 체계를 유지하되 채도는 낮춰 정보 계층만 남기는 쪽이 더 일관적이다.
 - 2026-04-02: frontend dev/build 는 root `.env` 의 `API_KEY` 를 별도 중복 입력 없이 client-side `VITE_API_KEY` 로 승계한다. 운영/리뷰 세션에서 작업대 write access 경고를 줄이고 단일 비밀값 소스를 유지하는 쪽이 낫다.
-- 2026-04-02: operations workbench 는 우측 sidebar보다 full-width 편집 surface가 우선이다. 작업대 요약, 현재 필터, 최근 업로드 맥락은 상단 compact cards로 올리고, 편집 테이블은 필터 결과 전체를 페이지네이션으로 끝까지 탐색할 수 있어야 한다.
+- 2026-04-02: operations workbench 는 우측 sidebar보다 full-width 편집 surface가 우선이다. 상단 보조 정보(`작업대 요약`, `현재 필터`, `최근 업로드 맥락`)도 기본 화면에서는 숨기거나 제거해 첫 viewport를 거래 편집에 우선 배정한다. 편집 테이블은 필터 결과 전체를 페이지네이션으로 끝까지 탐색할 수 있어야 한다.
+- 2026-04-02: 원본 `description` 은 import fidelity 보존용으로 고정하고, 사용자 편집/분석용 거래처는 별도 `transactions.merchant` 컬럼으로 관리한다. 신규/기존 row의 초기 merchant 값은 `description` 으로 채우고, `merchant != description` 은 사용자 수정으로 간주한다.
+- 2026-04-02: spending 상단의 월별 추이 카드는 공통 시계열 슬라이더와 분리하고, 추이 카드 아래에는 separator로 상세 월 필터 적용 영역을 명시한다. 하단 집계 카드들의 초기 월 필터는 시스템 월을 우선 사용하고, 해당 월 데이터가 없을 때만 가장 가까운 사용 가능 월로 fallback 한다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -209,7 +221,7 @@
 - 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
 - Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
 - 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
-- `merchant_normalized` 부재로 recurring/anomaly/merchant aggregation v1은 raw `description` alias 품질에 영향을 받는다
+- `merchant_normalized` 부재로 merchant 분석 v1은 raw `merchant` 입력 품질에 영향을 받는다. 현재는 작업대 수동 수정으로 보정할 수 있지만, 상점명 정규화 규칙이나 alias 병합 전략은 후속 과제다
 - `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다
 - `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다
 - frontend 재설계 1차 단계에서는 `SpendingPage`, `AssetsPage` 본문이 기존 구현을 재사용한다. 새 shell/route 아래에서 동작하지만 시각 언어와 정보 밀도 정리는 후속 단계다.

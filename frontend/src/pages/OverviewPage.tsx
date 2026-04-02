@@ -1,7 +1,8 @@
 import {
+  Bar,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,7 +17,13 @@ import { TransactionsTable } from '../components/tables/TransactionsTable';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useOverview } from '../hooks/useOverview';
-import { CHART_NEUTRALS, chartTooltipStyle } from '../components/charts/chartTheme';
+import {
+  CHART_ACCENT,
+  CHART_BAR_RADIUS_VERTICAL,
+  CHART_COMPLEMENTARY,
+  CHART_SECONDARY,
+  chartTooltipStyle,
+} from '../components/charts/chartTheme';
 
 function formatMoney(value: number | string | readonly (number | string)[] | null | undefined) {
   const normalized = Array.isArray(value) && value.length > 0 ? value[0] : (value ?? 0);
@@ -79,7 +86,7 @@ export function OverviewPage() {
             <div>
               <CardTitle>월간 현금흐름</CardTitle>
               <CardDescription className="mt-2">
-                수입, 지출, 이체, 순현금흐름을 월 단위로 비교합니다.
+                수입과 지출은 막대로, 순현금흐름은 선으로 월 단위 비교합니다.
               </CardDescription>
             </div>
             {recent_upload_status ? <Badge variant="secondary">최근 업로드 {recent_upload_status}</Badge> : null}
@@ -87,7 +94,10 @@ export function OverviewPage() {
           <CardContent>
             <div className="h-80 w-full" aria-label="월간 현금흐름 차트">
               <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
-                <LineChart data={monthly_cashflow} margin={{ top: 12, right: 12, left: 4, bottom: 0 }}>
+                <ComposedChart
+                  data={monthly_cashflow}
+                  margin={{ top: 12, right: 12, left: 4, bottom: 0 }}
+                >
                   <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
                   <XAxis axisLine={false} dataKey="period" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
                   <YAxis
@@ -98,11 +108,28 @@ export function OverviewPage() {
                     width={92}
                   />
                   <Tooltip contentStyle={chartTooltipStyle} formatter={(value) => formatMoney(value)} />
-                  <Line dataKey="income" dot={false} stroke={CHART_NEUTRALS[0]} strokeWidth={3} type="monotone" />
-                  <Line dataKey="expense" dot={false} stroke={CHART_NEUTRALS[1]} strokeWidth={2.5} type="monotone" />
-                  <Line dataKey="transfer" dot={false} stroke={CHART_NEUTRALS[3]} strokeWidth={2} type="monotone" />
-                  <Line dataKey="net_cashflow" dot={false} stroke="#0f766e" strokeWidth={3} type="monotone" />
-                </LineChart>
+                  <Bar
+                    dataKey="income"
+                    fill={CHART_ACCENT}
+                    maxBarSize={28}
+                    name="수입"
+                    radius={CHART_BAR_RADIUS_VERTICAL}
+                  />
+                  <Bar
+                    dataKey="expense"
+                    fill={CHART_SECONDARY}
+                    maxBarSize={28}
+                    name="지출"
+                    radius={CHART_BAR_RADIUS_VERTICAL}
+                  />
+                  <Line
+                    dataKey="net_cashflow"
+                    dot={false}
+                    stroke={CHART_COMPLEMENTARY}
+                    strokeWidth={3}
+                    type="monotone"
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </CardContent>

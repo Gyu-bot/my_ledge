@@ -313,7 +313,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
               </div>
 
               {validationMessage ? (
-                <p className="rounded-[var(--radius-sm)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <p className="rounded-[var(--radius-sm)] border border-[color:var(--color-warning-soft)] bg-[color:var(--color-warning-soft)] px-4 py-3 text-sm text-[color:var(--color-warning)]">
                   {validationMessage}
                 </p>
               ) : null}
@@ -324,7 +324,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
 
       <CardContent className="flex flex-1 items-center">
         {categoryQuery.isError && activePreset !== 'all' ? (
-          <div className="w-full rounded-[var(--radius)] border border-rose-200 bg-rose-50 px-4 py-6 text-sm leading-6 text-rose-800">
+          <div className="w-full rounded-[var(--radius)] border border-[color:var(--color-danger-soft)] bg-[color:var(--color-danger-soft)] px-4 py-6 text-sm leading-6 text-[color:var(--color-danger)]">
             선택한 월 범위의 카테고리 데이터를 불러오지 못했습니다.
           </div>
         ) : hasData ? (

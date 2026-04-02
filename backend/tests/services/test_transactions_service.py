@@ -15,6 +15,7 @@ def _transaction(
     category_major: str,
     category_minor: str | None,
     description: str,
+    merchant: str | None = None,
     amount: int,
     payment_method: str | None,
     memo: str | None = None,
@@ -33,6 +34,7 @@ def _transaction(
         category_major_user=category_major_user,
         category_minor_user=category_minor_user,
         description=description,
+        merchant=merchant or description,
         amount=amount,
         currency="KRW",
         payment_method=payment_method,
@@ -92,3 +94,32 @@ async def test_build_transactions_effective_select_excludes_deleted_and_merged_r
     assert rows[0]["is_edited"] is True
     assert rows[0]["is_deleted"] is False
     assert rows[0]["merged_into_id"] is None
+
+
+async def test_build_transactions_effective_select_exposes_merchant_and_marks_merchant_edits(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        _transaction(
+            tx_date=date(2026, 3, 11),
+            tx_time=time(8, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor="카페",
+            description="스타벅스 리저브 종로점",
+            merchant="스타벅스",
+            amount=-6900,
+            payment_method="카드 A",
+        )
+    )
+    await db_session.commit()
+
+    canonical = build_transactions_effective_select().subquery()
+    row = (
+        await db_session.execute(select(canonical).order_by(canonical.c.id.desc()))
+    ).mappings().first()
+
+    assert row is not None
+    assert row["description"] == "스타벅스 리저브 종로점"
+    assert row["merchant"] == "스타벅스"
+    assert row["is_edited"] is True

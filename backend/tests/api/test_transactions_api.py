@@ -15,6 +15,7 @@ def _transaction(
     category_major: str,
     category_minor: str | None,
     description: str,
+    merchant: str | None = None,
     amount: int,
     payment_method: str | None,
     memo: str | None = None,
@@ -34,6 +35,7 @@ def _transaction(
         category_major_user=category_major_user,
         category_minor_user=category_minor_user,
         description=description,
+        merchant=merchant or description,
         amount=amount,
         currency="KRW",
         payment_method=payment_method,
@@ -386,6 +388,8 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert create_response.status_code == 201
     created_id = create_response.json()["id"]
     assert create_response.json()["source"] == "manual"
+    assert create_response.json()["description"] == "점심"
+    assert create_response.json()["merchant"] == "점심"
 
     patch_response = await async_client.patch(
         f"/api/v1/transactions/{created_id}",
@@ -393,11 +397,15 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
         json={
             "category_major_user": "생활/잡화",
             "category_minor_user": "생필품",
+            "merchant": "회사식당",
             "memo": "수정 메모",
         },
     )
     assert patch_response.status_code == 200
     assert patch_response.json()["effective_category_major"] == "생활/잡화"
+    assert patch_response.json()["description"] == "점심"
+    assert patch_response.json()["merchant"] == "회사식당"
+    assert patch_response.json()["is_edited"] is True
 
     second = _transaction(
         tx_date=date(2026, 3, 16),
@@ -441,6 +449,8 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert stored is not None
     assert stored.category_major_user == "식비"
     assert stored.category_minor_user == "배달"
+    assert stored.description == "점심"
+    assert stored.merchant == "회사식당"
     assert stored.memo == "수정 메모"
     assert stored.is_deleted is False
 

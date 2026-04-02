@@ -12,11 +12,13 @@ const buttonVariants = cva(
         default:
           'bg-[color:var(--color-primary)] text-white hover:bg-[color:var(--color-primary-strong)]',
         outline:
-          'border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent)]',
+          'border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]',
         secondary:
-          'bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)] hover:bg-[color:var(--color-primary-soft)]',
-        destructive: 'bg-rose-600 text-white hover:bg-rose-700',
-        ghost: 'text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent)]',
+          'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-strong)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]',
+        destructive:
+          'bg-[color:var(--color-danger-soft)] text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger-soft)]/80',
+        ghost:
+          'text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]',
       },
       size: {
         default: 'h-10 px-4 py-2',

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
 import { CategoryTimelineAreaChart } from '../components/charts/CategoryTimelineAreaChart';
 import { DailySpendCalendar } from '../components/charts/DailySpendCalendar';
@@ -38,8 +38,11 @@ import {
   useSpendingPeriodData,
   useSpendingTimelineData,
   useSpendingTransactionsData,
+  getSystemMonth,
+  resolvePreferredMonth,
   type SpendingPageState,
 } from '../hooks/useSpending';
+import { Separator } from '../components/ui/separator';
 
 function InlineSectionStatus({
   description,
@@ -52,8 +55,8 @@ function InlineSectionStatus({
 }) {
   const toneClasses =
     tone === 'error'
-      ? 'border-rose-200 bg-rose-50/80 text-rose-700'
-      : 'border-[color:var(--color-border)] bg-white/70 text-[color:var(--color-text-muted)]';
+      ? 'border-[color:var(--color-danger-soft)] bg-[color:var(--color-danger-soft)]/70 text-[color:var(--color-danger)]'
+      : 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]/18 text-[color:var(--color-text-muted)]';
 
   return (
     <div className={`rounded-[var(--radius)] border px-6 py-16 text-center ${toneClasses}`}>
@@ -64,15 +67,19 @@ function InlineSectionStatus({
 }
 
 const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
+  timelineData,
+  timelineError,
   timelineFilters,
+  timelinePending,
   setTimelineFilters,
 }: {
+  timelineData?: ReturnType<typeof useSpendingTimelineData>['data'];
+  timelineError: boolean;
   timelineFilters: SpendingPageState['timeline_filters'];
+  timelinePending: boolean;
   setTimelineFilters: SpendingPageState['updateTimelineFilters'];
 }) {
-  const timelineQuery = useSpendingTimelineData(timelineFilters);
-
-  if (timelineQuery.isPending) {
+  if (timelinePending) {
     return (
       <section className="grid gap-6">
         <InlineSectionStatus
@@ -83,7 +90,7 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
     );
   }
 
-  if (timelineQuery.isError || !timelineQuery.data) {
+  if (timelineError || !timelineData) {
     return (
       <section className="grid gap-6">
         <InlineSectionStatus
@@ -96,58 +103,61 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
   }
 
   const selectedStartMonth =
-    timelineFilters.start_month || timelineQuery.data.available_months[0] || '-';
+    timelineFilters.start_month || timelineData.available_months[0] || '-';
   const selectedEndMonth =
     timelineFilters.end_month ||
-    timelineQuery.data.available_months[timelineQuery.data.available_months.length - 1] ||
+    timelineData.available_months[timelineData.available_months.length - 1] ||
     '-';
 
   return (
-    <section className="grid gap-6">
-      <Card>
-        <CardHeader className="space-y-5">
-          <div>
-            <CardTitle>월별 카테고리 추이</CardTitle>
-            <CardDescription>
-              월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다.
-            </CardDescription>
-          </div>
-          <TimelineRangeSlider
-            months={timelineQuery.data.available_months}
-            values={timelineFilters}
-            onChange={setTimelineFilters}
-            onReset={() => setTimelineFilters({ start_month: '', end_month: '' })}
-          />
-        </CardHeader>
-        <CardContent>
-          <CategoryTimelineAreaChart
-            data={timelineQuery.data.category_timeline.points}
-            categories={timelineQuery.data.category_timeline.categories}
-          />
-        </CardContent>
-      </Card>
+    <section className="space-y-6">
+      <TimelineRangeSlider
+        months={timelineData.available_months}
+        values={timelineFilters}
+        onChange={setTimelineFilters}
+        onReset={() => setTimelineFilters({ start_month: '', end_month: '' })}
+      />
 
-      <Card>
-        <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-          <div>
-            <CardTitle>월별 고정비/변동비 추이</CardTitle>
-            <CardDescription>
-              고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge>{selectedStartMonth}</Badge>
-            <span>~</span>
-            <Badge variant="accent">{selectedEndMonth}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <SectionPlaceholder
-            title="고정비/변동비 분류 데이터 준비 중"
-            description="현재 슬라이더 기간과 동기화되도록 자리를 먼저 잡아두었고, 거래에 cost_kind 분류가 채워지면 area chart가 여기에 표시됩니다."
-          />
-        </CardContent>
-      </Card>
+      <div className="grid gap-6">
+        <Card data-testid="monthly-category-timeline-card">
+          <CardHeader>
+            <div>
+              <CardTitle>월별 카테고리 추이</CardTitle>
+              <CardDescription>
+                월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <CategoryTimelineAreaChart
+              data={timelineData.category_timeline.points}
+              categories={timelineData.category_timeline.categories}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>월별 고정비/변동비 추이</CardTitle>
+              <CardDescription>
+                고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge>{selectedStartMonth}</Badge>
+              <span>~</span>
+              <Badge variant="accent">{selectedEndMonth}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <SectionPlaceholder
+              title="고정비/변동비 분류 데이터 준비 중"
+              description="현재 슬라이더 기간과 동기화되도록 자리를 먼저 잡아두었고, 거래에 cost_kind 분류가 채워지면 area chart가 여기에 표시됩니다."
+            />
+          </CardContent>
+        </Card>
+      </div>
     </section>
   );
 });
@@ -337,7 +347,7 @@ const BreakdownSection = memo(function BreakdownSection({
           <CardHeader>
             <CardTitle>거래처별 Tree Map</CardTitle>
             <CardDescription>
-              현재는 거래 설명 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다.
+              편집된 거래처 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -636,13 +646,59 @@ const TransactionsSection = memo(function TransactionsSection({
 
 export function SpendingPage() {
   const spendingState = useSpendingPageState();
+  const detailFilters = spendingState.detail_filters;
+  const dailyCalendarMonth = spendingState.daily_calendar_month;
+  const updateDailyCalendarMonth = spendingState.updateDailyCalendarMonth;
+  const updateDetailFilters = spendingState.updateDetailFilters;
+  const timelineQuery = useSpendingTimelineData(spendingState.timeline_filters);
   const periodOptionsQuery = useSpendingPeriodData(
     {
-      start_month: spendingState.detail_filters.start_month,
-      end_month: spendingState.detail_filters.end_month,
+      start_month: detailFilters.start_month,
+      end_month: detailFilters.end_month,
     },
     '',
   );
+
+  useEffect(() => {
+    if (!timelineQuery.data?.available_months.length) {
+      return;
+    }
+
+    const systemMonth = getSystemMonth();
+    const preferredMonth = resolvePreferredMonth(timelineQuery.data.available_months, systemMonth);
+
+    if (!preferredMonth) {
+      return;
+    }
+
+    const shouldRebaseDetailRange =
+      detailFilters.start_month === systemMonth &&
+      detailFilters.end_month === systemMonth &&
+      !timelineQuery.data.available_months.includes(systemMonth);
+
+    if (shouldRebaseDetailRange) {
+      updateDetailFilters({
+        ...detailFilters,
+        start_month: preferredMonth,
+        end_month: preferredMonth,
+      });
+    }
+
+    const shouldSyncDailyMonth =
+      (dailyCalendarMonth === systemMonth &&
+        !timelineQuery.data.available_months.includes(systemMonth)) ||
+      !dailyCalendarMonth;
+
+    if (shouldSyncDailyMonth && dailyCalendarMonth !== preferredMonth) {
+      updateDailyCalendarMonth(preferredMonth);
+    }
+  }, [
+    dailyCalendarMonth,
+    detailFilters,
+    timelineQuery.data,
+    updateDailyCalendarMonth,
+    updateDetailFilters,
+  ]);
 
   if (periodOptionsQuery.isError) {
     return (
@@ -688,39 +744,54 @@ export function SpendingPage() {
       />
 
       <MonthlyTimelineSection
+        timelineData={timelineQuery.data}
+        timelineError={timelineQuery.isError}
         timelineFilters={spendingState.timeline_filters}
+        timelinePending={timelineQuery.isPending}
         setTimelineFilters={spendingState.updateTimelineFilters}
       />
+
+      <div className="space-y-3" data-testid="spending-detail-scope-separator">
+        <div className="flex items-center gap-4">
+          <p className="shrink-0 text-xs font-semibold tracking-[0.18em] text-[color:var(--color-text-subtle)]">
+            아래 카드부터 월 필터 적용
+          </p>
+          <Separator />
+        </div>
+        <p className="text-sm text-[color:var(--color-text-muted)]">
+          카테고리별, 거래처별, 일별 달력, 거래 내역은 아래 월 범위를 기준으로 함께 집계됩니다.
+        </p>
+      </div>
 
       <DetailFilterSection
         categoryOptions={periodOptionsQuery.data.filter_options.categories}
         paymentMethodOptions={periodOptionsQuery.data.filter_options.payment_methods}
-        detailFilters={spendingState.detail_filters}
+        detailFilters={detailFilters}
         resetDetailFilters={spendingState.resetDetailFilters}
         setDetailFilters={spendingState.updateDetailFilters}
       />
 
       <BreakdownSection
-        startMonth={spendingState.detail_filters.start_month}
-        endMonth={spendingState.detail_filters.end_month}
+        startMonth={detailFilters.start_month}
+        endMonth={detailFilters.end_month}
         subcategoryMajorFilter={spendingState.subcategory_major_filter}
         setSubcategoryMajorFilter={spendingState.updateSubcategoryMajorFilter}
       />
 
       <DailySpendSection
-        detailFilters={spendingState.detail_filters}
+        detailFilters={detailFilters}
         includeIncome={spendingState.include_income}
-        selectedMonth={spendingState.daily_calendar_month}
+        selectedMonth={dailyCalendarMonth}
         setIncludeIncome={spendingState.updateIncludeIncome}
         setSelectedMonth={spendingState.updateDailyCalendarMonth}
       />
 
       <TransactionsSection
-        startMonth={spendingState.detail_filters.start_month}
-        endMonth={spendingState.detail_filters.end_month}
-        categoryMajor={spendingState.detail_filters.category_major}
-        paymentMethod={spendingState.detail_filters.payment_method}
-        search={spendingState.detail_filters.search}
+        startMonth={detailFilters.start_month}
+        endMonth={detailFilters.end_month}
+        categoryMajor={detailFilters.category_major}
+        paymentMethod={detailFilters.payment_method}
+        search={detailFilters.search}
         includeIncome={spendingState.include_income}
         page={spendingState.transactions_page}
         perPage={spendingState.transactions_per_page}

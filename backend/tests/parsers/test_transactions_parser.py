@@ -20,6 +20,7 @@ def test_parse_transactions_extracts_normalized_rows(
         "category_major": "주거/통신",
         "category_minor": "미분류",
         "description": "SK텔레콤-자동납부",
+        "merchant": "SK텔레콤-자동납부",
         "amount": -106600,
         "currency": "KRW",
         "payment_method": "(구)KB국민 My WE:SH(마이 위시) 카드",

@@ -18,6 +18,7 @@ class TransactionResponse(BaseModel):
     effective_category_major: str
     effective_category_minor: str | None
     description: str
+    merchant: str
     amount: int
     currency: str
     payment_method: str | None
@@ -80,6 +81,7 @@ class TransactionCreateRequest(BaseModel):
     category_major: str
     category_minor: str | None = None
     description: str
+    merchant: str | None = None
     amount: int
     payment_method: str | None = None
     cost_kind: str | None = None
@@ -90,6 +92,7 @@ class TransactionCreateRequest(BaseModel):
 class TransactionUpdateRequest(BaseModel):
     category_major_user: str | None = None
     category_minor_user: str | None = None
+    merchant: str | None = None
     cost_kind: str | None = None
     fixed_cost_necessity: str | None = None
     memo: str | None = None

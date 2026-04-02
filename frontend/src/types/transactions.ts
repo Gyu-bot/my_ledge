@@ -10,6 +10,7 @@ export interface TransactionResponse {
   effective_category_major: string;
   effective_category_minor: string | null;
   description: string;
+  merchant?: string | null;
   amount: number;
   currency: string;
   payment_method: string | null;
@@ -31,6 +32,7 @@ export interface TransactionCreateRequest {
   category_major: string;
   category_minor: string | null;
   description: string;
+  merchant?: string | null;
   amount: number;
   payment_method: string | null;
   memo: string | null;
@@ -39,6 +41,7 @@ export interface TransactionCreateRequest {
 export interface TransactionUpdateRequest {
   category_major_user?: string | null;
   category_minor_user?: string | null;
+  merchant?: string | null;
   memo?: string | null;
 }
 

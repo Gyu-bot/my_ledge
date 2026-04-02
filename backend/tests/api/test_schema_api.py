@@ -65,3 +65,4 @@ async def test_schema_endpoint_returns_tables(
     assert effective_view["kind"] == "view"
     assert "excludes deleted or merged rows" in effective_view["description"]
     assert any(column["name"] == "effective_category_major" for column in effective_view["columns"])
+    assert any(column["name"] == "merchant" for column in effective_view["columns"])

@@ -9,8 +9,8 @@ interface StatusCardProps extends SummaryCard {
 export function StatusCard({ label, value, detail, tone = 'primary' }: StatusCardProps) {
   const toneClass =
     tone === 'accent'
-      ? 'border-[color:var(--color-accent-soft)] bg-[color:var(--color-accent-soft)]'
-      : 'border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)]';
+      ? 'border-[color:var(--color-accent-soft)] bg-[color:var(--color-accent-soft)]/75'
+      : 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]/35';
 
   return (
     <Card

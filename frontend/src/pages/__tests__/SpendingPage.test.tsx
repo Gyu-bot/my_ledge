@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SpendingPage } from '../SpendingPage';
 
@@ -8,6 +8,8 @@ vi.mock('../../hooks/useSpending', () => ({
   useSpendingPeriodData: vi.fn(),
   useSpendingTimelineData: vi.fn(),
   useSpendingTransactionsData: vi.fn(),
+  getSystemMonth: vi.fn(() => '2026-03'),
+  resolvePreferredMonth: vi.fn(() => '2026-03'),
 }));
 
 import {
@@ -155,6 +157,7 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('heading', { level: 2, name: '지출 분석' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '월별 카테고리 추이' })).toBeInTheDocument();
     expect(screen.getByText(/시계열 기간/)).toBeInTheDocument();
+    expect(screen.getByText('아래 카드부터 월 필터 적용')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '카테고리별 지출' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '하위 카테고리별 지출' })).toBeInTheDocument();
     expect(screen.getByLabelText('상위 카테고리 필터')).toBeInTheDocument();
@@ -171,5 +174,9 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '거래 내역' })).toBeInTheDocument();
     expect(screen.getByText('거래 내역 접기')).toBeInTheDocument();
     expect(screen.getByText('1 / 3 페이지')).toBeInTheDocument();
+
+    expect(
+      within(screen.getByTestId('monthly-category-timeline-card')).queryByText(/시계열 기간/),
+    ).not.toBeInTheDocument();
   });
 });

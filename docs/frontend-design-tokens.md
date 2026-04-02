@@ -55,7 +55,10 @@
 
 - `--color-primary`: `#2563EB`
 - `--color-primary-strong`: `#1D4ED8`
-- `--color-primary-soft`: `#DBEAFE`
+- `--color-primary-soft`: `#BFDBFE`
+- `--color-secondary`: `#D97706`
+- `--color-secondary-strong`: `#B45309`
+- `--color-secondary-soft`: `#FFEDD5`
 - `--color-accent`: `#0F766E`
 - `--color-accent-strong`: `#115E59`
 - `--color-accent-soft`: `#CCFBF1`
@@ -75,8 +78,8 @@
 - `--color-warning-soft`: `#FEF3C7`
 - `--color-danger`: `#DC2626`
 - `--color-danger-soft`: `#FEE2E2`
-- `--color-info`: `#2563EB`
-- `--color-info-soft`: `#DBEAFE`
+- `--color-info`: `#7C3AED`
+- `--color-info-soft`: `#EDE9FE`
 
 ### Interaction
 
@@ -86,6 +89,7 @@
 ## Color Usage Rules
 
 - `primary`는 주요 네비게이션 활성 상태, 핵심 CTA, 선택 상태에 사용한다.
+- `secondary`는 차트의 대비 시리즈, 보조 CTA, 비교 축 강조에 사용한다.
 - `accent`는 보조 강조, 추세 비교, 보조 KPI에 사용한다.
 - `positive`는 순증가, 목표 달성, 정상 상태에 사용한다.
 - `warning`은 주의가 필요한 소비 패턴, 업로드 partial, 분류 미완료 상태에 사용한다.
@@ -223,7 +227,10 @@
 
   --color-primary: #2563EB;
   --color-primary-strong: #1D4ED8;
-  --color-primary-soft: #DBEAFE;
+  --color-primary-soft: #BFDBFE;
+  --color-secondary: #D97706;
+  --color-secondary-strong: #B45309;
+  --color-secondary-soft: #FFEDD5;
   --color-accent: #0F766E;
   --color-accent-strong: #115E59;
   --color-accent-soft: #CCFBF1;
@@ -239,8 +246,8 @@
   --color-warning-soft: #FEF3C7;
   --color-danger: #DC2626;
   --color-danger-soft: #FEE2E2;
-  --color-info: #2563EB;
-  --color-info-soft: #DBEAFE;
+  --color-info: #7C3AED;
+  --color-info-soft: #EDE9FE;
 
   --color-ring: #2563EB;
   --color-selection: rgba(37, 99, 235, 0.18);
@@ -257,7 +264,8 @@
 - Tailwind utility를 쓰더라도 색/반경/shadow 값은 literal보다 CSS 변수로 우선 연결한다.
 - 새 컴포넌트는 가능하면 `text-[color:var(--...)]`, `bg-[color:var(--...)]`, `rounded-[var(--...)]` 패턴을 유지한다.
 - active / hover / selected 상태는 토큰 조합으로 표현하고, 하드코딩 hex 사용은 피한다.
-- 차트 색상 팔레트도 이 문서의 `primary`, `accent`, `positive`, `warning`, `danger`, `info` 축 안에서 고른다.
+- 차트 색상 팔레트는 단일 hue 계열만 쓰지 않고 `primary`, `secondary`, `accent`, `info`, `danger`, `muted` 축을 함께 사용한다.
+- bar chart는 pill 형태를 피하고 거의 직각에 가까운 낮은 radius를 기본값으로 사용한다.
 
 ## Frontend Implementation Requirement
 

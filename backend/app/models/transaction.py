@@ -19,6 +19,7 @@ class Transaction(TimestampMixin, Base):
     category_major_user: Mapped[str | None] = mapped_column(String(50))
     category_minor_user: Mapped[str | None] = mapped_column(String(50))
     description: Mapped[str] = mapped_column(String(500), nullable=False)
+    merchant: Mapped[str] = mapped_column(String(500), nullable=False)
     amount: Mapped[int] = mapped_column(nullable=False)
     currency: Mapped[str] = mapped_column(
         String(5),

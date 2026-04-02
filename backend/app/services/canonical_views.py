@@ -26,6 +26,7 @@ def transaction_is_edited_clause() -> ColumnElement[bool]:
     return or_(
         Transaction.category_major_user.is_not(None),
         Transaction.category_minor_user.is_not(None),
+        Transaction.merchant != Transaction.description,
         Transaction.memo.is_not(None),
     )
 
@@ -51,6 +52,7 @@ def build_transactions_effective_select(
             "effective_category_minor"
         ),
         Transaction.description.label("description"),
+        Transaction.merchant.label("merchant"),
         Transaction.amount.label("amount"),
         Transaction.currency.label("currency"),
         Transaction.payment_method.label("payment_method"),
@@ -114,6 +116,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
                 nullable=True,
             ),
             SchemaColumnDefinition("description", String(length=500), nullable=False),
+            SchemaColumnDefinition("merchant", String(length=500), nullable=False),
             SchemaColumnDefinition("amount", Integer(), nullable=False),
             SchemaColumnDefinition("currency", String(length=5), nullable=False),
             SchemaColumnDefinition("payment_method", String(length=100), nullable=True),

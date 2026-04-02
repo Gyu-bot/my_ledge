@@ -24,13 +24,14 @@ vi.mock('../../api/upload', () => ({
 }));
 
 import { resetData } from '../../api/dataManagement';
-import { deleteTransaction, getTransactions } from '../../api/transactions';
+import { deleteTransaction, getTransactions, updateTransaction } from '../../api/transactions';
 import { getUploadLogs } from '../../api/upload';
 import { useDataManagement } from '../useDataManagement';
 
 const mockedGetTransactions = vi.mocked(getTransactions);
 const mockedGetUploadLogs = vi.mocked(getUploadLogs);
 const mockedDeleteTransaction = vi.mocked(deleteTransaction);
+const mockedUpdateTransaction = vi.mocked(updateTransaction);
 const mockedResetData = vi.mocked(resetData);
 
 function createWrapper() {
@@ -173,6 +174,83 @@ describe('useDataManagement', () => {
       variant: 'success',
       message: '거래 1번을 삭제했습니다.',
     });
+  });
+
+  it('passes merchant edits through the transaction save mutation', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 1,
+      page: 1,
+      per_page: 20,
+      items: [
+        {
+          id: 1,
+          date: '2026-03-24',
+          time: '09:30:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: '스타벅스 리저브 종로점',
+          merchant: '스타벅스',
+          amount: -12000,
+          currency: 'KRW',
+          payment_method: '카드 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: true,
+          source: 'import',
+          created_at: '2026-03-24T09:30:00',
+          updated_at: '2026-03-24T09:30:00',
+        },
+      ],
+    });
+    mockedGetUploadLogs.mockResolvedValue({ items: [] });
+    mockedUpdateTransaction.mockResolvedValue({
+      id: 1,
+      date: '2026-03-24',
+      time: '09:30:00',
+      type: '지출',
+      category_major: '식비',
+      category_minor: null,
+      category_major_user: null,
+      category_minor_user: null,
+      effective_category_major: '식비',
+      effective_category_minor: null,
+      description: '스타벅스 리저브 종로점',
+      merchant: '스타벅스',
+      amount: -12000,
+      currency: 'KRW',
+      payment_method: '카드 A',
+      cost_kind: null,
+      fixed_cost_necessity: null,
+      memo: null,
+      is_deleted: false,
+      merged_into_id: null,
+      is_edited: true,
+      source: 'import',
+      created_at: '2026-03-24T09:30:00',
+      updated_at: '2026-03-24T09:30:00',
+    } as never);
+
+    const { result } = renderHook(() => useDataManagement(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    await act(async () => {
+      await result.current.saveTransaction(1, { merchant: '스타벅스' });
+    });
+
+    expect(mockedUpdateTransaction).toHaveBeenCalledWith(1, { merchant: '스타벅스' });
   });
 
   it('falls back to an empty upload history when the upload log payload is missing items', async () => {

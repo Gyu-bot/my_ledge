@@ -121,8 +121,6 @@ describe('OperationsWorkbenchPage', () => {
     render(<OperationsWorkbenchPage />);
 
     expect(screen.getByRole('heading', { level: 2, name: '거래 작업대' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: '작업대 요약' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: '최근 업로드 맥락' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 편집 작업대' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '업로드' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '최근 업로드 이력' })).toBeInTheDocument();
@@ -130,6 +128,9 @@ describe('OperationsWorkbenchPage', () => {
     expect(
       screen.queryByText('BankSalad 내보내기 파일을 올려 거래와 스냅샷을 다시 적재합니다.'),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: '작업대 요약' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: '현재 필터' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: '최근 업로드 맥락' })).not.toBeInTheDocument();
   });
 
   it('uses a full-width workbench layout instead of a split sidebar grid', () => {

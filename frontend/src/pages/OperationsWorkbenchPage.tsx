@@ -10,7 +10,6 @@ import {
 import { EditableTransactionsTable } from '../components/data/EditableTransactionsTable';
 import { PageHeader } from '../components/layout/PageHeader';
 import { OperationsAccordions } from '../components/operations/OperationsAccordions';
-import { WorkbenchSidebar } from '../components/operations/WorkbenchSidebar';
 import { Alert } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -116,16 +115,6 @@ export function OperationsWorkbenchPage() {
           {dataManagementQuery.actionFeedback.message}
         </Alert>
       ) : null}
-
-      <WorkbenchSidebar
-        currentPage={current_page}
-        filters={filters}
-        hasWriteAccess={has_write_access}
-        lastUpload={last_upload}
-        total={total}
-        totalPages={total_pages}
-        visibleCount={transactions.length}
-      />
 
       <section className="space-y-4">
         <DataManagementFilterBar

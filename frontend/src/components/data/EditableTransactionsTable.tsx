@@ -32,6 +32,7 @@ interface EditableTransactionsTableProps {
 }
 
 interface DraftState {
+  merchant: string;
   category_major_user: string;
   category_minor_user: string;
   memo: string;
@@ -47,6 +48,7 @@ function formatCurrency(value: number) {
 
 function buildInitialDraft(row: TransactionResponse): DraftState {
   return {
+    merchant: row.merchant ?? row.description,
     category_major_user: row.category_major_user ?? row.effective_category_major ?? '',
     category_minor_user: row.category_minor_user ?? row.effective_category_minor ?? '',
     memo: row.memo ?? '',
@@ -64,6 +66,7 @@ export function EditableTransactionsTable({
 }: EditableTransactionsTableProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<DraftState>({
+    merchant: '',
     category_major_user: '',
     category_minor_user: '',
     memo: '',
@@ -82,6 +85,7 @@ export function EditableTransactionsTable({
   const cancelEditing = () => {
     setEditingId(null);
     setDraft({
+      merchant: '',
       category_major_user: '',
       category_minor_user: '',
       memo: '',
@@ -90,6 +94,7 @@ export function EditableTransactionsTable({
 
   const handleSave = async (transactionId: number) => {
     await onSave(transactionId, {
+      merchant: draft.merchant || null,
       category_major_user: draft.category_major_user || null,
       category_minor_user: draft.category_minor_user || null,
       memo: draft.memo || null,
@@ -105,6 +110,7 @@ export function EditableTransactionsTable({
             <TableRow className="hover:bg-transparent">
               <TableHead>일시</TableHead>
               <TableHead>설명</TableHead>
+              <TableHead>거래처</TableHead>
               <TableHead>카테고리</TableHead>
               <TableHead>메모</TableHead>
               <TableHead>상태</TableHead>
@@ -128,6 +134,27 @@ export function EditableTransactionsTable({
                     <p className="mt-1 text-xs text-[color:var(--color-text-muted)]">
                       {row.payment_method ?? '결제수단 없음'}
                     </p>
+                  </TableCell>
+                  <TableCell className="text-[color:var(--color-text)]">
+                    {isEditing ? (
+                      <Input
+                        placeholder="거래처"
+                        value={draft.merchant}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            merchant: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <div>
+                        <p className="font-medium">{row.merchant ?? row.description}</p>
+                        <p className="mt-1 text-xs text-[color:var(--color-text-muted)]">
+                          분석 기준 거래처
+                        </p>
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-[color:var(--color-text)]">
                     {isEditing ? (
@@ -300,6 +327,16 @@ export function EditableTransactionsTable({
                 <div className="mt-3 space-y-3">
                   {isEditing ? (
                     <>
+                      <Input
+                        placeholder="거래처"
+                        value={draft.merchant}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            merchant: event.target.value,
+                          }))
+                        }
+                      />
                       <Select
                         onValueChange={(value) =>
                           setDraft((current) => ({
@@ -344,6 +381,7 @@ export function EditableTransactionsTable({
                     </>
                   ) : (
                     <div className="grid gap-2 text-sm text-[color:var(--color-text-muted)]">
+                      <p>거래처: {row.merchant ?? row.description}</p>
                       <p>카테고리: {row.effective_category_major}</p>
                       <p>소분류: {row.effective_category_minor ?? '소분류 없음'}</p>
                       <p>메모: {row.memo ?? '메모 없음'}</p>

@@ -23,6 +23,7 @@ def _transaction(
     category_major: str,
     category_minor: str | None,
     description: str,
+    merchant: str | None = None,
     amount: int,
     payment_method: str | None,
     category_major_user: str | None = None,
@@ -42,6 +43,7 @@ def _transaction(
         category_major_user=category_major_user,
         category_minor_user=category_minor_user,
         description=description,
+        merchant=merchant or description,
         amount=amount,
         currency="KRW",
         payment_method=payment_method,
@@ -382,7 +384,7 @@ async def test_get_fixed_cost_summary_reports_fixed_variable_and_unclassified_to
     }
 
 
-async def test_get_merchant_spend_groups_by_description_and_limits_results(
+async def test_get_merchant_spend_groups_by_merchant_and_limits_results(
     db_session: AsyncSession,
 ) -> None:
     db_session.add_all(
@@ -393,7 +395,8 @@ async def test_get_merchant_spend_groups_by_description_and_limits_results(
                 tx_type="지출",
                 category_major="생활",
                 category_minor="쇼핑",
-                description="쿠팡",
+                description="쿠팡 주문 1",
+                merchant="쿠팡",
                 amount=-100,
                 payment_method="카드 A",
             ),
@@ -403,7 +406,8 @@ async def test_get_merchant_spend_groups_by_description_and_limits_results(
                 tx_type="지출",
                 category_major="구독",
                 category_minor="OTT",
-                description="넷플릭스",
+                description="넷플릭스 정기결제",
+                merchant="넷플릭스",
                 amount=-50,
                 payment_method="카드 B",
             ),
@@ -413,7 +417,8 @@ async def test_get_merchant_spend_groups_by_description_and_limits_results(
                 tx_type="지출",
                 category_major="생활",
                 category_minor="쇼핑",
-                description="쿠팡",
+                description="쿠팡 주문취소",
+                merchant="쿠팡",
                 amount=20,
                 payment_method="카드 A",
             ),
@@ -424,6 +429,7 @@ async def test_get_merchant_spend_groups_by_description_and_limits_results(
                 category_major="생활",
                 category_minor="쇼핑",
                 description="삭제 쿠팡",
+                merchant="쿠팡",
                 amount=-999,
                 payment_method="카드 A",
                 is_deleted=True,

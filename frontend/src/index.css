@@ -21,7 +21,10 @@
   --color-border-strong: #cbd5e1;
   --color-primary: #2563eb;
   --color-primary-strong: #1d4ed8;
-  --color-primary-soft: #dbeafe;
+  --color-primary-soft: #bfdbfe;
+  --color-secondary: #d97706;
+  --color-secondary-strong: #b45309;
+  --color-secondary-soft: #ffedd5;
   --color-accent: #0f766e;
   --color-accent-strong: #115e59;
   --color-accent-soft: #ccfbf1;
@@ -35,8 +38,8 @@
   --color-warning-soft: #fef3c7;
   --color-danger: #dc2626;
   --color-danger-soft: #fee2e2;
-  --color-info: #2563eb;
-  --color-info-soft: #dbeafe;
+  --color-info: #7c3aed;
+  --color-info-soft: #ede9fe;
   --color-ring: #2563eb;
   --color-selection: rgba(37, 99, 235, 0.18);
   --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -105,7 +108,8 @@ a {
 .bg-dashboard-grid {
   background:
     radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%),
-    radial-gradient(circle at top right, rgba(15, 118, 110, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(217, 119, 6, 0.1), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.08), transparent 30%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 250, 252, 0.94)),
     var(--color-canvas);
 }

@@ -11,6 +11,7 @@ class TransactionRow(TypedDict):
     category_major: str
     category_minor: str | None
     description: str
+    merchant: str
     amount: int
     currency: str
     payment_method: str | None
@@ -47,13 +48,15 @@ def parse_transactions(workbook: Workbook) -> list[TransactionRow]:
 
 
 def normalize_transaction_row(raw: dict[str, object]) -> TransactionRow:
+    description = str(raw["description"])
     return {
         "date": _to_date(raw["date"]),
         "time": _to_time(raw["time"]),
         "type": str(raw["type"]),
         "category_major": str(raw["category_major"]),
         "category_minor": _optional_str(raw.get("category_minor")),
-        "description": str(raw["description"]),
+        "description": description,
+        "merchant": description,
         "amount": int(raw["amount"]),
         "currency": str(raw["currency"] or "KRW"),
         "payment_method": _optional_str(raw.get("payment_method")),
