@@ -14,6 +14,7 @@ vi.mock('../../api/dataManagement', () => ({
 vi.mock('../../api/transactions', () => ({
   bulkUpdateTransactions: vi.fn(),
   deleteTransaction: vi.fn(),
+  getTransactionFilterOptions: vi.fn(),
   getTransactions: vi.fn(),
   restoreTransaction: vi.fn(),
   updateTransaction: vi.fn(),
@@ -28,6 +29,7 @@ import { resetData } from '../../api/dataManagement';
 import {
   bulkUpdateTransactions,
   deleteTransaction,
+  getTransactionFilterOptions,
   getTransactions,
   updateTransaction,
 } from '../../api/transactions';
@@ -35,6 +37,7 @@ import { getUploadLogs } from '../../api/upload';
 import { useDataManagement } from '../useDataManagement';
 
 const mockedGetTransactions = vi.mocked(getTransactions);
+const mockedGetTransactionFilterOptions = vi.mocked(getTransactionFilterOptions);
 const mockedGetUploadLogs = vi.mocked(getUploadLogs);
 const mockedBulkUpdateTransactions = vi.mocked(bulkUpdateTransactions);
 const mockedDeleteTransaction = vi.mocked(deleteTransaction);
@@ -61,6 +64,10 @@ function createWrapper() {
 describe('useDataManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGetTransactionFilterOptions.mockResolvedValue({
+      category_options: [],
+      payment_method_options: [],
+    } as never);
   });
 
   it('loads recent upload history alongside transactions', async () => {
@@ -280,70 +287,41 @@ describe('useDataManagement', () => {
     expect(result.current.data?.upload_history).toEqual([]);
   });
 
-  it('aggregates paginated transactions before building the data workbench state', async () => {
-    mockedGetTransactions
-      .mockResolvedValueOnce({
-        total: 21,
-        page: 1,
-        per_page: 20,
-        items: Array.from({ length: 20 }, (_, index) => ({
-          id: index + 1,
-          date: '2026-03-24',
-          time: '09:30:00',
-          type: '지출',
-          category_major: '식비',
-          category_minor: null,
-          category_major_user: null,
-          category_minor_user: null,
-          effective_category_major: '식비',
-          effective_category_minor: null,
-          description: `점심 ${index + 1}`,
-          amount: -12000,
-          currency: 'KRW',
-          payment_method: '카드 A',
-          cost_kind: null,
-          fixed_cost_necessity: null,
-          memo: null,
-          is_deleted: false,
-          merged_into_id: null,
-          is_edited: false,
-          source: 'import',
-          created_at: '2026-03-24T09:30:00',
-          updated_at: '2026-03-24T09:30:00',
-        })),
-      })
-      .mockResolvedValueOnce({
-        total: 21,
-        page: 2,
-        per_page: 20,
-        items: [
-          {
-            id: 21,
-            date: '2026-03-23',
-            time: '08:30:00',
-            type: '수입',
-            category_major: '급여',
-            category_minor: null,
-            category_major_user: null,
-            category_minor_user: null,
-            effective_category_major: '급여',
-            effective_category_minor: null,
-            description: '월급',
-            amount: 3000000,
-            currency: 'KRW',
-            payment_method: '계좌 A',
-            cost_kind: null,
-            fixed_cost_necessity: null,
-            memo: null,
-            is_deleted: false,
-            merged_into_id: null,
-            is_edited: false,
-            source: 'import',
-            created_at: '2026-03-23T08:30:00',
-            updated_at: '2026-03-23T08:30:00',
-          },
-        ],
-      });
+  it('builds the workbench state from the current server page and server-provided filter options', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 21,
+      page: 1,
+      per_page: 20,
+      items: Array.from({ length: 20 }, (_, index) => ({
+        id: index + 1,
+        date: '2026-03-24',
+        time: '09:30:00',
+        type: '지출',
+        category_major: '식비',
+        category_minor: null,
+        category_major_user: null,
+        category_minor_user: null,
+        effective_category_major: '식비',
+        effective_category_minor: null,
+        description: `점심 ${index + 1}`,
+        amount: -12000,
+        currency: 'KRW',
+        payment_method: '카드 A',
+        cost_kind: null,
+        fixed_cost_necessity: null,
+        memo: null,
+        is_deleted: false,
+        merged_into_id: null,
+        is_edited: false,
+        source: 'import',
+        created_at: '2026-03-24T09:30:00',
+        updated_at: '2026-03-24T09:30:00',
+      })),
+    });
+    mockedGetTransactionFilterOptions.mockResolvedValue({
+      category_options: ['급여', '식비'],
+      payment_method_options: ['계좌 A', '카드 A'],
+    } as never);
     mockedGetUploadLogs.mockResolvedValue({ items: [] });
 
     const { result } = renderHook(() => useDataManagement(), {
@@ -354,7 +332,7 @@ describe('useDataManagement', () => {
       expect(result.current.data).toBeDefined();
     });
 
-    expect(mockedGetTransactions).toHaveBeenCalledTimes(2);
+    expect(mockedGetTransactions).toHaveBeenCalledTimes(1);
     expect(result.current.data?.total).toBe(21);
     expect(result.current.data?.transactions).toHaveLength(20);
     expect(result.current.data?.current_page).toBe(1);
@@ -363,7 +341,7 @@ describe('useDataManagement', () => {
     expect(result.current.data?.payment_method_options).toEqual(['계좌 A', '카드 A']);
   });
 
-  it('lets the workbench navigate to later pages without refetching every row again', async () => {
+  it('lets the workbench navigate to later pages by requesting just that page from the API', async () => {
     mockedGetTransactions
       .mockResolvedValueOnce({
         total: 21,
@@ -441,17 +419,20 @@ describe('useDataManagement', () => {
       result.current.setPage(2);
     });
 
-    expect(result.current.data?.current_page).toBe(2);
-    expect(result.current.data?.transactions).toEqual([
-      expect.objectContaining({
-        id: 21,
-        description: '월급',
-      }),
-    ]);
+    await waitFor(() => {
+      expect(result.current.data?.current_page).toBe(2);
+      expect(result.current.data?.transactions).toEqual([
+        expect.objectContaining({
+          id: 21,
+          description: '월급',
+        }),
+      ]);
+    });
+
     expect(mockedGetTransactions).toHaveBeenCalledTimes(2);
   });
 
-  it('applies advanced client-side filters for transaction type, source, edited status, and date range', async () => {
+  it('delegates filters and pagination to the transactions API instead of loading all pages client-side', async () => {
     mockedGetTransactions.mockResolvedValue({
       total: 3,
       page: 1,
@@ -546,10 +527,10 @@ describe('useDataManagement', () => {
 
     const nextFilters = {
       search: '',
-      transaction_type: '수입',
+      transaction_type: '지출',
       source: 'manual',
-      category_major: '',
-      payment_method: '',
+      category_major: '급여',
+      payment_method: '계좌 A',
       date_from: '2026-03-21',
       date_to: '2026-03-23',
       edited_only: true,
@@ -560,23 +541,30 @@ describe('useDataManagement', () => {
       result.current.updateFilters(nextFilters);
     });
 
-    expect(result.current.data?.filters).toEqual(nextFilters);
-    expect(result.current.data?.total).toBe(3);
+    await waitFor(() => {
+      expect(result.current.data?.filters).toEqual(nextFilters);
+    });
 
-    await act(async () => {
+    act(() => {
       result.current.applyFilters();
     });
 
     await waitFor(() => {
-      expect(result.current.data?.total).toBe(1);
+      expect(mockedGetTransactions).toHaveBeenLastCalledWith({
+        page: 1,
+        per_page: 20,
+        include_deleted: false,
+        include_merged: false,
+        category_major: '급여',
+        payment_method: '계좌 A',
+        search: undefined,
+        start_date: '2026-03-21',
+        end_date: '2026-03-23',
+        is_edited: 'true',
+        type: '지출',
+        source: 'manual',
+      });
     });
-
-    expect(result.current.data?.transactions).toEqual([
-      expect.objectContaining({
-        id: 2,
-        description: '월급',
-      }),
-    ]);
   });
 
   it('reports reset feedback after clearing transaction rows only', async () => {

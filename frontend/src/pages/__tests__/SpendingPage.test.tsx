@@ -36,9 +36,6 @@ describe('SpendingPage', () => {
       detail_filters: {
         start_month: '2026-01',
         end_month: '2026-03',
-        category_major: '',
-        payment_method: '',
-        search: '',
       },
       subcategory_major_filter: '',
       include_income: false,
@@ -82,18 +79,12 @@ describe('SpendingPage', () => {
           { label: '식비 / 점심', amount: 150000, share: 41.7 },
           { label: '식비 / 커피', amount: 90000, share: 25 },
         ],
-        payment_methods: [
-          { label: '카드 A', amount: 180000, share: 66.7 },
-          { label: '카드 B', amount: 90000, share: 33.3 },
-        ],
         merchant_breakdown: [
           { name: '점심', amount: 150000 },
           { name: '카페', amount: 90000 },
         ],
         filter_options: {
-          categories: ['식비', '교통'],
           subcategory_major_categories: ['식비', '교통'],
-          payment_methods: ['카드 A', '카드 B'],
         },
       },
       isPending: false,
@@ -164,13 +155,15 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '월별 고정비/변동비 추이' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '고정비 필수/비필수 비율' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '변동비 비율' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: '결제수단별 지출' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래처별 Tree Map' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '일별 지출액' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '기간 적용' })).toBeInTheDocument();
+    expect(screen.queryByText('카테고리', { selector: 'span' })).not.toBeInTheDocument();
+    expect(screen.queryByText('결제수단', { selector: 'span' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('거래 설명 검색')).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: '수입 포함' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: '거래내역 수입 포함' })).toBeInTheDocument();
     expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
-    expect(screen.getByLabelText('결제수단별 지출 파이 차트')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 내역' })).toBeInTheDocument();
     expect(screen.getByText('거래 내역 접기')).toBeInTheDocument();
     expect(screen.getByText('1 / 3 페이지')).toBeInTheDocument();

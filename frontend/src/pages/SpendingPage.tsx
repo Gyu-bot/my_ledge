@@ -1,5 +1,4 @@
 import { memo, useEffect } from 'react';
-import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
 import { CategoryTimelineAreaChart } from '../components/charts/CategoryTimelineAreaChart';
 import { DailySpendCalendar } from '../components/charts/DailySpendCalendar';
 import { HorizontalBarChart } from '../components/charts/HorizontalBarChart';
@@ -114,7 +113,7 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
       <TimelineRangeSlider
         months={timelineData.available_months}
         values={timelineFilters}
-        onChange={setTimelineFilters}
+        onApply={setTimelineFilters}
         onReset={() => setTimelineFilters({ start_month: '', end_month: '' })}
       />
 
@@ -145,9 +144,9 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Badge>{selectedStartMonth}</Badge>
+              <Badge variant="reference">{selectedStartMonth}</Badge>
               <span>~</span>
-              <Badge variant="accent">{selectedEndMonth}</Badge>
+              <Badge variant="reference">{selectedEndMonth}</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -166,26 +165,20 @@ const DetailFilterSection = memo(function DetailFilterSection({
   detailFilters,
   resetDetailFilters,
   setDetailFilters,
-  paymentMethodOptions,
-  categoryOptions,
 }: {
   detailFilters: TransactionFilterValues;
   resetDetailFilters: SpendingPageState['resetDetailFilters'];
   setDetailFilters: SpendingPageState['updateDetailFilters'];
-  paymentMethodOptions: string[];
-  categoryOptions: string[];
 }) {
   return (
     <>
       <TransactionFilterBar
-        categoryOptions={categoryOptions}
-        paymentMethodOptions={paymentMethodOptions}
         values={detailFilters}
         onApply={setDetailFilters}
         onReset={resetDetailFilters}
       />
       <p className="-mt-2 px-2 text-sm text-[color:var(--color-text-muted)]">
-        기간은 아래 집계 카드와 거래 내역에 함께 적용되고, 카테고리·결제수단·검색은 거래 내역 필터로 사용됩니다.
+        월 범위는 아래 집계 카드와 거래 내역에 함께 적용됩니다.
       </p>
     </>
   );
@@ -215,7 +208,7 @@ const BreakdownSection = memo(function BreakdownSection({
       <section className="grid gap-6">
         <InlineSectionStatus
           title="기간 집계 카드를 준비 중입니다"
-          description="카테고리, 하위 카테고리, 결제수단, 거래처 집계를 계산하고 있습니다."
+          description="카테고리, 하위 카테고리, 거래처 집계를 계산하고 있습니다."
         />
       </section>
     );
@@ -282,12 +275,12 @@ const BreakdownSection = memo(function BreakdownSection({
               </Select>
             </label>
             <div className="mt-6">
-            <HorizontalBarChart
-              ariaLabel="하위 카테고리별 지출 차트"
-              data={breakdownQuery.data.subcategory_breakdown}
-              heightClassName="h-96"
-              labelWidth={160}
-            />
+              <HorizontalBarChart
+                ariaLabel="하위 카테고리별 지출 차트"
+                data={breakdownQuery.data.subcategory_breakdown}
+                heightClassName="h-96"
+                labelWidth={160}
+              />
             </div>
           </CardContent>
         </Card>
@@ -325,24 +318,7 @@ const BreakdownSection = memo(function BreakdownSection({
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>결제수단별 지출</CardTitle>
-            <CardDescription>
-              같은 기간 기준 결제수단별 지출 금액을 비교합니다.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center">
-            <div className="w-full max-w-[28rem]">
-              <BreakdownPieChart
-                ariaLabel="결제수단별 지출 파이 차트"
-                data={breakdownQuery.data.payment_methods}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
+      <section className="grid gap-6">
         <Card>
           <CardHeader>
             <CardTitle>거래처별 Tree Map</CardTitle>
@@ -363,26 +339,17 @@ const BreakdownSection = memo(function BreakdownSection({
 });
 
 const DailySpendSection = memo(function DailySpendSection({
-  detailFilters,
   includeIncome,
   selectedMonth,
   setIncludeIncome,
   setSelectedMonth,
 }: {
-  detailFilters: TransactionFilterValues;
   includeIncome: boolean;
   selectedMonth: string;
   setIncludeIncome: SpendingPageState['updateIncludeIncome'];
   setSelectedMonth: SpendingPageState['updateDailyCalendarMonth'];
 }) {
-  const dailyQuery = useSpendingDailyCalendarData(
-    {
-      start_month: detailFilters.start_month,
-      end_month: detailFilters.end_month,
-    },
-    includeIncome,
-    selectedMonth,
-  );
+  const dailyQuery = useSpendingDailyCalendarData(includeIncome, selectedMonth);
 
   if (dailyQuery.isPending) {
     return (
@@ -431,7 +398,7 @@ const DailySpendSection = memo(function DailySpendSection({
             />
             수입 포함
           </label>
-          <Badge variant="accent">{dailyQuery.data.selected_month || '기간 데이터 없음'} 기준</Badge>
+          <Badge variant="reference">{dailyQuery.data.selected_month || '기간 데이터 없음'} 기준</Badge>
           <label className="block min-w-[10rem]">
             <span className="sr-only">일별 지출 월 선택</span>
             <Select
@@ -491,14 +458,11 @@ const DailySpendSection = memo(function DailySpendSection({
 });
 
 const TransactionsSection = memo(function TransactionsSection({
-  categoryMajor,
   endMonth,
   includeIncome,
   isAccordionOpen,
   page,
-  paymentMethod,
   perPage,
-  search,
   setIncludeIncome,
   setTransactionsAccordionOpen,
   setTransactionsPage,
@@ -506,9 +470,6 @@ const TransactionsSection = memo(function TransactionsSection({
 }: {
   startMonth: string;
   endMonth: string;
-  categoryMajor: string;
-  paymentMethod: string;
-  search: string;
   includeIncome: boolean;
   page: number;
   perPage: number;
@@ -521,9 +482,6 @@ const TransactionsSection = memo(function TransactionsSection({
     {
       start_month: startMonth,
       end_month: endMonth,
-      category_major: categoryMajor,
-      payment_method: paymentMethod,
-      search,
     },
     includeIncome,
     page,
@@ -716,7 +674,7 @@ export function SpendingPage() {
         <PageHeader
           eyebrow="지출"
           title="지출 분석"
-          description="기간, 카테고리, 결제수단 기준으로 지출 흐름과 거래 내역을 확인합니다."
+          description="기간 기준으로 지출 흐름과 거래 내역을 확인합니다."
         />
         <InlineSectionStatus
           title="지출 분석 화면을 준비 중입니다"
@@ -740,7 +698,7 @@ export function SpendingPage() {
       <PageHeader
         eyebrow="지출"
         title="지출 분석"
-        description="기간, 카테고리, 결제수단 기준으로 지출 흐름과 거래 내역을 확인합니다."
+        description="기간 기준으로 지출 흐름과 거래 내역을 확인합니다."
       />
 
       <MonthlyTimelineSection
@@ -759,13 +717,11 @@ export function SpendingPage() {
           <Separator />
         </div>
         <p className="text-sm text-[color:var(--color-text-muted)]">
-          카테고리별, 거래처별, 일별 달력, 거래 내역은 아래 월 범위를 기준으로 함께 집계됩니다.
+          카테고리별, 거래처별, 거래 내역은 아래 월 범위를 기준으로 함께 집계됩니다.
         </p>
       </div>
 
       <DetailFilterSection
-        categoryOptions={periodOptionsQuery.data.filter_options.categories}
-        paymentMethodOptions={periodOptionsQuery.data.filter_options.payment_methods}
         detailFilters={detailFilters}
         resetDetailFilters={spendingState.resetDetailFilters}
         setDetailFilters={spendingState.updateDetailFilters}
@@ -779,7 +735,6 @@ export function SpendingPage() {
       />
 
       <DailySpendSection
-        detailFilters={detailFilters}
         includeIncome={spendingState.include_income}
         selectedMonth={dailyCalendarMonth}
         setIncludeIncome={spendingState.updateIncludeIncome}
@@ -789,9 +744,6 @@ export function SpendingPage() {
       <TransactionsSection
         startMonth={detailFilters.start_month}
         endMonth={detailFilters.end_month}
-        categoryMajor={detailFilters.category_major}
-        paymentMethod={detailFilters.payment_method}
-        search={detailFilters.search}
         includeIncome={spendingState.include_income}
         page={spendingState.transactions_page}
         perPage={spendingState.transactions_per_page}

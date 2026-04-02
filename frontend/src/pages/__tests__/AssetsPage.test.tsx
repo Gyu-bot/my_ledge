@@ -30,6 +30,13 @@ describe('AssetsPage', () => {
             cost_basis: 15000000,
             market_value: 16254103.61,
           },
+          allocation_breakdown: [
+            {
+              label: '해외 ETF',
+              amount: 16254103.61,
+              share: 100,
+            },
+          ],
           items: [
             {
               broker: '브로커 A',
@@ -72,6 +79,7 @@ describe('AssetsPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '순자산 추이' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '투자 요약' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '대출 요약' })).toBeInTheDocument();
+    expect(screen.getByLabelText('투자 항목 비중 파이 차트')).toBeInTheDocument();
     expect(screen.getByText('단일 스냅샷')).toBeInTheDocument();
     expect(screen.queryByText('시계열 데이터 1건')).not.toBeInTheDocument();
   });

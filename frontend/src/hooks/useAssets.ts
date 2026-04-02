@@ -43,6 +43,11 @@ export interface AssetsData {
       cost_basis: number;
       market_value: number;
     };
+    allocation_breakdown: Array<{
+      label: string;
+      amount: number;
+      share: number;
+    }>;
     items: InvestmentItem[];
   };
   loans: {
@@ -123,6 +128,21 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
   const investmentTotals = ensureObject(response.investments?.totals);
   const loans = ensureObject(response.loans);
   const loanTotals = ensureObject(response.loans?.totals);
+  const investmentAllocationItems = investmentItems
+    .map((item) => ({
+      label: item.product_name,
+      amount: toNumber(item.market_value ?? item.cost_basis),
+    }))
+    .filter((item) => item.amount > 0)
+    .sort((left, right) => right.amount - left.amount);
+  const topAllocationItems = investmentAllocationItems.slice(0, 6);
+  const overflowAmount = investmentAllocationItems
+    .slice(6)
+    .reduce((sum, item) => sum + item.amount, 0);
+  if (overflowAmount > 0) {
+    topAllocationItems.push({ label: '기타', amount: overflowAmount });
+  }
+  const allocationTotal = topAllocationItems.reduce((sum, item) => sum + item.amount, 0);
 
   return {
     snapshot_date: assetSnapshots[assetSnapshots.length - 1]?.snapshot_date ?? null,
@@ -137,6 +157,10 @@ function buildAssetsData(response: AssetsApiResponse): AssetsData {
         cost_basis: toNumber(investmentTotals.cost_basis),
         market_value: toNumber(investmentTotals.market_value),
       },
+      allocation_breakdown: topAllocationItems.map((item) => ({
+        ...item,
+        share: allocationTotal > 0 ? Number(((item.amount / allocationTotal) * 100).toFixed(1)) : 0,
+      })),
       items: investmentItems.map((item) => ({
         ...item,
         cost_basis: item.cost_basis === null ? null : toNumber(item.cost_basis),

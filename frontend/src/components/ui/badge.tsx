@@ -14,6 +14,8 @@ const badgeVariants = cva(
           'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-strong)]',
         accent:
           'border-[color:var(--color-accent-soft)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent-strong)]',
+        reference:
+          'border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text-muted)]',
         destructive:
           'border-[color:var(--color-danger-soft)] bg-[color:var(--color-danger-soft)] text-[color:var(--color-danger)]',
       },

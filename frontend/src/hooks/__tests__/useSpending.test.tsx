@@ -58,9 +58,6 @@ describe('useSpendingPageState', () => {
       result.current.updateDetailFilters({
         start_month: '2026-02',
         end_month: '2026-02',
-        category_major: '식비',
-        payment_method: '카드',
-        search: '점심',
       });
       result.current.updateDailyCalendarMonth('2026-02');
     });
@@ -71,9 +68,6 @@ describe('useSpendingPageState', () => {
 
     expect(result.current.detail_filters.start_month).toBe('2026-03');
     expect(result.current.detail_filters.end_month).toBe('2026-03');
-    expect(result.current.detail_filters.category_major).toBe('');
-    expect(result.current.detail_filters.payment_method).toBe('');
-    expect(result.current.detail_filters.search).toBe('');
     expect(result.current.daily_calendar_month).toBe('2026-03');
   });
 
@@ -241,10 +235,6 @@ describe('useSpendingDailyCalendarData', () => {
     const { result } = renderHook(
       () =>
         useSpendingDailyCalendarData(
-          {
-            start_month: '2026-03',
-            end_month: '2026-03',
-          },
           false,
           '2026-03',
         ),
@@ -327,9 +317,6 @@ describe('useSpendingDailyCalendarData', () => {
           {
             start_month: '2026-03',
             end_month: '2026-03',
-            category_major: '',
-            payment_method: '',
-            search: '',
           },
           true,
           1,
@@ -515,12 +502,9 @@ describe('spending payload hardening', () => {
     expect(result.current.data).toEqual({
       category_breakdown: [],
       subcategory_breakdown: [],
-      payment_methods: [],
       merchant_breakdown: [],
       filter_options: {
-        categories: [],
         subcategory_major_categories: [],
-        payment_methods: [],
       },
     });
   });

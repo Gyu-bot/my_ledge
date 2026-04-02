@@ -716,3 +716,78 @@
   - 이번 턴에는 계획 추가만 수행
   - 코드 변경 없음
   - 테스트 실행 없음
+
+## Workbench Performance And Spending / Assets Follow-up Batch
+- 사용자 요구:
+  - 앞서 정리한 우선 TODO 1~5를 실제 구현하고, 완료 후 커밋/푸시까지 마무리한다
+  - 범위:
+    - 거래 작업대 성능 최적화
+    - 지출 페이지 시계열 slider apply 흐름
+    - 지출 상세 필터 단순화
+    - 결제수단 카드 제거 + 거래처 TreeMap full-width
+    - 자산 투자 요약 pie chart 전환
+    - 기준 월/일자 badge 톤 통일
+- 구현:
+  - backend
+    - `backend/app/api/v1/endpoints/transactions.py`
+      - `GET /transactions` 에 `type`, `source` query를 추가했다
+      - `GET /transactions/filter-options` endpoint를 추가했다
+    - `backend/app/schemas/transaction.py`
+      - `TransactionSourceFilter`, `TransactionFilterOptionsResponse` 를 추가했다
+    - `backend/app/services/transactions_service.py`
+      - 거래 목록 조회를 `type`, `source`, 날짜 조건까지 서버에서 직접 필터링하도록 정리했다
+      - filter options distinct 조회 서비스를 추가했다
+    - `backend/tests/api/test_transactions_api.py`
+      - `type/source/date` 필터 test를 추가했다
+      - `filter-options` distinct 응답 test를 추가했다
+  - frontend workbench
+    - `frontend/src/api/transactions.ts`
+      - `getTransactionFilterOptions()` 를 추가했다
+    - `frontend/src/types/transactions.ts`
+      - `TransactionFilterOptionsResponse` 타입을 추가했다
+    - `frontend/src/hooks/useDataManagement.ts`
+      - `loadAllTransactions()` 전체 수집을 제거했다
+      - 거래 목록 query를 서버 필터링 + 서버 페이지네이션으로 전환했다
+      - 거래 목록 query와 upload history query를 분리했다
+      - 수정 mutation은 cache update, 나머지는 부분 invalidation 위주로 바꿨다
+    - `frontend/src/hooks/__tests__/useDataManagement.test.tsx`
+      - later page navigation, server-filter delegation, upload-history split 경로를 반영해 갱신했다
+  - frontend spending/assets
+    - `frontend/src/components/filters/TimelineRangeSlider.tsx`
+      - slider 변경 즉시 반영 대신 local draft + `기간 적용` 버튼 구조로 바꿨다
+    - `frontend/src/components/filters/TransactionFilterBar.tsx`
+      - 지출 상세 필터를 `시작 월`, `종료 월`만 남기는 구조로 정리했다
+    - `frontend/src/hooks/useSpending.ts`
+      - 상세 필터 모델을 월 범위만 쓰도록 정리했다
+      - `일별 지출액` 데이터는 공용 상세 필터와 분리된 별도 query 경로로 맞췄다
+    - `frontend/src/pages/SpendingPage.tsx`
+      - `결제수단별 지출` 카드를 제거했다
+      - `거래처별 Tree Map` 카드를 full-width 로 확장했다
+      - 기준 월 badge에 `reference` variant를 적용했다
+    - `frontend/src/hooks/useAssets.ts`
+      - 투자 항목별 비중 pie chart용 allocation breakdown을 계산하도록 추가했다
+    - `frontend/src/components/charts/BreakdownPieChart.tsx`
+      - empty state 문구를 커스터마이즈할 수 있도록 확장했다
+    - `frontend/src/pages/AssetsPage.tsx`
+      - `투자 요약` 카드를 상단 총액 + 하단 pie chart 구조로 바꿨다
+      - 투자/대출 기준일 badge를 `reference` variant로 통일했다
+    - `frontend/src/components/ui/badge.tsx`
+      - 기준값용 `reference` variant를 추가했다
+    - `frontend/src/components/ui/badge.test.tsx`
+      - `reference` variant class 검증을 추가했다
+  - 테스트 정리:
+    - `frontend/src/pages/__tests__/SpendingPage.test.tsx`
+    - `frontend/src/pages/__tests__/AssetsPage.test.tsx`
+    - `frontend/src/components/filters/__tests__/TimelineRangeSlider.test.tsx`
+    - 관련 expectation을 새 UX 기준으로 갱신했다
+- 검증:
+  - `cd frontend && npm test -- src/components/filters/__tests__/TimelineRangeSlider.test.tsx src/pages/__tests__/SpendingPage.test.tsx src/pages/__tests__/AssetsPage.test.tsx src/components/ui/badge.test.tsx src/hooks/__tests__/useDataManagement.test.tsx src/hooks/__tests__/useSpending.test.tsx` → 통과
+  - `cd frontend && npm run lint -- --quiet` → 통과
+  - `cd frontend && npm test` → `24 files / 60 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+  - `cd backend && UV_CACHE_DIR=/tmp/uv-cache-my-ledge uv run pytest tests/api/test_transactions_api.py -q` → `8 passed`
+  - `cd backend && UV_CACHE_DIR=/tmp/uv-cache-my-ledge uv run pytest tests/api/test_analytics_api.py -q` → `10 passed`
+- git:
+  - 사전 정리 커밋: `f462fe8 [frontend] 작업대 bulk edit와 인사이트 후속 정리 (codex)`
+  - 이번 배치 완료 후 별도 커밋/푸시를 추가로 수행한다

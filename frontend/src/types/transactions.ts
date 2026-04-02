@@ -68,6 +68,11 @@ export interface TransactionListResponse {
   items: TransactionResponse[];
 }
 
+export interface TransactionFilterOptionsResponse {
+  category_options: string[];
+  payment_method_options: string[];
+}
+
 export interface TransactionSummaryItem {
   period: string;
   amount: number;

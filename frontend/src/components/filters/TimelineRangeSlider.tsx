@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -10,7 +11,7 @@ export interface TimelineRangeFilterValues {
 interface TimelineRangeSliderProps {
   months: string[];
   values: TimelineRangeFilterValues;
-  onChange: (next: TimelineRangeFilterValues) => void;
+  onApply: (next: TimelineRangeFilterValues) => void;
   onReset: () => void;
 }
 
@@ -44,28 +45,39 @@ function buildSelectedTrackStyle(
   };
 }
 
+function areFiltersEqual(left: TimelineRangeFilterValues, right: TimelineRangeFilterValues) {
+  return left.start_month === right.start_month && left.end_month === right.end_month;
+}
+
 export function TimelineRangeSlider({
   months,
-  onChange,
+  onApply,
   onReset,
   values,
 }: TimelineRangeSliderProps) {
+  const [draftValues, setDraftValues] = useState<TimelineRangeFilterValues>(values);
+
+  useEffect(() => {
+    setDraftValues(values);
+  }, [values]);
+
   if (months.length === 0) {
     return null;
   }
 
   const maxIndex = months.length - 1;
-  const startIndex = resolveSelectedIndex(months, values.start_month, 0);
-  const endIndex = resolveSelectedIndex(months, values.end_month, maxIndex);
+  const startIndex = resolveSelectedIndex(months, draftValues.start_month, 0);
+  const endIndex = resolveSelectedIndex(months, draftValues.end_month, maxIndex);
   const normalizedStartIndex = Math.min(startIndex, endIndex);
   const normalizedEndIndex = Math.max(startIndex, endIndex);
   const trackStyle = buildSelectedTrackStyle(normalizedStartIndex, normalizedEndIndex, maxIndex);
+  const hasPendingChanges = !areFiltersEqual(draftValues, values);
 
   const applyIndexes = (nextStartIndex: number, nextEndIndex: number) => {
     const safeStart = Math.min(nextStartIndex, nextEndIndex);
     const safeEnd = Math.max(nextStartIndex, nextEndIndex);
 
-    onChange({
+    setDraftValues({
       start_month: months[safeStart],
       end_month: months[safeEnd],
     });
@@ -80,14 +92,19 @@ export function TimelineRangeSlider({
               시계열 기간
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">{months[normalizedStartIndex]}</Badge>
+              <Badge variant="reference">{months[normalizedStartIndex]}</Badge>
               <span className="text-sm text-[color:var(--color-text-muted)]">~</span>
-              <Badge variant="accent">{months[normalizedEndIndex]}</Badge>
+              <Badge variant="reference">{months[normalizedEndIndex]}</Badge>
             </div>
           </div>
-          <Button onClick={onReset} type="button" variant="outline">
-            전체 기간
-          </Button>
+          <div className="flex gap-2">
+            <Button disabled={!hasPendingChanges} onClick={() => onApply(draftValues)} type="button">
+              기간 적용
+            </Button>
+            <Button onClick={onReset} type="button" variant="outline">
+              전체 기간
+            </Button>
+          </div>
         </div>
 
         <div className="rounded-[var(--radius)] border border-[color:var(--color-primary-soft)] bg-[color:var(--color-surface-raised)] px-4 py-4">

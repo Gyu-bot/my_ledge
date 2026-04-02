@@ -1,3 +1,4 @@
+import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
 import { LineTrendChart } from '../components/charts/LineTrendChart';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -13,14 +14,6 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('ko-KR', {
     maximumFractionDigits: 0,
   }).format(value)}원`;
-}
-
-function formatPercent(value: number | null) {
-  if (value === null) {
-    return '수익률 없음';
-  }
-
-  return `${value.toFixed(2)}%`;
 }
 
 export function AssetsPage() {
@@ -109,7 +102,7 @@ export function AssetsPage() {
                 최신 투자 스냅샷 기준 평가액과 주요 포지션입니다.
               </CardDescription>
             </div>
-            <Badge variant="accent">{investments.snapshot_date ?? '기준일 없음'}</Badge>
+            <Badge variant="reference">{investments.snapshot_date ?? '기준일 없음'}</Badge>
           </CardHeader>
           <CardContent>
             {investments.items.length > 0 ? (
@@ -132,34 +125,14 @@ export function AssetsPage() {
                     </p>
                   </div>
                 </div>
-                <ul className="mt-5 space-y-3">
-                  {investments.items.slice(0, 4).map((item) => (
-                    <li
-                      key={`${item.broker}-${item.product_name}`}
-                      className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-[color:var(--color-text)]">
-                            {item.product_name}
-                          </p>
-                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                            {item.broker}
-                            {item.product_type ? ` · ${item.product_type}` : ''}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-[color:var(--color-text)]">
-                            {formatMoney(item.market_value ?? 0)}
-                          </p>
-                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                            {formatPercent(item.return_rate)}
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-5">
+                  <BreakdownPieChart
+                    ariaLabel="투자 항목 비중 파이 차트"
+                    data={investments.allocation_breakdown}
+                    emptyTitle="투자 비중 데이터 없음"
+                    emptyDescription="평가액이 있는 투자 항목이 적재되면 이 영역에 비중 차트가 표시됩니다."
+                  />
+                </div>
               </>
             ) : (
               <SectionPlaceholder
@@ -178,7 +151,7 @@ export function AssetsPage() {
                 최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다.
               </CardDescription>
             </div>
-            <Badge variant="destructive">{loans.snapshot_date ?? '기준일 없음'}</Badge>
+            <Badge variant="reference">{loans.snapshot_date ?? '기준일 없음'}</Badge>
           </CardHeader>
           <CardContent>
             {loans.items.length > 0 ? (

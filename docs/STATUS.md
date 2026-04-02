@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / operations bulk edit v1 완료 / frontend 재설계 1차 구현 진행
-- **Last Worker:** codex (2026-04-02T21:05+0900, added spending filter simplification backlog and documented workbench perf diagnosis)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / operations bulk edit v1 완료 / frontend 재설계 후속 batch 반영 완료
+- **Last Worker:** codex (2026-04-02T21:15+0900, completed workbench performance batch plus spending/assets follow-up UI updates)
 - **Branch:** main
 
 ## Completed
@@ -61,6 +61,8 @@
 - [x] Git hygiene 정리: ignored review artifact 디렉터리 `output/`, `.playwright-cli/`, `.codex/` 를 Git index 에서 제거하고, `.gitignore` 를 Python/test/build cache 산출물까지 확장
 - [x] 개요/인사이트 거래처 표기 정리 완료: 개요 `최근 거래` 카드와 인사이트 `반복 결제` 카드의 주요 식별 컬럼을 `description` 대신 `merchant` 기준으로 표시하도록 정렬
 - [x] 인사이트 카드 API 페이지네이션 완료: `반복 결제`, `이상 지출` endpoint/card에 `page`, `per_page`, `total` 기반 10건 단위 페이지네이션을 추가해 카드 길이와 payload를 함께 제어
+- [x] 거래 작업대 성능 최적화 batch 완료: `/transactions` 전건 수집을 제거하고 서버 필터링 + 서버 페이지네이션 + filter-options endpoint + query 분리 + 부분 invalidation/cached update로 재구성
+- [x] 지출/자산 후속 UI batch 완료: 지출 시계열 slider apply 버튼화, 상세 월 필터 단순화, 결제수단별 카드 제거, 거래처 TreeMap full-width 확장, 투자 요약 pie chart 전환, 기준 badge 색상 `reference` variant로 통일
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
@@ -69,8 +71,8 @@
   - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
 - [ ] Frontend 재설계 구현
   - 현재 상태: approved wireframe/spec/plan 기준으로 shell, overview, insights, operations workbench 구현 완료
-  - 현재 지점: global shell hero와 각 페이지 title card를 compact header로 전환했고, `DashboardPage` / `DataPage` / `PlaceholderApp` 및 관련 테스트를 제거했다. `/data` 는 wrapper가 아니라 canonical workbench로 redirect 된다. overview 하단 2열은 `카테고리 요약 Top 5` 를 더 좁히고 `최근 거래` 를 더 넓혀 desktop 줄바꿈을 완화했다. overview `월간 현금흐름` 카드는 `transfer` 시리즈를 제거하고 `income/expense` bar + `net_cashflow` line 혼합 차트로 단순화했다. 전역 차트 팔레트는 단색 블루 계열 대신 `primary/secondary/accent/info/danger/muted` 혼합 팔레트로 재정의했고, bar radius는 프로젝트 전체에서 낮은 roundness를 기본값으로 통일했다. badge, alert, slider, empty/placeholder, 상태 패널도 같은 팔레트의 `*-soft` surface를 쓰도록 정리해 배경 톤을 통일했다. operations workbench는 우측 sidebar를 제거한 뒤, 사용자 피드백에 맞춰 `작업대 요약` / `현재 필터` / `최근 업로드 맥락` 상단 카드도 기본 화면에서 숨기고 full-width 편집 작업대 + 페이지네이션만 남겼다. 필터 바의 날짜 입력폭도 줄여 체크박스 라벨 줄바꿈을 방지했다. 거래 편집 작업대는 `merchant` 편집을 지원하고, spending `거래처별 Tree Map` 은 `description` 대신 `merchant` 를 집계 키로 사용한다. spending 상단 시계열 영역은 슬라이더를 카드 밖 공통 컨트롤로 분리했고, 그 아래에 separator를 두어 상세 월 필터 적용 범위를 시각적으로 구분했다. 상세 집계/달력/거래내역의 기본 월 필터는 시스템 월로 초기화하고, 시스템 월 데이터가 없으면 사용 가능한 가장 가까운 월로 fallback 하도록 정렬했다. 거래 작업대 필터는 draft/apply 2단계로 바꿔 입력 즉시 목록이 흔들리지 않고 `필터 적용` 버튼 클릭 시에만 반영되도록 조정했다. 추가로 선택 체크박스, 현재 페이지 전체 선택, 상단 bulk toolbar를 도입해 선택된 거래의 `merchant`, `category_major_user`, `category_minor_user`, `cost_kind`, `fixed_cost_necessity`, `memo` 를 한 번에 수정할 수 있게 했다. 개요 페이지의 카드별 설명 문구는 제거해 제목 아래 밀도를 줄였다
-  - 남은 작업: spending/assets 본문 redesign 정교화, placeholder/empty-state visual polish, redirect(`/spending`, `/assets`) 브라우저 마무리 확인, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
+  - 현재 지점: global shell hero와 각 페이지 title card를 compact header로 전환했고, `DashboardPage` / `DataPage` / `PlaceholderApp` 및 관련 테스트를 제거했다. `/data` 는 wrapper가 아니라 canonical workbench로 redirect 된다. overview 하단 2열은 `카테고리 요약 Top 5` 를 더 좁히고 `최근 거래` 를 더 넓혀 desktop 줄바꿈을 완화했다. overview `월간 현금흐름` 카드는 `transfer` 시리즈를 제거하고 `income/expense` bar + `net_cashflow` line 혼합 차트로 단순화했다. 전역 차트 팔레트는 단색 블루 계열 대신 `primary/secondary/accent/info/danger/muted` 혼합 팔레트로 재정의했고, bar radius는 프로젝트 전체에서 낮은 roundness를 기본값으로 통일했다. badge, alert, slider, empty/placeholder, 상태 패널도 같은 팔레트의 `*-soft` surface를 쓰도록 정리해 배경 톤을 통일했다. operations workbench는 우측 sidebar를 제거한 뒤, 사용자 피드백에 맞춰 `작업대 요약` / `현재 필터` / `최근 업로드 맥락` 상단 카드도 기본 화면에서 숨기고 full-width 편집 작업대 + 페이지네이션만 남겼다. 필터 바의 날짜 입력폭도 줄여 체크박스 라벨 줄바꿈을 방지했다. 거래 편집 작업대는 `merchant` 편집을 지원하고, spending `거래처별 Tree Map` 은 `description` 대신 `merchant` 를 집계 키로 사용한다. spending 상단 시계열 영역은 slider draft/apply 패턴으로 바꿨고, 상세 필터는 `시작 월` / `종료 월`만 남겼다. `결제수단별 지출` 카드는 제거했고 `거래처별 Tree Map` 은 full-width 로 확장했다. 자산 `투자 요약` 카드는 상단 총액 + 하단 pie chart 구조로 재구성했고, `기준 월` / `기준 일자` badge 는 `reference` variant로 정렬했다. 거래 작업대 필터는 서버 필터링 + 서버 페이지네이션 기반 draft/apply 2단계로 바꿔 전건 수집을 제거했고, filter-options endpoint, query 분리, partial invalidation/cached update까지 반영했다
+  - 남은 작업: `일별 지출액` 카드 내부 독립 dropdown filter, placeholder/empty-state visual polish, redirect(`/spending`, `/assets`) 브라우저 마무리 확인, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/` 정리 후 compact header 반영본 desktop 5장 + mobile 5장(canonical route) 재수집 완료, overview/operations desktop 캡처는 최신 반영본으로 다시 갱신했다
   - 현재 지점: 분석/운영 화면의 동시 로드 오류는 프론트 코드 regressions가 아니라 backend dev server 종료로 인한 `/api/*` 500이었다. backend 재기동 후 `transactions/summary`, `assets/net-worth-history`, `analytics/monthly-cashflow`, `upload/logs` 프록시 응답 200을 재확인했다. frontend dev server는 root `.env` 의 `API_KEY` 를 `VITE_API_KEY` 로 승계하도록 조정해 작업대 write access 경고가 사라지는 상태다
@@ -93,12 +95,12 @@
   - [x] spending 시계열/상세 필터 범위 separator 및 시스템 월 기본값 정렬
   - [ ] 최종 visual polish 및 legacy 컴포넌트 정리
   - [x] workbench 상단 보조 카드 제거 및 필터 행 압축
-  - [ ] 지출 시계열 slider `적용` 버튼 흐름 도입
-  - [ ] 지출 상세 필터를 `시작 월` / `종료 월`만 남기도록 단순화
+  - [x] 지출 시계열 slider `적용` 버튼 흐름 도입
+  - [x] 지출 상세 필터를 `시작 월` / `종료 월`만 남기도록 단순화
   - [ ] `일별 지출액` 카드 내부 독립 dropdown filter 추가
-  - [ ] `결제수단별 지출` 제거 + `거래처별 TreeMap` full-width 확장
-  - [ ] 자산 `투자 요약` 카드 하단 pie chart 비중화
-  - [ ] 기준 월/기준 일자 badge 배경색 전역 통일
+  - [x] `결제수단별 지출` 제거 + `거래처별 TreeMap` full-width 확장
+  - [x] 자산 `투자 요약` 카드 하단 pie chart 비중화
+  - [x] 기준 월/기준 일자 badge 배경색 전역 통일
 - [ ] 거래처 데이터 정리
   - [x] `transactions.merchant` 컬럼 추가 및 기존 row 백필
   - [x] 작업대 merchant 편집 지원 + analytics merchant 집계 전환
@@ -125,10 +127,10 @@
     - [x] 필터 입력과 실제 목록 반영을 분리하는 `필터 적용` 버튼 흐름 도입
     - [ ] 카테고리 기반 rule-based `cost_kind` / `fixed_cost_necessity` 자동 분류 계획 구체화
   - Track D. workbench performance
-    - [ ] `loadAllTransactions()` 기반 전체 페이지 수집 제거
-    - [ ] 서버 필터링 + 서버 페이지네이션으로 전환
-    - [ ] mutation 후 전체 재조회 대신 현재 페이지 캐시 갱신/부분 invalidation 검토
-    - [ ] 거래 목록 query와 업로드 이력 query 분리
+    - [x] `loadAllTransactions()` 기반 전체 페이지 수집 제거
+    - [x] 서버 필터링 + 서버 페이지네이션으로 전환
+    - [x] mutation 후 전체 재조회 대신 현재 페이지 캐시 갱신/부분 invalidation 적용
+    - [x] 거래 목록 query와 업로드 이력 query 분리
   - Track C. bulk edit v2
     - [ ] `description_user` nullable 컬럼 추가 + Alembic migration 작성
     - [ ] canonical read path 확장: `effective_description`, `is_edited`, schema 문서 갱신

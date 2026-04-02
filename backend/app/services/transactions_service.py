@@ -18,9 +18,11 @@ from app.schemas.transaction import (
     TransactionBulkUpdateRequest,
     TransactionBulkUpdateResponse,
     TransactionCreateRequest,
+    TransactionFilterOptionsResponse,
     TransactionGroupBy,
     TransactionListResponse,
     TransactionResponse,
+    TransactionSourceFilter,
     TransactionSummaryItem,
     TransactionSummaryResponse,
     TransactionTypeFilter,
@@ -33,6 +35,8 @@ async def list_transactions(
     *,
     start_date: date | None,
     end_date: date | None,
+    tx_type: TransactionTypeFilter,
+    source: TransactionSourceFilter,
     category_major: str | None,
     payment_method: str | None,
     is_edited: str,
@@ -45,9 +49,10 @@ async def list_transactions(
     base_query, canonical = _build_transaction_query(
         start_date=start_date,
         end_date=end_date,
+        tx_type=tx_type,
+        source=source,
         category_major=category_major,
         payment_method=payment_method,
-        tx_type="all",
         is_edited=is_edited,
         include_deleted=include_deleted,
         include_merged=include_merged,
@@ -68,6 +73,36 @@ async def list_transactions(
     )
 
 
+async def list_transaction_filter_options(
+    db_session: AsyncSession,
+    *,
+    include_deleted: bool,
+    include_merged: bool,
+) -> TransactionFilterOptionsResponse:
+    canonical = build_transactions_effective_select(
+        include_deleted=include_deleted,
+        include_merged=include_merged,
+    ).subquery("vw_transactions_effective")
+
+    category_rows = await db_session.execute(
+        select(canonical.c.effective_category_major)
+        .where(canonical.c.effective_category_major.is_not(None))
+        .distinct()
+        .order_by(canonical.c.effective_category_major.asc())
+    )
+    payment_method_rows = await db_session.execute(
+        select(canonical.c.payment_method)
+        .where(canonical.c.payment_method.is_not(None))
+        .distinct()
+        .order_by(canonical.c.payment_method.asc())
+    )
+
+    return TransactionFilterOptionsResponse(
+        category_options=[row[0] for row in category_rows.all() if row[0]],
+        payment_method_options=[row[0] for row in payment_method_rows.all() if row[0]],
+    )
+
+
 async def summarize_transactions(
     db_session: AsyncSession,
     *,
@@ -83,6 +118,7 @@ async def summarize_transactions(
         category_major=None,
         payment_method=None,
         tx_type=tx_type,
+        source="all",
         is_edited="all",
         include_deleted=False,
         include_merged=False,
@@ -116,6 +152,7 @@ async def summarize_by_category(
         category_major=None,
         payment_method=None,
         tx_type=tx_type,
+        source="all",
         is_edited="all",
         include_deleted=False,
         include_merged=False,
@@ -150,6 +187,7 @@ async def summarize_by_payment_method(
         category_major=None,
         payment_method=None,
         tx_type="all",
+        source="all",
         is_edited="all",
         include_deleted=False,
         include_merged=False,
@@ -182,6 +220,7 @@ async def summarize_category_timeline(
         category_major=None,
         payment_method=None,
         tx_type=tx_type,
+        source="all",
         is_edited="all",
         include_deleted=False,
         include_merged=False,
@@ -323,6 +362,7 @@ async def _load_filtered_transactions(
     category_major: str | None,
     payment_method: str | None,
     tx_type: TransactionTypeFilter,
+    source: TransactionSourceFilter,
     is_edited: str,
     include_deleted: bool,
     include_merged: bool,
@@ -334,6 +374,7 @@ async def _load_filtered_transactions(
         category_major=category_major,
         payment_method=payment_method,
         tx_type=tx_type,
+        source=source,
         is_edited=is_edited,
         include_deleted=include_deleted,
         include_merged=include_merged,
@@ -352,6 +393,7 @@ def _build_transaction_query(
     category_major: str | None,
     payment_method: str | None,
     tx_type: TransactionTypeFilter,
+    source: TransactionSourceFilter,
     is_edited: str,
     include_deleted: bool,
     include_merged: bool,
@@ -372,6 +414,8 @@ def _build_transaction_query(
         query = query.where(canonical.c.effective_category_major == category_major)
     if tx_type != "all":
         query = query.where(canonical.c.type == tx_type)
+    if source != "all":
+        query = query.where(canonical.c.source == source)
     if is_edited == "true":
         query = query.where(canonical.c.is_edited.is_(True))
     elif is_edited == "false":

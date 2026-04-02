@@ -163,6 +163,114 @@ async def test_list_transactions_supports_is_edited_and_search(
     assert payload["items"][0]["fixed_cost_necessity"] is None
 
 
+async def test_list_transactions_supports_type_source_and_date_filters(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 3, 10),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="수동 식비",
+                amount=-15000,
+                payment_method="카드 A",
+                source="manual",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 12),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="업로드 식비",
+                amount=-17000,
+                payment_method="카드 A",
+                source="import",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 27),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=3000000,
+                payment_method="계좌",
+                source="manual",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/transactions",
+        params={
+            "type": "지출",
+            "source": "manual",
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-31",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["description"] == "수동 식비"
+
+
+async def test_list_transaction_filter_options_returns_distinct_visible_values(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 3, 10),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="점심",
+                amount=-15000,
+                payment_method="카드 A",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 11),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="교통",
+                category_minor=None,
+                description="택시",
+                amount=-22000,
+                payment_method="카드 B",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 12),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="기타",
+                category_minor=None,
+                description="삭제 거래",
+                amount=-3000,
+                payment_method="카드 C",
+                is_deleted=True,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get("/api/v1/transactions/filter-options")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["category_options"] == ["교통", "식비"]
+    assert payload["payment_method_options"] == ["카드 A", "카드 B"]
+
+
 async def test_list_transactions_can_include_deleted_and_merged_rows(
     async_client: AsyncClient,
     db_session: AsyncSession,

@@ -6,6 +6,7 @@ import type {
   TransactionBulkUpdateResponse,
   PaymentMethodSummaryResponse,
   TransactionCreateRequest,
+  TransactionFilterOptionsResponse,
   TransactionListResponse,
   TransactionResponse,
   TransactionSummaryResponse,
@@ -14,6 +15,10 @@ import type {
 
 export function getTransactions(query?: QueryParams) {
   return apiRequest<TransactionListResponse>('/transactions', { query });
+}
+
+export function getTransactionFilterOptions(query?: QueryParams) {
+  return apiRequest<TransactionFilterOptionsResponse>('/transactions/filter-options', { query });
 }
 
 export function getTransactionSummary(query?: QueryParams) {

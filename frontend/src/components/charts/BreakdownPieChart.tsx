@@ -6,6 +6,8 @@ import { CHART_NEUTRALS, chartTooltipStyle } from './chartTheme';
 interface BreakdownPieChartProps {
   ariaLabel: string;
   data: SpendingBreakdownDatum[];
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
 const chartColors = CHART_NEUTRALS;
@@ -45,12 +47,17 @@ function TooltipContent({
   );
 }
 
-export function BreakdownPieChart({ ariaLabel, data }: BreakdownPieChartProps) {
+export function BreakdownPieChart({
+  ariaLabel,
+  data,
+  emptyTitle = '결제수단 비중 데이터 없음',
+  emptyDescription = '선택한 기간에 표시할 결제수단 비중 데이터를 찾지 못했습니다.',
+}: BreakdownPieChartProps) {
   if (data.length === 0) {
     return (
       <SectionPlaceholder
-        title="결제수단 비중 데이터 없음"
-        description="선택한 기간에 표시할 결제수단 비중 데이터를 찾지 못했습니다."
+        title={emptyTitle}
+        description={emptyDescription}
       />
     );
   }

@@ -37,6 +37,11 @@ class TransactionListResponse(PaginatedResponse):
     items: list[TransactionResponse]
 
 
+class TransactionFilterOptionsResponse(BaseModel):
+    category_options: list[str]
+    payment_method_options: list[str]
+
+
 class TransactionSummaryItem(BaseModel):
     period: str
     amount: int
@@ -130,5 +135,6 @@ class TransactionMergeRequest(BaseModel):
 
 TransactionGroupBy = Literal["month", "week", "day"]
 TransactionTypeFilter = Literal["지출", "수입", "이체", "all"]
+TransactionSourceFilter = Literal["import", "manual", "all"]
 TransactionCategoryLevel = Literal["major", "minor"]
 TransactionEditedFilter = Literal["true", "false", "all"]

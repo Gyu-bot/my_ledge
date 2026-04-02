@@ -57,12 +57,9 @@ export interface SpendingTimelineData {
 export interface SpendingPeriodData {
   category_breakdown: SpendingBreakdownDatum[];
   subcategory_breakdown: SpendingBreakdownDatum[];
-  payment_methods: SpendingBreakdownDatum[];
   merchant_breakdown: MerchantTreemapDatum[];
   filter_options: {
-    categories: string[];
     subcategory_major_categories: string[];
-    payment_methods: string[];
   };
 }
 
@@ -110,9 +107,6 @@ export function createDefaultDetailFilters(month = getSystemMonth()): Transactio
   return {
     start_month: month,
     end_month: month,
-    category_major: '',
-    payment_method: '',
-    search: '',
   };
 }
 
@@ -193,22 +187,6 @@ function buildMerchantTreemapData(items: TransactionResponse[]): MerchantTreemap
   }
 
   return topItems;
-}
-
-function summarizePaymentMethods(items: TransactionResponse[]) {
-  const totals = new Map<string, number>();
-
-  for (const item of items) {
-    const key = item.payment_method ?? '미지정';
-    totals.set(key, (totals.get(key) ?? 0) + Math.abs(item.amount));
-  }
-
-  return buildBreakdownData(
-    Array.from(totals.entries()).map(([payment_method, amount]) => ({
-      payment_method,
-      amount,
-    })),
-  );
 }
 
 function formatSubcategoryLabel(
@@ -426,14 +404,6 @@ export function useSpendingPeriodData(
       const categories = Array.from(
         new Set(categoryItems.map((item) => item.category)),
       ).sort();
-      const paymentMethodOptions = Array.from(
-        new Set(
-          periodSpendingTransactions
-            .map((item) => item.payment_method)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort();
-
       return {
         category_breakdown: buildBreakdownData(
           categoryItems.map((item) => ({
@@ -451,12 +421,9 @@ export function useSpendingPeriodData(
             amount: item.amount,
           })),
         ),
-        payment_methods: summarizePaymentMethods(periodSpendingTransactions),
         merchant_breakdown: buildMerchantTreemapData(periodSpendingTransactions),
         filter_options: {
-          categories,
           subcategory_major_categories: categories,
-          payment_methods: paymentMethodOptions,
         },
       };
     },
@@ -475,29 +442,41 @@ export function useSpendingTransactionsData(
       'spending-transactions',
       filters.start_month,
       filters.end_month,
-      filters.category_major,
-      filters.payment_method,
-      filters.search,
       includeIncome,
       page,
       perPage,
     ],
     queryFn: async (): Promise<SpendingTransactionsData> => {
+      if (!includeIncome) {
+        const response = await getTransactions({
+          ...toMonthRange(filters),
+          type: '지출',
+          include_deleted: false,
+          include_merged: false,
+          page,
+          per_page: perPage,
+        });
+
+        return {
+          transactions: ensureArray(response.items),
+          transactions_total: response.total,
+          transactions_page: response.page,
+          transactions_per_page: response.per_page,
+        };
+      }
+
       const allTransactions = await fetchAllTransactions({
         ...toMonthRange(filters),
-        category_major: filters.category_major || undefined,
-        payment_method: filters.payment_method || undefined,
-        search: filters.search || undefined,
       });
-      const spendingTransactions = allTransactions.filter((item) =>
+      const visibleTransactions = allTransactions.filter((item) =>
         shouldIncludeTransaction(item.type, includeIncome),
       );
-      const total = spendingTransactions.length;
+      const total = visibleTransactions.length;
       const boundedPage = total === 0 ? 1 : Math.min(page, Math.ceil(total / perPage));
       const startIndex = (boundedPage - 1) * perPage;
 
       return {
-        transactions: spendingTransactions.slice(startIndex, startIndex + perPage),
+        transactions: visibleTransactions.slice(startIndex, startIndex + perPage),
         transactions_total: total,
         transactions_page: boundedPage,
         transactions_per_page: perPage,
@@ -509,20 +488,17 @@ export function useSpendingTransactionsData(
 }
 
 export function useSpendingDailyCalendarData(
-  filters: TimelineRangeFilterValues,
   includeIncome: boolean,
   selectedMonth: string,
 ) {
   return useQuery({
     queryKey: [
       'spending-daily-calendar',
-      filters.start_month,
-      filters.end_month,
       includeIncome,
       selectedMonth,
     ],
     queryFn: async (): Promise<SpendingDailyCalendarData> => {
-      const periodTransactions = await fetchAllTransactions(toMonthRange(filters));
+      const periodTransactions = await fetchAllTransactions({});
       const spendingTransactions = periodTransactions.filter((item) =>
         shouldIncludeTransaction(item.type, includeIncome),
       );

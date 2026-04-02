@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hasApiKeyConfigured } from '../api/client';
 import { resetData, type DataResetResponse, type DataResetScope } from '../api/dataManagement';
-import { ensureArray } from '../lib/collections';
 import {
   bulkUpdateTransactions,
   deleteTransaction,
+  getTransactionFilterOptions,
   getTransactions,
   restoreTransaction,
   updateTransaction,
@@ -16,9 +16,11 @@ import {
   type UploadLogResponse,
   type UploadResponse,
 } from '../api/upload';
+import { ensureArray } from '../lib/collections';
 import type { DataManagementFilterValues } from '../components/data/DataManagementFilterBar';
 import type {
   TransactionBulkUpdateRequest,
+  TransactionListResponse,
   TransactionResponse,
   TransactionUpdateRequest,
 } from '../types/transactions';
@@ -36,6 +38,9 @@ const defaultFilters: DataManagementFilterValues = {
 };
 
 const DATA_MANAGEMENT_QUERY_KEY = ['data-management'] as const;
+const TRANSACTIONS_QUERY_KEY = [...DATA_MANAGEMENT_QUERY_KEY, 'transactions'] as const;
+const FILTER_OPTIONS_QUERY_KEY = [...DATA_MANAGEMENT_QUERY_KEY, 'filter-options'] as const;
+const UPLOAD_HISTORY_QUERY_KEY = [...DATA_MANAGEMENT_QUERY_KEY, 'upload-history'] as const;
 const DATA_MANAGEMENT_ROWS_PER_PAGE = 20;
 
 function areFiltersEqual(
@@ -55,61 +60,24 @@ function areFiltersEqual(
   );
 }
 
-async function loadAllTransactions(
+function buildTransactionsQuery(
   filters: DataManagementFilterValues,
-): Promise<TransactionResponse[]> {
-  const items: TransactionResponse[] = [];
-  let page = 1;
-  let total = 0;
-
-  while (page === 1 || items.length < total) {
-    const response = await getTransactions({
-      page,
-      per_page: DATA_MANAGEMENT_ROWS_PER_PAGE,
-      include_deleted: filters.include_deleted,
-      include_merged: false,
-      category_major: filters.category_major || undefined,
-      payment_method: filters.payment_method || undefined,
-      search: filters.search || undefined,
-    });
-    const pageItems = ensureArray(response.items);
-
-    items.push(...pageItems);
-    total = typeof response.total === 'number' ? response.total : items.length;
-
-    if (pageItems.length === 0) {
-      break;
-    }
-
-    page += 1;
-  }
-
-  return items;
-}
-
-function applyClientFilters(
-  transactions: TransactionResponse[],
-  filters: DataManagementFilterValues,
-): TransactionResponse[] {
-  return transactions.filter((transaction) => {
-    if (filters.transaction_type && transaction.type !== filters.transaction_type) {
-      return false;
-    }
-    if (filters.source && transaction.source !== filters.source) {
-      return false;
-    }
-    if (filters.edited_only && !transaction.is_edited) {
-      return false;
-    }
-    if (filters.date_from && transaction.date < filters.date_from) {
-      return false;
-    }
-    if (filters.date_to && transaction.date > filters.date_to) {
-      return false;
-    }
-
-    return true;
-  });
+  page: number,
+): Record<string, string | number | boolean | undefined> {
+  return {
+    page,
+    per_page: DATA_MANAGEMENT_ROWS_PER_PAGE,
+    include_deleted: filters.include_deleted,
+    include_merged: false,
+    category_major: filters.category_major || undefined,
+    payment_method: filters.payment_method || undefined,
+    search: filters.search || undefined,
+    start_date: filters.date_from || undefined,
+    end_date: filters.date_to || undefined,
+    is_edited: filters.edited_only ? 'true' : 'all',
+    type: filters.transaction_type || undefined,
+    source: filters.source || undefined,
+  };
 }
 
 export interface DataManagementData {
@@ -150,7 +118,10 @@ export interface UseDataManagementResult {
   uploadWorkbookFile: (file: File, snapshotDate: string) => Promise<void>;
   resetDataScope: (scope: DataResetScope) => Promise<DataResetResponse>;
   saveTransaction: (transactionId: number, payload: TransactionUpdateRequest) => Promise<void>;
-  saveBulkTransactions: (ids: number[], payload: Omit<TransactionBulkUpdateRequest, 'ids'>) => Promise<void>;
+  saveBulkTransactions: (
+    ids: number[],
+    payload: Omit<TransactionBulkUpdateRequest, 'ids'>,
+  ) => Promise<void>;
   deleteTransactionRow: (transactionId: number) => Promise<void>;
   restoreTransactionRow: (transactionId: number) => Promise<void>;
 }
@@ -165,54 +136,41 @@ export function useDataManagement(): UseDataManagementResult {
   const [currentPage, setCurrentPage] = useState(1);
 
   const transactionsQuery = useQuery({
-    queryKey: [...DATA_MANAGEMENT_QUERY_KEY, appliedFilters],
-    queryFn: async (): Promise<DataManagementData> => {
-      const [allTransactions, uploadLogsResponse] = await Promise.all([
-        loadAllTransactions(appliedFilters),
-        getUploadLogs(),
-      ]);
-      const uploadHistory = ensureArray(uploadLogsResponse.items);
-      const filteredTransactions = applyClientFilters(allTransactions, appliedFilters);
-
-      const categoryOptions = Array.from(
-        new Set(allTransactions.map((item) => item.effective_category_major).filter(Boolean)),
-      ).sort();
-      const paymentMethodOptions = Array.from(
-        new Set(
-          allTransactions
-            .map((item) => item.payment_method)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort();
-
-      return {
-        filters: appliedFilters,
-        has_pending_filter_changes: false,
-        transactions: filteredTransactions,
-        total: filteredTransactions.length,
-        current_page: 1,
-        page_size: DATA_MANAGEMENT_ROWS_PER_PAGE,
-        total_pages: Math.max(
-          1,
-          Math.ceil(filteredTransactions.length / DATA_MANAGEMENT_ROWS_PER_PAGE),
-        ),
-        category_options: categoryOptions,
-        payment_method_options: paymentMethodOptions,
-        upload_history: uploadHistory,
-        last_upload: lastUpload,
-        has_write_access: hasApiKeyConfigured(),
-      };
-    },
-    refetchOnMount: 'always',
+    queryKey: [...TRANSACTIONS_QUERY_KEY, appliedFilters, currentPage],
+    queryFn: () => getTransactions(buildTransactionsQuery(appliedFilters, currentPage)),
+    placeholderData: (previousData) => previousData,
+    refetchOnMount: false,
     staleTime: 60 * 1000,
   });
 
-  const invalidateTransactions = async () => {
-    await queryClient.invalidateQueries({ queryKey: DATA_MANAGEMENT_QUERY_KEY });
+  const filterOptionsQuery = useQuery({
+    queryKey: [...FILTER_OPTIONS_QUERY_KEY, appliedFilters.include_deleted],
+    queryFn: () =>
+      getTransactionFilterOptions({
+        include_deleted: appliedFilters.include_deleted,
+        include_merged: false,
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const uploadHistoryQuery = useQuery({
+    queryKey: UPLOAD_HISTORY_QUERY_KEY,
+    queryFn: getUploadLogs,
+    staleTime: 60 * 1000,
+  });
+
+  const invalidateWorkbenchTransactions = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: FILTER_OPTIONS_QUERY_KEY }),
+    ]);
   };
 
-  const invalidateDependentQueries = async () => {
-    await invalidateTransactions();
+  const invalidateUploadHistory = async () => {
+    await queryClient.invalidateQueries({ queryKey: UPLOAD_HISTORY_QUERY_KEY });
+  };
+
+  const invalidateDependentReadPages = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       queryClient.invalidateQueries({ queryKey: ['assets-page'] }),
@@ -221,6 +179,24 @@ export function useDataManagement(): UseDataManagementResult {
           typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('spending-'),
       }),
     ]);
+  };
+
+  const updateTransactionCaches = (updatedTransaction: TransactionResponse) => {
+    queryClient.setQueriesData<TransactionListResponse>(
+      { queryKey: TRANSACTIONS_QUERY_KEY },
+      (previousData) => {
+        if (!previousData) {
+          return previousData;
+        }
+
+        return {
+          ...previousData,
+          items: previousData.items.map((item) =>
+            item.id === updatedTransaction.id ? updatedTransaction : item,
+          ),
+        };
+      },
+    );
   };
 
   const uploadMutation = useMutation({
@@ -235,7 +211,11 @@ export function useDataManagement(): UseDataManagementResult {
             ? `업로드가 실패했습니다. ${result.error_message ?? '오류 내역을 확인하세요.'}`
             : `업로드가 ${result.status} 상태로 완료되었습니다. 신규 거래 ${result.transactions.new}건이 반영됐습니다.`,
       });
-      await invalidateTransactions();
+      await Promise.all([
+        invalidateWorkbenchTransactions(),
+        invalidateUploadHistory(),
+        invalidateDependentReadPages(),
+      ]);
     },
     onError: (error) => {
       setActionFeedback({
@@ -261,7 +241,11 @@ export function useDataManagement(): UseDataManagementResult {
             ? `거래 ${result.deleted.transactions}건을 초기화했습니다. 업로드 이력은 유지됩니다.`
             : `거래 ${result.deleted.transactions}건과 스냅샷 ${deletedSnapshotRows}건을 초기화했습니다. 업로드 이력은 유지됩니다.`,
       });
-      await invalidateDependentQueries();
+      await Promise.all([
+        invalidateWorkbenchTransactions(),
+        invalidateUploadHistory(),
+        invalidateDependentReadPages(),
+      ]);
     },
     onError: (error) => {
       setActionFeedback({
@@ -284,15 +268,19 @@ export function useDataManagement(): UseDataManagementResult {
       setActionFeedback(null);
       return updateTransaction(transactionId, payload);
     },
-    onSuccess: (_result, variables) => {
+    onSuccess: async (result, variables) => {
+      updateTransactionCaches(result);
       setActionFeedback({
         variant: 'success',
         message: `거래 ${variables.transactionId}번을 수정했습니다.`,
       });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: FILTER_OPTIONS_QUERY_KEY }),
+        invalidateDependentReadPages(),
+      ]);
     },
-    onSettled: async () => {
+    onSettled: () => {
       setPendingTransactionId(null);
-      await invalidateTransactions();
     },
     onError: (error, variables) => {
       setActionFeedback({
@@ -319,14 +307,12 @@ export function useDataManagement(): UseDataManagementResult {
         ...payload,
       });
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       setActionFeedback({
         variant: 'success',
         message: `선택한 거래 ${result.updated}건을 수정했습니다.`,
       });
-    },
-    onSettled: async () => {
-      await invalidateTransactions();
+      await Promise.all([invalidateWorkbenchTransactions(), invalidateDependentReadPages()]);
     },
     onError: (error) => {
       setActionFeedback({
@@ -345,15 +331,15 @@ export function useDataManagement(): UseDataManagementResult {
       setActionFeedback(null);
       return deleteTransaction(transactionId);
     },
-    onSuccess: (_result, transactionId) => {
+    onSuccess: async (_result, transactionId) => {
       setActionFeedback({
         variant: 'success',
         message: `거래 ${transactionId}번을 삭제했습니다.`,
       });
+      await Promise.all([invalidateWorkbenchTransactions(), invalidateDependentReadPages()]);
     },
-    onSettled: async () => {
+    onSettled: () => {
       setPendingTransactionId(null);
-      await invalidateTransactions();
     },
     onError: (error, transactionId) => {
       setActionFeedback({
@@ -372,15 +358,15 @@ export function useDataManagement(): UseDataManagementResult {
       setActionFeedback(null);
       return restoreTransaction(transactionId);
     },
-    onSuccess: (_result, transactionId) => {
+    onSuccess: async (_result, transactionId) => {
       setActionFeedback({
         variant: 'success',
         message: `거래 ${transactionId}번을 복원했습니다.`,
       });
+      await Promise.all([invalidateWorkbenchTransactions(), invalidateDependentReadPages()]);
     },
-    onSettled: async () => {
+    onSettled: () => {
       setPendingTransactionId(null);
-      await invalidateTransactions();
     },
     onError: (error, transactionId) => {
       setActionFeedback({
@@ -393,35 +379,54 @@ export function useDataManagement(): UseDataManagementResult {
     },
   });
 
-  const paginatedData = useMemo(() => {
-    if (!transactionsQuery.data) {
+  const data = useMemo<DataManagementData | undefined>(() => {
+    if (!transactionsQuery.data || !filterOptionsQuery.data) {
       return undefined;
     }
 
-    const totalPages = Math.max(
-      1,
-      Math.ceil(transactionsQuery.data.total / DATA_MANAGEMENT_ROWS_PER_PAGE),
-    );
+    const total = typeof transactionsQuery.data.total === 'number' ? transactionsQuery.data.total : 0;
+    const totalPages = Math.max(1, Math.ceil(total / DATA_MANAGEMENT_ROWS_PER_PAGE));
     const safeCurrentPage = Math.min(currentPage, totalPages);
-    const startIndex = (safeCurrentPage - 1) * DATA_MANAGEMENT_ROWS_PER_PAGE;
 
     return {
-      ...transactionsQuery.data,
       filters: draftFilters,
       has_pending_filter_changes: !areFiltersEqual(draftFilters, appliedFilters),
+      transactions: ensureArray(transactionsQuery.data.items),
+      total,
       current_page: safeCurrentPage,
+      page_size: transactionsQuery.data.per_page ?? DATA_MANAGEMENT_ROWS_PER_PAGE,
       total_pages: totalPages,
-      transactions: transactionsQuery.data.transactions.slice(
-        startIndex,
-        startIndex + DATA_MANAGEMENT_ROWS_PER_PAGE,
-      ),
+      category_options: ensureArray(filterOptionsQuery.data.category_options),
+      payment_method_options: ensureArray(filterOptionsQuery.data.payment_method_options),
+      upload_history: uploadHistoryQuery.isError
+        ? []
+        : ensureArray(uploadHistoryQuery.data?.items),
+      last_upload: lastUpload,
+      has_write_access: hasApiKeyConfigured(),
     };
-  }, [appliedFilters, currentPage, draftFilters, transactionsQuery.data]);
+  }, [
+    appliedFilters,
+    currentPage,
+    draftFilters,
+    filterOptionsQuery.data,
+    lastUpload,
+    transactionsQuery.data,
+    uploadHistoryQuery.data,
+    uploadHistoryQuery.isError,
+  ]);
+
+  const isPending = transactionsQuery.isPending || filterOptionsQuery.isPending;
+  const error =
+    (transactionsQuery.error as Error | null) ??
+    (filterOptionsQuery.error as Error | null) ??
+    null;
 
   return useMemo(
     () => ({
-      ...transactionsQuery,
-      data: paginatedData,
+      data,
+      isPending,
+      isError: error !== null,
+      error,
       pendingTransactionId,
       isBulkSaving: bulkUpdateMutation.isPending,
       isUploading: uploadMutation.isPending,
@@ -462,16 +467,17 @@ export function useDataManagement(): UseDataManagementResult {
       },
     }),
     [
+      actionFeedback,
       bulkUpdateMutation,
+      data,
       deleteMutation,
-      paginatedData,
+      error,
+      isPending,
       pendingTransactionId,
       resetMutation,
       restoreMutation,
-      transactionsQuery,
       updateMutation,
       uploadMutation,
-      actionFeedback,
       draftFilters,
     ],
   );

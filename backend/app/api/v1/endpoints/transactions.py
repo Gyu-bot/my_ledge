@@ -14,10 +14,12 @@ from app.schemas.transaction import (
     TransactionCategoryLevel,
     TransactionCreateRequest,
     TransactionEditedFilter,
+    TransactionFilterOptionsResponse,
     TransactionGroupBy,
     TransactionListResponse,
     TransactionMergeRequest,
     TransactionResponse,
+    TransactionSourceFilter,
     TransactionSummaryResponse,
     TransactionTypeFilter,
     TransactionUpdateRequest,
@@ -25,6 +27,7 @@ from app.schemas.transaction import (
 from app.services.transactions_service import (
     bulk_update_transactions,
     create_transaction,
+    list_transaction_filter_options,
     list_transactions,
     restore_transaction,
     soft_delete_transaction,
@@ -42,6 +45,8 @@ router = APIRouter()
 async def get_transactions(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    type: TransactionTypeFilter = Query(default="all"),
+    source: TransactionSourceFilter = Query(default="all"),
     category_major: str | None = Query(default=None),
     payment_method: str | None = Query(default=None),
     is_edited: TransactionEditedFilter = Query(default="all"),
@@ -56,6 +61,8 @@ async def get_transactions(
         db_session,
         start_date=start_date,
         end_date=end_date,
+        tx_type=type,
+        source=source,
         category_major=category_major,
         payment_method=payment_method,
         is_edited=is_edited,
@@ -64,6 +71,19 @@ async def get_transactions(
         search=search,
         page=page,
         per_page=per_page,
+    )
+
+
+@router.get("/transactions/filter-options", response_model=TransactionFilterOptionsResponse)
+async def get_transaction_filter_options(
+    include_deleted: bool = Query(default=False),
+    include_merged: bool = Query(default=False),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> TransactionFilterOptionsResponse:
+    return await list_transaction_filter_options(
+        db_session,
+        include_deleted=include_deleted,
+        include_merged=include_merged,
     )
 
 
