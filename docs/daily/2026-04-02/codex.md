@@ -243,6 +243,18 @@
 - 검증:
   - `git ls-files output .playwright-cli` 가 빈 결과를 반환
   - `git status --short` 에서는 해당 파일들이 staged deletion 으로만 표시되고, 이후 같은 경로의 신규 파일은 ignore 규칙을 따른다
+
+## .codex Tracking Removal
+- 사용자 요청:
+  - `.codex/` 도 Git 추적에서 제외
+- 확인:
+  - `git ls-files .codex` 결과로 `ui-ux-pro-max` skill 자산 일체가 추적 중이었다
+- 조치:
+  - `.gitignore` 에 `.codex/` 추가
+  - `git rm -r --cached -- .codex`
+  - 로컬 파일은 삭제하지 않고 Git index 에서만 제거
+- 검증:
+  - 이후 `git ls-files .codex` 는 빈 결과여야 하며, `git check-ignore -v .codex` 는 `.gitignore` 규칙을 가리켜야 한다
 - 설계:
   - override 컬럼(`merchant_user`) 대신 단일 `transactions.merchant` 컬럼을 도입
   - 기존/신규 row는 모두 `description -> merchant` 로 backfill / default
