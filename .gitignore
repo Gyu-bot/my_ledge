@@ -8,3 +8,4 @@ frontend/dist/
 frontend/*.tsbuildinfo
 .superpowers/
 output/
+.playwright-cli/
