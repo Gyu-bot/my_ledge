@@ -1,0 +1,43 @@
+- generic [ref=e3]:
+  - link "본문으로 건너뛰기" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: Finance cockpit
+            - heading "개인 재무 흐름을 개요, 분석, 운영으로 나눠 관리합니다." [level=3] [ref=e11]
+            - paragraph [ref=e12]: 최신 순자산과 현금흐름을 빠르게 읽고, 분석 탭에서 패턴을 확인한 뒤, 운영 탭에서 거래를 정리하는 흐름으로 재구성한 새 워크스페이스입니다.
+          - generic [ref=e13]:
+            - paragraph [ref=e14]: 제품 구조
+            - paragraph [ref=e15]: 개요 · 분석 · 운영
+            - paragraph [ref=e16]: 모바일에서도 상단 섹션 전환으로 빠르게 이동합니다.
+        - generic [ref=e17]:
+          - navigation "Sections" [ref=e18]:
+            - link "개요" [ref=e19] [cursor=pointer]:
+              - /url: /
+            - link "분석" [ref=e20] [cursor=pointer]:
+              - /url: /analysis/spending
+            - link "운영" [ref=e21] [cursor=pointer]:
+              - /url: /operations/workbench
+          - navigation "Section tabs" [ref=e22]:
+            - link "지출" [ref=e23] [cursor=pointer]:
+              - /url: /analysis/spending
+            - link "자산" [ref=e24] [cursor=pointer]:
+              - /url: /analysis/assets
+            - link "인사이트" [ref=e25] [cursor=pointer]:
+              - /url: /analysis/insights
+      - generic [ref=e27]:
+        - generic [ref=e28]: my_ledge
+        - generic [ref=e29]: read-heavy 분석과 write-heavy 운영을 한 셸 안에서 연결합니다.
+    - main [ref=e30]:
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - generic [ref=e34]:
+            - generic [ref=e35]: 지출
+            - heading "지출 분석" [level=2] [ref=e36]
+          - paragraph [ref=e38]: 기간, 카테고리, 결제수단 기준으로 지출 흐름과 거래 내역을 확인합니다.
+        - generic [ref=e39]:
+          - paragraph [ref=e40]: 지출 분석 화면을 준비 중입니다
+          - paragraph [ref=e41]: 기간별 집계와 거래 목록을 차례대로 불러오고 있습니다.

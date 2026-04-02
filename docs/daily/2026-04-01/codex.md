@@ -85,3 +85,116 @@
   - insights page 구현
   - operations workbench 재구성
   - 회귀 테스트와 문서 마무리
+
+## Operations Workbench Implementation
+- 사용자 승인된 redesign spec/plan 범위 안에서 operations slice만 구현했다.
+- 작업 파일:
+  - `frontend/src/pages/OperationsWorkbenchPage.tsx`
+  - `frontend/src/components/operations/OperationsAccordions.tsx`
+  - `frontend/src/components/operations/WorkbenchSidebar.tsx`
+  - `frontend/src/pages/DataPage.tsx`
+  - `frontend/src/pages/__tests__/OperationsWorkbenchPage.test.tsx`
+  - `frontend/src/pages/__tests__/DataPage.test.tsx`
+- 구현 내용:
+  - `거래 작업대`를 운영 섹션의 기본 랜딩으로 승격
+  - 기존 `useDataManagement` read/write 동작 재사용
+  - 업로드 / 최근 업로드 이력 / Danger Zone을 기본 접힘 accordion으로 재배치
+  - `/data` 는 새 작업대를 렌더하는 thin legacy wrapper로 유지
+  - sidebar에 작업대 요약과 최근 업로드 맥락 추가
+- TDD:
+  - 먼저 `OperationsWorkbenchPage.test.tsx`, `DataPage.test.tsx` 를 추가/수정
+  - red: 새 workbench heading / legacy wrapper expectation 부재로 실패 확인
+  - green: 구현 후 두 파일 4개 테스트 통과
+- Verification:
+  - `cd frontend && npm test -- --runInBand src/pages/__tests__/OperationsWorkbenchPage.test.tsx src/pages/__tests__/DataPage.test.tsx`
+  - 결과: `2 passed`, `4 passed`
+
+## Frontend Redesign Integration
+- 서브에이전트를 병렬로 사용해 정보 수집과 페이지 구현을 분리했다.
+  - explorer 2개: 기존 overview/data surface 재사용 가능 영역과 부족한 analytics surface 확인
+  - worker 2개: overview/insights slice, operations slice 구현 분담
+- 메인 세션에서는 결과를 통합하고 새 app shell과 route map을 정리했다.
+- 작업 파일:
+  - `frontend/src/app/AppLayout.tsx`
+  - `frontend/src/app/router.tsx`
+  - `frontend/src/index.css`
+  - `frontend/src/components/navigation/PrimarySectionNav.tsx`
+  - `frontend/src/components/navigation/SectionTabNav.tsx`
+  - `frontend/src/components/layout/AsidePanel.tsx`
+  - `frontend/src/components/layout/MetricCardGrid.tsx`
+  - `frontend/src/api/analytics.ts`
+  - `frontend/src/types/analytics.ts`
+  - `frontend/src/hooks/useOverview.ts`
+  - `frontend/src/hooks/useInsights.ts`
+  - `frontend/src/components/insights/InsightSummaryCards.tsx`
+  - `frontend/src/components/insights/RecurringPaymentsTable.tsx`
+  - `frontend/src/components/insights/SpendingAnomaliesTable.tsx`
+  - `frontend/src/pages/OverviewPage.tsx`
+  - `frontend/src/pages/InsightsPage.tsx`
+- 구현 내용:
+  - 상단 섹션 IA를 `개요 | 분석 | 운영` 으로 재구성
+  - 분석 섹션에 `지출 | 자산 | 인사이트` 탭을 두고 canonical route를 `/analysis/*` 로 전환
+  - 운영 섹션은 `/operations/workbench` 를 기준 route로 두고 `/data` 는 thin wrapper로 유지
+  - `/spending`, `/assets` 는 redirect만 남겨 기존 링크 호환성을 유지
+  - overview는 월간 현금흐름, 핵심 지표, 상위 카테고리, 최근 거래를 한 화면에 통합
+  - insights는 income stability, recurring payments, anomalies, merchant/category signal을 읽는 전용 surface로 분리
+
+## Frontend Verification
+- `cd frontend && npm test -- --runInBand src/app/AppLayout.test.tsx`
+- `cd frontend && npm test -- --runInBand src/pages/__tests__/OverviewPage.test.tsx src/pages/__tests__/InsightsPage.test.tsx`
+- `cd frontend && npm test -- --runInBand src/app/AppLayout.test.tsx src/pages/__tests__/OverviewPage.test.tsx src/pages/__tests__/InsightsPage.test.tsx src/pages/__tests__/OperationsWorkbenchPage.test.tsx src/pages/__tests__/DataPage.test.tsx`
+- `cd frontend && npm run typecheck`
+- `cd frontend && npm run lint`
+- `cd frontend && npm test`
+- 결과:
+  - 전체 frontend test `18 files / 44 tests` 통과
+  - typecheck 통과
+  - lint 통과
+  - Recharts `ResponsiveContainer` warning은 jsdom 한계로 stderr에만 남고 실패는 아님
+
+## Runtime Browser Verification
+- 요청에 따라 실제 서버와 브라우저 기준으로 화면을 확인했다.
+- 실행:
+  - `docker compose up -d db`
+  - `cd backend && UV_CACHE_DIR=/tmp/uv-cache uv run alembic upgrade head`
+  - backend는 기존 `127.0.0.1:8000` 응답 인스턴스를 재사용
+  - `cd frontend && npm run dev -- --host 127.0.0.1 --port 5173`
+  - Playwright CLI로 canonical route를 순회하며 screenshot / console smoke 확인
+- 확보한 캡처:
+  - `output/playwright/screens/overview-desktop.png`
+  - `output/playwright/screens/spending-desktop.png`
+  - `output/playwright/screens/assets-desktop.png`
+  - `output/playwright/screens/insights-desktop.png`
+- 확인 결과:
+  - desktop 4개 route는 실제 렌더링 기준으로 공통 shell과 상단 탭이 정상 노출됨
+  - console error는 공통적으로 `favicon.ico` 404만 확인됨
+  - overview / insights에서는 저장률이 과도한 음수로 노출되어 데이터 표현 검토가 필요함
+  - assets 화면은 순자산 차트가 점 1개만 보여 빈 영역이 크게 남아 시계열 표현/empty-state polish가 필요함
+  - spending 화면은 상단 필터/차트 레이아웃은 안정적이지만, 상세 섹션까지 보려면 추가 캡처가 필요함
+- 자원 사용량 이슈 대응:
+  - Playwright 세션과 dev server가 CPU/메모리를 많이 써서, 사용자 요청 직후 frontend dev server / backend uvicorn / docker db / chrome headless 프로세스를 모두 종료했다
+  - 이후 검증은 저장된 캡처와 로그 분석으로 전환했다
+
+## Layout Fix Pass
+- 실브라우저 캡처 기준으로 확인된 문제를 바로 수정했다.
+- 수정 대상:
+  - `frontend/src/lib/insightMetrics.ts`
+  - `frontend/src/hooks/useOverview.ts`
+  - `frontend/src/hooks/useInsights.ts`
+  - `frontend/src/components/charts/LineTrendChart.tsx`
+  - `frontend/src/lib/insightMetrics.test.ts`
+  - `frontend/src/components/charts/LineTrendChart.test.tsx`
+  - `frontend/src/pages/__tests__/AssetsPage.test.tsx`
+- 적용 내용:
+  - 수입이 극단적으로 작아 저축률이 `-86836.5%` 같이 비정상적으로 길어질 때 `적자 구간` 또는 `산정 보류`로 축약
+  - 시계열 포인트가 1건뿐인 경우 `LineTrendChart`가 빈 차트 대신 single-point summary panel을 렌더하도록 변경
+  - 자산 페이지 테스트도 단일 포인트 fallback을 기준으로 갱신
+- Verification:
+  - `cd frontend && npm test -- --runInBand src/lib/insightMetrics.test.ts src/components/charts/LineTrendChart.test.tsx src/pages/__tests__/AssetsPage.test.tsx`
+  - `cd frontend && npm test -- --runInBand src/pages/__tests__/OverviewPage.test.tsx src/pages/__tests__/InsightsPage.test.tsx src/pages/__tests__/AssetsPage.test.tsx src/components/charts/LineTrendChart.test.tsx src/lib/insightMetrics.test.ts`
+  - `cd frontend && npm run typecheck`
+  - `cd frontend && npm run lint`
+- 결과:
+  - 관련 테스트 5 files / 11 tests 통과
+  - typecheck 통과
+  - lint 통과
