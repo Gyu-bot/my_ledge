@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기 / frontend 재설계 1차 구현 진행
-- **Last Worker:** codex (2026-04-02T13:07+0900, spending filter scope 분리/기본 월 정렬)
+- **Last Worker:** codex (2026-04-02T18:02+0900, expanded gitignore for local caches and untracked ignored artifacts)
 - **Branch:** main
 
 ## Completed
@@ -58,6 +58,7 @@
 - [x] Frontend 실브라우저 점검 일부 완료: 실제 서버 기준 desktop canonical route 4종(`개요`, `지출`, `자산`, `인사이트`) 캡처 확보, 런타임 오류는 `favicon.ico` 404만 확인
 - [x] Frontend 레이아웃 보정 완료: 극단적 저축률 표시를 compact label로 정규화하고, 단일 포인트 시계열은 빈 차트 대신 summary fallback으로 전환
 - [x] 거래처 컬럼 도입 완료: `transactions.merchant` 추가, 기존/신규 row 기본값을 `description` 으로 백필하고 거래 편집 작업대에서 `description` 은 read-only, `merchant` 는 editable 로 분리
+- [x] Git hygiene 정리: ignored review artifact 디렉터리 `output/`, `.playwright-cli/` 를 Git index 에서 제거하고, `.gitignore` 를 Python/test/build cache 산출물까지 확장
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
@@ -209,6 +210,8 @@
 - 2026-04-02: operations workbench 는 우측 sidebar보다 full-width 편집 surface가 우선이다. 상단 보조 정보(`작업대 요약`, `현재 필터`, `최근 업로드 맥락`)도 기본 화면에서는 숨기거나 제거해 첫 viewport를 거래 편집에 우선 배정한다. 편집 테이블은 필터 결과 전체를 페이지네이션으로 끝까지 탐색할 수 있어야 한다.
 - 2026-04-02: 원본 `description` 은 import fidelity 보존용으로 고정하고, 사용자 편집/분석용 거래처는 별도 `transactions.merchant` 컬럼으로 관리한다. 신규/기존 row의 초기 merchant 값은 `description` 으로 채우고, `merchant != description` 은 사용자 수정으로 간주한다.
 - 2026-04-02: spending 상단의 월별 추이 카드는 공통 시계열 슬라이더와 분리하고, 추이 카드 아래에는 separator로 상세 월 필터 적용 영역을 명시한다. 하단 집계 카드들의 초기 월 필터는 시스템 월을 우선 사용하고, 해당 월 데이터가 없을 때만 가장 가까운 사용 가능 월로 fallback 한다.
+- 2026-04-02: 리뷰/캡처 산출물은 `.gitignore` 만으로 충분하지 않다. 이미 추적된 `output/`, `.playwright-cli/` 파일은 index 에서 제거해 로컬 전용 artifact 로 유지한다.
+- 2026-04-02: Git ignore 범위는 현재 저장소에서 반복 생성되는 로컬 산출물만 포함한다. 이번 턴에서는 `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, coverage/test report 계열까지 확장하고, fixture·문서·샘플 데이터는 추적 유지한다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수

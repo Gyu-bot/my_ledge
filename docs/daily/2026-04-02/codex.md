@@ -218,6 +218,31 @@
   - 별도 `거래처(merchant)` 컬럼을 추가하고 초기값은 `description` 으로 채운다
   - 거래 편집 작업대에서는 `description` 은 수정하지 않고 `merchant` 만 수정 가능해야 한다
   - 지출 분석 `거래처별 Tree Map` 과 merchant analytics 는 이 새 컬럼을 사용해야 한다
+
+## Git Ignore Hygiene
+- 사용자 요청:
+  - `output/` 디렉터리와 `.playwright-cli/` 디렉터리를 Git 에서 제외
+- 후속 요청:
+  - 그 외 굳이 필요 없는 파일도 Git 추적에서 제외
+- 확인:
+  - 루트 `.gitignore` 에 두 항목은 이미 존재했다
+  - 하지만 `git ls-files output .playwright-cli` 결과로 기존 캡처/로그 파일이 이미 index 에 남아 있었다
+  - 추가 스캔 결과 현재 추적 중인 불필요 파일은 사실상 위 두 디렉터리뿐이었다
+  - 다만 로컬 반복 산출물 디렉터리 `backend/.pytest_cache`, `backend/.ruff_cache`, `backend/**/__pycache__`, `frontend/dist` 가 워킹트리에 존재했다
+- 조치:
+  - `git rm -r --cached -- output .playwright-cli`
+  - working tree 파일은 유지하고 Git 추적만 제거했다
+  - `.gitignore` 확장:
+    - `.pytest_cache/`
+    - `.ruff_cache/`
+    - `.mypy_cache/`
+    - `.coverage`
+    - `coverage/`
+    - `playwright-report/`
+    - `test-results/`
+- 검증:
+  - `git ls-files output .playwright-cli` 가 빈 결과를 반환
+  - `git status --short` 에서는 해당 파일들이 staged deletion 으로만 표시되고, 이후 같은 경로의 신규 파일은 ignore 규칙을 따른다
 - 설계:
   - override 컬럼(`merchant_user`) 대신 단일 `transactions.merchant` 컬럼을 도입
   - 기존/신규 row는 모두 `description -> merchant` 로 backfill / default
