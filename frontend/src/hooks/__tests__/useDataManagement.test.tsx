@@ -272,8 +272,217 @@ describe('useDataManagement', () => {
     expect(mockedGetTransactions).toHaveBeenCalledTimes(2);
     expect(result.current.data?.total).toBe(21);
     expect(result.current.data?.transactions).toHaveLength(20);
+    expect(result.current.data?.current_page).toBe(1);
+    expect(result.current.data?.total_pages).toBe(2);
     expect(result.current.data?.category_options).toEqual(['급여', '식비']);
     expect(result.current.data?.payment_method_options).toEqual(['계좌 A', '카드 A']);
+  });
+
+  it('lets the workbench navigate to later pages without refetching every row again', async () => {
+    mockedGetTransactions
+      .mockResolvedValueOnce({
+        total: 21,
+        page: 1,
+        per_page: 20,
+        items: Array.from({ length: 20 }, (_, index) => ({
+          id: index + 1,
+          date: '2026-03-24',
+          time: '09:30:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: `점심 ${index + 1}`,
+          amount: -12000,
+          currency: 'KRW',
+          payment_method: '카드 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-24T09:30:00',
+          updated_at: '2026-03-24T09:30:00',
+        })),
+      })
+      .mockResolvedValueOnce({
+        total: 21,
+        page: 2,
+        per_page: 20,
+        items: [
+          {
+            id: 21,
+            date: '2026-03-23',
+            time: '08:30:00',
+            type: '수입',
+            category_major: '급여',
+            category_minor: null,
+            category_major_user: null,
+            category_minor_user: null,
+            effective_category_major: '급여',
+            effective_category_minor: null,
+            description: '월급',
+            amount: 3000000,
+            currency: 'KRW',
+            payment_method: '계좌 A',
+            cost_kind: null,
+            fixed_cost_necessity: null,
+            memo: null,
+            is_deleted: false,
+            merged_into_id: null,
+            is_edited: false,
+            source: 'import',
+            created_at: '2026-03-23T08:30:00',
+            updated_at: '2026-03-23T08:30:00',
+          },
+        ],
+      });
+    mockedGetUploadLogs.mockResolvedValue({ items: [] });
+
+    const { result } = renderHook(() => useDataManagement(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    await act(async () => {
+      result.current.setPage(2);
+    });
+
+    expect(result.current.data?.current_page).toBe(2);
+    expect(result.current.data?.transactions).toEqual([
+      expect.objectContaining({
+        id: 21,
+        description: '월급',
+      }),
+    ]);
+    expect(mockedGetTransactions).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies advanced client-side filters for transaction type, source, edited status, and date range', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 3,
+      page: 1,
+      per_page: 20,
+      items: [
+        {
+          id: 1,
+          date: '2026-03-24',
+          time: '09:30:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: '점심',
+          amount: -12000,
+          currency: 'KRW',
+          payment_method: '카드 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-24T09:30:00',
+          updated_at: '2026-03-24T09:30:00',
+        },
+        {
+          id: 2,
+          date: '2026-03-22',
+          time: '10:30:00',
+          type: '수입',
+          category_major: '급여',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '급여',
+          effective_category_minor: null,
+          description: '월급',
+          amount: 3000000,
+          currency: 'KRW',
+          payment_method: '계좌 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: '확인 완료',
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: true,
+          source: 'manual',
+          created_at: '2026-03-22T10:30:00',
+          updated_at: '2026-03-22T10:30:00',
+        },
+        {
+          id: 3,
+          date: '2026-03-20',
+          time: '08:00:00',
+          type: '이체',
+          category_major: '이체',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '이체',
+          effective_category_minor: null,
+          description: '적금 이체',
+          amount: -500000,
+          currency: 'KRW',
+          payment_method: '계좌 B',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-20T08:00:00',
+          updated_at: '2026-03-20T08:00:00',
+        },
+      ],
+    });
+    mockedGetUploadLogs.mockResolvedValue({ items: [] });
+
+    const { result } = renderHook(() => useDataManagement(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    await act(async () => {
+      result.current.updateFilters({
+        search: '',
+        transaction_type: '수입',
+        source: 'manual',
+        category_major: '',
+        payment_method: '',
+        date_from: '2026-03-21',
+        date_to: '2026-03-23',
+        edited_only: true,
+        include_deleted: false,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.total).toBe(1);
+    });
+
+    expect(result.current.data?.transactions).toEqual([
+      expect.objectContaining({
+        id: 2,
+        description: '월급',
+      }),
+    ]);
   });
 
   it('reports reset feedback after clearing transaction rows only', async () => {

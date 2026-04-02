@@ -1,5 +1,4 @@
 import { Badge } from '../ui/badge';
-import { Card, CardContent, CardHeader } from '../ui/card';
 
 interface PageHeaderProps {
   eyebrow: string;
@@ -10,23 +9,21 @@ interface PageHeaderProps {
 
 export function PageHeader({ eyebrow, title, description, meta }: PageHeaderProps) {
   return (
-    <Card className="sm:p-2">
-      <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
+    <section className="flex flex-col gap-3 border-b border-[color:var(--color-border)] pb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Badge className="tracking-normal" variant="secondary">
             {eyebrow}
           </Badge>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-4xl">
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[color:var(--color-text)] sm:text-3xl">
             {title}
           </h2>
         </div>
-        {meta ? <Badge variant="secondary">{meta}</Badge> : null}
-      </CardHeader>
-      <CardContent className="pt-0">
-        <p className="max-w-3xl text-sm leading-7 text-[color:var(--color-text-muted)] sm:text-base">
-          {description}
-        </p>
-      </CardContent>
-    </Card>
+        {meta ? <span className="text-xs font-medium tracking-[0.12em] text-[color:var(--color-text-subtle)]">{meta}</span> : null}
+      </div>
+      <p className="max-w-3xl text-sm leading-6 text-[color:var(--color-text-muted)] sm:text-base">
+        {description}
+      </p>
+    </section>
   );
 }

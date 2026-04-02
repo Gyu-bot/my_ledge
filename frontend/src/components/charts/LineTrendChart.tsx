@@ -26,6 +26,27 @@ function formatCurrency(value: number | string | readonly (number | string)[] | 
 }
 
 export function LineTrendChart({ data }: LineTrendChartProps) {
+  if (data.length === 1) {
+    const point = data[0];
+
+    return (
+      <div
+        className="flex w-full flex-col justify-center rounded-[var(--radius)] border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] px-6 py-8 text-center"
+        aria-label="Single point trend summary"
+      >
+        <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
+          단일 스냅샷
+        </p>
+        <p className="mt-4 text-3xl font-semibold tracking-tight text-[color:var(--color-text)]">
+          {formatCurrency(point.amount)}
+        </p>
+        <p className="mt-3 text-sm text-[color:var(--color-text-muted)]">
+          {point.period} 기준 값만 표시합니다. 추세 비교를 하려면 스냅샷이 더 필요합니다.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="h-72 w-full" aria-label="Monthly spend trend chart">
       <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={288}>

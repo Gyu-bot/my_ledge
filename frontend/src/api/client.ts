@@ -23,7 +23,16 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
-const API_KEY = import.meta.env.VITE_API_KEY;
+
+export function resolveClientApiKey(
+  env: Partial<Record<'VITE_API_KEY' | 'API_KEY', string | undefined>>,
+) {
+  return env.VITE_API_KEY || env.API_KEY || '';
+}
+
+const API_KEY = resolveClientApiKey(
+  import.meta.env as Partial<Record<'VITE_API_KEY' | 'API_KEY', string | undefined>>,
+);
 
 function buildUrl(path: string, query?: QueryParams) {
   const baseUrl = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;

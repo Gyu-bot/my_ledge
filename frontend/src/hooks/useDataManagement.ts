@@ -20,8 +20,13 @@ import type { TransactionResponse, TransactionUpdateRequest } from '../types/tra
 
 const defaultFilters: DataManagementFilterValues = {
   search: '',
+  transaction_type: '',
+  source: '',
   category_major: '',
   payment_method: '',
+  date_from: '',
+  date_to: '',
+  edited_only: false,
   include_deleted: false,
 };
 
@@ -60,10 +65,38 @@ async function loadAllTransactions(
   return items;
 }
 
+function applyClientFilters(
+  transactions: TransactionResponse[],
+  filters: DataManagementFilterValues,
+): TransactionResponse[] {
+  return transactions.filter((transaction) => {
+    if (filters.transaction_type && transaction.type !== filters.transaction_type) {
+      return false;
+    }
+    if (filters.source && transaction.source !== filters.source) {
+      return false;
+    }
+    if (filters.edited_only && !transaction.is_edited) {
+      return false;
+    }
+    if (filters.date_from && transaction.date < filters.date_from) {
+      return false;
+    }
+    if (filters.date_to && transaction.date > filters.date_to) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
 export interface DataManagementData {
   filters: DataManagementFilterValues;
   transactions: TransactionResponse[];
   total: number;
+  current_page: number;
+  page_size: number;
+  total_pages: number;
   category_options: string[];
   payment_method_options: string[];
   upload_history: UploadLogResponse[];
@@ -88,6 +121,7 @@ export interface UseDataManagementResult {
   actionFeedback: DataManagementActionFeedback | null;
   updateFilters: (next: DataManagementFilterValues) => void;
   resetFilters: () => void;
+  setPage: (page: number) => void;
   uploadWorkbookFile: (file: File, snapshotDate: string) => Promise<void>;
   resetDataScope: (scope: DataResetScope) => Promise<DataResetResponse>;
   saveTransaction: (transactionId: number, payload: TransactionUpdateRequest) => Promise<void>;
@@ -101,6 +135,7 @@ export function useDataManagement(): UseDataManagementResult {
   const [lastUpload, setLastUpload] = useState<UploadResponse | null>(null);
   const [pendingTransactionId, setPendingTransactionId] = useState<number | null>(null);
   const [actionFeedback, setActionFeedback] = useState<DataManagementActionFeedback | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const transactionsQuery = useQuery({
     queryKey: [...DATA_MANAGEMENT_QUERY_KEY, filters],
@@ -110,6 +145,7 @@ export function useDataManagement(): UseDataManagementResult {
         getUploadLogs(),
       ]);
       const uploadHistory = ensureArray(uploadLogsResponse.items);
+      const filteredTransactions = applyClientFilters(allTransactions, filters);
 
       const categoryOptions = Array.from(
         new Set(allTransactions.map((item) => item.effective_category_major).filter(Boolean)),
@@ -124,8 +160,14 @@ export function useDataManagement(): UseDataManagementResult {
 
       return {
         filters,
-        transactions: allTransactions.slice(0, DATA_MANAGEMENT_ROWS_PER_PAGE),
-        total: allTransactions.length,
+        transactions: filteredTransactions,
+        total: filteredTransactions.length,
+        current_page: 1,
+        page_size: DATA_MANAGEMENT_ROWS_PER_PAGE,
+        total_pages: Math.max(
+          1,
+          Math.ceil(filteredTransactions.length / DATA_MANAGEMENT_ROWS_PER_PAGE),
+        ),
         category_options: categoryOptions,
         payment_method_options: paymentMethodOptions,
         upload_history: uploadHistory,
@@ -289,16 +331,47 @@ export function useDataManagement(): UseDataManagementResult {
     },
   });
 
+  const paginatedData = useMemo(() => {
+    if (!transactionsQuery.data) {
+      return undefined;
+    }
+
+    const totalPages = Math.max(
+      1,
+      Math.ceil(transactionsQuery.data.total / DATA_MANAGEMENT_ROWS_PER_PAGE),
+    );
+    const safeCurrentPage = Math.min(currentPage, totalPages);
+    const startIndex = (safeCurrentPage - 1) * DATA_MANAGEMENT_ROWS_PER_PAGE;
+
+    return {
+      ...transactionsQuery.data,
+      current_page: safeCurrentPage,
+      total_pages: totalPages,
+      transactions: transactionsQuery.data.transactions.slice(
+        startIndex,
+        startIndex + DATA_MANAGEMENT_ROWS_PER_PAGE,
+      ),
+    };
+  }, [currentPage, transactionsQuery.data]);
+
   return useMemo(
     () => ({
       ...transactionsQuery,
+      data: paginatedData,
       pendingTransactionId,
       isUploading: uploadMutation.isPending,
       isResetting: resetMutation.isPending,
       uploadError: uploadMutation.error,
       actionFeedback,
-      updateFilters: (next: DataManagementFilterValues) => setFilters(next),
-      resetFilters: () => setFilters(defaultFilters),
+      updateFilters: (next: DataManagementFilterValues) => {
+        setCurrentPage(1);
+        setFilters(next);
+      },
+      resetFilters: () => {
+        setCurrentPage(1);
+        setFilters(defaultFilters);
+      },
+      setPage: (page: number) => setCurrentPage(Math.max(1, page)),
       uploadWorkbookFile: async (file: File, snapshotDate: string) => {
         await uploadMutation.mutateAsync({ file, snapshotDate });
       },
@@ -315,6 +388,7 @@ export function useDataManagement(): UseDataManagementResult {
     }),
     [
       deleteMutation,
+      paginatedData,
       pendingTransactionId,
       resetMutation,
       restoreMutation,

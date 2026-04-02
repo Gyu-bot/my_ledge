@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기 / frontend 재설계 구현 계획 정리 병행
-- **Last Worker:** codex (2026-04-01T11:22+0900, frontend 재설계 implementation plan 작성)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 또는 bulk edit v1 대기 / frontend 재설계 1차 구현 진행
+- **Last Worker:** codex (2026-04-02T11:28+0900, workbench full-width 전환 및 API_KEY 승계)
 - **Branch:** main
 
 ## Completed
@@ -51,16 +51,26 @@
 - [x] Phase 4A P0 advisor analytics 구현 완료: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend` 추가 + backend 서비스/API 테스트 통과
 - [x] Phase 4B P1 rule-based diagnostics 구현 완료: `GET /api/v1/analytics/payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies` 추가 + 전체 테스트 통과 (`57 passed`)
 - [x] 운영 git hygiene hotfix: `.env` 를 `.gitignore` 에 추가하고 latest commit 재작성으로 로컬 history 추적 제거
+- [x] Frontend 재설계 operations slice 완료: `OperationsWorkbenchPage` 추가, `거래 작업대`를 본문 랜딩으로 승격, `업로드`/`최근 업로드 이력`/`Danger Zone`을 accordion으로 재구성, `/data`를 legacy alias wrapper로 유지
+- [x] Frontend 재설계 foundation 완료: 상단 섹션 IA(`개요 | 분석 | 운영`), 섹션 탭 네비게이션, 분석/운영 canonical route map, legacy route redirect/wrapper 적용
+- [x] Frontend 재설계 overview/insights slice 완료: `OverviewPage`, `InsightsPage`, analytics read hook/타입/카드·테이블 컴포넌트 추가
+- [x] Frontend 재설계 1차 검증 완료: frontend 전체 테스트, lint, typecheck 통과
+- [x] Frontend 실브라우저 점검 일부 완료: 실제 서버 기준 desktop canonical route 4종(`개요`, `지출`, `자산`, `인사이트`) 캡처 확보, 런타임 오류는 `favicon.ico` 404만 확인
+- [x] Frontend 레이아웃 보정 완료: 극단적 저축률 표시를 compact label로 정규화하고, 단일 포인트 시계열은 빈 차트 대신 summary fallback으로 전환
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
   - 현재 지점: bulk edit v1 또는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 중 우선순위 결정 필요
   - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
-- [ ] Frontend 재설계 wireframe 설계
-  - 현재 상태: 기존 frontend 라우트/훅/API surface 검토 완료, 상세 wireframe 승인 완료
-  - 현재 지점: `docs/frontend-design-tokens.md` 작성 완료, `docs/DESIGN.md` 제거 완료
-  - 남은 작업: 구현 방식 선택 후 execution 시작
+- [ ] Frontend 재설계 구현
+  - 현재 상태: approved wireframe/spec/plan 기준으로 shell, overview, insights, operations workbench 구현 완료
+  - 현재 지점: global shell hero와 각 페이지 title card를 compact header로 전환했고, `DashboardPage` / `DataPage` / `PlaceholderApp` 및 관련 테스트를 제거했다. `/data` 는 wrapper가 아니라 canonical workbench로 redirect 된다. overview 하단 2열은 `카테고리 요약 Top 5` 를 더 좁히고 `최근 거래` 를 더 넓혀 desktop 줄바꿈을 완화했다. operations workbench는 우측 sidebar를 제거하고 상단 compact summary strip + full-width 편집 작업대 + 페이지네이션 구조로 재배치했다
+  - 남은 작업: spending/assets 본문 redesign 정교화, placeholder/empty-state visual polish, redirect(`/spending`, `/assets`) 브라우저 마무리 확인
+- [ ] Frontend 런타임 점검 후속
+  - 현재 상태: `output/` 정리 후 compact header 반영본 desktop 5장 + mobile 5장(canonical route) 재수집 완료, overview/operations desktop 캡처는 최신 반영본으로 다시 갱신했다
+  - 현재 지점: 분석/운영 화면의 동시 로드 오류는 프론트 코드 regressions가 아니라 backend dev server 종료로 인한 `/api/*` 500이었다. backend 재기동 후 `transactions/summary`, `assets/net-worth-history`, `analytics/monthly-cashflow`, `upload/logs` 프록시 응답 200을 재확인했다. frontend dev server는 root `.env` 의 `API_KEY` 를 `VITE_API_KEY` 로 승계하도록 조정해 작업대 write access 경고가 사라지는 상태다
+  - 남은 작업: 필요 시 desktop/mobile 추가 캡처와 spending/assets 후속 polish
 
 ## Blocked
 - 없음
@@ -71,7 +81,21 @@
   - [x] `docs/superpowers/specs/` 아래 redesign spec 작성
   - [x] `docs/frontend-design-tokens.md` 작성 및 legacy `docs/DESIGN.md` 제거
   - [x] 구현 범위와 단계별 migration plan 정리
-  - [ ] execution 방식 선택 및 구현 시작
+  - [x] operations workbench slice 구현 시작
+  - [x] app shell / route migration 실행
+  - [x] overview / insights 신규 페이지 구현
+  - [x] 캡처 기준 레이아웃 보정 1차 완료
+  - [ ] spending / assets 본문 redesign 정교화
+  - [ ] 최종 visual polish 및 legacy 컴포넌트 정리
+- [ ] Frontend 실브라우저 점검 보강
+  - [x] desktop route 4종 캡처 및 console smoke 확인
+  - [x] 로컬 사용자 리뷰용 dev server 재기동 (`4173`/`8000`, Tailscale 접속 확인)
+  - [x] `operations/workbench` 및 `/data` wrapper desktop 캡처 재수집
+  - [x] mobile viewport canonical route 5종 캡처
+  - [x] `/data` wrapper 제거 후 canonical workbench redirect 반영
+  - [x] 분석/운영 canonical route API proxy 200 재확인
+  - [x] root `.env` `API_KEY` → frontend `VITE_API_KEY` 승계 확인
+  - [ ] redirect(`/spending`, `/assets`) 브라우저 기준 마무리 확인
 - [ ] Advisor analytics 구현
   - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
 - [ ] 데이터 관리 후속 기능
@@ -162,6 +186,17 @@
 - 2026-04-01: frontend 재설계는 모바일 대응을 위해 좌측 사이드바 중심 구조 대신 `상단 섹션(개요/분석/운영) + 섹션 내부 탭` 혼합형 IA를 우선 검토한다. `income`/`transfers`는 독립 페이지보다 현금흐름/인사이트 surface로 흡수하는 쪽을 기본안으로 둔다.
 - 2026-04-01: 운영 섹션에서는 업로드보다 거래 편집이 주 사용 흐름이므로 `거래 작업대`를 랜딩 본문으로 두고, `업로드`/`최근 업로드 이력`/`Danger Zone`은 모두 접힌 아코디언으로 내린다.
 - 2026-04-01: legacy `docs/DESIGN.md` 의 PipelinePro 시스템은 CRM/pipeline 도메인 언어와 상태 의미를 강하게 내장하고 있어 my_ledge에는 그대로 적용하지 않는다. spacing/radius/input/button 같은 중립 토큰만 선별 차용해 `docs/frontend-design-tokens.md`로 재정의한다.
+- 2026-04-01: `/data` route는 제거하지 않고 `OperationsWorkbenchPage` 를 렌더하는 thin legacy wrapper로 유지한다. 기존 진입 링크 호환성과 새 운영 IA를 동시에 만족시키는 쪽이 안전하다.
+- 2026-04-01: frontend 재설계의 canonical route는 `/`, `/analysis/spending`, `/analysis/assets`, `/analysis/insights`, `/operations/workbench` 로 둔다. 기존 `/spending`, `/assets`, `/data` 는 redirect 또는 wrapper 로만 유지해 링크 호환성만 보장한다.
+- 2026-04-01: 실브라우저 점검은 상시 dev server를 오래 유지하지 않고 route별 단발성 실행/캡처로 줄인다. 현재 세션에서는 자원 사용량 이슈로 desktop 4개 route까지만 확인하고 서버를 모두 정리했다.
+- 2026-04-01: 저축률은 수입이 극단적으로 작거나 비율이 비정상적으로 커질 때 퍼센트 그대로 노출하지 않고 `적자 구간`/`산정 보류`로 축약한다. 값의 의미를 유지하면서 카드 레이아웃 붕괴를 막는 쪽이 더 안전하다.
+- 2026-04-01: 시계열 데이터가 1건뿐이면 chart 컴포넌트는 빈 플롯을 그리지 않고 단일 시점 summary panel을 보여준다. 자산 화면의 큰 빈 영역보다 상태 전달력이 높다.
+- 2026-04-02: 사용자 실리뷰를 위한 임시 dev server는 Vite 설정 파일을 바꾸지 않고 CLI `--host 0.0.0.0` override로 연다. 기본 로컬 전용 설정은 유지하면서 Tailscale 접근만 임시로 허용하는 쪽이 안전하다.
+- 2026-04-02: 화면 진단 결과 페이지 제목/설명/메타는 `Card` 안에 두지 않고 page-level compact header로 분리한다. 첫 화면 정보 밀도를 높이고 모바일에서 제목 줄바꿈과 불필요한 상단 여백을 줄이는 쪽이 더 중요하다.
+- 2026-04-02: 새 IA로 대체된 이후에는 legacy page 컴포넌트(`DashboardPage`, `DataPage`, `PlaceholderApp`)를 남겨두지 않는다. `/data` 는 wrapper가 아니라 canonical `operations/workbench` 로 redirect 해 route 호환만 유지한다.
+- 2026-04-02: overview 하단 2열은 거래 가독성을 우선해 `카테고리 요약 Top 5` 보다 `최근 거래` 에 더 큰 폭을 준다. 테이블에서는 날짜/결제수단/금액 컬럼을 `nowrap` 으로 고정해 설명 열이 먼저 폭을 가져가게 한다.
+- 2026-04-02: frontend dev/build 는 root `.env` 의 `API_KEY` 를 별도 중복 입력 없이 client-side `VITE_API_KEY` 로 승계한다. 운영/리뷰 세션에서 작업대 write access 경고를 줄이고 단일 비밀값 소스를 유지하는 쪽이 낫다.
+- 2026-04-02: operations workbench 는 우측 sidebar보다 full-width 편집 surface가 우선이다. 작업대 요약, 현재 필터, 최근 업로드 맥락은 상단 compact cards로 올리고, 편집 테이블은 필터 결과 전체를 페이지네이션으로 끝까지 탐색할 수 있어야 한다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -177,3 +212,6 @@
 - `merchant_normalized` 부재로 recurring/anomaly/merchant aggregation v1은 raw `description` alias 품질에 영향을 받는다
 - `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다
 - `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다
+- frontend 재설계 1차 단계에서는 `SpendingPage`, `AssetsPage` 본문이 기존 구현을 재사용한다. 새 shell/route 아래에서 동작하지만 시각 언어와 정보 밀도 정리는 후속 단계다.
+- Playwright CLI는 현재 환경에서 session 유지와 캐시 경로 이슈가 있어 장시간 일괄 캡처가 불안정하다. 이번 턴에서는 실제 desktop 캡처 4장을 확보한 뒤 서버/브라우저 프로세스를 모두 종료했다.
+- Playwright CLI는 현재 샌드박스에서 cache/namespace 제약으로 browser launch 자체가 실패한다. 이번 턴의 스크린샷 재수집은 Chrome headless `--no-sandbox --disable-dev-shm-usage` fallback으로 수행했다.

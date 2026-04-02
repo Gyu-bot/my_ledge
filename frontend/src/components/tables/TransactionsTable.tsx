@@ -33,17 +33,17 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead>일자</TableHead>
-              <TableHead>내역</TableHead>
-              <TableHead>카테고리</TableHead>
-              <TableHead>결제수단</TableHead>
-              <TableHead className="text-right">금액</TableHead>
+              <TableHead className="w-[7.5rem] whitespace-nowrap">일자</TableHead>
+              <TableHead className="w-[34%]">내역</TableHead>
+              <TableHead className="w-[24%]">카테고리</TableHead>
+              <TableHead className="w-[8.5rem] whitespace-nowrap">결제수단</TableHead>
+              <TableHead className="w-[8rem] whitespace-nowrap text-right">금액</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
           {rows.map((row) => (
             <TableRow key={row.id}>
-              <TableCell className="text-[color:var(--color-text-muted)]">
+              <TableCell className="whitespace-nowrap text-[color:var(--color-text-muted)]">
                 {row.date ?? '-'}
               </TableCell>
               <TableCell className="font-medium text-[color:var(--color-text)]">
@@ -59,10 +59,10 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="text-[color:var(--color-text-muted)]">
+              <TableCell className="whitespace-nowrap text-[color:var(--color-text-muted)]">
                 {row.payment_method ?? 'N/A'}
               </TableCell>
-              <TableCell className="text-right font-semibold text-[color:var(--color-text)]">
+              <TableCell className="whitespace-nowrap text-right font-semibold text-[color:var(--color-text)]">
                 {formatCurrency(row.amount)}
               </TableCell>
             </TableRow>

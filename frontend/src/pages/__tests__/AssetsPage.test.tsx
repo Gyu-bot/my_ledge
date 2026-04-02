@@ -72,5 +72,7 @@ describe('AssetsPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '순자산 추이' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '투자 요약' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '대출 요약' })).toBeInTheDocument();
+    expect(screen.getByText('단일 스냅샷')).toBeInTheDocument();
+    expect(screen.queryByText('시계열 데이터 1건')).not.toBeInTheDocument();
   });
 });
