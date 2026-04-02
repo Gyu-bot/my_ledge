@@ -390,6 +390,7 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert create_response.json()["source"] == "manual"
     assert create_response.json()["description"] == "점심"
     assert create_response.json()["merchant"] == "점심"
+    assert create_response.json()["cost_kind"] == "variable"
 
     patch_response = await async_client.patch(
         f"/api/v1/transactions/{created_id}",
@@ -425,8 +426,12 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
         headers=api_headers,
         json={
             "ids": [created_id, second.id],
+            "merchant": "공통 거래처",
             "category_major_user": "식비",
             "category_minor_user": "배달",
+            "cost_kind": "fixed",
+            "fixed_cost_necessity": "essential",
+            "memo": "일괄 메모",
         },
     )
     assert bulk_response.status_code == 200
@@ -450,8 +455,10 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert stored.category_major_user == "식비"
     assert stored.category_minor_user == "배달"
     assert stored.description == "점심"
-    assert stored.merchant == "회사식당"
-    assert stored.memo == "수정 메모"
+    assert stored.merchant == "공통 거래처"
+    assert stored.cost_kind == "fixed"
+    assert stored.fixed_cost_necessity == "essential"
+    assert stored.memo == "일괄 메모"
     assert stored.is_deleted is False
 
 

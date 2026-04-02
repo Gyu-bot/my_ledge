@@ -2,6 +2,8 @@ import { apiRequest, getApiKeyHeaders, type QueryParams } from './client';
 import type {
   CategorySummaryResponse,
   CategoryTimelineResponse,
+  TransactionBulkUpdateRequest,
+  TransactionBulkUpdateResponse,
   PaymentMethodSummaryResponse,
   TransactionCreateRequest,
   TransactionListResponse,
@@ -40,6 +42,14 @@ export function createTransaction(body: TransactionCreateRequest) {
 
 export function updateTransaction(transactionId: number, body: TransactionUpdateRequest) {
   return apiRequest<TransactionResponse>(`/transactions/${transactionId}`, {
+    method: 'PATCH',
+    body,
+    headers: getApiKeyHeaders(),
+  });
+}
+
+export function bulkUpdateTransactions(body: TransactionBulkUpdateRequest) {
+  return apiRequest<TransactionBulkUpdateResponse>('/transactions/bulk-update', {
     method: 'PATCH',
     body,
     headers: getApiKeyHeaders(),

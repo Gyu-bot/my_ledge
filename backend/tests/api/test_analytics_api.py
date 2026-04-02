@@ -443,7 +443,57 @@ async def test_recurring_payments_endpoint_detects_monthly(
     assert "assumptions" in data
     assert len(data["items"]) == 1
     assert data["items"][0]["interval_type"] == "monthly"
-    assert data["items"][0]["description"] == "넷플릭스"
+    assert data["items"][0]["merchant"] == "넷플릭스"
+    assert "동일 거래처의 반복 간격" in data["assumptions"]
+
+
+async def test_recurring_payments_endpoint_paginates_results(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    entries: list[Transaction] = []
+    for index in range(1, 13):
+        merchant = f"구독-{index:02d}"
+        entries.extend([
+            _transaction(
+                tx_date=date(2026, 1, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="구독",
+                category_minor=None,
+                description=f"{merchant} 1월",
+                merchant=merchant,
+                amount=-15000,
+                payment_method="카드",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="구독",
+                category_minor=None,
+                description=f"{merchant} 2월",
+                merchant=merchant,
+                amount=-15000,
+                payment_method="카드",
+            ),
+        ])
+    db_session.add_all(entries)
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/recurring-payments",
+        params={"start_date": "2026-01-01", "end_date": "2026-02-28", "page": 2, "per_page": 10},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 12
+    assert data["page"] == 2
+    assert data["per_page"] == 10
+    assert len(data["items"]) == 2
+    assert data["items"][0]["merchant"] == "구독-11"
+    assert data["items"][1]["merchant"] == "구독-12"
 
 
 # ── P1: spending-anomalies ────────────────────────────────────────────────────
@@ -499,3 +549,60 @@ async def test_spending_anomalies_endpoint_detects_spike(
     assert len(data["items"]) >= 1
     assert data["items"][0]["category"] == "식비"
     assert "급증" in data["items"][0]["reason"]
+
+
+async def test_spending_anomalies_endpoint_paginates_results(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    entries: list[Transaction] = []
+    for index in range(1, 13):
+        category = f"카테고리-{index:02d}"
+        entries.extend([
+            _transaction(
+                tx_date=date(2026, 1, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major=category,
+                category_minor=None,
+                description=f"{category} 1월",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major=category,
+                category_minor=None,
+                description=f"{category} 2월",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major=category,
+                category_minor=None,
+                description=f"{category} 3월",
+                amount=-200000,
+                payment_method=None,
+            ),
+        ])
+    db_session.add_all(entries)
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={"end_date": "2026-03-31", "baseline_months": 2, "anomaly_threshold": 0.5, "page": 2, "per_page": 10},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 12
+    assert data["page"] == 2
+    assert data["per_page"] == 10
+    assert len(data["items"]) == 2
+    assert data["items"][0]["category"] == "카테고리-11"
+    assert data["items"][1]["category"] == "카테고리-12"

@@ -15,7 +15,7 @@ import { MetricCardGrid } from '../components/layout/MetricCardGrid';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TransactionsTable } from '../components/tables/TransactionsTable';
 import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { useOverview } from '../hooks/useOverview';
 import {
   CHART_ACCENT,
@@ -85,9 +85,6 @@ export function OverviewPage() {
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
             <div>
               <CardTitle>월간 현금흐름</CardTitle>
-              <CardDescription className="mt-2">
-                수입과 지출은 막대로, 순현금흐름은 선으로 월 단위 비교합니다.
-              </CardDescription>
             </div>
             {recent_upload_status ? <Badge variant="secondary">최근 업로드 {recent_upload_status}</Badge> : null}
           </CardHeader>
@@ -138,9 +135,6 @@ export function OverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle>주의 신호</CardTitle>
-            <CardDescription className="mt-2">
-              이상 지출, 반복 결제, 수입 안정성을 빠르게 점검합니다.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {signal_summaries.map((item) => (
@@ -163,9 +157,6 @@ export function OverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle>카테고리 요약 Top 5</CardTitle>
-            <CardDescription className="mt-2">
-              최근 지출 비중이 큰 카테고리를 상위 5개까지 보여줍니다.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2.5">
             {category_top5.map((item, index) => (
@@ -188,9 +179,6 @@ export function OverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle>최근 거래</CardTitle>
-            <CardDescription className="mt-2">
-              최신 거래 8건을 바로 확인합니다.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <TransactionsTable rows={recent_transactions} />

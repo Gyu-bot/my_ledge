@@ -302,6 +302,8 @@ async def get_recurring_payments(
     start_date: date | None,
     end_date: date | None,
     min_occurrences: int,
+    page: int,
+    per_page: int,
 ) -> RecurringPaymentsResponse:
     rows = await _load_analytics_transactions(
         db_session,
@@ -310,17 +312,17 @@ async def get_recurring_payments(
         tx_type="지출",
     )
 
-    desc_data: dict[str, dict] = defaultdict(
+    merchant_data: dict[str, dict] = defaultdict(
         lambda: {"dates": [], "amounts": [], "category": "미분류"}
     )
     for row in rows:
-        desc = row["description"] or "미분류"
-        desc_data[desc]["dates"].append(row["date"])
-        desc_data[desc]["amounts"].append(-row["amount"])
-        desc_data[desc]["category"] = row["effective_category_major"] or "미분류"
+        merchant = row["merchant"] or row["description"] or "미분류"
+        merchant_data[merchant]["dates"].append(row["date"])
+        merchant_data[merchant]["amounts"].append(-row["amount"])
+        merchant_data[merchant]["category"] = row["effective_category_major"] or "미분류"
 
     items = []
-    for desc, data in desc_data.items():
+    for merchant, data in merchant_data.items():
         dates = sorted(data["dates"])
         if len(dates) < min_occurrences:
             continue
@@ -345,7 +347,7 @@ async def get_recurring_payments(
         avg_amount = round(sum(data["amounts"]) / len(data["amounts"]))
         items.append(
             RecurringPaymentItem(
-                description=desc,
+                merchant=merchant,
                 category=data["category"],
                 avg_amount=avg_amount,
                 interval_type=interval_type,
@@ -356,10 +358,14 @@ async def get_recurring_payments(
             )
         )
 
-    items.sort(key=lambda item: (-item.confidence, -item.occurrences, item.description))
+    items.sort(key=lambda item: (-item.confidence, -item.occurrences, item.merchant))
+    paged_items, total, resolved_page = _paginate_items(items, page=page, per_page=per_page)
     return RecurringPaymentsResponse(
-        items=items,
-        assumptions="지출 거래 기준, 동일 description의 반복 간격으로 판단. 25-35일=monthly, 6-8일=weekly",
+        total=total,
+        page=resolved_page,
+        per_page=per_page,
+        items=paged_items,
+        assumptions="지출 거래 기준, 동일 거래처의 반복 간격으로 판단. 25-35일=monthly, 6-8일=weekly",
     )
 
 
@@ -369,6 +375,8 @@ async def get_spending_anomalies(
     end_date: date | None,
     baseline_months: int,
     anomaly_threshold: float,
+    page: int,
+    per_page: int,
 ) -> SpendingAnomaliesResponse:
     ref_date = end_date or date.today()
     target_period = _month_key(ref_date)
@@ -455,8 +463,12 @@ async def get_spending_anomalies(
         )
 
     items.sort(key=lambda item: (-item.anomaly_score, item.category))
+    paged_items, total, resolved_page = _paginate_items(items, page=page, per_page=per_page)
     return SpendingAnomaliesResponse(
-        items=items,
+        total=total,
+        page=resolved_page,
+        per_page=per_page,
+        items=paged_items,
         assumptions=f"기준월={target_period}, baseline={baseline_months}개월 평균 대비, threshold={anomaly_threshold}",
     )
 
@@ -527,3 +539,10 @@ def _safe_ratio(numerator: int, denominator: int) -> float | None:
     if denominator == 0:
         return None
     return round(numerator / denominator, 4)
+
+
+def _paginate_items[T](items: list[T], *, page: int, per_page: int) -> tuple[list[T], int, int]:
+    total = len(items)
+    resolved_page = 1 if total == 0 else min(page, math.ceil(total / per_page))
+    start_index = (resolved_page - 1) * per_page
+    return items[start_index:start_index + per_page], total, resolved_page

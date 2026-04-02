@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   DataManagementFilterBar,
@@ -22,6 +22,7 @@ describe('DataManagementFilterBar', () => {
     const { container } = render(
       <DataManagementFilterBar
         categoryOptions={['식비']}
+        onChange={vi.fn()}
         onApply={vi.fn()}
         onReset={vi.fn()}
         paymentMethodOptions={['카드 A']}
@@ -42,5 +43,36 @@ describe('DataManagementFilterBar', () => {
     checkboxRows.forEach((row) => {
       expect(row.className).toContain('whitespace-nowrap');
     });
+  });
+
+  it('does not apply filters until the apply button is clicked', () => {
+    const handleChange = vi.fn();
+    const handleApply = vi.fn();
+
+    render(
+      <DataManagementFilterBar
+        categoryOptions={['식비']}
+        onChange={handleChange}
+        onApply={handleApply}
+        onReset={vi.fn()}
+        paymentMethodOptions={['카드 A']}
+        hasPendingChanges
+        values={defaultValues}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('거래 설명 또는 메모 검색'), {
+      target: { value: '스타벅스' },
+    });
+
+    expect(handleChange).toHaveBeenCalledWith({
+      ...defaultValues,
+      search: '스타벅스',
+    });
+    expect(handleApply).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '필터 적용' }));
+
+    expect(handleApply).toHaveBeenCalledTimes(1);
   });
 });

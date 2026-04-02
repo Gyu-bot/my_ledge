@@ -82,7 +82,7 @@ class IncomeStabilityResponse(BaseModel):
 
 # P1 ── recurring-payments
 class RecurringPaymentItem(BaseModel):
-    description: str
+    merchant: str
     category: str
     avg_amount: int
     interval_type: str
@@ -93,6 +93,9 @@ class RecurringPaymentItem(BaseModel):
 
 
 class RecurringPaymentsResponse(BaseModel):
+    total: int
+    page: int
+    per_page: int
     items: list[RecurringPaymentItem]
     assumptions: str
 
@@ -109,5 +112,8 @@ class SpendingAnomalyItem(BaseModel):
 
 
 class SpendingAnomaliesResponse(BaseModel):
+    total: int
+    page: int
+    per_page: int
     items: list[SpendingAnomalyItem]
     assumptions: str

@@ -95,6 +95,7 @@ function buildOverviewData(overrides: Partial<OverviewData> = {}): OverviewData 
         effective_category_major: '교통',
         effective_category_minor: null,
         description: '지하철',
+        merchant: '서울교통공사',
         amount: -1450,
         currency: 'KRW',
         payment_method: '카드 A',
@@ -131,10 +132,11 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '주의 신호' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '카테고리 요약 Top 5' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '최근 거래' })).toBeInTheDocument();
-    expect(screen.getAllByText('지하철')).toHaveLength(2);
+    expect(screen.getByRole('columnheader', { name: '거래처' })).toBeInTheDocument();
+    expect(screen.getAllByText('서울교통공사')).toHaveLength(2);
   });
 
-  it('renders monthly cashflow as income/expense bars with a net cashflow line and no transfer series', () => {
+  it('renders monthly cashflow as income/expense bars with a net cashflow line and no per-card descriptions', () => {
     mockedUseOverview.mockReturnValue({
       data: buildOverviewData(),
       isPending: false,
@@ -145,8 +147,15 @@ describe('OverviewPage', () => {
     render(<OverviewPage />);
 
     expect(
-      screen.getByText('수입과 지출은 막대로, 순현금흐름은 선으로 월 단위 비교합니다.'),
-    ).toBeInTheDocument();
+      screen.queryByText('수입과 지출은 막대로, 순현금흐름은 선으로 월 단위 비교합니다.'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('이상 지출, 반복 결제, 수입 안정성을 빠르게 점검합니다.'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('최근 지출 비중이 큰 카테고리를 상위 5개까지 보여줍니다.'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('최신 거래 8건을 바로 확인합니다.')).not.toBeInTheDocument();
     expect(screen.getByTestId('bar-series-income')).toBeInTheDocument();
     expect(screen.getByTestId('bar-series-expense')).toBeInTheDocument();
     expect(screen.getByTestId('line-series-net_cashflow')).toBeInTheDocument();

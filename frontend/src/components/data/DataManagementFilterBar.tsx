@@ -26,20 +26,31 @@ interface DataManagementFilterBarProps {
   values: DataManagementFilterValues;
   categoryOptions: string[];
   paymentMethodOptions: string[];
-  onApply: (next: DataManagementFilterValues) => void;
+  onChange: (next: DataManagementFilterValues) => void;
+  onApply: () => void;
   onReset: () => void;
+  hasPendingChanges?: boolean;
 }
 
 export function DataManagementFilterBar({
   values,
   categoryOptions,
   paymentMethodOptions,
+  onChange,
   onApply,
   onReset,
+  hasPendingChanges = false,
 }: DataManagementFilterBarProps) {
   return (
     <Card>
       <CardContent className="p-5">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApply();
+          }}
+        >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.82fr))]">
           <label className="space-y-2">
             <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
@@ -48,7 +59,7 @@ export function DataManagementFilterBar({
             <Input
               type="search"
               value={values.search}
-              onChange={(event) => onApply({ ...values, search: event.target.value })}
+              onChange={(event) => onChange({ ...values, search: event.target.value })}
               placeholder="거래 설명 또는 메모 검색"
             />
           </label>
@@ -59,7 +70,7 @@ export function DataManagementFilterBar({
             </span>
             <Select
               onValueChange={(value) =>
-                onApply({ ...values, transaction_type: value === '__all__' ? '' : value })
+                onChange({ ...values, transaction_type: value === '__all__' ? '' : value })
               }
               value={values.transaction_type || '__all__'}
             >
@@ -81,7 +92,7 @@ export function DataManagementFilterBar({
             </span>
             <Select
               onValueChange={(value) =>
-                onApply({ ...values, source: value === '__all__' ? '' : value })
+                onChange({ ...values, source: value === '__all__' ? '' : value })
               }
               value={values.source || '__all__'}
             >
@@ -102,7 +113,7 @@ export function DataManagementFilterBar({
             </span>
             <Select
               onValueChange={(value) =>
-                onApply({ ...values, category_major: value === '__all__' ? '' : value })
+                onChange({ ...values, category_major: value === '__all__' ? '' : value })
               }
               value={values.category_major || '__all__'}
             >
@@ -128,7 +139,7 @@ export function DataManagementFilterBar({
             </span>
             <Select
               onValueChange={(value) =>
-                onApply({ ...values, payment_method: value === '__all__' ? '' : value })
+                onChange({ ...values, payment_method: value === '__all__' ? '' : value })
               }
               value={values.payment_method || '__all__'}
             >
@@ -154,7 +165,7 @@ export function DataManagementFilterBar({
               className="max-w-[10.5rem]"
               type="date"
               value={values.date_from}
-              onChange={(event) => onApply({ ...values, date_from: event.target.value })}
+              onChange={(event) => onChange({ ...values, date_from: event.target.value })}
             />
           </label>
 
@@ -166,7 +177,7 @@ export function DataManagementFilterBar({
               className="max-w-[10.5rem]"
               type="date"
               value={values.date_to}
-              onChange={(event) => onApply({ ...values, date_to: event.target.value })}
+              onChange={(event) => onChange({ ...values, date_to: event.target.value })}
             />
           </label>
 
@@ -175,7 +186,7 @@ export function DataManagementFilterBar({
               <Checkbox
                 checked={values.include_deleted}
                 onCheckedChange={(checked) =>
-                  onApply({ ...values, include_deleted: checked === true })
+                  onChange({ ...values, include_deleted: checked === true })
                 }
               />
               삭제된 거래 포함
@@ -187,7 +198,7 @@ export function DataManagementFilterBar({
               <Checkbox
                 checked={values.edited_only}
                 onCheckedChange={(checked) =>
-                  onApply({ ...values, edited_only: checked === true })
+                  onChange({ ...values, edited_only: checked === true })
                 }
               />
               사용자 수정만
@@ -195,11 +206,17 @@ export function DataManagementFilterBar({
           </label>
 
           <div className="flex items-end">
-            <Button className="w-full" onClick={onReset} type="button" variant="outline">
-              필터 초기화
-            </Button>
+            <div className="flex w-full gap-2">
+              <Button className="flex-1" disabled={!hasPendingChanges} type="submit">
+                필터 적용
+              </Button>
+              <Button className="flex-1" onClick={onReset} type="button" variant="outline">
+                필터 초기화
+              </Button>
+            </div>
           </div>
         </div>
+        </form>
       </CardContent>
     </Card>
   );

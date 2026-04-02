@@ -12,6 +12,7 @@ vi.mock('../../api/dataManagement', () => ({
 }));
 
 vi.mock('../../api/transactions', () => ({
+  bulkUpdateTransactions: vi.fn(),
   deleteTransaction: vi.fn(),
   getTransactions: vi.fn(),
   restoreTransaction: vi.fn(),
@@ -24,12 +25,18 @@ vi.mock('../../api/upload', () => ({
 }));
 
 import { resetData } from '../../api/dataManagement';
-import { deleteTransaction, getTransactions, updateTransaction } from '../../api/transactions';
+import {
+  bulkUpdateTransactions,
+  deleteTransaction,
+  getTransactions,
+  updateTransaction,
+} from '../../api/transactions';
 import { getUploadLogs } from '../../api/upload';
 import { useDataManagement } from '../useDataManagement';
 
 const mockedGetTransactions = vi.mocked(getTransactions);
 const mockedGetUploadLogs = vi.mocked(getUploadLogs);
+const mockedBulkUpdateTransactions = vi.mocked(bulkUpdateTransactions);
 const mockedDeleteTransaction = vi.mocked(deleteTransaction);
 const mockedUpdateTransaction = vi.mocked(updateTransaction);
 const mockedResetData = vi.mocked(resetData);
@@ -537,18 +544,27 @@ describe('useDataManagement', () => {
       expect(result.current.data).toBeDefined();
     });
 
+    const nextFilters = {
+      search: '',
+      transaction_type: '수입',
+      source: 'manual',
+      category_major: '',
+      payment_method: '',
+      date_from: '2026-03-21',
+      date_to: '2026-03-23',
+      edited_only: true,
+      include_deleted: false,
+    };
+
     await act(async () => {
-      result.current.updateFilters({
-        search: '',
-        transaction_type: '수입',
-        source: 'manual',
-        category_major: '',
-        payment_method: '',
-        date_from: '2026-03-21',
-        date_to: '2026-03-23',
-        edited_only: true,
-        include_deleted: false,
-      });
+      result.current.updateFilters(nextFilters);
+    });
+
+    expect(result.current.data?.filters).toEqual(nextFilters);
+    expect(result.current.data?.total).toBe(3);
+
+    await act(async () => {
+      result.current.applyFilters();
     });
 
     await waitFor(() => {
@@ -598,6 +614,99 @@ describe('useDataManagement', () => {
     expect(result.current.actionFeedback).toEqual({
       variant: 'success',
       message: '거래 12건을 초기화했습니다. 업로드 이력은 유지됩니다.',
+    });
+  });
+
+  it('sends bulk edit payloads and reports the updated row count', async () => {
+    mockedGetTransactions.mockResolvedValue({
+      total: 2,
+      page: 1,
+      per_page: 20,
+      items: [
+        {
+          id: 1,
+          date: '2026-03-24',
+          time: '09:30:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: '점심',
+          merchant: '회사식당',
+          amount: -12000,
+          currency: 'KRW',
+          payment_method: '카드 A',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-24T09:30:00',
+          updated_at: '2026-03-24T09:30:00',
+        },
+        {
+          id: 2,
+          date: '2026-03-25',
+          time: '10:00:00',
+          type: '지출',
+          category_major: '식비',
+          category_minor: null,
+          category_major_user: null,
+          category_minor_user: null,
+          effective_category_major: '식비',
+          effective_category_minor: null,
+          description: '커피',
+          merchant: '카페',
+          amount: -5000,
+          currency: 'KRW',
+          payment_method: '카드 B',
+          cost_kind: null,
+          fixed_cost_necessity: null,
+          memo: null,
+          is_deleted: false,
+          merged_into_id: null,
+          is_edited: false,
+          source: 'import',
+          created_at: '2026-03-25T10:00:00',
+          updated_at: '2026-03-25T10:00:00',
+        },
+      ],
+    });
+    mockedGetUploadLogs.mockResolvedValue({ items: [] });
+    mockedBulkUpdateTransactions.mockResolvedValue({ updated: 2 });
+
+    const { result } = renderHook(() => useDataManagement(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    await act(async () => {
+      await result.current.saveBulkTransactions([1, 2], {
+        cost_kind: 'fixed',
+        fixed_cost_necessity: 'essential',
+        merchant: '외식 묶음',
+        memo: '일괄 메모',
+      });
+    });
+
+    expect(mockedBulkUpdateTransactions).toHaveBeenCalledWith({
+      ids: [1, 2],
+      cost_kind: 'fixed',
+      fixed_cost_necessity: 'essential',
+      merchant: '외식 묶음',
+      memo: '일괄 메모',
+    });
+    expect(result.current.actionFeedback).toEqual({
+      variant: 'success',
+      message: '선택한 거래 2건을 수정했습니다.',
     });
   });
 });

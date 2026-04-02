@@ -18,6 +18,7 @@ describe('TransactionsTable', () => {
             category_major_user: null,
             category_minor_user: null,
             description: '생활비 자동이체 테스트',
+            merchant: '생활비 자동이체',
             effective_category_major: '생활',
             effective_category_minor: '고정비',
             payment_method: '우리카드',
@@ -38,8 +39,9 @@ describe('TransactionsTable', () => {
     );
 
     expect(screen.getByRole('columnheader', { name: '일자' })).toHaveClass('whitespace-nowrap');
-    expect(screen.getByRole('columnheader', { name: '내역' })).toHaveClass('w-[34%]');
+    expect(screen.getByRole('columnheader', { name: '거래처' })).toHaveClass('w-[34%]');
     expect(screen.getByRole('columnheader', { name: '결제수단' })).toHaveClass('whitespace-nowrap');
     expect(screen.getByRole('cell', { name: /우리카드/i })).toHaveClass('whitespace-nowrap');
+    expect(screen.getByRole('cell', { name: '생활비 자동이체' })).toBeInTheDocument();
   });
 });

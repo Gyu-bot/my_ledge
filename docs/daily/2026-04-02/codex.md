@@ -113,6 +113,23 @@
 - `operations-workbench` desktop에서는 sidebar 카드가 본문보다 빨리 끝나 우측 여백이 길게 남는다.
 - spending/assets 본문은 새 shell 아래에서 동작하지만, 차트/필터/요약 블록의 정보 밀도 정리는 한 차례 더 손보는 편이 좋다.
 
+## Additional Spending Filter Backlog And Workbench Perf Diagnosis
+- 사용자 요청으로 다음 backlog를 구현 계획에 유지한다:
+  - `분석 > 지출` 시계열 날짜 필터는 slider 이동 즉시 반영하지 않고 `적용` 버튼 클릭 시에만 실행
+  - `분석 > 지출` 상세 월 필터는 `시작 월`, `종료 월`만 유지
+  - `카테고리`, `결제수단`, `설명 검색` 필터는 제거
+- 관련 계획 문서는 `docs/superpowers/plans/2026-04-01-frontend-redesign-implementation.md` 의 `Next Batch Backlog` 를 기준으로 유지한다.
+- 거래 편집 작업대 체감 성능 병목은 `frontend/src/hooks/useDataManagement.ts` 의 `loadAllTransactions()` 에 있다.
+  - 현재 구조는 `/transactions` 전체 페이지를 끝까지 수집
+  - 이후 client-side 로 추가 필터링
+  - 마지막에 다시 client-side pagination slice 적용
+- 우선순위가 높은 최적화 방향:
+  - `/transactions` 에 서버 필터링 + 서버 페이지네이션을 전면 위임
+  - mutation 후 전체 refetch 대신 현재 페이지 cache update 또는 partial invalidation 적용
+  - `getUploadLogs()` 와 거래 목록 query 분리
+  - `refetchOnMount: 'always'` 재검토
+- 이번 턴은 문서 반영과 병목 정리만 수행했고 코드 변경이나 테스트 실행은 하지 않았다.
+
 ## Overview Width And Runtime Follow-up
 - 사용자 피드백:
   - overview 하단 2열에서 `카테고리 요약 Top 5` 는 너무 넓고 `최근 거래` 는 좁아 줄바꿈이 지저분했다
@@ -218,6 +235,75 @@
   - 별도 `거래처(merchant)` 컬럼을 추가하고 초기값은 `description` 으로 채운다
   - 거래 편집 작업대에서는 `description` 은 수정하지 않고 `merchant` 만 수정 가능해야 한다
   - 지출 분석 `거래처별 Tree Map` 과 merchant analytics 는 이 새 컬럼을 사용해야 한다
+
+## Deferred Filter Apply In Operations Workbench
+- 사용자 요구:
+  - 거래 편집 작업대에서 필터 값을 바꾸는 즉시 목록이 다시 걸리지 않게 한다
+  - 별도 `필터 적용` 버튼을 눌렀을 때만 필터링이 반영되어야 한다
+- 구현:
+  - `frontend/src/hooks/useDataManagement.ts`
+    - `draftFilters` 와 `appliedFilters` 를 분리했다
+    - query key와 실제 서버/클라이언트 필터링은 `appliedFilters` 만 사용한다
+    - `updateFilters()` 는 draft만 바꾸고, `applyFilters()` 가 page reset + applied 반영을 담당한다
+    - `has_pending_filter_changes` 를 노출해 UI가 적용 대기 상태를 알 수 있게 했다
+  - `frontend/src/components/data/DataManagementFilterBar.tsx`
+    - 입력 변경 이벤트는 `onChange` 로만 전달한다
+    - `필터 적용` submit 버튼을 추가했다
+    - `필터 초기화` 는 draft/applied를 함께 기본값으로 되돌리는 흐름을 유지했다
+  - `frontend/src/pages/OperationsWorkbenchPage.tsx`
+    - 작업대 페이지가 새 `onChange` / `onApply` 계약을 사용하도록 연결했다
+  - 테스트/환경:
+    - `DataManagementFilterBar.test.tsx` 에 즉시 적용되지 않는 동작 테스트 추가
+    - `useDataManagement.test.tsx` 에 apply 전/후 결과 차이 검증 추가
+    - `OperationsWorkbenchPage.test.tsx` 에 `필터 적용` 버튼 존재 확인 추가
+    - Radix checkbox 렌더링을 위해 `frontend/src/test/setup.ts` 에 `ResizeObserver` stub 추가
+- 검증:
+  - `cd frontend && npm test` → `24 files, 57 tests passed`
+  - `cd frontend && npm run typecheck` → passed
+  - `cd frontend && npm run lint` → passed
+
+## Workbench Bulk Edit V1
+- 사용자 요구:
+  - 거래 편집 작업대에서 여러 항목을 체크해 한꺼번에 수정할 수 있게 한다
+  - 대상 필드는 `merchant`, `category_major_user`, `category_minor_user`, `memo` 전체를 포함한다
+- 설계:
+  - bulk edit v1 설계를 `docs/superpowers/specs/2026-04-02-bulk-edit-workbench-design.md` 에 기록했다
+  - B안 채택:
+    - 선택된 row가 있을 때만 상단 bulk toolbar를 노출한다
+    - 빈 값은 `수정 안 함`으로 해석한다
+    - 단건 편집과 bulk 선택은 동시에 허용하지 않는다
+- backend:
+  - `backend/app/schemas/transaction.py`
+    - `TransactionBulkUpdateRequest` 에 `merchant`, `memo` 를 추가했다
+  - `backend/app/services/transactions_service.py`
+    - bulk update 시 `merchant` 도 단건 수정과 같은 `_normalized_merchant()` 경로를 타도록 맞췄다
+- frontend:
+  - `frontend/src/types/transactions.ts`
+    - bulk update request/response 타입을 추가했다
+  - `frontend/src/api/transactions.ts`
+    - `bulkUpdateTransactions()` API 호출 함수를 추가했다
+  - `frontend/src/hooks/useDataManagement.ts`
+    - bulk mutation과 success/error feedback을 추가했다
+  - `frontend/src/components/data/EditableTransactionsTable.tsx`
+    - row checkbox, 현재 페이지 전체 선택, 선택 해제, bulk toolbar를 추가했다
+    - 선택한 거래들에 대해 `merchant`, `category_major_user`, `category_minor_user`, `memo` 를 한 번에 수정하도록 연결했다
+    - 삭제된 row는 bulk selection에서 제외했다
+    - 선택 시작 시 단건 편집을 정리하고, 단건 편집 시작 시 bulk selection을 정리하도록 충돌을 막았다
+  - `frontend/src/pages/OperationsWorkbenchPage.tsx`
+    - workbench page가 bulk save mutation 상태와 action을 넘기도록 연결했다
+- 테스트:
+  - backend:
+    - `cd backend && UV_CACHE_DIR=/tmp/uv-cache-my-ledge uv run pytest tests/api/test_transactions_api.py -q`
+    - 결과: `6 passed`
+  - frontend targeted:
+    - `cd frontend && npm test -- src/components/data/EditableTransactionsTable.test.tsx src/hooks/__tests__/useDataManagement.test.tsx src/pages/__tests__/OperationsWorkbenchPage.test.tsx`
+    - 결과: `16 passed`
+  - frontend full:
+    - `cd frontend && npm test`
+    - `cd frontend && npm run typecheck`
+    - `cd frontend && npm run lint`
+    - 결과: 전체 통과
+
 
 ## Git Ignore Hygiene
 - 사용자 요청:
@@ -497,3 +583,136 @@
 - 결과:
   - 지출 분석 상단의 시계열 범위와 하단 상세 월 필터 범위가 구조적으로 분리됐다
   - 하단 분석 카드들은 초기 진입 시 현재 월 기준으로 바로 의미 있는 집계를 보여주고, 현재 월 데이터가 없을 때도 인접 월로 안전하게 fallback 한다
+
+## Workbench Cost Metadata Bulk Edit And Overview Copy Cleanup
+- 사용자 요구:
+  - 거래 편집 작업대 bulk edit 대상에 `cost_kind`, `fixed_cost_necessity` 를 추가한다
+  - `cost_kind` 는 `변동비`, `고정비` 두 값만 받도록 제한한다
+  - 새로 생성되는 값의 기본 `cost_kind` 는 `variable` 로 둔다
+  - 개요 페이지 각 카드 제목 아래 설명 문구는 제거한다
+  - 후속 계획에는 카테고리 기반 rule-based 자동 분류를 추가하되, 이번 턴에는 구현하지 않는다
+- 설계:
+  - bulk toolbar의 `cost_kind` 기본 선택은 `수정 안 함` 으로 유지해 선택 즉시 다건 값이 덮어써지지 않게 했다
+  - `fixed_cost_necessity` 는 `cost_kind=fixed` 일 때만 의미가 있으므로, `variable` 선택 시 payload에서 자동으로 비우도록 정리했다
+  - backend request schema는 `cost_kind=fixed|variable`, `fixed_cost_necessity=essential|discretionary` 로 제한했다
+- 구현:
+  - `backend/app/schemas/transaction.py`
+    - create/update/bulk update request의 `cost_kind`, `fixed_cost_necessity` 입력값을 제한했다
+  - `backend/app/services/transactions_service.py`
+    - manual create 시 `cost_kind` 기본값을 `variable` 로 정규화했다
+    - update/bulk update 시 `cost_kind` 와 `fixed_cost_necessity` 를 함께 정규화하도록 로직을 추가했다
+    - `cost_kind=variable` 인 경우 `fixed_cost_necessity` 는 자동으로 `None` 으로 정리되게 했다
+  - `frontend/src/types/transactions.ts`
+    - bulk update payload 타입에 `cost_kind`, `fixed_cost_necessity` 를 추가했다
+  - `frontend/src/components/data/EditableTransactionsTable.tsx`
+    - bulk toolbar에 `공통 고정비/변동비`, `공통 고정비 필수 여부` select를 추가했다
+    - `변동비` 선택 시 필수 여부를 함께 비우도록 맞췄다
+  - `frontend/src/pages/OverviewPage.tsx`
+    - `월간 현금흐름`, `주의 신호`, `카테고리 요약 Top 5`, `최근 거래` 카드의 title 아래 설명 문구를 제거했다
+  - 계획만 추가:
+    - `docs/superpowers/specs/2026-04-02-bulk-edit-workbench-design.md`
+    - `docs/STATUS.md`
+    - 카테고리 기반 rule-based `cost_kind` / `fixed_cost_necessity` 자동 분류는 후속 계획으로만 기록했다
+- 검증:
+  - `cd frontend && npm test -- src/components/data/EditableTransactionsTable.test.tsx src/hooks/__tests__/useDataManagement.test.tsx src/pages/__tests__/OverviewPage.test.tsx src/components/tables/TransactionsTable.test.tsx` → 통과
+  - `cd backend && UV_CACHE_DIR=/tmp/uv-cache-my-ledge uv run pytest tests/api/test_transactions_api.py -q` → `6 passed`
+  - `cd frontend && npm test` → `24 files / 59 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+
+## Overview / Insights Merchant Label Alignment
+- 사용자 요구:
+  - 개요 페이지 `최근 거래` 카드의 테이블에서 `내역` 대신 `거래처`를 표시한다
+  - 분석 `인사이트` 페이지 `반복 결제` 카드의 테이블에서도 `설명` 대신 `거래처`를 표시한다
+- 설계:
+  - 개요 `최근 거래` 는 기존 공용 `TransactionsTable` 에서 `merchant ?? description` 을 대표값으로 노출한다
+  - `반복 결제` 는 화면 헤더만 바꾸지 않고 backend 진단 기준도 `description` 에서 `merchant` 로 맞춘다
+  - 진단 assumptions 문구도 `동일 거래처` 기준으로 수정해 화면 라벨과 의미가 일치하게 한다
+- 구현:
+  - `frontend/src/components/tables/TransactionsTable.tsx`
+    - 테이블 헤더를 `거래처` 로 변경했다
+    - desktop/mobile 모두 `merchant ?? description` 을 대표 텍스트로 표시하도록 수정했다
+  - `frontend/src/components/insights/RecurringPaymentsTable.tsx`
+    - 첫 컬럼 헤더를 `거래처` 로 바꾸고 `item.merchant` 를 렌더하도록 수정했다
+  - `frontend/src/types/analytics.ts`
+    - recurring payments 응답 타입을 `description` 대신 `merchant` 로 변경했다
+  - `backend/app/schemas/analytics.py`
+    - recurring payments 스키마의 대표 식별 필드를 `merchant` 로 전환했다
+  - `backend/app/services/analytics_service.py`
+    - 반복 결제 grouping key를 `merchant` 기준으로 변경했다
+    - assumptions 문구를 `동일 거래처의 반복 간격` 으로 수정했다
+  - 테스트 갱신:
+    - `frontend/src/components/tables/TransactionsTable.test.tsx`
+    - `frontend/src/pages/__tests__/OverviewPage.test.tsx`
+    - `frontend/src/pages/__tests__/InsightsPage.test.tsx`
+    - `backend/tests/api/test_analytics_api.py`
+- 검증:
+  - `cd frontend && npm test -- src/components/tables/TransactionsTable.test.tsx src/pages/__tests__/OverviewPage.test.tsx src/pages/__tests__/InsightsPage.test.tsx` → `3 files / 9 tests` 통과
+  - `cd backend && UV_CACHE_DIR=/tmp/uv-cache-my-ledge uv run pytest tests/api/test_analytics_api.py -q` → `8 passed`
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+
+## Insights Card API Pagination
+- 사용자 요구:
+  - `반복 결제`, `이상 지출` 카드는 10건씩만 보이게 하고 카드 내부에서 페이지 이동할 수 있어야 한다
+  - 단순 프론트 slice가 아니라 데이터가 많아져도 느려지지 않게 API 페이지네이션으로 구현한다
+- 설계:
+  - backend `recurring-payments`, `spending-anomalies` endpoint에 `page`, `per_page` query를 추가하고 응답에 `total`, `page`, `per_page`, `items`, `assumptions`를 함께 반환한다
+  - frontend는 `useInsights` 요약 쿼리와 카드별 페이지 쿼리를 분리해, 카드 페이지 이동 시 전체 인사이트 화면이 아니라 해당 카드 데이터만 다시 읽도록 구성한다
+  - 카드 footer에는 `이전`, `다음`, `현재/전체 페이지`, `총 N건`을 노출한다
+- 구현:
+  - `backend/app/api/v1/endpoints/analytics.py`
+    - `recurring-payments`, `spending-anomalies` endpoint에 `page`, `per_page` query param을 추가했다
+  - `backend/app/schemas/analytics.py`
+    - 두 endpoint 응답에 `total`, `page`, `per_page` 필드를 추가했다
+  - `backend/app/services/analytics_service.py`
+    - 두 진단 결과 리스트에 공통 `_paginate_items()`를 적용했다
+  - `frontend/src/types/analytics.ts`
+    - paginated response 타입으로 확장했다
+  - `frontend/src/hooks/useInsights.ts`
+    - `INSIGHTS_CARD_PAGE_SIZE = 10` 추가
+    - `useRecurringPaymentsPage`, `useSpendingAnomaliesPage` query hook을 추가했다
+    - `useInsights` 자체는 요약 계산용으로 page 1 / per_page 10 응답을 사용하도록 정리했다
+  - `frontend/src/pages/InsightsPage.tsx`
+    - `반복 결제`, `이상 지출` 카드에 독립 페이지 상태와 footer pagination control을 추가했다
+    - 페이지 이동 시 해당 카드만 10건 단위로 전환되게 했다
+  - 테스트 갱신:
+    - `frontend/src/pages/__tests__/InsightsPage.test.tsx`
+    - `backend/tests/api/test_analytics_api.py`
+- 검증:
+  - `cd frontend && npm test -- src/pages/__tests__/InsightsPage.test.tsx` → `4 tests` 통과
+  - `cd backend && UV_CACHE_DIR=/tmp/uv-cache-my-ledge uv run pytest tests/api/test_analytics_api.py -q` → `10 passed`
+  - `cd frontend && npm test` → `24 files / 60 tests` 통과
+  - `cd frontend && npm run typecheck` → 통과
+  - `cd frontend && npm run lint` → 통과
+
+## Spending / Assets / Workbench Follow-up Planning
+- 사용자 요구:
+  - 아래 항목은 다음 구현 계획에 추가한다
+  - `분석 > 지출` 시계열 날짜 필터는 slider 조작 즉시 반영이 아니라 `적용` 버튼 클릭 시 반영
+  - `분석 > 지출` 의 월 필터는 `시작 월`, `종료 월`만 남기고 `카테고리`, `결제수단`, `설명 검색` 필터는 제거
+  - `분석 > 지출` 의 `일별 지출액` 카드는 다른 카드와 별개로 카드 내부 dropdown filter 사용
+  - `결제수단별 지출` 카드는 제거하고 `거래처별 TreeMap` 카드는 전체 폭으로 확장
+  - `분석 > 자산` 의 `투자 요약` 카드는 상단 총액 숫자를 유지하고 하단은 pie chart 비중 표시로 전환
+  - 프로젝트 전역의 `기준 월`, `기준 일자` badge 배경색을 통일
+- 문서 반영:
+  - `docs/superpowers/plans/2026-04-01-frontend-redesign-implementation.md`
+    - next batch backlog에 위 항목과 workbench 성능 최적화 배치를 추가했다
+  - `docs/STATUS.md`
+    - `Next Up` 에 지출/자산 후속 UI 항목을 추가했다
+    - `데이터 관리 후속 기능 > Track D. workbench performance` 를 추가했다
+- 작업대 성능 진단:
+  - 현재 병목의 핵심은 [useDataManagement.ts](/home/gyurin/projects/my_ledge/frontend/src/hooks/useDataManagement.ts) 의 `loadAllTransactions()` 이다
+  - 현재 구조는:
+    - `/transactions` 를 페이지 끝까지 전부 호출
+    - 프론트에서 다시 `transaction_type`, `source`, `edited_only`, 날짜 범위 필터를 적용
+    - 마지막에 다시 프론트에서 페이지네이션 slice
+  - 이 구조는 데이터가 커질수록 느릴 수밖에 없으므로, 가장 효과적인 최적화는 아래 순서다
+    - 서버 필터링과 서버 페이지네이션으로 전환
+    - mutation 후 전체 목록 재조회 대신 현재 페이지 캐시만 갱신하거나 부분 invalidation
+    - 거래 목록 query와 업로드 이력 query 분리
+    - `refetchOnMount: 'always'` 완화 검토
+- 구현 여부:
+  - 이번 턴에는 계획 추가만 수행
+  - 코드 변경 없음
+  - 테스트 실행 없음

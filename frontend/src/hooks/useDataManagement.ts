@@ -4,6 +4,7 @@ import { hasApiKeyConfigured } from '../api/client';
 import { resetData, type DataResetResponse, type DataResetScope } from '../api/dataManagement';
 import { ensureArray } from '../lib/collections';
 import {
+  bulkUpdateTransactions,
   deleteTransaction,
   getTransactions,
   restoreTransaction,
@@ -16,7 +17,11 @@ import {
   type UploadResponse,
 } from '../api/upload';
 import type { DataManagementFilterValues } from '../components/data/DataManagementFilterBar';
-import type { TransactionResponse, TransactionUpdateRequest } from '../types/transactions';
+import type {
+  TransactionBulkUpdateRequest,
+  TransactionResponse,
+  TransactionUpdateRequest,
+} from '../types/transactions';
 
 const defaultFilters: DataManagementFilterValues = {
   search: '',
@@ -32,6 +37,23 @@ const defaultFilters: DataManagementFilterValues = {
 
 const DATA_MANAGEMENT_QUERY_KEY = ['data-management'] as const;
 const DATA_MANAGEMENT_ROWS_PER_PAGE = 20;
+
+function areFiltersEqual(
+  left: DataManagementFilterValues,
+  right: DataManagementFilterValues,
+): boolean {
+  return (
+    left.search === right.search &&
+    left.transaction_type === right.transaction_type &&
+    left.source === right.source &&
+    left.category_major === right.category_major &&
+    left.payment_method === right.payment_method &&
+    left.date_from === right.date_from &&
+    left.date_to === right.date_to &&
+    left.edited_only === right.edited_only &&
+    left.include_deleted === right.include_deleted
+  );
+}
 
 async function loadAllTransactions(
   filters: DataManagementFilterValues,
@@ -92,6 +114,7 @@ function applyClientFilters(
 
 export interface DataManagementData {
   filters: DataManagementFilterValues;
+  has_pending_filter_changes: boolean;
   transactions: TransactionResponse[];
   total: number;
   current_page: number;
@@ -115,37 +138,41 @@ export interface UseDataManagementResult {
   isError: boolean;
   error: Error | null;
   pendingTransactionId: number | null;
+  isBulkSaving: boolean;
   isUploading: boolean;
   isResetting: boolean;
   uploadError: Error | null;
   actionFeedback: DataManagementActionFeedback | null;
   updateFilters: (next: DataManagementFilterValues) => void;
+  applyFilters: () => void;
   resetFilters: () => void;
   setPage: (page: number) => void;
   uploadWorkbookFile: (file: File, snapshotDate: string) => Promise<void>;
   resetDataScope: (scope: DataResetScope) => Promise<DataResetResponse>;
   saveTransaction: (transactionId: number, payload: TransactionUpdateRequest) => Promise<void>;
+  saveBulkTransactions: (ids: number[], payload: Omit<TransactionBulkUpdateRequest, 'ids'>) => Promise<void>;
   deleteTransactionRow: (transactionId: number) => Promise<void>;
   restoreTransactionRow: (transactionId: number) => Promise<void>;
 }
 
 export function useDataManagement(): UseDataManagementResult {
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<DataManagementFilterValues>(defaultFilters);
+  const [draftFilters, setDraftFilters] = useState<DataManagementFilterValues>(defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useState<DataManagementFilterValues>(defaultFilters);
   const [lastUpload, setLastUpload] = useState<UploadResponse | null>(null);
   const [pendingTransactionId, setPendingTransactionId] = useState<number | null>(null);
   const [actionFeedback, setActionFeedback] = useState<DataManagementActionFeedback | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
   const transactionsQuery = useQuery({
-    queryKey: [...DATA_MANAGEMENT_QUERY_KEY, filters],
+    queryKey: [...DATA_MANAGEMENT_QUERY_KEY, appliedFilters],
     queryFn: async (): Promise<DataManagementData> => {
       const [allTransactions, uploadLogsResponse] = await Promise.all([
-        loadAllTransactions(filters),
+        loadAllTransactions(appliedFilters),
         getUploadLogs(),
       ]);
       const uploadHistory = ensureArray(uploadLogsResponse.items);
-      const filteredTransactions = applyClientFilters(allTransactions, filters);
+      const filteredTransactions = applyClientFilters(allTransactions, appliedFilters);
 
       const categoryOptions = Array.from(
         new Set(allTransactions.map((item) => item.effective_category_major).filter(Boolean)),
@@ -159,7 +186,8 @@ export function useDataManagement(): UseDataManagementResult {
       ).sort();
 
       return {
-        filters,
+        filters: appliedFilters,
+        has_pending_filter_changes: false,
         transactions: filteredTransactions,
         total: filteredTransactions.length,
         current_page: 1,
@@ -277,6 +305,40 @@ export function useDataManagement(): UseDataManagementResult {
     },
   });
 
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({
+      ids,
+      payload,
+    }: {
+      ids: number[];
+      payload: Omit<TransactionBulkUpdateRequest, 'ids'>;
+    }) => {
+      setActionFeedback(null);
+      return bulkUpdateTransactions({
+        ids,
+        ...payload,
+      });
+    },
+    onSuccess: (result) => {
+      setActionFeedback({
+        variant: 'success',
+        message: `선택한 거래 ${result.updated}건을 수정했습니다.`,
+      });
+    },
+    onSettled: async () => {
+      await invalidateTransactions();
+    },
+    onError: (error) => {
+      setActionFeedback({
+        variant: 'destructive',
+        message:
+          error instanceof Error
+            ? `일괄 수정에 실패했습니다. ${error.message}`
+            : '일괄 수정에 실패했습니다.',
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (transactionId: number) => {
       setPendingTransactionId(transactionId);
@@ -345,6 +407,8 @@ export function useDataManagement(): UseDataManagementResult {
 
     return {
       ...transactionsQuery.data,
+      filters: draftFilters,
+      has_pending_filter_changes: !areFiltersEqual(draftFilters, appliedFilters),
       current_page: safeCurrentPage,
       total_pages: totalPages,
       transactions: transactionsQuery.data.transactions.slice(
@@ -352,24 +416,29 @@ export function useDataManagement(): UseDataManagementResult {
         startIndex + DATA_MANAGEMENT_ROWS_PER_PAGE,
       ),
     };
-  }, [currentPage, transactionsQuery.data]);
+  }, [appliedFilters, currentPage, draftFilters, transactionsQuery.data]);
 
   return useMemo(
     () => ({
       ...transactionsQuery,
       data: paginatedData,
       pendingTransactionId,
+      isBulkSaving: bulkUpdateMutation.isPending,
       isUploading: uploadMutation.isPending,
       isResetting: resetMutation.isPending,
       uploadError: uploadMutation.error,
       actionFeedback,
       updateFilters: (next: DataManagementFilterValues) => {
+        setDraftFilters(next);
+      },
+      applyFilters: () => {
         setCurrentPage(1);
-        setFilters(next);
+        setAppliedFilters(draftFilters);
       },
       resetFilters: () => {
         setCurrentPage(1);
-        setFilters(defaultFilters);
+        setDraftFilters(defaultFilters);
+        setAppliedFilters(defaultFilters);
       },
       setPage: (page: number) => setCurrentPage(Math.max(1, page)),
       uploadWorkbookFile: async (file: File, snapshotDate: string) => {
@@ -379,6 +448,12 @@ export function useDataManagement(): UseDataManagementResult {
       saveTransaction: async (transactionId: number, payload: TransactionUpdateRequest) => {
         await updateMutation.mutateAsync({ transactionId, payload });
       },
+      saveBulkTransactions: async (
+        ids: number[],
+        payload: Omit<TransactionBulkUpdateRequest, 'ids'>,
+      ) => {
+        await bulkUpdateMutation.mutateAsync({ ids, payload });
+      },
       deleteTransactionRow: async (transactionId: number) => {
         await deleteMutation.mutateAsync(transactionId);
       },
@@ -387,6 +462,7 @@ export function useDataManagement(): UseDataManagementResult {
       },
     }),
     [
+      bulkUpdateMutation,
       deleteMutation,
       paginatedData,
       pendingTransactionId,
@@ -396,6 +472,7 @@ export function useDataManagement(): UseDataManagementResult {
       updateMutation,
       uploadMutation,
       actionFeedback,
+      draftFilters,
     ],
   );
 }

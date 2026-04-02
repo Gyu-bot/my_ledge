@@ -34,7 +34,7 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[7.5rem] whitespace-nowrap">일자</TableHead>
-              <TableHead className="w-[34%]">내역</TableHead>
+              <TableHead className="w-[34%]">거래처</TableHead>
               <TableHead className="w-[24%]">카테고리</TableHead>
               <TableHead className="w-[8.5rem] whitespace-nowrap">결제수단</TableHead>
               <TableHead className="w-[8rem] whitespace-nowrap text-right">금액</TableHead>
@@ -47,7 +47,7 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
                 {row.date ?? '-'}
               </TableCell>
               <TableCell className="font-medium text-[color:var(--color-text)]">
-                {row.description}
+                {row.merchant?.trim() || row.description}
               </TableCell>
               <TableCell className="text-[color:var(--color-text-muted)]">
                 <div className="flex flex-col gap-1">
@@ -78,7 +78,7 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-[color:var(--color-text)]">
-                  {row.description}
+                  {row.merchant?.trim() || row.description}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                   {row.date ?? '-'}

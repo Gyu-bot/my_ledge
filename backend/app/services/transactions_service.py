@@ -213,6 +213,11 @@ async def create_transaction(
         merchant=payload_data.get("merchant"),
         description=payload_data["description"],
     )
+    payload_data["cost_kind"] = _normalized_cost_kind(payload_data.get("cost_kind"))
+    payload_data["fixed_cost_necessity"] = _normalized_fixed_cost_necessity(
+        cost_kind=payload_data["cost_kind"],
+        fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
+    )
     transaction = Transaction(
         **payload_data,
         source="manual",
@@ -229,7 +234,25 @@ async def update_transaction(
     payload: TransactionUpdateRequest,
 ) -> TransactionResponse:
     transaction = await _get_transaction_or_404(db_session, transaction_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_fields = payload.model_dump(exclude_unset=True)
+    effective_cost_kind = _resolve_effective_cost_kind(
+        incoming_cost_kind=update_fields.get("cost_kind"),
+        current_cost_kind=transaction.cost_kind,
+    )
+    if "cost_kind" in update_fields:
+        transaction.cost_kind = effective_cost_kind
+    if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
+        transaction.fixed_cost_necessity = _normalized_fixed_cost_necessity(
+            cost_kind=effective_cost_kind,
+            fixed_cost_necessity=update_fields.get(
+                "fixed_cost_necessity",
+                transaction.fixed_cost_necessity,
+            ),
+        )
+
+    for field, value in update_fields.items():
+        if field in {"cost_kind", "fixed_cost_necessity"}:
+            continue
         if field == "merchant":
             value = _normalized_merchant(merchant=value, description=transaction.description)
         setattr(transaction, field, value)
@@ -268,7 +291,25 @@ async def bulk_update_transactions(
     transactions = result.scalars().all()
     update_fields = payload.model_dump(exclude={"ids"}, exclude_unset=True)
     for transaction in transactions:
+        effective_cost_kind = _resolve_effective_cost_kind(
+            incoming_cost_kind=update_fields.get("cost_kind"),
+            current_cost_kind=transaction.cost_kind,
+        )
+        if "cost_kind" in update_fields:
+            transaction.cost_kind = effective_cost_kind
+        if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
+            transaction.fixed_cost_necessity = _normalized_fixed_cost_necessity(
+                cost_kind=effective_cost_kind,
+                fixed_cost_necessity=update_fields.get(
+                    "fixed_cost_necessity",
+                    transaction.fixed_cost_necessity,
+                ),
+            )
         for field, value in update_fields.items():
+            if field in {"cost_kind", "fixed_cost_necessity"}:
+                continue
+            if field == "merchant":
+                value = _normalized_merchant(merchant=value, description=transaction.description)
             setattr(transaction, field, value)
     await db_session.commit()
     return TransactionBulkUpdateResponse(updated=len(transactions))
@@ -442,6 +483,32 @@ def _normalized_merchant(*, merchant: str | None, description: str) -> str:
 
     normalized = merchant.strip()
     return normalized or description
+
+
+def _normalized_cost_kind(cost_kind: str | None) -> str:
+    return "fixed" if cost_kind == "fixed" else "variable"
+
+
+def _resolve_effective_cost_kind(
+    *,
+    incoming_cost_kind: str | None,
+    current_cost_kind: str | None,
+) -> str:
+    if incoming_cost_kind is not None:
+        return _normalized_cost_kind(incoming_cost_kind)
+    return _normalized_cost_kind(current_cost_kind)
+
+
+def _normalized_fixed_cost_necessity(
+    *,
+    cost_kind: str,
+    fixed_cost_necessity: str | None,
+) -> str | None:
+    if cost_kind != "fixed":
+        return None
+    if fixed_cost_necessity in {"essential", "discretionary"}:
+        return fixed_cost_necessity
+    return None
 
 
 def _period_key(tx_date: date, group_by: TransactionGroupBy) -> str:

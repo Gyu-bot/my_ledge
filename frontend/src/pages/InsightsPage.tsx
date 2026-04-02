@@ -1,13 +1,21 @@
+import { useState } from 'react';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { LoadingState } from '../components/common/LoadingState';
+import { AssumptionPopover } from '../components/insights/AssumptionPopover';
 import { InsightSummaryCards } from '../components/insights/InsightSummaryCards';
 import { RecurringPaymentsTable } from '../components/insights/RecurringPaymentsTable';
 import { SpendingAnomaliesTable } from '../components/insights/SpendingAnomaliesTable';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { useInsights } from '../hooks/useInsights';
+import {
+  INSIGHTS_CARD_PAGE_SIZE,
+  useInsights,
+  useRecurringPaymentsPage,
+  useSpendingAnomaliesPage,
+} from '../hooks/useInsights';
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('ko-KR', {
@@ -15,8 +23,69 @@ function formatMoney(value: number) {
   }).format(value)}원`;
 }
 
+function findAssumption(assumptions: string[], key: string) {
+  const prefix = `${key}:`;
+  const match = assumptions.find((item) => item.startsWith(prefix));
+  return match ? match.slice(prefix.length).trim() : null;
+}
+
+interface InsightCardPaginationProps {
+  currentPage: number;
+  totalItems: number;
+  perPage: number;
+  isFetching: boolean;
+  previousLabel: string;
+  nextLabel: string;
+  onPrevious: () => void;
+  onNext: () => void;
+}
+
+function InsightCardPagination({
+  currentPage,
+  totalItems,
+  perPage,
+  isFetching,
+  previousLabel,
+  nextLabel,
+  onPrevious,
+  onNext,
+}: InsightCardPaginationProps) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Button
+        type="button"
+        variant="outline"
+        disabled={currentPage <= 1 || isFetching}
+        aria-label={previousLabel}
+        onClick={onPrevious}
+      >
+        이전
+      </Button>
+      <p className="text-sm text-[color:var(--color-text-muted)]">
+        {currentPage} / {totalPages} 페이지 · 총 {totalItems}건
+        {isFetching ? ' · 불러오는 중' : ''}
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={currentPage >= totalPages || isFetching}
+        aria-label={nextLabel}
+        onClick={onNext}
+      >
+        다음
+      </Button>
+    </div>
+  );
+}
+
 export function InsightsPage() {
+  const [recurringPage, setRecurringPage] = useState(1);
+  const [anomalyPage, setAnomalyPage] = useState(1);
   const insightsQuery = useInsights();
+  const recurringQuery = useRecurringPaymentsPage(recurringPage, INSIGHTS_CARD_PAGE_SIZE);
+  const anomalyQuery = useSpendingAnomaliesPage(anomalyPage, INSIGHTS_CARD_PAGE_SIZE);
 
   if (insightsQuery.isPending) {
     return (
@@ -48,6 +117,17 @@ export function InsightsPage() {
 
   const { assumptions, category_mom, key_insights, merchant_spend, recurring_payments, spending_anomalies, summary_cards } =
     insightsQuery.data;
+  const incomeStabilityAssumption = findAssumption(assumptions, 'income-stability');
+  const recurringPaymentsAssumption = findAssumption(assumptions, 'recurring-payments');
+  const spendingAnomaliesAssumption = findAssumption(assumptions, 'spending-anomalies');
+  const recurringPageData = recurringQuery.data;
+  const anomalyPageData = anomalyQuery.data;
+  const recurringItems = recurringPageData?.items ?? recurring_payments;
+  const anomalyItems = anomalyPageData?.items ?? spending_anomalies;
+  const recurringTotal = recurringPageData?.total ?? recurring_payments.length;
+  const anomalyTotal = anomalyPageData?.total ?? spending_anomalies.length;
+  const recurringCurrentPage = recurringPageData?.page ?? 1;
+  const anomalyCurrentPage = anomalyPageData?.page ?? 1;
 
   return (
     <div className="space-y-6">
@@ -57,9 +137,12 @@ export function InsightsPage() {
         title="인사이트"
       />
 
-      <InsightSummaryCards items={summary_cards} />
+      <InsightSummaryCards
+        incomeStabilityAssumption={incomeStabilityAssumption}
+        items={summary_cards}
+      />
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <section>
         <Card>
           <CardHeader>
             <CardTitle>핵심 인사이트</CardTitle>
@@ -76,46 +159,80 @@ export function InsightsPage() {
             ))}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Assumptions</CardTitle>
-            <CardDescription className="mt-2">
-              해석 시 전제한 규칙과 데이터 가정을 함께 제공합니다.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {assumptions.map((item) => (
-              <div key={item} className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text-muted)]">
-                {item}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>반복 결제</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>반복 결제</CardTitle>
+              {recurringPaymentsAssumption ? (
+                <AssumptionPopover
+                  ariaLabel="반복 결제 가정 보기"
+                  content={recurringPaymentsAssumption}
+                />
+              ) : null}
+            </div>
             <CardDescription className="mt-2">
               정기적으로 반복되는 결제 후보를 표 형태로 정리했습니다.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <RecurringPaymentsTable items={recurring_payments} />
+          <CardContent className="space-y-4">
+            <RecurringPaymentsTable items={recurringItems} />
+            <InsightCardPagination
+              currentPage={recurringCurrentPage}
+              totalItems={recurringTotal}
+              perPage={INSIGHTS_CARD_PAGE_SIZE}
+              isFetching={recurringQuery.isFetching}
+              previousLabel="반복 결제 이전 페이지"
+              nextLabel="반복 결제 다음 페이지"
+              onPrevious={() => setRecurringPage(Math.max(1, recurringCurrentPage - 1))}
+              onNext={() =>
+                setRecurringPage(
+                  Math.min(
+                    Math.max(1, Math.ceil(recurringTotal / INSIGHTS_CARD_PAGE_SIZE)),
+                    recurringCurrentPage + 1,
+                  ),
+                )
+              }
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>이상 지출</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>이상 지출</CardTitle>
+              {spendingAnomaliesAssumption ? (
+                <AssumptionPopover
+                  ariaLabel="이상 지출 가정 보기"
+                  content={spendingAnomaliesAssumption}
+                />
+              ) : null}
+            </div>
             <CardDescription className="mt-2">
               baseline 대비 급증한 카테고리를 확인합니다.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <SpendingAnomaliesTable items={spending_anomalies} />
+          <CardContent className="space-y-4">
+            <SpendingAnomaliesTable items={anomalyItems} />
+            <InsightCardPagination
+              currentPage={anomalyCurrentPage}
+              totalItems={anomalyTotal}
+              perPage={INSIGHTS_CARD_PAGE_SIZE}
+              isFetching={anomalyQuery.isFetching}
+              previousLabel="이상 지출 이전 페이지"
+              nextLabel="이상 지출 다음 페이지"
+              onPrevious={() => setAnomalyPage(Math.max(1, anomalyCurrentPage - 1))}
+              onNext={() =>
+                setAnomalyPage(
+                  Math.min(
+                    Math.max(1, Math.ceil(anomalyTotal / INSIGHTS_CARD_PAGE_SIZE)),
+                    anomalyCurrentPage + 1,
+                  ),
+                )
+              }
+            />
           </CardContent>
         </Card>
       </section>

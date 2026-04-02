@@ -42,7 +42,23 @@ export interface TransactionUpdateRequest {
   category_major_user?: string | null;
   category_minor_user?: string | null;
   merchant?: string | null;
+  cost_kind?: 'fixed' | 'variable' | null;
+  fixed_cost_necessity?: 'essential' | 'discretionary' | null;
   memo?: string | null;
+}
+
+export interface TransactionBulkUpdateRequest {
+  ids: number[];
+  category_major_user?: string | null;
+  category_minor_user?: string | null;
+  merchant?: string | null;
+  cost_kind?: 'fixed' | 'variable' | null;
+  fixed_cost_necessity?: 'essential' | 'discretionary' | null;
+  memo?: string | null;
+}
+
+export interface TransactionBulkUpdateResponse {
+  updated: number;
 }
 
 export interface TransactionListResponse {

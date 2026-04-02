@@ -13,6 +13,8 @@ import type {
   CategoryMoMItemResponse,
   MerchantSpendItemResponse,
   RecurringPaymentItemResponse,
+  RecurringPaymentsResponse,
+  SpendingAnomaliesResponse,
   SpendingAnomalyItemResponse,
 } from '../types/analytics';
 import type { SummaryCard } from '../types/dashboard';
@@ -31,6 +33,8 @@ export interface InsightsData {
   merchant_spend: MerchantSpendItemResponse[];
   category_mom: CategoryMoMItemResponse[];
 }
+
+export const INSIGHTS_CARD_PAGE_SIZE = 10;
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('ko-KR', {
@@ -52,8 +56,8 @@ export function useInsights() {
       ] = await Promise.all([
         getMonthlyCashflow(),
         getIncomeStability(),
-        getRecurringPayments(),
-        getSpendingAnomalies(),
+        getRecurringPayments({ page: 1, per_page: INSIGHTS_CARD_PAGE_SIZE }),
+        getSpendingAnomalies({ page: 1, per_page: INSIGHTS_CARD_PAGE_SIZE }),
         getMerchantSpend({ type: '지출', limit: 5 }),
         getCategoryMoM({ type: '지출', level: 'major' }),
       ]);
@@ -121,6 +125,24 @@ export function useInsights() {
         category_mom: momItems,
       };
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useRecurringPaymentsPage(page: number, perPage: number = INSIGHTS_CARD_PAGE_SIZE) {
+  return useQuery<RecurringPaymentsResponse, Error>({
+    queryKey: ['analytics', 'recurring-payments', page, perPage],
+    queryFn: () => getRecurringPayments({ page, per_page: perPage }),
+    placeholderData: (previousData) => previousData,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSpendingAnomaliesPage(page: number, perPage: number = INSIGHTS_CARD_PAGE_SIZE) {
+  return useQuery<SpendingAnomaliesResponse, Error>({
+    queryKey: ['analytics', 'spending-anomalies', page, perPage],
+    queryFn: () => getSpendingAnomalies({ page, per_page: perPage }),
+    placeholderData: (previousData) => previousData,
     staleTime: 5 * 60 * 1000,
   });
 }

@@ -74,7 +74,7 @@ export interface IncomeStabilityResponse {
 }
 
 export interface RecurringPaymentItemResponse {
-  description: string;
+  merchant: string;
   category: string;
   avg_amount: number;
   interval_type: string;
@@ -85,6 +85,9 @@ export interface RecurringPaymentItemResponse {
 }
 
 export interface RecurringPaymentsResponse {
+  total: number;
+  page: number;
+  per_page: number;
   items: RecurringPaymentItemResponse[];
   assumptions: string;
 }
@@ -100,6 +103,9 @@ export interface SpendingAnomalyItemResponse {
 }
 
 export interface SpendingAnomaliesResponse {
+  total: number;
+  page: number;
+  per_page: number;
   items: SpendingAnomalyItemResponse[];
   assumptions: string;
 }

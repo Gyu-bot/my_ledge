@@ -84,8 +84,8 @@ class TransactionCreateRequest(BaseModel):
     merchant: str | None = None
     amount: int
     payment_method: str | None = None
-    cost_kind: str | None = None
-    fixed_cost_necessity: str | None = None
+    cost_kind: Literal["fixed", "variable"] | None = None
+    fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
     memo: str | None = None
 
 
@@ -93,17 +93,19 @@ class TransactionUpdateRequest(BaseModel):
     category_major_user: str | None = None
     category_minor_user: str | None = None
     merchant: str | None = None
-    cost_kind: str | None = None
-    fixed_cost_necessity: str | None = None
+    cost_kind: Literal["fixed", "variable"] | None = None
+    fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
     memo: str | None = None
 
 
 class TransactionBulkUpdateRequest(BaseModel):
     ids: list[int] = Field(min_length=1)
+    merchant: str | None = None
     category_major_user: str | None = None
     category_minor_user: str | None = None
-    cost_kind: str | None = None
-    fixed_cost_necessity: str | None = None
+    cost_kind: Literal["fixed", "variable"] | None = None
+    fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
+    memo: str | None = None
 
 
 class TransactionBulkUpdateResponse(BaseModel):

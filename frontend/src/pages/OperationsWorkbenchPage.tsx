@@ -119,7 +119,9 @@ export function OperationsWorkbenchPage() {
       <section className="space-y-4">
         <DataManagementFilterBar
           categoryOptions={category_options}
-          onApply={(next: DataManagementFilterValues) => dataManagementQuery.updateFilters(next)}
+          hasPendingChanges={dataManagementQuery.data.has_pending_filter_changes}
+          onApply={dataManagementQuery.applyFilters}
+          onChange={(next: DataManagementFilterValues) => dataManagementQuery.updateFilters(next)}
           onReset={dataManagementQuery.resetFilters}
           paymentMethodOptions={payment_method_options}
           values={filters}
@@ -136,6 +138,8 @@ export function OperationsWorkbenchPage() {
             <EditableTransactionsTable
               categoryOptions={category_options}
               hasWriteAccess={has_write_access}
+              isBulkSaving={dataManagementQuery.isBulkSaving}
+              onBulkSave={dataManagementQuery.saveBulkTransactions}
               onDelete={dataManagementQuery.deleteTransactionRow}
               onRestore={dataManagementQuery.restoreTransactionRow}
               onSave={dataManagementQuery.saveTransaction}

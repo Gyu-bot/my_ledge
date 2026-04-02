@@ -23,6 +23,7 @@ function buildUseDataManagementResult() {
         edited_only: false,
         include_deleted: false,
       },
+      has_pending_filter_changes: false,
       transactions: [
         {
           id: 1,
@@ -90,11 +91,13 @@ function buildUseDataManagementResult() {
     isError: false,
     error: null,
     pendingTransactionId: null,
+    isBulkSaving: false,
     isUploading: false,
     isResetting: false,
     uploadError: null,
     actionFeedback: null,
     updateFilters: () => undefined,
+    applyFilters: () => undefined,
     resetFilters: () => undefined,
     setPage: () => undefined,
     uploadWorkbookFile: vi.fn(async () => undefined),
@@ -109,6 +112,7 @@ function buildUseDataManagementResult() {
       upload_logs_retained: true,
     })),
     saveTransaction: async () => undefined,
+    saveBulkTransactions: async () => undefined,
     deleteTransactionRow: async () => undefined,
     restoreTransactionRow: async () => undefined,
   } as ReturnType<typeof useDataManagement>;
@@ -122,6 +126,7 @@ describe('OperationsWorkbenchPage', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: '거래 작업대' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 편집 작업대' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '필터 적용' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '업로드' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '최근 업로드 이력' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Danger Zone' })).toBeInTheDocument();

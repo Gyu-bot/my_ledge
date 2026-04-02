@@ -17,7 +17,7 @@ export function RecurringPaymentsTable({ items }: RecurringPaymentsTableProps) {
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead>설명</TableHead>
+            <TableHead>거래처</TableHead>
             <TableHead>카테고리</TableHead>
             <TableHead>평균 금액</TableHead>
             <TableHead>간격</TableHead>
@@ -26,8 +26,8 @@ export function RecurringPaymentsTable({ items }: RecurringPaymentsTableProps) {
         </TableHeader>
         <TableBody>
           {items.map((item) => (
-            <TableRow key={`${item.description}-${item.last_date}`}>
-              <TableCell className="font-medium text-[color:var(--color-text)]">{item.description}</TableCell>
+            <TableRow key={`${item.merchant}-${item.last_date}`}>
+              <TableCell className="font-medium text-[color:var(--color-text)]">{item.merchant}</TableCell>
               <TableCell>{item.category}</TableCell>
               <TableCell>{formatMoney(item.avg_amount)}</TableCell>
               <TableCell>{item.interval_type}</TableCell>
