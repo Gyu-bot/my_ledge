@@ -64,6 +64,9 @@ services:
       context: ./frontend
       args:
         VITE_API_KEY: ${API_KEY:-replace-me}
+    environment:
+      API_KEY: ${API_KEY:-replace-me}
+      API_BASE_URL: /api/v1
     restart: unless-stopped
     depends_on:
       backend:

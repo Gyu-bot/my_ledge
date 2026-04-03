@@ -14,7 +14,7 @@ function formatMoney(value: number) {
 export function SpendingAnomaliesTable({ items }: SpendingAnomaliesTableProps) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
-      <Table>
+      <Table density="compact">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>기간</TableHead>

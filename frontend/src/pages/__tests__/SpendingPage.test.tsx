@@ -147,16 +147,41 @@ describe('SpendingPage', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: '지출 분석' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '월별 카테고리 추이' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: '월별 카테고리 추이 적용 기간' }),
+    ).toHaveTextContent('2026-01');
+    expect(
+      screen.getByRole('group', { name: '월별 카테고리 추이 적용 기간' }),
+    ).toHaveTextContent('2026-03');
     expect(screen.getByText(/시계열 기간/)).toBeInTheDocument();
     expect(screen.getByText('아래 카드부터 월 필터 적용')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '카테고리별 지출' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '카테고리별 지출 적용 기간' })).toHaveTextContent(
+      '2026-01',
+    );
     expect(screen.getByRole('heading', { level: 3, name: '하위 카테고리별 지출' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: '하위 카테고리별 지출 적용 기간' }),
+    ).toHaveTextContent('2026-03');
     expect(screen.getByLabelText('상위 카테고리 필터')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '월별 고정비/변동비 추이' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: '월별 고정비/변동비 추이 적용 기간' }),
+    ).toHaveTextContent('2026-01');
     expect(screen.getByRole('heading', { level: 3, name: '고정비 필수/비필수 비율' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: '고정비 필수/비필수 비율 적용 기간' }),
+    ).toHaveTextContent('2026-03');
     expect(screen.getByRole('heading', { level: 3, name: '변동비 비율' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '변동비 비율 적용 기간' })).toHaveTextContent(
+      '2026-01',
+    );
     expect(screen.getByRole('heading', { level: 3, name: '거래처별 Tree Map' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '거래처별 Tree Map 적용 기간' })).toHaveTextContent(
+      '2026-03',
+    );
     expect(screen.getByRole('heading', { level: 3, name: '일별 지출액' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '일별 지출액 적용 기간' })).toHaveTextContent('2026-01');
     expect(screen.getByRole('button', { name: '기간 적용' })).toBeInTheDocument();
     expect(screen.queryByText('카테고리', { selector: 'span' })).not.toBeInTheDocument();
     expect(screen.queryByText('결제수단', { selector: 'span' })).not.toBeInTheDocument();
@@ -165,6 +190,7 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('checkbox', { name: '거래내역 수입 포함' })).toBeInTheDocument();
     expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 내역' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '거래 내역 적용 기간' })).toHaveTextContent('2026-03');
     expect(screen.getByText('거래 내역 접기')).toBeInTheDocument();
     expect(screen.getByText('1 / 3 페이지')).toBeInTheDocument();
 

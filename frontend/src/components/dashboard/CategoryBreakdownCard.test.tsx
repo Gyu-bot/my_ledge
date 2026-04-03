@@ -48,6 +48,9 @@ describe('CategoryBreakdownCard', () => {
     renderCard();
 
     expect(screen.getAllByText('조회 기간 전체').length).toBeGreaterThan(0);
+    expect(screen.getByRole('group', { name: '카테고리 비중 적용 기간' })).toHaveTextContent(
+      '조회 기간 전체',
+    );
     expect(screen.queryByLabelText('시작 월')).not.toBeInTheDocument();
     expect(screen.getByLabelText('카테고리 비중 차트')).toBeInTheDocument();
     expect(mockedGetCategoryBreakdown).not.toHaveBeenCalled();
@@ -66,7 +69,12 @@ describe('CategoryBreakdownCard', () => {
       });
     });
 
-    expect(screen.getAllByText(/조회 기간 2026년 1월 ~ 2026년 3월/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('group', { name: '카테고리 비중 적용 기간' })).toHaveTextContent(
+      '2026-01',
+    );
+    expect(screen.getByRole('group', { name: '카테고리 비중 적용 기간' })).toHaveTextContent(
+      '2026-03',
+    );
   });
 
   it('applies a custom month range with month-based boundaries', async () => {
@@ -84,7 +92,12 @@ describe('CategoryBreakdownCard', () => {
       });
     });
 
-    expect(screen.getAllByText(/조회 기간 2026년 1월 ~ 2026년 2월/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('group', { name: '카테고리 비중 적용 기간' })).toHaveTextContent(
+      '2026-01',
+    );
+    expect(screen.getByRole('group', { name: '카테고리 비중 적용 기간' })).toHaveTextContent(
+      '2026-02',
+    );
   });
 
   it('shows a validation message when the custom range is reversed', async () => {

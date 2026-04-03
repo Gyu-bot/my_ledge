@@ -100,7 +100,7 @@ export function OperationsWorkbenchPage() {
 
       {!has_write_access ? (
         <Alert variant="warning">
-          현재 `VITE_API_KEY`가 설정되지 않아 업로드와 수정, 삭제, 복원 동작은 비활성화됩니다.
+          현재 runtime API key가 설정되지 않아 업로드와 수정, 삭제, 복원 동작은 비활성화됩니다.
         </Alert>
       ) : null}
 

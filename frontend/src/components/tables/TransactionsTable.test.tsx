@@ -39,9 +39,11 @@ describe('TransactionsTable', () => {
     );
 
     expect(screen.getByRole('columnheader', { name: '일자' })).toHaveClass('whitespace-nowrap');
+    expect(screen.getByRole('columnheader', { name: '일자' })).toHaveClass('h-8');
     expect(screen.getByRole('columnheader', { name: '거래처' })).toHaveClass('w-[34%]');
     expect(screen.getByRole('columnheader', { name: '결제수단' })).toHaveClass('whitespace-nowrap');
     expect(screen.getByRole('cell', { name: /우리카드/i })).toHaveClass('whitespace-nowrap');
+    expect(screen.getByRole('cell', { name: /우리카드/i })).toHaveClass('py-2');
     expect(screen.getByRole('cell', { name: '생활비 자동이체' })).toBeInTheDocument();
   });
 });

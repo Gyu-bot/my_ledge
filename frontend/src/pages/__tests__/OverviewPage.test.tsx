@@ -129,9 +129,16 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('heading', { level: 2, name: '개요' })).toBeInTheDocument();
     expect(screen.getByText(/^순자산$/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '월간 현금흐름' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '월간 현금흐름 적용 기간' })).toHaveTextContent(
+      '2026-02',
+    );
+    expect(screen.getByRole('group', { name: '월간 현금흐름 적용 기간' })).toHaveTextContent(
+      '2026-03',
+    );
     expect(screen.getByRole('heading', { level: 3, name: '주의 신호' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '카테고리 요약 Top 5' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '최근 거래' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '최근 거래 적용 기간' })).toHaveTextContent('2026-03-24');
     expect(screen.getByRole('columnheader', { name: '거래처' })).toBeInTheDocument();
     expect(screen.getAllByText('서울교통공사')).toHaveLength(2);
   });

@@ -30,7 +30,7 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
   return (
     <div className="overflow-x-auto">
       <div className="hidden rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 md:block">
-        <Table>
+        <Table density="compact">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[7.5rem] whitespace-nowrap">일자</TableHead>

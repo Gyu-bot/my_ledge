@@ -175,6 +175,15 @@ describe('InsightsPage', () => {
     expect(screen.queryByRole('heading', { level: 3, name: 'Assumptions' })).not.toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '거래처' })).toBeInTheDocument();
     expect(screen.getByText('넷플릭스')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '거래처 소비 Top N 적용 기간' })).toHaveTextContent(
+      '2026-03',
+    );
+    expect(screen.getByRole('group', { name: '카테고리 증감 요약 적용 기간' })).toHaveTextContent(
+      '2026-02',
+    );
+    expect(screen.getByRole('group', { name: '카테고리 증감 요약 적용 기간' })).toHaveTextContent(
+      '2026-03',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '수입 안정성 가정 보기' }));
     expect(screen.getByText('표본 3개월 기준으로 계산했습니다.')).toBeInTheDocument();

@@ -1,4 +1,5 @@
 import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
+import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { LineTrendChart } from '../components/charts/LineTrendChart';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -6,7 +7,6 @@ import { LoadingState } from '../components/common/LoadingState';
 import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
 import { StatusCard } from '../components/common/StatusCard';
 import { PageHeader } from '../components/layout/PageHeader';
-import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useAssets } from '../hooks/useAssets';
 
@@ -49,6 +49,9 @@ export function AssetsPage() {
 
   const { investments, loans, net_worth_history, snapshot_date, summary_cards } =
     assetsQuery.data;
+  const netWorthStartPeriod = net_worth_history[0]?.period ?? snapshot_date ?? '기준일 없음';
+  const netWorthEndPeriod =
+    net_worth_history[net_worth_history.length - 1]?.period ?? snapshot_date ?? '기준일 없음';
 
   return (
     <div className="space-y-6">
@@ -80,7 +83,11 @@ export function AssetsPage() {
                 적재된 스냅샷 기준 순자산 변화를 시계열로 보여줍니다.
               </CardDescription>
             </div>
-            <Badge>순자산</Badge>
+            <CardPeriodBadgeGroup
+              ariaLabel="순자산 추이 적용 기간"
+              end={netWorthEndPeriod}
+              start={netWorthStartPeriod}
+            />
           </CardHeader>
           <CardContent>
             {net_worth_history.length > 0 ? (
@@ -102,7 +109,10 @@ export function AssetsPage() {
                 최신 투자 스냅샷 기준 평가액과 주요 포지션입니다.
               </CardDescription>
             </div>
-            <Badge variant="reference">{investments.snapshot_date ?? '기준일 없음'}</Badge>
+            <CardPeriodBadgeGroup
+              ariaLabel="투자 요약 기준일"
+              start={investments.snapshot_date ?? '기준일 없음'}
+            />
           </CardHeader>
           <CardContent>
             {investments.items.length > 0 ? (
@@ -151,7 +161,10 @@ export function AssetsPage() {
                 최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다.
               </CardDescription>
             </div>
-            <Badge variant="reference">{loans.snapshot_date ?? '기준일 없음'}</Badge>
+            <CardPeriodBadgeGroup
+              ariaLabel="대출 요약 기준일"
+              start={loans.snapshot_date ?? '기준일 없음'}
+            />
           </CardHeader>
           <CardContent>
             {loans.items.length > 0 ? (

@@ -3,6 +3,7 @@ import { CategoryTimelineAreaChart } from '../components/charts/CategoryTimeline
 import { DailySpendCalendar } from '../components/charts/DailySpendCalendar';
 import { HorizontalBarChart } from '../components/charts/HorizontalBarChart';
 import { MerchantTreemapChart } from '../components/charts/MerchantTreemapChart';
+import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
@@ -119,13 +120,18 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
 
       <div className="grid gap-6">
         <Card data-testid="monthly-category-timeline-card">
-          <CardHeader>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
             <div>
               <CardTitle>월별 카테고리 추이</CardTitle>
               <CardDescription>
                 월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다.
               </CardDescription>
             </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="월별 카테고리 추이 적용 기간"
+              end={selectedEndMonth}
+              start={selectedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <CategoryTimelineAreaChart
@@ -143,11 +149,11 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
                 고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="reference">{selectedStartMonth}</Badge>
-              <span>~</span>
-              <Badge variant="reference">{selectedEndMonth}</Badge>
-            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="월별 고정비/변동비 추이 적용 기간"
+              end={selectedEndMonth}
+              start={selectedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <SectionPlaceholder
@@ -226,15 +232,25 @@ const BreakdownSection = memo(function BreakdownSection({
     );
   }
 
+  const appliedStartMonth = startMonth || '기간 데이터 없음';
+  const appliedEndMonth = endMonth || appliedStartMonth;
+
   return (
     <>
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>카테고리별 지출</CardTitle>
-            <CardDescription>
-              선택한 기간 기준 상위 카테고리 지출 금액을 비교합니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>카테고리별 지출</CardTitle>
+              <CardDescription>
+                선택한 기간 기준 상위 카테고리 지출 금액을 비교합니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="카테고리별 지출 적용 기간"
+              end={appliedEndMonth}
+              start={appliedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <HorizontalBarChart
@@ -246,11 +262,18 @@ const BreakdownSection = memo(function BreakdownSection({
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>하위 카테고리별 지출</CardTitle>
-            <CardDescription>
-              선택한 기간 기준 소분류 지출을 그래프로 정리했습니다. 상위 카테고리를 먼저 고르면 해당 범위만 좁혀서 볼 수 있습니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>하위 카테고리별 지출</CardTitle>
+              <CardDescription>
+                선택한 기간 기준 소분류 지출을 그래프로 정리했습니다. 상위 카테고리를 먼저 고르면 해당 범위만 좁혀서 볼 수 있습니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="하위 카테고리별 지출 적용 기간"
+              end={appliedEndMonth}
+              start={appliedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <label className="block max-w-xs">
@@ -288,11 +311,18 @@ const BreakdownSection = memo(function BreakdownSection({
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>고정비 필수/비필수 비율</CardTitle>
-            <CardDescription>
-              고정비가 입력되면 필수/비필수 비율을 비교합니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>고정비 필수/비필수 비율</CardTitle>
+              <CardDescription>
+                고정비가 입력되면 필수/비필수 비율을 비교합니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="고정비 필수/비필수 비율 적용 기간"
+              end={appliedEndMonth}
+              start={appliedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <SectionPlaceholder
@@ -303,11 +333,18 @@ const BreakdownSection = memo(function BreakdownSection({
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>변동비 비율</CardTitle>
-            <CardDescription>
-              변동비 분류가 채워지면 월별 비중과 구성 변화를 확인합니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>변동비 비율</CardTitle>
+              <CardDescription>
+                변동비 분류가 채워지면 월별 비중과 구성 변화를 확인합니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="변동비 비율 적용 기간"
+              end={appliedEndMonth}
+              start={appliedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <SectionPlaceholder
@@ -320,11 +357,18 @@ const BreakdownSection = memo(function BreakdownSection({
 
       <section className="grid gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle>거래처별 Tree Map</CardTitle>
-            <CardDescription>
-              편집된 거래처 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>거래처별 Tree Map</CardTitle>
+              <CardDescription>
+                편집된 거래처 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="거래처별 Tree Map 적용 기간"
+              end={appliedEndMonth}
+              start={appliedStartMonth}
+            />
           </CardHeader>
           <CardContent>
             <MerchantTreemapChart
@@ -339,11 +383,15 @@ const BreakdownSection = memo(function BreakdownSection({
 });
 
 const DailySpendSection = memo(function DailySpendSection({
+  endMonth,
   includeIncome,
   selectedMonth,
+  startMonth,
   setIncludeIncome,
   setSelectedMonth,
 }: {
+  startMonth: string;
+  endMonth: string;
   includeIncome: boolean;
   selectedMonth: string;
   setIncludeIncome: SpendingPageState['updateIncludeIncome'];
@@ -390,6 +438,11 @@ const DailySpendSection = memo(function DailySpendSection({
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <CardPeriodBadgeGroup
+            ariaLabel={`${includeIncome ? '일별 수입/지출액' : '일별 지출액'} 적용 기간`}
+            end={endMonth || startMonth || '기간 데이터 없음'}
+            start={startMonth || endMonth || '기간 데이터 없음'}
+          />
           <label className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm text-[color:var(--color-text)]">
             <Checkbox
               aria-label="수입 포함"
@@ -532,6 +585,11 @@ const TransactionsSection = memo(function TransactionsSection({
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <CardPeriodBadgeGroup
+            ariaLabel="거래 내역 적용 기간"
+            end={endMonth || startMonth || '기간 데이터 없음'}
+            start={startMonth || endMonth || '기간 데이터 없음'}
+          />
           <label className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm text-[color:var(--color-text)]">
             <Checkbox
               aria-label="거래내역 수입 포함"
@@ -735,6 +793,8 @@ export function SpendingPage() {
       />
 
       <DailySpendSection
+        startMonth={detailFilters.start_month}
+        endMonth={detailFilters.end_month}
         includeIncome={spendingState.include_income}
         selectedMonth={dailyCalendarMonth}
         setIncludeIncome={spendingState.updateIncludeIncome}

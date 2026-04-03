@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { getCategoryBreakdown } from '../../api/dashboard';
+import { CardPeriodBadgeGroup } from '../common/CardPeriodBadgeGroup';
 import { ensureArray } from '../../lib/collections';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -168,6 +169,9 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
 
   const hasData = chartData.length > 0;
   const periodLabel = formatActivePeriod(activePreset, activeStartMonth, activeEndMonth);
+  const activePeriodStart =
+    activePreset === 'all' ? periodLabel : activeStartMonth || '기간 정보 없음';
+  const activePeriodEnd = activePreset === 'all' ? undefined : activeEndMonth || activePeriodStart;
 
   function handlePresetSelect(preset: Exclude<CategoryRangePreset, 'custom'>) {
     setValidationMessage(null);
@@ -230,10 +234,18 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
               <p className="text-xs font-semibold tracking-[0.18em] text-[color:var(--color-text-subtle)]">
                 선택 기간
               </p>
-              <p className="mt-1 text-sm leading-5 text-[color:var(--color-text-muted)]">
-                {periodLabel}
-                {categoryQuery.isFetching ? ' · 갱신 중' : ''}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <CardPeriodBadgeGroup
+                  ariaLabel="카테고리 비중 적용 기간"
+                  end={activePeriodEnd}
+                  start={activePeriodStart}
+                />
+                {categoryQuery.isFetching ? (
+                  <span className="text-sm leading-5 text-[color:var(--color-text-muted)]">
+                    갱신 중
+                  </span>
+                ) : null}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {activePreset !== 'all' ? (

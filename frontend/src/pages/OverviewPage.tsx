@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { LoadingState } from '../components/common/LoadingState';
@@ -68,6 +69,13 @@ export function OverviewPage() {
 
   const { category_top5, monthly_cashflow, recent_transactions, recent_upload_status, signal_summaries, snapshot_date, summary_cards } =
     overviewQuery.data;
+  const monthlyCashflowStart = monthly_cashflow[0]?.period ?? '기간 정보 없음';
+  const monthlyCashflowEnd =
+    monthly_cashflow[monthly_cashflow.length - 1]?.period ?? monthlyCashflowStart;
+  const recentTransactionDates = recent_transactions.map((item) => item.date).sort();
+  const recentTransactionsStart = recentTransactionDates[0] ?? '기간 정보 없음';
+  const recentTransactionsEnd =
+    recentTransactionDates[recentTransactionDates.length - 1] ?? recentTransactionsStart;
 
   return (
     <div className="space-y-6">
@@ -86,7 +94,16 @@ export function OverviewPage() {
             <div>
               <CardTitle>월간 현금흐름</CardTitle>
             </div>
-            {recent_upload_status ? <Badge variant="secondary">최근 업로드 {recent_upload_status}</Badge> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <CardPeriodBadgeGroup
+                ariaLabel="월간 현금흐름 적용 기간"
+                end={monthlyCashflowEnd}
+                start={monthlyCashflowStart}
+              />
+              {recent_upload_status ? (
+                <Badge variant="secondary">최근 업로드 {recent_upload_status}</Badge>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-80 w-full" aria-label="월간 현금흐름 차트">
@@ -177,8 +194,13 @@ export function OverviewPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
             <CardTitle>최근 거래</CardTitle>
+            <CardPeriodBadgeGroup
+              ariaLabel="최근 거래 적용 기간"
+              end={recentTransactionsEnd}
+              start={recentTransactionsStart}
+            />
           </CardHeader>
           <CardContent>
             <TransactionsTable rows={recent_transactions} />

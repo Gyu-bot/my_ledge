@@ -177,4 +177,51 @@ describe('EditableTransactionsTable', () => {
       memo: '주간 검토 대상',
     });
   });
+
+  it('shows cost classification in the table and omits the upload source badge', () => {
+    render(
+      <EditableTransactionsTable
+        rows={[
+          {
+            id: 1,
+            date: '2026-03-24',
+            time: '09:30:00',
+            type: '지출',
+            category_major: '주거',
+            category_minor: '월세',
+            category_major_user: null,
+            category_minor_user: null,
+            effective_category_major: '주거',
+            effective_category_minor: '월세',
+            description: '오피스텔 월세',
+            merchant: '임대인',
+            amount: -850000,
+            currency: 'KRW',
+            payment_method: '계좌이체',
+            cost_kind: 'fixed',
+            fixed_cost_necessity: 'essential',
+            memo: null,
+            is_deleted: false,
+            merged_into_id: null,
+            is_edited: false,
+            source: 'import',
+            created_at: '2026-03-24T09:30:00',
+            updated_at: '2026-03-24T09:30:00',
+          },
+        ]}
+        categoryOptions={['주거']}
+        hasWriteAccess
+        pendingTransactionId={null}
+        isBulkSaving={false}
+        onSave={vi.fn(async () => undefined)}
+        onBulkSave={vi.fn(async () => undefined)}
+        onDelete={vi.fn(async () => undefined)}
+        onRestore={vi.fn(async () => undefined)}
+      />,
+    );
+
+    expect(screen.getAllByText('고정비').length).toBeGreaterThan(0);
+    expect(screen.getByText(/고정비 필수 여부 필수/)).toBeInTheDocument();
+    expect(screen.queryByText('업로드')).not.toBeInTheDocument();
+  });
 });

@@ -77,8 +77,13 @@ describe('AssetsPage', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: '자산 현황' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '순자산 추이' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '순자산 추이 적용 기간' })).toHaveTextContent(
+      '2026-03-24',
+    );
     expect(screen.getByRole('heading', { level: 3, name: '투자 요약' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '투자 요약 기준일' })).toHaveTextContent('2026-03-24');
     expect(screen.getByRole('heading', { level: 3, name: '대출 요약' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '대출 요약 기준일' })).toHaveTextContent('2026-03-24');
     expect(screen.getByLabelText('투자 항목 비중 파이 차트')).toBeInTheDocument();
     expect(screen.getByText('단일 스냅샷')).toBeInTheDocument();
     expect(screen.queryByText('시계열 데이터 1건')).not.toBeInTheDocument();

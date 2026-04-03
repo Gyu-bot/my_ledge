@@ -118,6 +118,26 @@ function buildBulkPayload(draft: BulkDraftState): Omit<TransactionBulkUpdateRequ
   return payload;
 }
 
+function getCostKindLabel(value: TransactionResponse['cost_kind']) {
+  if (value === 'fixed') {
+    return '고정비';
+  }
+  if (value === 'variable') {
+    return '변동비';
+  }
+  return '미지정';
+}
+
+function getFixedCostNecessityLabel(value: TransactionResponse['fixed_cost_necessity']) {
+  if (value === 'essential') {
+    return '필수';
+  }
+  if (value === 'discretionary') {
+    return '비필수';
+  }
+  return '미지정';
+}
+
 export function EditableTransactionsTable({
   rows,
   categoryOptions,
@@ -382,7 +402,7 @@ export function EditableTransactionsTable({
       ) : null}
 
       <div className="hidden rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 xl:block">
-        <Table>
+        <Table density="compact">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-14">
@@ -397,6 +417,7 @@ export function EditableTransactionsTable({
               <TableHead>설명</TableHead>
               <TableHead>거래처</TableHead>
               <TableHead>카테고리</TableHead>
+              <TableHead>분류</TableHead>
               <TableHead>메모</TableHead>
               <TableHead>상태</TableHead>
               <TableHead className="text-right">금액</TableHead>
@@ -496,6 +517,14 @@ export function EditableTransactionsTable({
                     )}
                   </TableCell>
                   <TableCell className="text-[color:var(--color-text)]">
+                    <div>
+                      <p className="font-medium">{getCostKindLabel(row.cost_kind)}</p>
+                      <p className="mt-1 text-xs text-[color:var(--color-text-muted)]">
+                        고정비 필수 여부 {getFixedCostNecessityLabel(row.fixed_cost_necessity)}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-[color:var(--color-text)]">
                     {isEditing ? (
                       <Textarea
                         className="min-w-[14rem]"
@@ -516,9 +545,6 @@ export function EditableTransactionsTable({
                   </TableCell>
                   <TableCell className="text-[color:var(--color-text-muted)]">
                     <div className="space-y-1">
-                      <Badge className="w-fit normal-case tracking-normal">
-                        {row.source === 'manual' ? '수동 입력' : '업로드'}
-                      </Badge>
                       {row.is_deleted ? (
                         <Badge className="w-fit normal-case tracking-normal" variant="destructive">
                           삭제됨
@@ -689,6 +715,8 @@ export function EditableTransactionsTable({
                       <p>거래처: {row.merchant ?? row.description}</p>
                       <p>카테고리: {row.effective_category_major}</p>
                       <p>소분류: {row.effective_category_minor ?? '소분류 없음'}</p>
+                      <p>고정비/변동비: {getCostKindLabel(row.cost_kind)}</p>
+                      <p>고정비 필수 여부: {getFixedCostNecessityLabel(row.fixed_cost_necessity)}</p>
                       <p>메모: {row.memo ?? '메모 없음'}</p>
                       <p>결제수단: {row.payment_method ?? '결제수단 없음'}</p>
                     </div>

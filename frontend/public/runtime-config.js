@@ -1,0 +1,1 @@
+window.__MY_LEDGE_RUNTIME_CONFIG__ = window.__MY_LEDGE_RUNTIME_CONFIG__ ?? {};

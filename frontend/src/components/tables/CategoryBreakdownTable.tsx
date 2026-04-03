@@ -52,7 +52,7 @@ export function CategoryBreakdownTable({ rows, title }: CategoryBreakdownTablePr
       </CardHeader>
       <CardContent>
         <div className="overflow-hidden rounded-[var(--radius)] border border-[color:var(--color-border)]">
-          <Table>
+          <Table density="compact">
             <TableHeader className="bg-[color:var(--color-accent-soft)]/50">
               <TableRow className="hover:bg-transparent">
                 <TableHead>카테고리</TableHead>

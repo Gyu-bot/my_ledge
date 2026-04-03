@@ -77,7 +77,7 @@ CORS_ORIGINS=
 - `DB_PASSWORD`: PostgreSQL 앱 계정 비밀번호
 - `DB_READONLY_PASSWORD`: OpenClaw 등 readonly DB 접근용 비밀번호
 - `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증용 비밀값
-- `API_KEY`: backend write API 인증용 비밀값이며, compose 빌드 시 frontend의 `VITE_API_KEY`로도 같은 값이 자동 주입된다
+- `API_KEY`: backend write API 인증용 비밀값이며, compose/frontend container 시작 시 `runtime-config.js`로도 같은 값이 주입된다
 - `EXCEL_PASSWORD`: 실제 BankSalad 암호화 파일을 사용할 경우 필요
 - `CORS_ORIGINS`: 실제 프론트엔드 도메인으로 설정
 
@@ -161,7 +161,7 @@ docker compose up -d --build db migrate backend frontend
 
 주의:
 
-- `API_KEY` 값을 바꾸면 frontend 번들에도 같은 값이 다시 주입되어야 하므로 `frontend` 재빌드가 필요하다
+- `API_KEY` 값을 바꾼 경우 frontend는 재빌드까지는 필요 없고, container 재시작으로 `runtime-config.js`를 다시 생성하면 된다
 - `POST /api/v1/upload` 는 `snapshot_date` 를 필수로 받는다. 업로드 시 기준일을 반드시 함께 보내야 한다
 
 ### 백엔드 단독 실행
@@ -210,7 +210,7 @@ CORS_ORIGINS=
 ```
 
 - `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증에 사용
-- `API_KEY`: compose 배포 시 frontend build에도 같은 값이 자동 주입된다
+- `API_KEY`: compose 배포 시 frontend container 시작 시점의 `runtime-config.js`에도 같은 값이 자동 주입된다
 - `DB_READONLY_PASSWORD`: OpenClaw 등 외부 에이전트의 readonly DB 접근에 사용
 - `EXCEL_PASSWORD`: 실제 암호화된 BankSalad 파일 복호화에 사용
 

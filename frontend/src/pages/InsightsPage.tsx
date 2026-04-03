@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { LoadingState } from '../components/common/LoadingState';
@@ -27,6 +28,51 @@ function findAssumption(assumptions: string[], key: string) {
   const prefix = `${key}:`;
   const match = assumptions.find((item) => item.startsWith(prefix));
   return match ? match.slice(prefix.length).trim() : null;
+}
+
+function toMonthKey(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  return value.slice(0, 7);
+}
+
+function getMerchantSpendPeriod(items: Array<{ last_seen_at: string }>) {
+  const months = items
+    .map((item) => toMonthKey(item.last_seen_at))
+    .filter((value): value is string => value !== null)
+    .sort();
+
+  if (months.length === 0) {
+    return {
+      start: '기간 정보 없음',
+      end: '기간 정보 없음',
+    };
+  }
+
+  return {
+    start: months[0],
+    end: months[months.length - 1],
+  };
+}
+
+function getCategoryMoMPeriod(items: Array<{ previous_period: string; period: string }>) {
+  const months = items
+    .flatMap((item) => [item.previous_period, item.period])
+    .filter(Boolean)
+    .sort();
+
+  if (months.length === 0) {
+    return {
+      start: '기간 정보 없음',
+      end: '기간 정보 없음',
+    };
+  }
+
+  return {
+    start: months[0],
+    end: months[months.length - 1],
+  };
 }
 
 interface InsightCardPaginationProps {
@@ -128,6 +174,8 @@ export function InsightsPage() {
   const anomalyTotal = anomalyPageData?.total ?? spending_anomalies.length;
   const recurringCurrentPage = recurringPageData?.page ?? 1;
   const anomalyCurrentPage = anomalyPageData?.page ?? 1;
+  const merchantSpendPeriod = getMerchantSpendPeriod(merchant_spend);
+  const categoryMoMPeriod = getCategoryMoMPeriod(category_mom);
 
   return (
     <div className="space-y-6">
@@ -239,11 +287,18 @@ export function InsightsPage() {
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
-          <CardHeader>
-            <CardTitle>거래처 소비 Top N</CardTitle>
-            <CardDescription className="mt-2">
-              merchant spend 기준 상위 거래처를 요약했습니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>거래처 소비 Top N</CardTitle>
+              <CardDescription className="mt-2">
+                merchant spend 기준 상위 거래처를 요약했습니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="거래처 소비 Top N 적용 기간"
+              end={merchantSpendPeriod.end}
+              start={merchantSpendPeriod.start}
+            />
           </CardHeader>
           <CardContent className="space-y-3">
             {merchant_spend.map((item) => (
@@ -259,11 +314,18 @@ export function InsightsPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>카테고리 증감 요약</CardTitle>
-            <CardDescription className="mt-2">
-              전월 대비 증감이 큰 카테고리를 우선 노출합니다.
-            </CardDescription>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
+            <div>
+              <CardTitle>카테고리 증감 요약</CardTitle>
+              <CardDescription className="mt-2">
+                전월 대비 증감이 큰 카테고리를 우선 노출합니다.
+              </CardDescription>
+            </div>
+            <CardPeriodBadgeGroup
+              ariaLabel="카테고리 증감 요약 적용 기간"
+              end={categoryMoMPeriod.end}
+              start={categoryMoMPeriod.start}
+            />
           </CardHeader>
           <CardContent className="space-y-3">
             {category_mom.map((item) => (
