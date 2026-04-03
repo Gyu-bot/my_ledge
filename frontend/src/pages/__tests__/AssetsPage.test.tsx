@@ -75,7 +75,7 @@ describe('AssetsPage', () => {
 
     render(<AssetsPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '자산 현황' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: '자산 현황' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '순자산 추이' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '순자산 추이 적용 기간' })).toHaveTextContent(
       '2026-03-24',

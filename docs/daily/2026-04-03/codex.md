@@ -218,6 +218,53 @@
   - grouped nav를 disclosure/flyout trigger로 고정
   - breadcrumb/title source of truth를 shell navigation config로 고정
   - `PageHeader` 제거 규칙, description/meta 이동 규칙, breakpoint/state persistence 정의
+
+## Sidebar Shell Foundation Implementation
+- 사용자 요청으로 설계/계획 확인 뒤 즉시 프론트엔드 재구현을 시작했고, 멀티 에이전트로 첫 shell foundation 배치를 진행했다.
+- 사용한 흐름:
+  - main agent: `navigation.ts`, `AppShellState`, `AppTopbar`, `PageBreadcrumb`, `ContentFrame`, `AppLayout` cutover
+  - subagent: `AppSidebar`, `MobileSidebarDrawer`, 각 전용 테스트
+- TDD 순서:
+  - `frontend/src/app/router.test.tsx`
+    - breadcrumb/title 파생 규칙
+    - desktop sidebar localStorage restore
+  - `frontend/src/components/layout/__tests__/AppTopbar.test.tsx`
+    - breadcrumb/title 렌더
+    - mobile trigger, compact meta slot
+  - `frontend/src/app/AppLayout.test.tsx`
+    - top nav 제거
+    - sidebar shell / breadcrumb / current page heading 노출
+- 추가/수정 파일:
+  - `frontend/src/app/navigation.ts`
+  - `frontend/src/components/layout/AppShellState.tsx`
+  - `frontend/src/components/layout/AppSidebar.tsx`
+  - `frontend/src/components/layout/MobileSidebarDrawer.tsx`
+  - `frontend/src/components/layout/AppTopbar.tsx`
+  - `frontend/src/components/layout/PageBreadcrumb.tsx`
+  - `frontend/src/components/layout/ContentFrame.tsx`
+  - `frontend/src/app/AppLayout.tsx`
+  - `frontend/src/app/router.test.tsx`
+  - `frontend/src/app/AppLayout.test.tsx`
+  - `frontend/src/components/layout/__tests__/AppSidebar.test.tsx`
+  - `frontend/src/components/layout/__tests__/MobileSidebarDrawer.test.tsx`
+  - `frontend/src/components/layout/__tests__/AppTopbar.test.tsx`
+- 구현 내용:
+  - shell navigation source of truth를 `navigation.ts` 로 고정
+  - `AppShellState` 에서 desktop sidebar expansion state를 localStorage로 복원/저장
+  - desktop sidebar는 grouped disclosure / collapsed flyout 구조로 구현
+  - mobile drawer는 `role="dialog"` / `aria-modal="true"` / 명시적 close button / `Escape` close / trigger focus restore 동작을 구현
+  - `AppLayout` 은 기존 hero + primary/section nav를 제거하고 sidebar + thin topbar + wide content frame 조합으로 전환
+- 아직 남겨둔 것:
+  - 각 page 본문의 `PageHeader` 는 이번 배치에서 제거하지 않았다
+  - topbar meta slot은 아직 페이지별 실제 메타와 연결하지 않았다
+
+## Sidebar Shell Foundation Verification
+- targeted shell tests:
+  - `cd frontend && npm test -- --runInBand src/app/router.test.tsx src/app/AppLayout.test.tsx src/components/layout/__tests__/AppSidebar.test.tsx src/components/layout/__tests__/MobileSidebarDrawer.test.tsx src/components/layout/__tests__/AppTopbar.test.tsx`
+  - 결과: `5 passed`, `13 passed`
+- static checks:
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run typecheck`
   - shell rewrite에 필요한 접근성/키보드/ESC/scroll-lock 테스트 범위 정의
 
 ## Sidebar Shell Spec Review Loop
@@ -268,3 +315,61 @@
   - `lint` 통과
 - 비고:
   - Recharts responsive container 관련 width/height 경고는 테스트 환경 stderr에 남지만, 이번 실행에서도 실패로 승격되지는 않았다.
+
+## Frontend Reimplementation Completion
+- 사용자 요청에 맞춰 남아 있던 frontend 재구현 범위를 끝까지 마감했다.
+- subagent 분담:
+  - `Leibniz`: sidebar / mobile drawer foundation 구현
+  - `Hypatia`: `OverviewPage`, `InsightsPage`, `OperationsWorkbenchPage` 의 page header 제거
+  - `Fermat`: `SpendingPage`, `AssetsPage` 의 page header 제거
+- main session 구현:
+  - `frontend/src/components/layout/AppChromeContext.tsx`
+    - page-level meta를 shell topbar로 올리는 context/hook 추가
+  - `frontend/src/app/AppLayout.tsx`
+    - shell state/provider와 chrome provider를 조합해 topbar meta slot 연결
+  - `frontend/src/pages/OverviewPage.tsx`
+  - `frontend/src/pages/AssetsPage.tsx`
+  - `frontend/src/pages/InsightsPage.tsx`
+  - `frontend/src/pages/OperationsWorkbenchPage.tsx`
+  - `frontend/src/pages/SpendingPage.tsx`
+    - `PageHeader` 제거
+    - topbar meta badge 연결
+    - `일별 지출액` 카드에 내부 독립 dropdown filter(`지출만` / `수입 포함`) 추가
+  - `frontend/src/components/layout/AppTopbar.tsx`
+    - mobile에서 breadcrumb를 숨기고 header 높이를 줄여 first viewport 밀도 개선
+
+## Browser Review
+- Playwright CLI로 실브라우저 캡처를 수집했다.
+- 저장 경로:
+  - `output/playwright/desktop/overview-desktop.png`
+  - `output/playwright/desktop/spending-desktop.png`
+  - `output/playwright/desktop/assets-desktop.png`
+  - `output/playwright/desktop/insights-desktop.png`
+  - `output/playwright/desktop/operations-desktop.png`
+  - `output/playwright/mobile/overview-mobile.png`
+  - `output/playwright/mobile/spending-mobile.png`
+  - `output/playwright/mobile/assets-mobile.png`
+  - `output/playwright/mobile/insights-mobile.png`
+  - `output/playwright/mobile/operations-mobile.png`
+  - `output/playwright/mobile/overview-mobile-viewport.png`
+  - `output/playwright/mobile/overview-mobile-drawer.png`
+  - `output/playwright/mobile/spending-mobile-viewport.png`
+  - `output/playwright/mobile/operations-mobile-viewport.png`
+- 검토 결과:
+  - desktop canonical route 5종은 sidebar/topbar/content frame 비율과 카드 간격이 정상
+  - mobile에서는 기능성 깨짐은 없었고, 가장 큰 문제는 breadcrumb + title 이 중복돼 상단 공간을 과하게 쓰는 점이었다
+  - 해당 문제는 `AppTopbar` compact patch로 수정 후 mobile viewport를 다시 촬영해 확인했다
+- 중간 이슈:
+  - Playwright CLI는 기본 npm/cache 경로 권한 문제가 있어 `/tmp/npm-cache`, `/tmp/ms-playwright`, `XDG_CACHE_HOME=/tmp` 로 우회했다
+  - 브라우저 점검 중 `/api/*` 500이 한 차례 보였는데, 원인은 frontend regression이 아니라 polling 중 종료된 backend dev server였다
+  - backend를 재기동한 뒤 최종 mobile viewport 캡처에서 200 응답과 정상 렌더를 다시 확인했다
+
+## Final Verification
+- targeted regression:
+  - `cd frontend && npm test -- --runInBand src/components/layout/__tests__/AppTopbar.test.tsx src/app/AppLayout.test.tsx src/app/router.test.tsx src/pages/__tests__/OverviewPage.test.tsx src/pages/__tests__/InsightsPage.test.tsx src/pages/__tests__/OperationsWorkbenchPage.test.tsx src/pages/__tests__/SpendingPage.test.tsx src/pages/__tests__/AssetsPage.test.tsx src/components/layout/__tests__/AppSidebar.test.tsx src/components/layout/__tests__/MobileSidebarDrawer.test.tsx`
+  - 결과: `10 files, 30 tests` 통과
+- full frontend sweep:
+  - `cd frontend && npm test`
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run typecheck`
+  - 결과: `28 files, 77 tests` 통과 / lint 통과 / typecheck 통과

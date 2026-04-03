@@ -126,7 +126,7 @@ describe('OverviewPage', () => {
 
     render(<OverviewPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '개요' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: '개요' })).not.toBeInTheDocument();
     expect(screen.getByText(/^순자산$/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '월간 현금흐름' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '월간 현금흐름 적용 기간' })).toHaveTextContent(

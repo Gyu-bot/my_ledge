@@ -124,7 +124,7 @@ describe('OperationsWorkbenchPage', () => {
 
     render(<OperationsWorkbenchPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '거래 작업대' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: '거래 작업대' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 편집 작업대' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '필터 적용' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '업로드' })).toBeInTheDocument();

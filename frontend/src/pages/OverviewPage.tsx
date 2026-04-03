@@ -8,12 +8,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useMemo } from 'react';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { LoadingState } from '../components/common/LoadingState';
+import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { MetricCardGrid } from '../components/layout/MetricCardGrid';
-import { PageHeader } from '../components/layout/PageHeader';
 import { TransactionsTable } from '../components/tables/TransactionsTable';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -38,6 +39,14 @@ function formatMoney(value: number | string | readonly (number | string)[] | nul
 
 export function OverviewPage() {
   const overviewQuery = useOverview();
+  const chromeMeta = useMemo(
+    () =>
+      overviewQuery.data?.snapshot_date ? (
+        <Badge variant="reference">기준일 {overviewQuery.data.snapshot_date}</Badge>
+      ) : null,
+    [overviewQuery.data?.snapshot_date],
+  );
+  useAppChromeMeta(chromeMeta);
 
   if (overviewQuery.isPending) {
     return (
@@ -67,7 +76,7 @@ export function OverviewPage() {
     );
   }
 
-  const { category_top5, monthly_cashflow, recent_transactions, recent_upload_status, signal_summaries, snapshot_date, summary_cards } =
+  const { category_top5, monthly_cashflow, recent_transactions, recent_upload_status, signal_summaries, summary_cards } =
     overviewQuery.data;
   const monthlyCashflowStart = monthly_cashflow[0]?.period ?? '기간 정보 없음';
   const monthlyCashflowEnd =
@@ -79,13 +88,6 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        description="최신 KPI, 월간 현금흐름, 주의 신호, 최근 거래를 한 화면에서 확인합니다."
-        eyebrow="개요"
-        meta={snapshot_date ? `기준일 ${snapshot_date}` : undefined}
-        title="개요"
-      />
-
       <MetricCardGrid items={summary_cards} />
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(20rem,0.9fr)]">

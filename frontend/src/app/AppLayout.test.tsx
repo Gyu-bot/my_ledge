@@ -1,7 +1,21 @@
 import { render, screen } from '@testing-library/react';
+import { useMemo } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
+import { Badge } from '../components/ui/badge';
+import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { AppLayout } from './AppLayout';
+
+function LayoutMetaProbe() {
+  const meta = useMemo(
+    () => <Badge variant="reference">기준일 2026-03-24</Badge>,
+    [],
+  );
+
+  useAppChromeMeta(meta);
+
+  return <div>Dashboard content</div>;
+}
 
 describe('AppLayout', () => {
   it('keeps the skip-link target programmatically focusable', () => {
@@ -9,13 +23,14 @@ describe('AppLayout', () => {
       <MemoryRouter initialEntries={['/']}>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<div>Dashboard content</div>} />
+            <Route path="/" element={<LayoutMetaProbe />} />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
 
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByText('기준일 2026-03-24')).toBeInTheDocument();
   });
 
   it('renders section navigation and section tab navigation in the shared shell', () => {
@@ -29,13 +44,13 @@ describe('AppLayout', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { level: 1, name: 'my_ledge workspace' })).toBeInTheDocument();
-    expect(screen.queryByText('제품 구조')).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: /sections/i })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /sections/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /section tabs/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'my_ledge workspace' })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '지출' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '개요' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '분석' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '운영' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: /section tabs/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '지출' })).toHaveAttribute('aria-current', 'page');
   });
 });

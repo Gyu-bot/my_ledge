@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / operations bulk edit v1 완료 / frontend 재설계 후속 batch 반영 + frontend IA 문서화 완료
-- **Last Worker:** codex (2026-04-03T11:18+0900, added and review-approved the sidebar shell implementation plan, then re-ran frontend verification before commit/push)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend 재설계 shell rollout 및 desktop·mobile 실브라우저 점검 완료
+- **Last Worker:** codex (2026-04-03T12:18+0900, finished the sidebar-shell rollout, page-header migration, and browser-based layout review/fix)
 - **Branch:** main
 
 ## Completed
@@ -71,6 +71,10 @@
 - [x] 기간 뱃지 공통화 완료: `CardPeriodBadgeGroup` 추가 후 `SpendingPage`, `InsightsPage`, `AssetsPage`, `OverviewPage`, `CategoryBreakdownCard`의 카드 헤더 기간/기준일 메타데이터를 같은 reference token으로 정렬
 - [x] 지출/자산 후속 UI batch 완료: 지출 시계열 slider apply 버튼화, 상세 월 필터 단순화, 결제수단별 카드 제거, 거래처 TreeMap full-width 확장, 투자 요약 pie chart 전환, 기준 badge 색상 `reference` variant로 통일
 - [x] Frontend 업로드 runtime config hotfix 완료: compose/nginx frontend가 build-time `VITE_API_KEY` 고정 대신 container start 시 `runtime-config.js` 로 API key를 주입하도록 수정하고, workbench upload 200 / frontend 전체 test·typecheck·lint를 재검증
+- [x] Frontend sidebar shell foundation batch 완료: `navigation.ts` source-of-truth 추가, `AppShellState` localStorage persistence 추가, `AppSidebar` / `MobileSidebarDrawer` / `AppTopbar` / `PageBreadcrumb` / `ContentFrame` 구현, `AppLayout` 을 sidebar + thin topbar shell로 cutover, 관련 테스트 13건 추가/통과
+- [x] Frontend sidebar shell rollout 완료: canonical 5개 페이지의 `PageHeader` 제거, `AppChromeContext` 기반 topbar meta slot 연결, `일별 지출액` 카드 내부 독립 dropdown filter 추가, mobile topbar breadcrumb compact 처리
+- [x] Frontend 실브라우저 점검 완료: Playwright CLI로 desktop/mobile canonical route 캡처를 수집하고, mobile 상단 chrome 중복 문제를 `AppTopbar` compact patch로 수정한 뒤 재촬영/재검증 완료
+- [x] Frontend 최종 검증 완료: `cd frontend && npm test`, `npm run lint`, `npm run typecheck` 통과
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
@@ -78,13 +82,13 @@
   - 현재 지점: workbench bulk edit v1은 완료됐다. 다음 우선순위는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 또는 bulk delete / restore 중 결정 필요
   - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
 - [ ] Frontend 재설계 구현
-  - 현재 상태: approved wireframe/spec/plan 기준으로 shell, overview, insights, operations workbench 구현 완료
-  - 현재 지점: global shell hero와 각 페이지 title card를 compact header로 전환했고, `DashboardPage` / `DataPage` / `PlaceholderApp` 및 관련 테스트를 제거했다. `/data` 는 wrapper가 아니라 canonical workbench로 redirect 된다. overview 하단 2열은 `카테고리 요약 Top 5` 를 더 좁히고 `최근 거래` 를 더 넓혀 desktop 줄바꿈을 완화했다. overview `월간 현금흐름` 카드는 `transfer` 시리즈를 제거하고 `income/expense` bar + `net_cashflow` line 혼합 차트로 단순화했다. 전역 차트 팔레트는 단색 블루 계열 대신 `primary/secondary/accent/info/danger/muted` 혼합 팔레트로 재정의했고, bar radius는 프로젝트 전체에서 낮은 roundness를 기본값으로 통일했다. badge, alert, slider, empty/placeholder, 상태 패널도 같은 팔레트의 `*-soft` surface를 쓰도록 정리해 배경 톤을 통일했다. operations workbench는 우측 sidebar를 제거한 뒤, 사용자 피드백에 맞춰 `작업대 요약` / `현재 필터` / `최근 업로드 맥락` 상단 카드도 기본 화면에서 숨기고 full-width 편집 작업대 + 페이지네이션만 남겼다. 필터 바의 날짜 입력폭도 줄여 체크박스 라벨 줄바꿈을 방지했다. 거래 편집 작업대는 `merchant` 편집을 지원하고, spending `거래처별 Tree Map` 은 `description` 대신 `merchant` 를 집계 키로 사용한다. spending 상단 시계열 영역은 slider draft/apply 패턴으로 바꿨고, 상세 필터는 `시작 월` / `종료 월`만 남겼다. `결제수단별 지출` 카드는 제거했고 `거래처별 Tree Map` 은 full-width 로 확장했다. 자산 `투자 요약` 카드는 상단 총액 + 하단 pie chart 구조로 재구성했고, `기준 월` / `기준 일자` badge 는 `reference` variant로 정렬했다. 거래 작업대 필터는 서버 필터링 + 서버 페이지네이션 기반 draft/apply 2단계로 바꿔 전건 수집을 제거했고, filter-options endpoint, query 분리, partial invalidation/cached update까지 반영했다. 다음 shell 단계는 `docs/superpowers/specs/2026-04-03-frontend-sidebar-shell-redesign-design.md` 기준으로 `collapsible sidebar + mobile drawer + thin topbar + wide max-width` 로 앱 셸을 재편하는 것이다
-  - 남은 작업: reviewed implementation plan 기준 shell/sidebar cutover 구현, `일별 지출액` 카드 내부 독립 dropdown filter, placeholder/empty-state visual polish, redirect(`/spending`, `/assets`) 브라우저 마무리 확인, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
+  - 현재 상태: approved wireframe/spec/plan 기준 shell rollout, page-level hero/title migration, browser review까지 완료
+  - 현재 지점: `AppLayout` 은 `AppSidebar + MobileSidebarDrawer + AppTopbar + ContentFrame` 조합으로 안정화됐고, canonical 5개 페이지는 topbar meta slot과 compact mobile chrome 기준으로 정렬됐다
+  - 남은 작업: legacy `PrimarySectionNav` / `SectionTabNav` / `PageHeader` 정리, placeholder/empty-state visual polish, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
 - [ ] Frontend 런타임 점검 후속
-  - 현재 상태: `output/` 정리 후 compact header 반영본 desktop 5장 + mobile 5장(canonical route) 재수집 완료, overview/operations desktop 캡처는 최신 반영본으로 다시 갱신했다
-  - 현재 지점: 분석/운영 화면의 동시 로드 오류는 프론트 코드 regressions가 아니라 backend dev server 종료로 인한 `/api/*` 500이었다. backend 재기동 후 `transactions/summary`, `assets/net-worth-history`, `analytics/monthly-cashflow`, `upload/logs` 프록시 응답 200을 재확인했다. 이번 턴에는 workbench upload가 local dev에서는 실제 200으로 성공함을 브라우저 재현으로 확인했고, compose/nginx frontend는 build-time 키 고정보다 container start 시 `runtime-config.js` 를 읽는 구조로 바꿔 stale key mismatch 가능성을 줄였다
-  - 남은 작업: 필요 시 desktop/mobile 추가 캡처와 spending/assets 후속 polish
+  - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
+  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다
+  - 남은 작업: 필요 시 운영 환경 기준 추가 캡처 수집
 
 ## Blocked
 - 없음
@@ -99,14 +103,16 @@
   - [x] app shell / route migration 실행
   - [x] overview / insights 신규 페이지 구현
   - [x] sidebar shell implementation plan 작성 및 reviewer 승인
+  - [x] sidebar shell foundation (`AppSidebar`, `MobileSidebarDrawer`, `AppTopbar`, `AppLayout` cutover) 구현 시작
   - [x] 캡처 기준 레이아웃 보정 1차 완료
-  - [ ] spending / assets 본문 redesign 정교화
+  - [x] page-level hero/title 제거와 shell topbar 메타 연결
+  - [x] spending / assets 본문 redesign 정교화
   - [x] spending 시계열/상세 필터 범위 separator 및 시스템 월 기본값 정렬
   - [ ] 최종 visual polish 및 legacy 컴포넌트 정리
   - [x] workbench 상단 보조 카드 제거 및 필터 행 압축
   - [x] 지출 시계열 slider `적용` 버튼 흐름 도입
   - [x] 지출 상세 필터를 `시작 월` / `종료 월`만 남기도록 단순화
-  - [ ] `일별 지출액` 카드 내부 독립 dropdown filter 추가
+  - [x] `일별 지출액` 카드 내부 독립 dropdown filter 추가
   - [x] `결제수단별 지출` 제거 + `거래처별 TreeMap` full-width 확장
   - [x] 자산 `투자 요약` 카드 하단 pie chart 비중화
   - [x] 기준 월/기준 일자 badge 배경색 전역 통일
@@ -115,6 +121,9 @@
   - [x] 작업대 merchant 편집 지원 + analytics merchant 집계 전환
   - [ ] 실제 데이터 기준 merchant 정규화 룰/일괄 편집 방식 결정
 - [ ] Frontend 실브라우저 점검 보강
+  - [x] desktop/mobile canonical route 캡처
+  - [x] mobile topbar compact fix 반영 재촬영
+  - [ ] 운영 배포본 기준 smoke capture
   - [x] desktop route 4종 캡처 및 console smoke 확인
   - [x] 로컬 사용자 리뷰용 dev server 재기동 (`4173`/`8000`, Tailscale 접속 확인)
   - [x] `operations/workbench` 및 `/data` wrapper desktop 캡처 재수집
@@ -215,6 +224,7 @@
 - 2026-03-30: reset 기능은 `POST /api/v1/data/reset` 단일 endpoint로 두고 `scope` 값으로 거래 전용/거래+스냅샷 전체 초기화를 분기한다. `upload_logs`는 운영 이력 성격이 강하므로 reset 대상에서 제외한다.
 - 2026-03-30: `vw_transactions_effective` 는 OpenClaw와 AI 분석의 canonical row surface이므로 기본적으로 삭제/병합 row를 제외한다. 삭제/병합까지 포함한 조회는 canonical view가 아니라 raw `transactions` 또는 API의 `include_deleted` / `include_merged` 플래그를 사용한다.
 - 2026-03-31: advisor analytics는 P0/P1/P2로 나눠 rollout한다. P0는 현재 스키마만으로 구현하고, P1은 conservative rule-based heuristic, P2는 `*_est`와 mapping 기반 자산·부채 건강도 API로 설계한다.
+- 2026-04-03: shell breadcrumb는 desktop 정보밀도 유지용으로 남기되, mobile에서는 title과 중복돼 첫 viewport를 잠식하므로 `AppTopbar` 에서 `md` 이상에만 노출한다.
 - 2026-03-31: `merchant_normalized`, 현금성 자산 분류, 대출 상환 메타데이터는 P0 blocker가 아니다. 실제 OpenClaw 응답 품질을 확인한 뒤 Phase 4B/4C에서 schema enrichment 여부를 결정한다.
 - 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주한다. 이후 최우선 작업은 P0 advisor analytics 구현이다.
 - 2026-03-31: `monthly-cashflow.transfer` 는 자산이동의 순증감이 아니라 activity volume 으로 해석해 `ABS(amount)` 월합계로 제공한다. 단일 양수 필드 계약과 OpenClaw 설명 안정성을 우선했다.
@@ -248,6 +258,8 @@
 - 2026-04-03: frontend 현재 구조 문서는 구현 코드와 분리해 `docs/frontend/` 아래에 유지한다. `components-and-design-token-inventory.md`는 현재 UI surface 인벤토리와 토큰 연결표, `page-wireframes.md`는 실제 route 기준 section 구성을 담당한다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
 - 2026-04-03: 다음 frontend IA 리패스는 기존 top navigation shell을 누적 수정하지 않고 새 sidebar shell로 재작성한다. desktop은 lean collapsible sidebar, mobile은 drawer, content는 넓은 max-width, page chrome은 thin topbar를 기준으로 하고, 그룹 항목은 route link가 아니라 disclosure/flyout trigger로 정의한다.
+- 2026-04-03: sidebar shell의 breadcrumb/title/active group은 `frontend/src/app/navigation.ts` 하나에서 파생한다. `AppLayout` 에 route prefix 분기를 다시 흩뿌리지 않고, shell chrome과 nav 컴포넌트가 같은 구성을 참조하는 쪽이 이후 page-level header 제거에도 안전하다.
+- 2026-04-03: desktop sidebar expansion state는 `AppShellState` 에서 localStorage로만 영속화하고, mobile drawer open state는 세션 메모리 상태로만 둔다. mobile open 상태를 영속화할 이유는 없고, desktop 정보 밀도 선호만 복원하면 충분하다.
 - 2026-04-02: overview `최근 거래` 와 insights `반복 결제` 의 대표 식별자는 원본 description이 아니라 `merchant` 로 통일한다. 반복 결제 휴리스틱도 동일 거래처 기준으로 묶어야 화면 라벨과 진단 의미가 어긋나지 않는다.
 - 2026-04-02: `cost_kind` 는 입력값을 `fixed | variable` 로만 제한하고, 새 수동 거래의 기본값은 `variable` 로 둔다. 다건 편집 toolbar에서는 안전하게 기본 선택을 `수정 안 함` 으로 유지해 의도치 않은 일괄 덮어쓰기를 막는다.
 - 2026-04-02: 인사이트 카드의 `반복 결제`, `이상 지출` 은 카드 내부 로컬 slice가 아니라 API 페이지네이션으로 처리한다. 데이터가 커져도 카드 높이와 네트워크 payload를 함께 제어해야 하므로 `page/per_page/total` 계약을 endpoint에 직접 추가한다.

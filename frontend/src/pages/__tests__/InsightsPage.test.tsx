@@ -166,7 +166,7 @@ describe('InsightsPage', () => {
 
     render(<InsightsPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '인사이트' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: '인사이트' })).not.toBeInTheDocument();
     expect(screen.getByText(/^저축률$/)).toBeInTheDocument();
     expect(screen.getByText(/^수입 변동성$/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '핵심 인사이트' })).toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { LineTrendChart } from '../components/charts/LineTrendChart';
@@ -6,7 +7,8 @@ import { ErrorState } from '../components/common/ErrorState';
 import { LoadingState } from '../components/common/LoadingState';
 import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
 import { StatusCard } from '../components/common/StatusCard';
-import { PageHeader } from '../components/layout/PageHeader';
+import { useAppChromeMeta } from '../components/layout/AppChromeContext';
+import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useAssets } from '../hooks/useAssets';
 
@@ -18,6 +20,14 @@ function formatMoney(value: number) {
 
 export function AssetsPage() {
   const assetsQuery = useAssets();
+  const chromeMeta = useMemo(
+    () =>
+      assetsQuery.data?.snapshot_date ? (
+        <Badge variant="reference">기준일 {assetsQuery.data.snapshot_date}</Badge>
+      ) : null,
+    [assetsQuery.data?.snapshot_date],
+  );
+  useAppChromeMeta(chromeMeta);
 
   if (assetsQuery.isPending) {
     return (
@@ -55,13 +65,6 @@ export function AssetsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="자산"
-        title="자산 현황"
-        description="순자산 추이와 투자·대출 요약을 한 화면에서 확인합니다."
-        meta={snapshot_date ? `기준일 ${snapshot_date}` : undefined}
-      />
-
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summary_cards.map((card, index) => (
           <StatusCard

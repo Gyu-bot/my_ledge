@@ -1,24 +1,16 @@
-import { Outlet, useLocation } from 'react-router-dom';
-import { PrimarySectionNav } from '../components/navigation/PrimarySectionNav';
-import { SectionTabNav, type SectionTabItem } from '../components/navigation/SectionTabNav';
+import { useRef } from 'react';
+import { AppChromeProvider, useAppChromeContext } from '../components/layout/AppChromeContext';
+import { Outlet } from 'react-router-dom';
+import { AppShellStateProvider, useAppShellState } from '../components/layout/AppShellState';
+import { AppSidebar } from '../components/layout/AppSidebar';
+import { AppTopbar } from '../components/layout/AppTopbar';
+import { ContentFrame } from '../components/layout/ContentFrame';
+import { MobileSidebarDrawer } from '../components/layout/MobileSidebarDrawer';
 
-const analysisTabs: SectionTabItem[] = [
-  { label: '지출', to: '/analysis/spending' },
-  { label: '자산', to: '/analysis/assets' },
-  { label: '인사이트', to: '/analysis/insights' },
-];
-
-const operationTabs: SectionTabItem[] = [
-  { label: '거래 작업대', to: '/operations/workbench' },
-];
-
-export function AppLayout() {
-  const location = useLocation();
-  const sectionTabs = location.pathname.startsWith('/analysis')
-    ? { ariaLabel: 'Section tabs', items: analysisTabs }
-    : location.pathname.startsWith('/operations')
-      ? { ariaLabel: 'Section tabs', items: operationTabs }
-      : null;
+function AppLayoutContent() {
+  const { mobileSidebarOpen, setMobileSidebarOpen } = useAppShellState();
+  const { meta } = useAppChromeContext();
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="min-h-screen bg-dashboard-grid text-[color:var(--color-text)]">
@@ -26,47 +18,40 @@ export function AppLayout() {
         본문으로 건너뛰기
       </a>
 
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-5">
-        <header className="border-b border-[color:var(--color-border)] pb-4">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--color-text-subtle)]">
-                  Finance cockpit
-                </p>
-                <h1
-                  className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
-                  style={{ fontFamily: 'var(--font-heading)' }}
-                >
-                  my_ledge workspace
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-text-muted)]">
-                  개요에서 현재 상태를 읽고, 분석에서 패턴을 확인한 뒤, 운영에서 거래를 정리하는
-                  흐름으로 재무 화면을 재구성했습니다.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--color-text-muted)]">
-                <span className="rounded-[var(--radius-full)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-1.5">
-                  개요 · 분석 · 운영
-                </span>
-                <span className="rounded-[var(--radius-full)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-1.5">
-                  read-heavy + write-heavy
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <PrimarySectionNav />
-              {sectionTabs ? <SectionTabNav ariaLabel={sectionTabs.ariaLabel} items={sectionTabs.items} /> : null}
-            </div>
+      <ContentFrame className="min-h-screen">
+        <div className="flex flex-1 gap-4 lg:gap-6">
+          <div className="hidden lg:block">
+            <AppSidebar />
           </div>
-        </header>
 
-        <main id="main-content" tabIndex={-1} className="mt-5 flex-1">
-          <Outlet />
-        </main>
-      </div>
+          <div className="min-w-0 flex-1 rounded-[var(--radius-lg)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shadow-soft)]">
+            <AppTopbar
+              meta={meta}
+              mobileTriggerRef={mobileTriggerRef}
+              onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+            />
+            <main id="main-content" tabIndex={-1} className="flex-1 p-4 sm:p-6">
+              <Outlet />
+            </main>
+          </div>
+        </div>
+
+        <MobileSidebarDrawer
+          open={mobileSidebarOpen}
+          onOpenChange={setMobileSidebarOpen}
+          triggerRef={mobileTriggerRef}
+        />
+      </ContentFrame>
     </div>
+  );
+}
+
+export function AppLayout() {
+  return (
+    <AppShellStateProvider>
+      <AppChromeProvider>
+        <AppLayoutContent />
+      </AppChromeProvider>
+    </AppShellStateProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { CategoryTimelineAreaChart } from '../components/charts/CategoryTimelineAreaChart';
 import { DailySpendCalendar } from '../components/charts/DailySpendCalendar';
 import { HorizontalBarChart } from '../components/charts/HorizontalBarChart';
@@ -12,7 +12,7 @@ import {
   TransactionFilterBar,
   type TransactionFilterValues,
 } from '../components/filters/TransactionFilterBar';
-import { PageHeader } from '../components/layout/PageHeader';
+import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { TransactionsTable } from '../components/tables/TransactionsTable';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { Badge } from '../components/ui/badge';
@@ -383,20 +383,21 @@ const BreakdownSection = memo(function BreakdownSection({
 });
 
 const DailySpendSection = memo(function DailySpendSection({
+  displayMode,
   endMonth,
-  includeIncome,
   selectedMonth,
   startMonth,
-  setIncludeIncome,
+  setDisplayMode,
   setSelectedMonth,
 }: {
+  displayMode: 'expense' | 'net';
   startMonth: string;
   endMonth: string;
-  includeIncome: boolean;
   selectedMonth: string;
-  setIncludeIncome: SpendingPageState['updateIncludeIncome'];
+  setDisplayMode: (next: 'expense' | 'net') => void;
   setSelectedMonth: SpendingPageState['updateDailyCalendarMonth'];
 }) {
+  const includeIncome = displayMode === 'net';
   const dailyQuery = useSpendingDailyCalendarData(includeIncome, selectedMonth);
 
   if (dailyQuery.isPending) {
@@ -443,13 +444,20 @@ const DailySpendSection = memo(function DailySpendSection({
             end={endMonth || startMonth || '기간 데이터 없음'}
             start={startMonth || endMonth || '기간 데이터 없음'}
           />
-          <label className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm text-[color:var(--color-text)]">
-            <Checkbox
-              aria-label="수입 포함"
-              checked={includeIncome}
-              onCheckedChange={(checked) => setIncludeIncome(checked === true)}
-            />
-            수입 포함
+          <label className="block min-w-[10rem]">
+            <span className="sr-only">일별 카드 표시 기준</span>
+            <Select
+              onValueChange={(value) => setDisplayMode(value as 'expense' | 'net')}
+              value={displayMode}
+            >
+              <SelectTrigger aria-label="일별 카드 표시 기준">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="expense">지출만</SelectItem>
+                <SelectItem value="net">수입 포함</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           <Badge variant="reference">{dailyQuery.data.selected_month || '기간 데이터 없음'} 기준</Badge>
           <label className="block min-w-[10rem]">
@@ -663,9 +671,15 @@ const TransactionsSection = memo(function TransactionsSection({
 export function SpendingPage() {
   const spendingState = useSpendingPageState();
   const detailFilters = spendingState.detail_filters;
-  const dailyCalendarMonth = spendingState.daily_calendar_month;
-  const updateDailyCalendarMonth = spendingState.updateDailyCalendarMonth;
   const updateDetailFilters = spendingState.updateDetailFilters;
+  const [dailyCalendarMonth, setDailyCalendarMonth] = useState(() => spendingState.daily_calendar_month);
+  const [dailyCardDisplayMode, setDailyCardDisplayMode] = useState<'expense' | 'net'>('expense');
+  const detailRangeLabel =
+    detailFilters.start_month && detailFilters.end_month
+      ? detailFilters.start_month === detailFilters.end_month
+        ? `상세 범위 ${detailFilters.start_month}`
+        : `상세 범위 ${detailFilters.start_month} ~ ${detailFilters.end_month}`
+      : '상세 범위 미지정';
   const timelineQuery = useSpendingTimelineData(spendingState.timeline_filters);
   const periodOptionsQuery = useSpendingPeriodData(
     {
@@ -674,6 +688,11 @@ export function SpendingPage() {
     },
     '',
   );
+  const chromeMeta = useMemo(
+    () => <Badge variant="reference">{detailRangeLabel}</Badge>,
+    [detailRangeLabel],
+  );
+  useAppChromeMeta(chromeMeta);
 
   useEffect(() => {
     if (!timelineQuery.data?.available_months.length) {
@@ -706,13 +725,12 @@ export function SpendingPage() {
       !dailyCalendarMonth;
 
     if (shouldSyncDailyMonth && dailyCalendarMonth !== preferredMonth) {
-      updateDailyCalendarMonth(preferredMonth);
+      setDailyCalendarMonth(preferredMonth);
     }
   }, [
     dailyCalendarMonth,
     detailFilters,
     timelineQuery.data,
-    updateDailyCalendarMonth,
     updateDetailFilters,
   ]);
 
@@ -729,11 +747,6 @@ export function SpendingPage() {
   if (!periodOptionsQuery.data && periodOptionsQuery.isPending) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          eyebrow="지출"
-          title="지출 분석"
-          description="기간 기준으로 지출 흐름과 거래 내역을 확인합니다."
-        />
         <InlineSectionStatus
           title="지출 분석 화면을 준비 중입니다"
           description="기간별 집계와 거래 목록을 차례대로 불러오고 있습니다."
@@ -753,12 +766,6 @@ export function SpendingPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="지출"
-        title="지출 분석"
-        description="기간 기준으로 지출 흐름과 거래 내역을 확인합니다."
-      />
-
       <MonthlyTimelineSection
         timelineData={timelineQuery.data}
         timelineError={timelineQuery.isError}
@@ -793,12 +800,12 @@ export function SpendingPage() {
       />
 
       <DailySpendSection
+        displayMode={dailyCardDisplayMode}
         startMonth={detailFilters.start_month}
         endMonth={detailFilters.end_month}
-        includeIncome={spendingState.include_income}
         selectedMonth={dailyCalendarMonth}
-        setIncludeIncome={spendingState.updateIncludeIncome}
-        setSelectedMonth={spendingState.updateDailyCalendarMonth}
+        setDisplayMode={setDailyCardDisplayMode}
+        setSelectedMonth={setDailyCalendarMonth}
       />
 
       <TransactionsSection

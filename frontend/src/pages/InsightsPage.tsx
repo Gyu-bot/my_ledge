@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -7,7 +7,7 @@ import { AssumptionPopover } from '../components/insights/AssumptionPopover';
 import { InsightSummaryCards } from '../components/insights/InsightSummaryCards';
 import { RecurringPaymentsTable } from '../components/insights/RecurringPaymentsTable';
 import { SpendingAnomaliesTable } from '../components/insights/SpendingAnomaliesTable';
-import { PageHeader } from '../components/layout/PageHeader';
+import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -132,6 +132,14 @@ export function InsightsPage() {
   const insightsQuery = useInsights();
   const recurringQuery = useRecurringPaymentsPage(recurringPage, INSIGHTS_CARD_PAGE_SIZE);
   const anomalyQuery = useSpendingAnomaliesPage(anomalyPage, INSIGHTS_CARD_PAGE_SIZE);
+  const chromeMeta = useMemo(
+    () =>
+      insightsQuery.data ? (
+        <Badge variant="reference">핵심 인사이트 {insightsQuery.data.key_insights.length}건</Badge>
+      ) : null,
+    [insightsQuery.data],
+  );
+  useAppChromeMeta(chromeMeta);
 
   if (insightsQuery.isPending) {
     return (
@@ -179,12 +187,6 @@ export function InsightsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        description="현금흐름, 수입 안정성, 반복 결제, 이상 지출을 진단 중심으로 정리합니다."
-        eyebrow="분석"
-        title="인사이트"
-      />
-
       <InsightSummaryCards
         incomeStabilityAssumption={incomeStabilityAssumption}
         items={summary_cards}

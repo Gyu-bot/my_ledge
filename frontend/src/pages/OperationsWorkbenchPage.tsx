@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DataResetScope } from '../api/dataManagement';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -8,9 +8,10 @@ import {
   type DataManagementFilterValues,
 } from '../components/data/DataManagementFilterBar';
 import { EditableTransactionsTable } from '../components/data/EditableTransactionsTable';
-import { PageHeader } from '../components/layout/PageHeader';
+import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { OperationsAccordions } from '../components/operations/OperationsAccordions';
 import { Alert } from '../components/ui/alert';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useDataManagement } from '../hooks/useDataManagement';
@@ -21,6 +22,16 @@ export function OperationsWorkbenchPage() {
   const [snapshotDate, setSnapshotDate] = useState('');
   const [resetScope, setResetScope] = useState<DataResetScope>('transactions_only');
   const [resetConfirmation, setResetConfirmation] = useState('');
+  const chromeMeta = useMemo(
+    () =>
+      dataManagementQuery.data ? (
+        <Badge variant="reference">
+          표시 {dataManagementQuery.data.transactions.length} / 전체 {dataManagementQuery.data.total}
+        </Badge>
+      ) : null,
+    [dataManagementQuery.data],
+  );
+  useAppChromeMeta(chromeMeta);
 
   if (dataManagementQuery.isPending) {
     return (
@@ -91,13 +102,6 @@ export function OperationsWorkbenchPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        description="거래 편집을 기본 랜딩으로 두고, 업로드와 초기화는 보조 도구로 접어 둔 운영 작업대입니다."
-        eyebrow="운영"
-        meta={`표시 ${transactions.length} / 전체 ${total}`}
-        title="거래 작업대"
-      />
-
       {!has_write_access ? (
         <Alert variant="warning">
           현재 runtime API key가 설정되지 않아 업로드와 수정, 삭제, 복원 동작은 비활성화됩니다.

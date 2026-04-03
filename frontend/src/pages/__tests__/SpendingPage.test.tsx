@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { SpendingPage } from '../SpendingPage';
 
@@ -145,7 +146,7 @@ describe('SpendingPage', () => {
 
     render(<SpendingPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: '지출 분석' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: '지출 분석' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '월별 카테고리 추이' })).toBeInTheDocument();
     expect(
       screen.getByRole('group', { name: '월별 카테고리 추이 적용 기간' }),
@@ -186,7 +187,7 @@ describe('SpendingPage', () => {
     expect(screen.queryByText('카테고리', { selector: 'span' })).not.toBeInTheDocument();
     expect(screen.queryByText('결제수단', { selector: 'span' })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('거래 설명 검색')).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '수입 포함' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '일별 카드 표시 기준' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: '거래내역 수입 포함' })).toBeInTheDocument();
     expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: '거래 내역' })).toBeInTheDocument();
@@ -197,5 +198,102 @@ describe('SpendingPage', () => {
     expect(
       within(screen.getByTestId('monthly-category-timeline-card')).queryByText(/시계열 기간/),
     ).not.toBeInTheDocument();
+  });
+
+  it('keeps the daily spend month selector independent from the shared detail filter reset', () => {
+    mockedUseSpendingPageState.mockImplementation(() => {
+      const [detailFilters, setDetailFilters] = useState({
+        start_month: '2026-01',
+        end_month: '2026-03',
+      });
+      const [dailyCalendarMonth, setDailyCalendarMonth] = useState('2026-03');
+      const [transactionsPage, setTransactionsPage] = useState(1);
+      const [transactionsAccordionOpen, setTransactionsAccordionOpen] = useState(true);
+
+      return {
+        timeline_filters: {
+          start_month: '2026-01',
+          end_month: '2026-03',
+        },
+        detail_filters: detailFilters,
+        subcategory_major_filter: '',
+        include_income: false,
+        daily_calendar_month: dailyCalendarMonth,
+        transactions_page: transactionsPage,
+        transactions_per_page: 20,
+        transactions_accordion_open: transactionsAccordionOpen,
+        updateTimelineFilters: vi.fn(),
+        resetTimelineFilters: vi.fn(),
+        updateDetailFilters: setDetailFilters,
+        resetDetailFilters: () => {
+          setDetailFilters({
+            start_month: '2026-01',
+            end_month: '2026-01',
+          });
+          setDailyCalendarMonth('2026-01');
+          setTransactionsPage(1);
+        },
+        updateSubcategoryMajorFilter: vi.fn(),
+        updateIncludeIncome: vi.fn(),
+        updateDailyCalendarMonth: setDailyCalendarMonth,
+        updateTransactionsPage: setTransactionsPage,
+        updateTransactionsAccordionOpen: setTransactionsAccordionOpen,
+      };
+    });
+
+    mockedUseSpendingTimelineData.mockReturnValue({
+      data: {
+        available_months: ['2026-01', '2026-02', '2026-03'],
+        category_timeline: {
+          categories: ['식비', '교통'],
+          points: [{ period: '2026-03', values: { 식비: 120000, 교통: 40000 } }],
+        },
+      },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSpendingTimelineData>);
+
+    mockedUseSpendingPeriodData.mockReturnValue({
+      data: {
+        category_breakdown: [{ label: '식비', amount: 240000, share: 66.7 }],
+        subcategory_breakdown: [{ label: '식비 / 점심', amount: 150000, share: 41.7 }],
+        merchant_breakdown: [{ name: '점심', amount: 150000 }],
+        filter_options: {
+          subcategory_major_categories: ['식비'],
+        },
+      },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSpendingPeriodData>);
+
+    mockedUseSpendingDailyCalendarData.mockReturnValue({
+      data: {
+        available_months: ['2026-01', '2026-02', '2026-03'],
+        selected_month: '2026-03',
+        items: [{ date: '2026-03-01', amount: 12000 }],
+        total_amount: 12000,
+        max_amount: 12000,
+      },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSpendingDailyCalendarData>);
+
+    mockedUseSpendingTransactionsData.mockReturnValue({
+      data: {
+        transactions: [],
+        transactions_total: 0,
+        transactions_page: 1,
+        transactions_per_page: 20,
+      },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSpendingTransactionsData>);
+
+    render(<SpendingPage />);
+
+    expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
+    expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
+    expect(screen.queryByText('2026-01 기준')).not.toBeInTheDocument();
   });
 });
