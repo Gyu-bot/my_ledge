@@ -19,29 +19,29 @@
   --color-surface-muted: #f1f5f9;
   --color-border: #e2e8f0;
   --color-border-strong: #cbd5e1;
-  --color-primary: #2563eb;
-  --color-primary-strong: #1d4ed8;
-  --color-primary-soft: #bfdbfe;
-  --color-secondary: #d97706;
-  --color-secondary-strong: #b45309;
-  --color-secondary-soft: #ffedd5;
-  --color-accent: #0f766e;
-  --color-accent-strong: #115e59;
-  --color-accent-soft: #ccfbf1;
+  --color-primary: #223a5e;
+  --color-primary-strong: #172a45;
+  --color-primary-soft: #e7edf5;
+  --color-secondary: #c96a1b;
+  --color-secondary-strong: #9f5415;
+  --color-secondary-soft: #f7eee5;
+  --color-accent: #b6413b;
+  --color-accent-strong: #8f302c;
+  --color-accent-soft: #f6e8e7;
   --color-text: #0f172a;
   --color-text-muted: #475569;
   --color-text-subtle: #64748b;
   --color-text-inverse: #ffffff;
-  --color-positive: #16a34a;
-  --color-positive-soft: #dcfce7;
-  --color-warning: #d97706;
-  --color-warning-soft: #fef3c7;
-  --color-danger: #dc2626;
-  --color-danger-soft: #fee2e2;
-  --color-info: #7c3aed;
-  --color-info-soft: #ede9fe;
-  --color-ring: #2563eb;
-  --color-selection: rgba(37, 99, 235, 0.18);
+  --color-positive: #2f8f57;
+  --color-positive-soft: #e9f4ed;
+  --color-warning: #c96a1b;
+  --color-warning-soft: #f7eee5;
+  --color-danger: #b42318;
+  --color-danger-soft: #f7e8e7;
+  --color-info: #5b7192;
+  --color-info-soft: #ecf0f5;
+  --color-ring: #223a5e;
+  --color-selection: rgba(34, 58, 94, 0.16);
   --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-medium: 0 4px 10px rgba(15, 23, 42, 0.08);
   --shadow-large: 0 12px 24px rgba(15, 23, 42, 0.12);
@@ -107,9 +107,9 @@ a {
 
 .bg-dashboard-grid {
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%),
-    radial-gradient(circle at top right, rgba(217, 119, 6, 0.1), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.08), transparent 30%),
+    radial-gradient(circle at top left, rgba(34, 58, 94, 0.08), transparent 32%),
+    radial-gradient(circle at top right, rgba(201, 106, 27, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(182, 65, 59, 0.07), transparent 30%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 250, 252, 0.94)),
     var(--color-canvas);
 }

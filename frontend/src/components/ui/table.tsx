@@ -24,7 +24,11 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn('[&_tr]:border-b', className)} {...props} />
+  <thead
+    ref={ref}
+    className={cn('[&_tr]:border-b [&_tr]:border-[color:var(--color-border)]', className)}
+    {...props}
+  />
 ));
 TableHeader.displayName = 'TableHeader';
 
@@ -32,7 +36,11 @@ const TableBody = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <tbody ref={ref} className={cn('[&_tr:last-child]:border-0', className)} {...props} />
+  <tbody
+    ref={ref}
+    className={cn('[&_tr:last-child]:border-0', className)}
+    {...props}
+  />
 ));
 TableBody.displayName = 'TableBody';
 
@@ -41,7 +49,7 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
     <tr
       ref={ref}
       className={cn(
-        'border-b border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent-soft)]/60 data-[state=selected]:bg-[color:var(--color-accent-soft)]/60',
+        'border-b border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-primary-soft)]/72 data-[state=selected]:bg-[color:var(--color-primary-soft)]/72',
         className,
       )}
       {...props}
@@ -55,16 +63,16 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
     const density = React.useContext(TableDensityContext);
 
     return (
-    <th
-      ref={ref}
-      className={cn(
-        density === 'compact'
-          ? 'h-8 px-3 text-left align-middle font-medium text-[color:var(--color-text-muted)]'
-          : 'h-10 px-4 text-left align-middle font-medium text-[color:var(--color-text-muted)]',
-        className,
-      )}
-      {...props}
-    />
+      <th
+        ref={ref}
+        className={cn(
+          density === 'compact'
+            ? 'h-8 border-b border-[color:var(--color-border)] px-1 text-left align-middle font-medium text-[color:var(--color-text-muted)]'
+            : 'h-9 border-b border-[color:var(--color-border)] px-1.5 text-left align-middle font-medium text-[color:var(--color-text-muted)]',
+          className,
+        )}
+        {...props}
+      />
     );
   },
 );
@@ -77,7 +85,11 @@ const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<
     return (
       <td
         ref={ref}
-        className={cn(density === 'compact' ? 'px-3 py-2 align-middle' : 'px-4 py-3 align-middle', className)}
+        className={cn(
+          density === 'compact' ? 'px-1 py-2 align-middle' : 'px-1.5 py-3 align-middle',
+          'border-b border-[color:var(--color-border)]',
+          className,
+        )}
         {...props}
       />
     );

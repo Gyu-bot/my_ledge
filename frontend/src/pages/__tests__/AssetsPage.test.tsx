@@ -87,5 +87,14 @@ describe('AssetsPage', () => {
     expect(screen.getByLabelText('투자 항목 비중 파이 차트')).toBeInTheDocument();
     expect(screen.getByText('단일 스냅샷')).toBeInTheDocument();
     expect(screen.queryByText('시계열 데이터 1건')).not.toBeInTheDocument();
+    expect(screen.getByText('총 투자원금').closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
+    );
+    expect(screen.getByText('총 잔액').closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(231,237,245,0.9))]',
+    );
+    expect(screen.getByText('주택담보대출').closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
+    );
   });
 });

@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend 재설계 shell rollout 및 desktop·mobile 실브라우저 점검 완료
-- **Last Worker:** codex (2026-04-03T12:18+0900, finished the sidebar-shell rollout, page-header migration, and browser-based layout review/fix)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend visual system refresh와 chart/control/table density 조정 완료
+- **Last Worker:** codex (2026-04-03T14:15+0900, restored shared table separators, kept card-internal wrappers borderless, and constrained recurring-payment merchant column truncation)
 - **Branch:** main
 
 ## Completed
@@ -63,6 +63,14 @@
 - [x] Frontend 실브라우저 점검 일부 완료: 실제 서버 기준 desktop canonical route 4종(`개요`, `지출`, `자산`, `인사이트`) 캡처 확보, 런타임 오류는 `favicon.ico` 404만 확인
 - [x] Frontend 레이아웃 보정 완료: 극단적 저축률 표시를 compact label로 정규화하고, 단일 포인트 시계열은 빈 차트 대신 summary fallback으로 전환
 - [x] 거래처 컬럼 도입 완료: `transactions.merchant` 추가, 기존/신규 row 기본값을 `description` 으로 백필하고 거래 편집 작업대에서 `description` 은 read-only, `merchant` 는 editable 로 분리
+- [x] Frontend heroicon-density refresh Task 1-2 완료: local Heroicons module 추가, navigation icon metadata 연결, sidebar/mobile drawer 아이콘 렌더링 및 density 축소
+- [x] Frontend heroicon-density refresh 완료: section/card title inline icon 적용, `ButtonGroup` 기반 작업대 icon-only action column 적용, 공통 `Table` primitive spacing 전역 축소, Chrome headless fallback으로 desktop/mobile live screenshot 재검토 완료
+- [x] Frontend color token refresh 완료: `primary=navy`, `secondary=orange`, `accent=red` 축으로 전역 토큰 재정의, `*-soft` 채도 완화, generic hover/select/table highlight를 `primary`/`secondary` 중심으로 재배치, desktop/mobile overview 캡처로 실화면 재검토 완료
+- [x] Frontend monetary axis compaction 완료: `OverviewPage`, `CategoryTimelineAreaChart`, `LineTrendChart` 의 금액 축 tick을 `천원` 단위 숫자로 축약하고 axis width를 축소해 mobile chart 레이아웃 여유를 확보, overview/spending mobile 캡처로 재확인 완료
+- [x] Frontend card-group emphasis polish 완료: 개요 KPI, 자산 요약, 인사이트 요약/목록, 운영 업로드 결과 등 프로젝트 전반의 card group surface에 저채도 gradient를 공통 적용하고, `Button` / `Input` / `Select` / `Checkbox` 기본 크기를 small 기준으로 재정렬
+- [x] Frontend chart/control/table refinement 완료: `월별 카테고리 추이` 를 stacked bar + no y-axis 로 전환, chart tooltip / popover shadow 강화, `Button` 기본 크기를 small 기준으로 통일, `Input` / `Select` 높이 정렬, 공통 `Table` border 제거
+- [x] Frontend table surface cleanup 완료: 카드 내부 읽기용 테이블과 거래 작업대의 table wrapper border까지 제거해 card-in-card 표면을 borderless로 통일하고 회귀 테스트 추가
+- [x] Frontend table separator rollback 완료: 카드 내부 wrapper border 제거는 유지하고 공통 `Table` row/header separator를 복구, `반복결제` 거래처 컬럼은 fixed layout + truncate로 폭 변동을 방지
 - [x] Git hygiene 정리: ignored review artifact 디렉터리 `output/`, `.playwright-cli/`, `.codex/` 를 Git index 에서 제거하고, `.gitignore` 를 Python/test/build cache 산출물까지 확장
 - [x] 개요/인사이트 거래처 표기 정리 완료: 개요 `최근 거래` 카드와 인사이트 `반복 결제` 카드의 주요 식별 컬럼을 `description` 대신 `merchant` 기준으로 표시하도록 정렬
 - [x] 인사이트 카드 API 페이지네이션 완료: `반복 결제`, `이상 지출` endpoint/card에 `page`, `per_page`, `total` 기반 10건 단위 페이지네이션을 추가해 카드 길이와 payload를 함께 제어
@@ -82,12 +90,12 @@
   - 현재 지점: workbench bulk edit v1은 완료됐다. 다음 우선순위는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 또는 bulk delete / restore 중 결정 필요
   - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
 - [ ] Frontend 재설계 구현
-  - 현재 상태: approved wireframe/spec/plan 기준 shell rollout, page-level hero/title migration, browser review까지 완료
-  - 현재 지점: `AppLayout` 은 `AppSidebar + MobileSidebarDrawer + AppTopbar + ContentFrame` 조합으로 안정화됐고, canonical 5개 페이지는 topbar meta slot과 compact mobile chrome 기준으로 정렬됐다
-  - 남은 작업: legacy `PrimarySectionNav` / `SectionTabNav` / `PageHeader` 정리, placeholder/empty-state visual polish, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
+  - 현재 상태: approved wireframe/spec/plan 기준 shell rollout, page-level hero/title migration, browser review, heroicon/density/color polish, KPI gradient emphasis까지 완료
+  - 현재 지점: `AppLayout` 은 `AppSidebar + MobileSidebarDrawer + AppTopbar + ContentFrame` 조합으로 안정화됐고, canonical 5개 페이지는 topbar meta slot, compact mobile chrome, small-sized controls 기준으로 정렬됐다
+  - 남은 작업: legacy `PrimarySectionNav` / `SectionTabNav` / `PageHeader` 정리, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
-  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다
+  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 현재 수동 확인용 dev server는 backend `:8000`, frontend `:4173` 으로 다시 올라와 있다
   - 남은 작업: 필요 시 운영 환경 기준 추가 캡처 수집
 
 ## Blocked
@@ -108,7 +116,8 @@
   - [x] page-level hero/title 제거와 shell topbar 메타 연결
   - [x] spending / assets 본문 redesign 정교화
   - [x] spending 시계열/상세 필터 범위 separator 및 시스템 월 기본값 정렬
-  - [ ] 최종 visual polish 및 legacy 컴포넌트 정리
+  - [x] 최종 visual polish
+  - [ ] legacy 컴포넌트 정리
   - [x] workbench 상단 보조 카드 제거 및 필터 행 압축
   - [x] 지출 시계열 slider `적용` 버튼 흐름 도입
   - [x] 지출 상세 필터를 `시작 월` / `종료 월`만 남기도록 단순화
@@ -218,6 +227,11 @@
 - 2026-03-27: 자산/지출 read hook은 배열뿐 아니라 중첩 객체(`totals`, `snapshot_date`)도 누락될 수 있다고 가정하고 기본 객체/0 값으로 정규화한다. pagination loop와 집계 훅도 동일 규칙을 적용해 queryFn 내부 예외를 막는다
 - 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리한다. 초기 구현은 frontend build 주입 방식이었지만, 2026-04-03부터는 container start 시 `runtime-config.js` 생성으로 대체했다.
 - 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
+- 2026-04-03: sidebar/drawer 아이콘은 외부 Heroicons 패키지 없이 저장소 내부 SVG 컴포넌트로 고정한다. 배포 의존성을 늘리지 않고 outline 스타일을 유지하기 위함이다
+- 2026-04-03: 개요 KPI 카드와 자산 요약 카드처럼 강조가 필요한 summary group은 그림자나 강한 채도 대신 매우 옅은 gradient surface로만 구분한다. 이후 같은 역할의 card group은 페이지를 가리지 않고 같은 규칙을 재사용한다.
+- 2026-04-03: `Button`, `Input`, `Select`, `Checkbox` 의 기본 밀도는 small 기준으로 통일한다. 화면 전반의 정보 밀도를 맞추고 모바일에서 필터 행과 card header가 과도하게 커지는 문제를 줄이는 편이 더 중요하다.
+- 2026-04-03: 지출 `월별 카테고리 추이` 는 stacked area 대신 stacked bar 로 표현하고 y축은 제거한다. 월 단위 비교에서는 누적 막대가 더 직관적이고, mobile width 제약에서 축을 없애는 쪽이 정보 밀도와 가독성 모두 낫다.
+- 2026-04-03: 공통 `Table` primitive는 구분선을 border보다 spacing/hover에 의존하도록 정리한다. 현재 정보량에서는 행 border가 시각 잡음이 더 커서, 전역 제거가 더 깔끔하다.
 - 2026-03-27: compose 배포의 frontend는 상대경로 `/api` 호출을 유지하고, 정적 nginx가 `backend:8000` 으로 reverse proxy 한다. 브라우저가 Docker 내부 DNS를 직접 알 수 없으므로 build-time 절대 URL 주입보다 single-origin proxy가 안전하다
 - 2026-03-27: 데이터 관리 화면의 거래 작업대는 서버 첫 페이지 응답만 신뢰하지 않고 전체 페이지를 수집한 뒤 상단 20건만 노출한다. spending 화면과 read path 일관성을 맞추고, 캐시/페이지네이션 편차로 빈 화면처럼 보이는 위험을 줄이는 쪽이 더 안전하다
 - 2026-03-30: STATUS.md는 `docs/STATUS.md` 단일 파일로 관리한다. 루트 `STATUS.md`는 제거했다.
@@ -257,6 +271,8 @@
 - 2026-04-03: 카드 헤더의 기간/기준일 메타데이터는 개별 페이지에서 직접 `Badge`를 흩뿌리지 않고 공통 `CardPeriodBadgeGroup`으로 렌더링한다. 범위형(`start ~ end`)과 단일 기준일형을 같은 reference token과 gap 규칙으로 통일해야 페이지 간 밀도가 안정적이다.
 - 2026-04-03: frontend 현재 구조 문서는 구현 코드와 분리해 `docs/frontend/` 아래에 유지한다. `components-and-design-token-inventory.md`는 현재 UI surface 인벤토리와 토큰 연결표, `page-wireframes.md`는 실제 route 기준 section 구성을 담당한다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
+- 2026-04-03: 카드 내부 테이블은 바깥 `Card`가 이미 외곽 경계를 제공하므로 내부 table wrapper에는 별도 border를 두지 않는다. Data Table 전환 검토 시에도 server-driven filter bar와 mobile 카드 레이아웃은 별도 구조로 유지한다.
+- 2026-04-03: 공통 `Table`의 행/헤더 separator는 정보 구분을 위해 유지하고, 제거 대상은 카드 내부의 별도 table wrapper border만 한정한다. `반복결제`처럼 문자열 길이가 긴 열은 `table-fixed` + truncate로 폭 흔들림을 막는다.
 - 2026-04-03: 다음 frontend IA 리패스는 기존 top navigation shell을 누적 수정하지 않고 새 sidebar shell로 재작성한다. desktop은 lean collapsible sidebar, mobile은 drawer, content는 넓은 max-width, page chrome은 thin topbar를 기준으로 하고, 그룹 항목은 route link가 아니라 disclosure/flyout trigger로 정의한다.
 - 2026-04-03: sidebar shell의 breadcrumb/title/active group은 `frontend/src/app/navigation.ts` 하나에서 파생한다. `AppLayout` 에 route prefix 분기를 다시 흩뿌리지 않고, shell chrome과 nav 컴포넌트가 같은 구성을 참조하는 쪽이 이후 page-level header 제거에도 안전하다.
 - 2026-04-03: desktop sidebar expansion state는 `AppShellState` 에서 localStorage로만 영속화하고, mobile drawer open state는 세션 메모리 상태로만 둔다. mobile open 상태를 영속화할 이유는 없고, desktop 정보 밀도 선호만 복원하면 충분하다.

@@ -141,6 +141,12 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('group', { name: '최근 거래 적용 기간' })).toHaveTextContent('2026-03-24');
     expect(screen.getByRole('columnheader', { name: '거래처' })).toBeInTheDocument();
     expect(screen.getAllByText('서울교통공사')).toHaveLength(2);
+    expect(screen.getByText('이상 지출').closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,232,231,0.9))]',
+    );
+    expect(screen.getByText('반복 결제').closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
+    );
   });
 
   it('renders monthly cashflow as income/expense bars with a net cashflow line and no per-card descriptions', () => {

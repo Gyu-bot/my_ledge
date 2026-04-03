@@ -31,7 +31,7 @@ describe('HorizontalBarChart', () => {
     );
 
     const bar = screen.getByTestId('horizontal-bar-series');
-    expect(bar).toHaveAttribute('data-fill', '#2563eb');
+    expect(bar).toHaveAttribute('data-fill', '#223a5e');
     expect(bar).toHaveAttribute('data-radius', '0,2,2,0');
   });
 });

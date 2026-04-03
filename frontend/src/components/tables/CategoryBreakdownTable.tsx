@@ -51,9 +51,9 @@ export function CategoryBreakdownTable({ rows, title }: CategoryBreakdownTablePr
         </p>
       </CardHeader>
       <CardContent>
-        <div className="overflow-hidden rounded-[var(--radius)] border border-[color:var(--color-border)]">
+        <div className="overflow-hidden rounded-[var(--radius)]">
           <Table density="compact">
-            <TableHeader className="bg-[color:var(--color-accent-soft)]/50">
+            <TableHeader className="bg-[color:var(--color-secondary-soft)]/72">
               <TableRow className="hover:bg-transparent">
                 <TableHead>카테고리</TableHead>
                 <TableHead className="text-right">비중</TableHead>

@@ -13,7 +13,7 @@ function formatMoney(value: number) {
 
 export function SpendingAnomaliesTable({ items }: SpendingAnomaliesTableProps) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+    <div className="overflow-x-auto rounded-[var(--radius)] bg-[color:var(--color-surface)]">
       <Table density="compact">
         <TableHeader>
           <TableRow className="hover:bg-transparent">

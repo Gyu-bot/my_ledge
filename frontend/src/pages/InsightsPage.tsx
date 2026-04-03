@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
+import { IconTitle } from '../components/common/IconTitle';
 import { LoadingState } from '../components/common/LoadingState';
+import { getCardGroupSurfaceClass } from '../components/common/cardGroupSurface';
 import { AssumptionPopover } from '../components/insights/AssumptionPopover';
 import { InsightSummaryCards } from '../components/insights/InsightSummaryCards';
 import { RecurringPaymentsTable } from '../components/insights/RecurringPaymentsTable';
@@ -10,7 +12,8 @@ import { SpendingAnomaliesTable } from '../components/insights/SpendingAnomalies
 import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '../components/ui/card';
+import { cn } from '../lib/utils';
 import {
   INSIGHTS_CARD_PAGE_SIZE,
   useInsights,
@@ -99,7 +102,7 @@ function InsightCardPagination({
   const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
 
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex items-center justify-between gap-3">
       <Button
         type="button"
         variant="outline"
@@ -186,7 +189,7 @@ export function InsightsPage() {
   const categoryMoMPeriod = getCategoryMoMPeriod(category_mom);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <InsightSummaryCards
         incomeStabilityAssumption={incomeStabilityAssumption}
         items={summary_cards}
@@ -195,14 +198,21 @@ export function InsightsPage() {
       <section>
         <Card>
           <CardHeader>
-            <CardTitle>핵심 인사이트</CardTitle>
-            <CardDescription className="mt-2">
-              현재 데이터를 기준으로 가장 중요한 해석 포인트를 요약합니다.
-            </CardDescription>
+            <IconTitle
+              description="현재 데이터를 기준으로 가장 중요한 해석 포인트를 요약합니다."
+              icon="insights"
+              title="핵심 인사이트"
+            />
           </CardHeader>
           <CardContent className="space-y-3">
             {key_insights.map((item) => (
-              <div key={item.title} className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-4">
+              <div
+                key={item.title}
+                className={cn(
+                  'rounded-[var(--radius)] border p-3.5',
+                  getCardGroupSurfaceClass('primary'),
+                )}
+              >
                 <p className="font-semibold text-[color:var(--color-text)]">{item.title}</p>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">{item.description}</p>
               </div>
@@ -211,11 +221,11 @@ export function InsightsPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>반복 결제</CardTitle>
+              <IconTitle icon="arrowPath" title="반복 결제" />
               {recurringPaymentsAssumption ? (
                 <AssumptionPopover
                   ariaLabel="반복 결제 가정 보기"
@@ -223,9 +233,7 @@ export function InsightsPage() {
                 />
               ) : null}
             </div>
-            <CardDescription className="mt-2">
-              정기적으로 반복되는 결제 후보를 표 형태로 정리했습니다.
-            </CardDescription>
+            <CardDescription>정기적으로 반복되는 결제 후보를 표 형태로 정리했습니다.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <RecurringPaymentsTable items={recurringItems} />
@@ -252,7 +260,7 @@ export function InsightsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>이상 지출</CardTitle>
+              <IconTitle icon="exclamationTriangle" title="이상 지출" />
               {spendingAnomaliesAssumption ? (
                 <AssumptionPopover
                   ariaLabel="이상 지출 가정 보기"
@@ -260,9 +268,7 @@ export function InsightsPage() {
                 />
               ) : null}
             </div>
-            <CardDescription className="mt-2">
-              baseline 대비 급증한 카테고리를 확인합니다.
-            </CardDescription>
+            <CardDescription>baseline 대비 급증한 카테고리를 확인합니다.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <SpendingAnomaliesTable items={anomalyItems} />
@@ -287,15 +293,14 @@ export function InsightsPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>거래처 소비 Top N</CardTitle>
-              <CardDescription className="mt-2">
-                merchant spend 기준 상위 거래처를 요약했습니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="merchant spend 기준 상위 거래처를 요약했습니다."
+              icon="buildingStorefront"
+              title="거래처 소비 Top N"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="거래처 소비 Top N 적용 기간"
               end={merchantSpendPeriod.end}
@@ -304,7 +309,13 @@ export function InsightsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {merchant_spend.map((item) => (
-              <div key={`${item.merchant}-${item.last_seen_at}`} className="flex items-center justify-between rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3">
+              <div
+                key={`${item.merchant}-${item.last_seen_at}`}
+                className={cn(
+                  'flex items-center justify-between rounded-[var(--radius)] border px-4 py-3',
+                  getCardGroupSurfaceClass('secondary'),
+                )}
+              >
                 <div>
                   <p className="font-medium text-[color:var(--color-text)]">{item.merchant}</p>
                   <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{item.count}건 · 평균 {formatMoney(item.avg_amount)}</p>
@@ -317,12 +328,11 @@ export function InsightsPage() {
 
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>카테고리 증감 요약</CardTitle>
-              <CardDescription className="mt-2">
-                전월 대비 증감이 큰 카테고리를 우선 노출합니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="전월 대비 증감이 큰 카테고리를 우선 노출합니다."
+              icon="arrowsRightLeft"
+              title="카테고리 증감 요약"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="카테고리 증감 요약 적용 기간"
               end={categoryMoMPeriod.end}
@@ -331,7 +341,13 @@ export function InsightsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {category_mom.map((item) => (
-              <div key={`${item.period}-${item.category}`} className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-4">
+              <div
+                key={`${item.period}-${item.category}`}
+                className={cn(
+                  'rounded-[var(--radius)] border p-3.5',
+                  getCardGroupSurfaceClass(item.delta_amount >= 0 ? 'accent' : 'secondary'),
+                )}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-medium text-[color:var(--color-text)]">{item.category}</p>
                   <Badge variant={item.delta_amount >= 0 ? 'accent' : 'secondary'}>

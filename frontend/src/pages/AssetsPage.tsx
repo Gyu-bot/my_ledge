@@ -1,22 +1,35 @@
 import { useMemo } from 'react';
 import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
-import { LineTrendChart } from '../components/charts/LineTrendChart';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
+import { IconTitle } from '../components/common/IconTitle';
+import { LineTrendChart } from '../components/charts/LineTrendChart';
 import { LoadingState } from '../components/common/LoadingState';
 import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
 import { StatusCard } from '../components/common/StatusCard';
+import { getCardGroupSurfaceClass } from '../components/common/cardGroupSurface';
 import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { useAssets } from '../hooks/useAssets';
+import { cn } from '../lib/utils';
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('ko-KR', {
     maximumFractionDigits: 0,
   }).format(value)}원`;
 }
+
+const assetSummarySecondaryCardClass = cn(
+  'rounded-[var(--radius)] border p-3.5',
+  getCardGroupSurfaceClass('secondary'),
+);
+
+const assetSummaryPrimaryCardClass = cn(
+  'rounded-[var(--radius)] border p-3.5',
+  getCardGroupSurfaceClass('primary'),
+);
 
 export function AssetsPage() {
   const assetsQuery = useAssets();
@@ -64,7 +77,7 @@ export function AssetsPage() {
     net_worth_history[net_worth_history.length - 1]?.period ?? snapshot_date ?? '기준일 없음';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summary_cards.map((card, index) => (
           <StatusCard
@@ -77,15 +90,14 @@ export function AssetsPage() {
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-5 xl:grid-cols-2">
         <Card className="xl:col-span-2">
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <div>
-              <CardTitle>순자산 추이</CardTitle>
-              <CardDescription className="mt-2">
-                적재된 스냅샷 기준 순자산 변화를 시계열로 보여줍니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="적재된 스냅샷 기준 순자산 변화를 시계열로 보여줍니다."
+              icon="presentationChartLine"
+              title="순자산 추이"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="순자산 추이 적용 기간"
               end={netWorthEndPeriod}
@@ -106,12 +118,11 @@ export function AssetsPage() {
 
         <Card>
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <div>
-              <CardTitle>투자 요약</CardTitle>
-              <CardDescription className="mt-2">
-                최신 투자 스냅샷 기준 평가액과 주요 포지션입니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="최신 투자 스냅샷 기준 평가액과 주요 포지션입니다."
+              icon="banknotes"
+              title="투자 요약"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="투자 요약 기준일"
               start={investments.snapshot_date ?? '기준일 없음'}
@@ -121,7 +132,7 @@ export function AssetsPage() {
             {investments.items.length > 0 ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                  <div className={assetSummarySecondaryCardClass}>
                     <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                       총 투자원금
                     </p>
@@ -129,7 +140,7 @@ export function AssetsPage() {
                       {formatMoney(investments.totals.cost_basis)}
                     </p>
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                  <div className={assetSummaryPrimaryCardClass}>
                     <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                       총 평가액
                     </p>
@@ -158,12 +169,11 @@ export function AssetsPage() {
 
         <Card>
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <div>
-              <CardTitle>대출 요약</CardTitle>
-              <CardDescription className="mt-2">
-                최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다."
+              icon="buildingLibrary"
+              title="대출 요약"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="대출 요약 기준일"
               start={loans.snapshot_date ?? '기준일 없음'}
@@ -173,7 +183,7 @@ export function AssetsPage() {
             {loans.items.length > 0 ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                  <div className={assetSummarySecondaryCardClass}>
                     <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                       총 대출원금
                     </p>
@@ -181,7 +191,7 @@ export function AssetsPage() {
                       {formatMoney(loans.totals.principal)}
                     </p>
                   </div>
-                  <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4">
+                  <div className={assetSummaryPrimaryCardClass}>
                     <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                       총 잔액
                     </p>
@@ -194,7 +204,10 @@ export function AssetsPage() {
                   {loans.items.slice(0, 4).map((item) => (
                     <li
                       key={`${item.lender}-${item.product_name}`}
-                      className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 p-4"
+                      className={cn(
+                        'rounded-[var(--radius)] border p-3.5',
+                        getCardGroupSurfaceClass('secondary'),
+                      )}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>

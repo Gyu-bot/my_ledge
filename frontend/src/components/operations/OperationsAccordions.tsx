@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { DataResetScope } from '../../api/dataManagement';
 import type { UploadLogResponse, UploadResponse } from '../../api/upload';
+import { cn } from '../../lib/utils';
+import { getCardGroupSurfaceClass } from '../common/cardGroupSurface';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
 import { Alert } from '../ui/alert';
 import {
@@ -44,7 +46,12 @@ function UploadResultSummary({ lastUpload }: { lastUpload: UploadResponse | null
 
   return (
     <div className="space-y-3">
-      <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-4">
+      <div
+        className={cn(
+          'rounded-[var(--radius)] border p-4',
+          getCardGroupSurfaceClass('primary'),
+        )}
+      >
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-[color:var(--color-text)]">
             최근 업로드 상태
@@ -58,14 +65,24 @@ function UploadResultSummary({ lastUpload }: { lastUpload: UploadResponse | null
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/85 p-4 text-sm text-[color:var(--color-text-muted)]">
+        <div
+          className={cn(
+            'rounded-[var(--radius)] border p-4 text-sm text-[color:var(--color-text-muted)]',
+            getCardGroupSurfaceClass('secondary'),
+          )}
+        >
           <p className="font-semibold text-[color:var(--color-text)]">거래</p>
           <p className="mt-2">전체 {lastUpload.transactions.total}건</p>
           <p className="mt-1">
             신규 {lastUpload.transactions.new}건, 스킵 {lastUpload.transactions.skipped}건
           </p>
         </div>
-        <div className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/85 p-4 text-sm text-[color:var(--color-text-muted)]">
+        <div
+          className={cn(
+            'rounded-[var(--radius)] border p-4 text-sm text-[color:var(--color-text-muted)]',
+            getCardGroupSurfaceClass('primary'),
+          )}
+        >
           <p className="font-semibold text-[color:var(--color-text)]">스냅샷</p>
           <p className="mt-2">자산 {lastUpload.snapshots.asset_snapshots}건</p>
           <p className="mt-1">
@@ -123,7 +140,7 @@ export function OperationsAccordions({
                 </span>
                 <Input
                   accept=".xlsx,.xlsm"
-                  className="block w-full file:mr-4 file:rounded-[var(--radius-xs)] file:border-0 file:bg-[color:var(--color-accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                  className="block w-full file:mr-4 file:rounded-[var(--radius-xs)] file:border-0 file:bg-[color:var(--color-secondary)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
                   onChange={(event) => onSelectedFileChange(event.target.files?.[0] ?? null)}
                   type="file"
                 />

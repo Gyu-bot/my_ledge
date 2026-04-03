@@ -1,7 +1,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { SpendingBreakdownDatum } from '../../hooks/useSpending';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
-import { CHART_NEUTRALS, chartTooltipStyle } from './chartTheme';
+import { CHART_NEUTRALS, CHART_TOOLTIP_SHADOW, chartTooltipStyle } from './chartTheme';
 
 interface BreakdownPieChartProps {
   ariaLabel: string;
@@ -37,7 +37,10 @@ function TooltipContent({
   const item = payload[0].payload;
 
   return (
-    <div className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 shadow-sm">
+    <div
+      className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2"
+      style={{ boxShadow: CHART_TOOLTIP_SHADOW }}
+    >
       <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.label}</p>
       <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{formatCurrency(item.amount)}</p>
       <p className="mt-1 text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">

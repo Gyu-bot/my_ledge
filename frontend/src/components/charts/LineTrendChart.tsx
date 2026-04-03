@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import type { TrendPoint } from '../../types/dashboard';
 import { CHART_ACCENT, CHART_ACCENT_SOFT, chartTooltipStyle } from './chartTheme';
+import { formatAxisMoneyInThousands } from './moneyFormat';
 
 interface LineTrendChartProps {
   data: TrendPoint[];
@@ -67,9 +68,9 @@ export function LineTrendChart({ data }: LineTrendChartProps) {
           <YAxis
             axisLine={false}
             tick={{ fill: '#71717a', fontSize: 12 }}
-            tickFormatter={formatCurrency}
+            tickFormatter={formatAxisMoneyInThousands}
             tickLine={false}
-            width={92}
+            width={56}
           />
           <Tooltip
             contentStyle={chartTooltipStyle}

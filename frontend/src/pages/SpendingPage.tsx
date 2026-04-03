@@ -6,6 +6,7 @@ import { MerchantTreemapChart } from '../components/charts/MerchantTreemapChart'
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
+import { IconTitle } from '../components/common/IconTitle';
 import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
 import { TimelineRangeSlider } from '../components/filters/TimelineRangeSlider';
 import {
@@ -21,9 +22,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from '../components/ui/card';
 import {
   Select,
@@ -59,7 +58,7 @@ function InlineSectionStatus({
       : 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]/18 text-[color:var(--color-text-muted)]';
 
   return (
-    <div className={`rounded-[var(--radius)] border px-6 py-16 text-center ${toneClasses}`}>
+    <div className={`rounded-[var(--radius)] border px-5 py-12 text-center ${toneClasses}`}>
       <p className="text-base font-semibold">{title}</p>
       <p className="mt-2 text-sm leading-6">{description}</p>
     </div>
@@ -81,7 +80,7 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
 }) {
   if (timelinePending) {
     return (
-      <section className="grid gap-6">
+      <section className="grid gap-5">
         <InlineSectionStatus
           title="월별 지출 시계열을 준비 중입니다"
           description="월별 카테고리 추이와 고정비/변동비 추이 섹션을 불러오고 있습니다."
@@ -92,7 +91,7 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
 
   if (timelineError || !timelineData) {
     return (
-      <section className="grid gap-6">
+      <section className="grid gap-5">
         <InlineSectionStatus
           title="월별 시계열을 불러올 수 없습니다"
           description="잠시 후 다시 시도해 주세요."
@@ -110,7 +109,7 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
     '-';
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <TimelineRangeSlider
         months={timelineData.available_months}
         values={timelineFilters}
@@ -118,15 +117,14 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
         onReset={() => setTimelineFilters({ start_month: '', end_month: '' })}
       />
 
-      <div className="grid gap-6">
+      <div className="grid gap-5">
         <Card data-testid="monthly-category-timeline-card">
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>월별 카테고리 추이</CardTitle>
-              <CardDescription>
-                월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다."
+              icon="presentationChartLine"
+              title="월별 카테고리 추이"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="월별 카테고리 추이 적용 기간"
               end={selectedEndMonth}
@@ -143,12 +141,11 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
 
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>월별 고정비/변동비 추이</CardTitle>
-              <CardDescription>
-                고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다."
+              icon="chartBar"
+              title="월별 고정비/변동비 추이"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="월별 고정비/변동비 추이 적용 기간"
               end={selectedEndMonth}
@@ -211,7 +208,7 @@ const BreakdownSection = memo(function BreakdownSection({
 
   if (breakdownQuery.isPending) {
     return (
-      <section className="grid gap-6">
+      <section className="grid gap-5">
         <InlineSectionStatus
           title="기간 집계 카드를 준비 중입니다"
           description="카테고리, 하위 카테고리, 거래처 집계를 계산하고 있습니다."
@@ -222,7 +219,7 @@ const BreakdownSection = memo(function BreakdownSection({
 
   if (breakdownQuery.isError || !breakdownQuery.data) {
     return (
-      <section className="grid gap-6">
+      <section className="grid gap-5">
         <InlineSectionStatus
           title="기간 집계를 불러올 수 없습니다"
           description="지출 집계 카드 데이터를 가져오지 못했습니다."
@@ -237,15 +234,14 @@ const BreakdownSection = memo(function BreakdownSection({
 
   return (
     <>
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>카테고리별 지출</CardTitle>
-              <CardDescription>
-                선택한 기간 기준 상위 카테고리 지출 금액을 비교합니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="선택한 기간 기준 상위 카테고리 지출 금액을 비교합니다."
+              icon="chartBar"
+              title="카테고리별 지출"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="카테고리별 지출 적용 기간"
               end={appliedEndMonth}
@@ -263,12 +259,11 @@ const BreakdownSection = memo(function BreakdownSection({
 
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>하위 카테고리별 지출</CardTitle>
-              <CardDescription>
-                선택한 기간 기준 소분류 지출을 그래프로 정리했습니다. 상위 카테고리를 먼저 고르면 해당 범위만 좁혀서 볼 수 있습니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="선택한 기간 기준 소분류 지출을 그래프로 정리했습니다. 상위 카테고리를 먼저 고르면 해당 범위만 좁혀서 볼 수 있습니다."
+              icon="tag"
+              title="하위 카테고리별 지출"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="하위 카테고리별 지출 적용 기간"
               end={appliedEndMonth}
@@ -297,7 +292,7 @@ const BreakdownSection = memo(function BreakdownSection({
                 </SelectContent>
               </Select>
             </label>
-            <div className="mt-6">
+            <div className="mt-5">
               <HorizontalBarChart
                 ariaLabel="하위 카테고리별 지출 차트"
                 data={breakdownQuery.data.subcategory_breakdown}
@@ -309,15 +304,14 @@ const BreakdownSection = memo(function BreakdownSection({
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>고정비 필수/비필수 비율</CardTitle>
-              <CardDescription>
-                고정비가 입력되면 필수/비필수 비율을 비교합니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="고정비가 입력되면 필수/비필수 비율을 비교합니다."
+              icon="percentage"
+              title="고정비 필수/비필수 비율"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="고정비 필수/비필수 비율 적용 기간"
               end={appliedEndMonth}
@@ -334,12 +328,11 @@ const BreakdownSection = memo(function BreakdownSection({
 
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>변동비 비율</CardTitle>
-              <CardDescription>
-                변동비 분류가 채워지면 월별 비중과 구성 변화를 확인합니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="변동비 분류가 채워지면 월별 비중과 구성 변화를 확인합니다."
+              icon="percentage"
+              title="변동비 비율"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="변동비 비율 적용 기간"
               end={appliedEndMonth}
@@ -355,15 +348,14 @@ const BreakdownSection = memo(function BreakdownSection({
         </Card>
       </section>
 
-      <section className="grid gap-6">
+      <section className="grid gap-5">
         <Card>
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <div>
-              <CardTitle>거래처별 Tree Map</CardTitle>
-              <CardDescription>
-                편집된 거래처 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다.
-              </CardDescription>
-            </div>
+            <IconTitle
+              description="편집된 거래처 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다."
+              icon="buildingStorefront"
+              title="거래처별 Tree Map"
+            />
             <CardPeriodBadgeGroup
               ariaLabel="거래처별 Tree Map 적용 기간"
               end={appliedEndMonth}
@@ -403,7 +395,7 @@ const DailySpendSection = memo(function DailySpendSection({
   if (dailyQuery.isPending) {
     return (
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-5">
           <InlineSectionStatus
             title="일별 지출 달력을 준비 중입니다"
             description="선택한 기간의 일자별 지출액을 집계하고 있습니다."
@@ -416,7 +408,7 @@ const DailySpendSection = memo(function DailySpendSection({
   if (dailyQuery.isError || !dailyQuery.data) {
     return (
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-5">
           <InlineSectionStatus
             title="일별 지출 달력을 불러올 수 없습니다"
             description="일자별 지출 집계를 가져오지 못했습니다."
@@ -430,14 +422,15 @@ const DailySpendSection = memo(function DailySpendSection({
   return (
     <Card>
       <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between lg:space-y-0">
-        <div>
-          <CardTitle>{includeIncome ? '일별 수입/지출액' : '일별 지출액'}</CardTitle>
-          <CardDescription>
-            {includeIncome
+        <IconTitle
+          description={
+            includeIncome
               ? '선택한 기간 안에서 한 달을 골라 일자별 수입과 지출의 순변동을 달력으로 확인합니다.'
-              : '선택한 기간 안에서 한 달을 골라 일자별 지출 금액을 달력으로 확인합니다.'}
-          </CardDescription>
-        </div>
+              : '선택한 기간 안에서 한 달을 골라 일자별 지출 금액을 달력으로 확인합니다.'
+          }
+          icon="calendarDays"
+          title={includeIncome ? '일별 수입/지출액' : '일별 지출액'}
+        />
         <div className="flex flex-wrap items-center gap-3">
           <CardPeriodBadgeGroup
             ariaLabel={`${includeIncome ? '일별 수입/지출액' : '일별 지출액'} 적용 기간`}
@@ -489,7 +482,7 @@ const DailySpendSection = memo(function DailySpendSection({
       <CardContent className="space-y-4">
         {dailyQuery.data.selected_month ? (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3.5 py-3">
               <p className="text-sm text-[color:var(--color-text-muted)]">
                 {includeIncome ? '총 일별 순변동 합계' : '총 일별 지출 합계'}
               </p>
@@ -552,7 +545,7 @@ const TransactionsSection = memo(function TransactionsSection({
   if (transactionsQuery.isPending) {
     return (
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-5">
           <InlineSectionStatus
             title="거래 내역을 준비 중입니다"
             description="현재 필터 조건으로 거래 목록을 불러오고 있습니다."
@@ -565,7 +558,7 @@ const TransactionsSection = memo(function TransactionsSection({
   if (transactionsQuery.isError || !transactionsQuery.data) {
     return (
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-5">
           <InlineSectionStatus
             title="거래 내역을 불러올 수 없습니다"
             description="현재 조건의 거래 목록을 가져오지 못했습니다."
@@ -584,14 +577,15 @@ const TransactionsSection = memo(function TransactionsSection({
   return (
     <Card>
       <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
-        <div>
-          <CardTitle>거래 내역</CardTitle>
-          <CardDescription>
-            {includeIncome
+        <IconTitle
+          description={
+            includeIncome
               ? '현재 조건에 맞는 수입·지출 거래를 함께 확인합니다.'
-              : '현재 조건에 맞는 최근 지출 거래를 확인합니다.'}
-          </CardDescription>
-        </div>
+              : '현재 조건에 맞는 최근 지출 거래를 확인합니다.'
+          }
+          icon="workbench"
+          title="거래 내역"
+        />
         <div className="flex flex-wrap items-center gap-3">
           <CardPeriodBadgeGroup
             ariaLabel="거래 내역 적용 기간"
@@ -623,7 +617,7 @@ const TransactionsSection = memo(function TransactionsSection({
             <AccordionTrigger>{isAccordionOpen ? '거래 내역 접기' : '거래 내역 펼치기'}</AccordionTrigger>
             <AccordionContent>
               <TransactionsTable rows={transactionsQuery.data.transactions} />
-              <div className="mt-5 flex items-center justify-between gap-4">
+              <div className="mt-4 flex items-center justify-between gap-4">
                 <Button
                   type="button"
                   onClick={() =>
@@ -746,7 +740,7 @@ export function SpendingPage() {
 
   if (!periodOptionsQuery.data && periodOptionsQuery.isPending) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-5">
         <InlineSectionStatus
           title="지출 분석 화면을 준비 중입니다"
           description="기간별 집계와 거래 목록을 차례대로 불러오고 있습니다."
@@ -765,7 +759,7 @@ export function SpendingPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <MonthlyTimelineSection
         timelineData={timelineQuery.data}
         timelineError={timelineQuery.isError}

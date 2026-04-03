@@ -5,8 +5,8 @@ import { Badge } from './badge';
 describe('Badge', () => {
   it('uses soft palette backgrounds for semantic variants', () => {
     const { rerender } = render(<Badge variant="secondary">보조</Badge>);
-    expect(screen.getByText('보조').className).toContain('bg-[color:var(--color-primary-soft)]');
-    expect(screen.getByText('보조').className).toContain('text-[color:var(--color-primary-strong)]');
+    expect(screen.getByText('보조').className).toContain('bg-[color:var(--color-secondary-soft)]');
+    expect(screen.getByText('보조').className).toContain('text-[color:var(--color-secondary-strong)]');
 
     rerender(<Badge variant="accent">강조</Badge>);
     expect(screen.getByText('강조').className).toContain('bg-[color:var(--color-accent-soft)]');

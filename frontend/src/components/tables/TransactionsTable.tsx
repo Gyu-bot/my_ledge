@@ -29,7 +29,7 @@ function formatCategoryMajorMinor(major: string, minor: string | null) {
 export function TransactionsTable({ rows }: TransactionsTableProps) {
   return (
     <div className="overflow-x-auto">
-      <div className="hidden rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 md:block">
+      <div className="hidden rounded-[var(--radius)] bg-white/80 md:block">
         <Table density="compact">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -92,7 +92,7 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
               <Badge className="normal-case tracking-normal">
                 {formatCategoryMajorMinor(row.effective_category_major, row.effective_category_minor)}
               </Badge>
-              <Badge className="normal-case tracking-normal" variant="accent">
+              <Badge className="normal-case tracking-normal" variant="secondary">
                 {row.payment_method ?? 'N/A'}
               </Badge>
             </div>

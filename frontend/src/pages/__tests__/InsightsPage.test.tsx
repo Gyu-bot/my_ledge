@@ -184,6 +184,19 @@ describe('InsightsPage', () => {
     expect(screen.getByRole('group', { name: '카테고리 증감 요약 적용 기간' })).toHaveTextContent(
       '2026-03',
     );
+    expect(screen.getByText(/^저축률$/).closest('.p-0')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(231,237,245,0.9))]',
+    );
+    expect(screen.getByText('현금흐름은 안정적입니다').closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(231,237,245,0.9))]',
+    );
+    expect(screen.getByText('배달의민족').closest('.px-4')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
+    );
+    const categoryLabels = screen.getAllByText('교통');
+    expect(categoryLabels[categoryLabels.length - 1]?.closest('.p-3\\.5')).toHaveClass(
+      'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,232,231,0.9))]',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '수입 안정성 가정 보기' }));
     expect(screen.getByText('표본 3개월 기준으로 계산했습니다.')).toBeInTheDocument();

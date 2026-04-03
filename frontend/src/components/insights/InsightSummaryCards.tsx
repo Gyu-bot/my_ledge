@@ -1,5 +1,6 @@
 import type { SummaryCard } from '../../types/dashboard';
 import { Card, CardContent } from '../ui/card';
+import { getCardGroupSurfaceClass } from '../common/cardGroupSurface';
 import { AssumptionPopover } from './AssumptionPopover';
 import { cn } from '../../lib/utils';
 
@@ -15,10 +16,9 @@ export function InsightSummaryCards({
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {items.map((item, index) => {
-        const toneClass =
-          index === items.length - 1
-            ? 'border-[color:var(--color-accent-soft)] bg-[color:var(--color-accent-soft)]/75'
-            : 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]/35';
+        const toneClass = getCardGroupSurfaceClass(
+          index === items.length - 1 ? 'accent' : 'primary',
+        );
 
         const showIncomeAssumption =
           item.label === '수입 변동성' && incomeStabilityAssumption;

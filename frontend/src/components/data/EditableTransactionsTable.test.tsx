@@ -179,7 +179,7 @@ describe('EditableTransactionsTable', () => {
   });
 
   it('shows cost classification in the table and omits the upload source badge', () => {
-    render(
+    const { container } = render(
       <EditableTransactionsTable
         rows={[
           {
@@ -223,5 +223,12 @@ describe('EditableTransactionsTable', () => {
     expect(screen.getAllByText('고정비').length).toBeGreaterThan(0);
     expect(screen.getByText(/고정비 필수 여부 필수/)).toBeInTheDocument();
     expect(screen.queryByText('업로드')).not.toBeInTheDocument();
+
+    const desktopTableSurface = Array.from(container.querySelectorAll('div')).find(
+      (element) => element.className.includes('xl:block') && element.className.includes('bg-white/80'),
+    );
+
+    expect(desktopTableSurface).toBeDefined();
+    expect(desktopTableSurface?.className).not.toContain('border-[color:var(--color-border)]');
   });
 });

@@ -1,11 +1,15 @@
+import type { HeroIconName } from '../components/icons/HeroIcons';
+
 export interface NavigationLeafItem {
   label: string;
   to: string;
+  icon: HeroIconName;
 }
 
 export interface NavigationGroupItem {
   label: string;
   to: string;
+  icon: HeroIconName;
   children: NavigationLeafItem[];
 }
 
@@ -20,20 +24,23 @@ export const navigationItems: NavigationItem[] = [
   {
     label: '개요',
     to: '/',
+    icon: 'home',
   },
   {
     label: '분석',
     to: '/analysis',
+    icon: 'chartBar',
     children: [
-      { label: '지출', to: '/analysis/spending' },
-      { label: '자산', to: '/analysis/assets' },
-      { label: '인사이트', to: '/analysis/insights' },
+      { label: '지출', to: '/analysis/spending', icon: 'spending' },
+      { label: '자산', to: '/analysis/assets', icon: 'assets' },
+      { label: '인사이트', to: '/analysis/insights', icon: 'insights' },
     ],
   },
   {
     label: '운영',
     to: '/operations',
-    children: [{ label: '거래 작업대', to: '/operations/workbench' }],
+    icon: 'operations',
+    children: [{ label: '거래 작업대', to: '/operations/workbench', icon: 'workbench' }],
   },
 ];
 

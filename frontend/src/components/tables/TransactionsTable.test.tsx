@@ -5,7 +5,7 @@ import type { TransactionResponse } from '../../types/transactions';
 
 describe('TransactionsTable', () => {
   it('keeps narrow metadata columns compact so description has more room', () => {
-    render(
+    const { container } = render(
       <TransactionsTable
         rows={[
           {
@@ -45,5 +45,12 @@ describe('TransactionsTable', () => {
     expect(screen.getByRole('cell', { name: /우리카드/i })).toHaveClass('whitespace-nowrap');
     expect(screen.getByRole('cell', { name: /우리카드/i })).toHaveClass('py-2');
     expect(screen.getByRole('cell', { name: '생활비 자동이체' })).toBeInTheDocument();
+
+    const desktopTableSurface = Array.from(container.querySelectorAll('div')).find(
+      (element) => element.className.includes('md:block') && element.className.includes('bg-white/80'),
+    );
+
+    expect(desktopTableSurface).toBeDefined();
+    expect(desktopTableSurface?.className).not.toContain('border-[color:var(--color-border)]');
   });
 });

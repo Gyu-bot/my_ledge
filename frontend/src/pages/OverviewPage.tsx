@@ -12,12 +12,14 @@ import { useMemo } from 'react';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
+import { IconTitle } from '../components/common/IconTitle';
 import { LoadingState } from '../components/common/LoadingState';
+import { getCardGroupSurfaceClass } from '../components/common/cardGroupSurface';
 import { useAppChromeMeta } from '../components/layout/AppChromeContext';
 import { MetricCardGrid } from '../components/layout/MetricCardGrid';
 import { TransactionsTable } from '../components/tables/TransactionsTable';
 import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { useOverview } from '../hooks/useOverview';
 import {
   CHART_ACCENT,
@@ -26,6 +28,8 @@ import {
   CHART_SECONDARY,
   chartTooltipStyle,
 } from '../components/charts/chartTheme';
+import { formatAxisMoneyInThousands } from '../components/charts/moneyFormat';
+import { cn } from '../lib/utils';
 
 function formatMoney(value: number | string | readonly (number | string)[] | null | undefined) {
   const normalized = Array.isArray(value) && value.length > 0 ? value[0] : (value ?? 0);
@@ -87,15 +91,17 @@ export function OverviewPage() {
     recentTransactionDates[recentTransactionDates.length - 1] ?? recentTransactionsStart;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <MetricCardGrid items={summary_cards} />
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(20rem,0.9fr)]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(20rem,0.9fr)]">
         <Card>
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <div>
-              <CardTitle>월간 현금흐름</CardTitle>
-            </div>
+            <IconTitle
+              description="월별 수입·지출과 순현금흐름을 함께 확인합니다."
+              icon="presentationChartLine"
+              title="월간 현금흐름"
+            />
             <div className="flex flex-wrap items-center gap-2">
               <CardPeriodBadgeGroup
                 ariaLabel="월간 현금흐름 적용 기간"
@@ -119,9 +125,9 @@ export function OverviewPage() {
                   <YAxis
                     axisLine={false}
                     tick={{ fill: '#64748b', fontSize: 12 }}
-                    tickFormatter={formatMoney}
+                    tickFormatter={formatAxisMoneyInThousands}
                     tickLine={false}
-                    width={92}
+                    width={56}
                   />
                   <Tooltip contentStyle={chartTooltipStyle} formatter={(value) => formatMoney(value)} />
                   <Bar
@@ -153,13 +159,22 @@ export function OverviewPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>주의 신호</CardTitle>
+            <IconTitle icon="exclamationTriangle" title="주의 신호" />
           </CardHeader>
           <CardContent className="space-y-3">
             {signal_summaries.map((item) => (
               <div
                 key={item.label}
-                className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-4"
+                className={cn(
+                  'rounded-[var(--radius)] border p-3.5',
+                  getCardGroupSurfaceClass(
+                    item.label.includes('이상')
+                      ? 'accent'
+                      : item.label.includes('반복')
+                        ? 'secondary'
+                        : 'primary',
+                  ),
+                )}
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.label}</p>
@@ -172,16 +187,16 @@ export function OverviewPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(17rem,0.82fr)_minmax(0,1.38fr)]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(17rem,0.82fr)_minmax(0,1.38fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>카테고리 요약 Top 5</CardTitle>
+            <IconTitle icon="tag" title="카테고리 요약 Top 5" />
           </CardHeader>
           <CardContent className="space-y-2.5">
             {category_top5.map((item, index) => (
               <div
                 key={item.category}
-                className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3.5"
+                className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3.5 py-3"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -197,7 +212,7 @@ export function OverviewPage() {
 
         <Card>
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <CardTitle>최근 거래</CardTitle>
+            <IconTitle icon="clock" title="최근 거래" />
             <CardPeriodBadgeGroup
               ariaLabel="최근 거래 적용 기간"
               end={recentTransactionsEnd}

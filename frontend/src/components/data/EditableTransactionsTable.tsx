@@ -4,8 +4,10 @@ import type {
   TransactionResponse,
   TransactionUpdateRequest,
 } from '../../types/transactions';
+import { HeroIcon } from '../icons/HeroIcons';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { ButtonGroup } from '../ui/button-group';
 import { Card, CardContent } from '../ui/card';
 import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
@@ -401,7 +403,7 @@ export function EditableTransactionsTable({
         </Card>
       ) : null}
 
-      <div className="hidden rounded-[var(--radius)] border border-[color:var(--color-border)] bg-white/80 xl:block">
+      <div className="hidden rounded-[var(--radius)] bg-white/80 xl:block">
         <Table density="compact">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -562,57 +564,70 @@ export function EditableTransactionsTable({
                     {formatCurrency(row.amount)}
                   </TableCell>
                   <TableCell>
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end">
                       {row.is_deleted ? (
-                        <Button
-                          disabled={!hasWriteAccess || isPending || hasSelection || isBulkSaving}
-                          onClick={() => void onRestore(row.id)}
-                          size="sm"
-                          type="button"
-                        >
-                          복원
-                        </Button>
-                      ) : isEditing ? (
-                        <>
+                        <ButtonGroup>
                           <Button
+                            aria-label="복원"
+                            className="h-8 w-8 rounded-none border-0 bg-transparent p-0 text-[color:var(--color-primary-strong)] shadow-none hover:bg-[color:var(--color-primary-soft)]/40"
+                            disabled={!hasWriteAccess || isPending || hasSelection || isBulkSaving}
+                            onClick={() => void onRestore(row.id)}
+                            size="icon"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <HeroIcon className="h-4 w-4" name="arrowUturnLeft" />
+                          </Button>
+                        </ButtonGroup>
+                      ) : isEditing ? (
+                        <ButtonGroup>
+                          <Button
+                            aria-label="저장"
+                            className="h-8 w-8 rounded-none border-0 p-0 shadow-none"
                             disabled={!hasWriteAccess || isPending}
                             onClick={() => void handleSave(row.id)}
-                            size="sm"
+                            size="icon"
                             type="button"
                           >
-                            저장
+                            <HeroIcon className="h-4 w-4" name="check" />
                           </Button>
                           <Button
+                            aria-label="취소"
+                            className="h-8 w-8 rounded-none border-0 bg-transparent p-0 shadow-none"
                             disabled={isPending}
                             onClick={cancelEditing}
-                            size="sm"
+                            size="icon"
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                           >
-                            취소
+                            <HeroIcon className="h-4 w-4" name="xMark" />
                           </Button>
-                        </>
+                        </ButtonGroup>
                       ) : (
-                        <>
+                        <ButtonGroup>
                           <Button
+                            aria-label="수정"
+                            className="h-8 w-8 rounded-none border-0 bg-transparent p-0 shadow-none"
                             disabled={singleActionDisabled}
                             onClick={() => startEditing(row)}
-                            size="sm"
+                            size="icon"
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                           >
-                            수정
+                            <HeroIcon className="h-4 w-4" name="pencilSquare" />
                           </Button>
                           <Button
+                            aria-label="삭제"
+                            className="h-8 w-8 rounded-none border-0 bg-transparent p-0 text-[color:var(--color-danger)] shadow-none hover:bg-[color:var(--color-danger-soft)]/60 hover:text-[color:var(--color-danger)]"
                             disabled={singleActionDisabled}
                             onClick={() => void onDelete(row.id)}
-                            size="sm"
+                            size="icon"
                             type="button"
-                            variant="destructive"
+                            variant="ghost"
                           >
-                            삭제
+                            <HeroIcon className="h-4 w-4" name="trash" />
                           </Button>
-                        </>
+                        </ButtonGroup>
                       )}
                     </div>
                   </TableCell>

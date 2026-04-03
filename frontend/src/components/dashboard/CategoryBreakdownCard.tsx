@@ -220,7 +220,7 @@ export function CategoryBreakdownCard({ data, referenceMonth }: CategoryBreakdow
           <div>
             <div className="flex items-center gap-3">
               <CardTitle>카테고리 비중</CardTitle>
-              <Badge variant="accent">비중</Badge>
+              <Badge variant="secondary">비중</Badge>
             </div>
             <CardDescription className="mt-2">
               선택한 월 범위 기준 주요 지출 카테고리 비중을 보여줍니다.

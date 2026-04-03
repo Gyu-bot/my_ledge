@@ -12,19 +12,19 @@ const buttonVariants = cva(
         default:
           'bg-[color:var(--color-primary)] text-white hover:bg-[color:var(--color-primary-strong)]',
         outline:
-          'border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]',
+          'border border-[color:var(--color-border)] bg-[color:var(--color-surface-raised)] hover:bg-[color:var(--color-primary-soft)] hover:text-[color:var(--color-primary-strong)]',
         secondary:
-          'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-strong)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]',
+          'bg-[color:var(--color-secondary-soft)] text-[color:var(--color-secondary-strong)] hover:bg-[color:var(--color-secondary-soft)]/78 hover:text-[color:var(--color-secondary-strong)]',
         destructive:
           'bg-[color:var(--color-danger-soft)] text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger-soft)]/80',
         ghost:
-          'text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]',
+          'text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-primary-soft)] hover:text-[color:var(--color-primary-strong)]',
       },
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 px-3',
-        lg: 'h-11 px-8',
-        icon: 'h-10 w-10',
+        default: 'h-8 px-3 py-1.5',
+        sm: 'h-8 px-3 py-1.5',
+        lg: 'h-10 px-6',
+        icon: 'h-8 w-8',
       },
     },
     defaultVariants: {
