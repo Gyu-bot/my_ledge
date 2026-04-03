@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend visual system refresh와 chart tooltip/card-header polish 진행 중
-- **Last Worker:** codex (2026-04-03T14:43+0900, unified chart tooltips, restored spending trend to linear stacked area, tightened popovers, and polished period badges/treemap surfaces)
+- **Last Worker:** codex (2026-04-03T14:49+0900, removed the treemap square-width constraint so the merchant treemap fills the full card width while keeping the existing card height)
 - **Branch:** main
 
 ## Completed
@@ -73,6 +73,7 @@
 - [x] Frontend table separator rollback 완료: 카드 내부 wrapper border 제거는 유지하고 공통 `Table` row/header separator를 복구, `반복결제` 거래처 컬럼은 fixed layout + truncate로 폭 변동을 방지
 - [x] Frontend chart tooltip/card-header polish 완료: 개요 `월간 현금흐름` y축 제거, 공통 `ChartTooltipContent` 로 tooltip text size/color indicator 통일, 지출 `월별 카테고리 추이` 를 linear stacked area 로 복귀, range badge nowrap 보정, 거래처 treemap square ratio/높이 확대, `일별 지출액` 기간 badge 제거, popover padding 축소, KPI 카드 그룹 border contrast 강화
 - [x] 누적 visual refresh baseline 커밋/푸시 완료 (`395c66a`, `[frontend] visual system refresh and workbench polish (codex)`)
+- [x] Frontend merchant treemap width follow-up 완료: 카드 높이는 유지하고 `MerchantTreemapChart` 의 square/max-width 제약만 제거해 카드 본문 가로폭을 전부 사용하도록 조정
 - [x] Git hygiene 정리: ignored review artifact 디렉터리 `output/`, `.playwright-cli/`, `.codex/` 를 Git index 에서 제거하고, `.gitignore` 를 Python/test/build cache 산출물까지 확장
 - [x] 개요/인사이트 거래처 표기 정리 완료: 개요 `최근 거래` 카드와 인사이트 `반복 결제` 카드의 주요 식별 컬럼을 `description` 대신 `merchant` 기준으로 표시하도록 정렬
 - [x] 인사이트 카드 API 페이지네이션 완료: `반복 결제`, `이상 지출` endpoint/card에 `page`, `per_page`, `total` 기반 10건 단위 페이지네이션을 추가해 카드 길이와 payload를 함께 제어

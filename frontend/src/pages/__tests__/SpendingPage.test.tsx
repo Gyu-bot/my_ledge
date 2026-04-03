@@ -181,7 +181,9 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('group', { name: '거래처별 Tree Map 적용 기간' })).toHaveTextContent(
       '2026-03',
     );
-    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('aspect-square');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('h-full');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('w-full');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).not.toHaveClass('aspect-square');
     expect(screen.getByRole('heading', { level: 3, name: '일별 지출액' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '일별 지출액 적용 기간' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '기간 적용' })).toBeInTheDocument();

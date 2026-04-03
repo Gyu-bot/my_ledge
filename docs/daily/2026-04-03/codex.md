@@ -58,6 +58,20 @@
   - lint/typecheck: 통과
   - Recharts `ResponsiveContainer` zero-size warning은 jsdom 한계로 stderr에 계속 남았지만 실패는 없었다.
 
+## Merchant Treemap Width Follow-up
+- 사용자 후속 요청으로 `거래처별 Tree Map` 카드의 높이는 유지하고, 차트만 카드 가로폭을 끝까지 쓰도록 수정했다.
+- 변경:
+  - `frontend/src/components/charts/MerchantTreemapChart.tsx`
+    - `aspect-square`, `max-w-[40rem]`, 중앙 정렬 제약 제거
+    - wrapper를 `h-full w-full`로 바꿔 card body width를 그대로 사용
+  - `frontend/src/components/charts/MerchantTreemapChart.test.tsx`
+  - `frontend/src/pages/__tests__/SpendingPage.test.tsx`
+    - square-frame 기대값을 full-width 기대값으로 갱신
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/charts/MerchantTreemapChart.test.tsx src/pages/__tests__/SpendingPage.test.tsx`
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run typecheck`
+
 ## Chart And Control Density Refresh
 - 사용자 요청으로 지출 `월별 카테고리 추이` 를 stacked area 에서 stacked bar 로 바꾸고 y축을 제거했다.
 - tooltip / popover depth와 공통 control / table primitive도 함께 정리했다.

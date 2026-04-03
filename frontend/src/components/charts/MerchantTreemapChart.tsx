@@ -115,8 +115,8 @@ export function MerchantTreemapChart({ ariaLabel, data }: MerchantTreemapChartPr
   }
 
   return (
-    <div className="flex min-h-[40rem] w-full items-center justify-center">
-      <div className="mx-auto aspect-square w-full max-w-[40rem]" aria-label={ariaLabel}>
+    <div className="min-h-[40rem] w-full">
+      <div className="h-full w-full" aria-label={ariaLabel}>
         <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
           <Treemap
             data={data}

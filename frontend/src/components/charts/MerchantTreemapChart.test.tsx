@@ -9,7 +9,7 @@ vi.mock('recharts', () => ({
 }));
 
 describe('MerchantTreemapChart', () => {
-  it('uses a larger square chart frame', () => {
+  it('fills the available card width without forcing a square frame', () => {
     render(
       <MerchantTreemapChart
         ariaLabel="거래처별 지출 트리맵"
@@ -17,7 +17,9 @@ describe('MerchantTreemapChart', () => {
       />,
     );
 
-    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('aspect-square');
-    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('max-w-[40rem]');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('h-full');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('w-full');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).not.toHaveClass('aspect-square');
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).not.toHaveClass('max-w-[40rem]');
   });
 });
