@@ -102,7 +102,7 @@ function InsightCardPagination({
   const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <Button
         type="button"
         variant="outline"
@@ -112,7 +112,7 @@ function InsightCardPagination({
       >
         이전
       </Button>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
+      <p className="min-w-0 text-sm text-[color:var(--color-text-muted)]">
         {currentPage} / {totalPages} 페이지 · 총 {totalItems}건
         {isFetching ? ' · 불러오는 중' : ''}
       </p>
@@ -221,11 +221,11 @@ export function InsightsPage() {
         </Card>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <IconTitle icon="arrowPath" title="반복 결제" />
+      <section className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <Card className="min-w-0 w-full overflow-hidden">
+          <CardHeader className="min-w-0">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <IconTitle className="flex-1" icon="arrowPath" title="반복 결제" />
               {recurringPaymentsAssumption ? (
                 <AssumptionPopover
                   ariaLabel="반복 결제 가정 보기"
@@ -235,7 +235,7 @@ export function InsightsPage() {
             </div>
             <CardDescription>정기적으로 반복되는 결제 후보를 표 형태로 정리했습니다.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="min-w-0 space-y-4">
             <RecurringPaymentsTable items={recurringItems} />
             <InsightCardPagination
               currentPage={recurringCurrentPage}
@@ -257,10 +257,10 @@ export function InsightsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <IconTitle icon="exclamationTriangle" title="이상 지출" />
+        <Card className="min-w-0 w-full overflow-hidden">
+          <CardHeader className="min-w-0">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <IconTitle className="flex-1" icon="exclamationTriangle" title="이상 지출" />
               {spendingAnomaliesAssumption ? (
                 <AssumptionPopover
                   ariaLabel="이상 지출 가정 보기"
@@ -270,7 +270,7 @@ export function InsightsPage() {
             </div>
             <CardDescription>baseline 대비 급증한 카테고리를 확인합니다.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="min-w-0 space-y-4">
             <SpendingAnomaliesTable items={anomalyItems} />
             <InsightCardPagination
               currentPage={anomalyCurrentPage}
@@ -312,15 +312,19 @@ export function InsightsPage() {
               <div
                 key={`${item.merchant}-${item.last_seen_at}`}
                 className={cn(
-                  'flex items-center justify-between rounded-[var(--radius)] border px-4 py-3',
+                  'flex min-w-0 items-start justify-between gap-3 rounded-[var(--radius)] border px-4 py-3',
                   getCardGroupSurfaceClass('secondary'),
                 )}
               >
-                <div>
-                  <p className="font-medium text-[color:var(--color-text)]">{item.merchant}</p>
-                  <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{item.count}건 · 평균 {formatMoney(item.avg_amount)}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-[color:var(--color-text)]" title={item.merchant}>
+                    {item.merchant}
+                  </p>
+                  <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+                    {item.count}건 · 평균 {formatMoney(item.avg_amount)}
+                  </p>
                 </div>
-                <Badge variant="secondary">{formatMoney(item.amount)}</Badge>
+                <Badge className="shrink-0" variant="secondary">{formatMoney(item.amount)}</Badge>
               </div>
             ))}
           </CardContent>
@@ -348,9 +352,11 @@ export function InsightsPage() {
                   getCardGroupSurfaceClass(item.delta_amount >= 0 ? 'accent' : 'secondary'),
                 )}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-medium text-[color:var(--color-text)]">{item.category}</p>
-                  <Badge variant={item.delta_amount >= 0 ? 'accent' : 'secondary'}>
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <p className="min-w-0 truncate font-medium text-[color:var(--color-text)]" title={item.category}>
+                    {item.category}
+                  </p>
+                  <Badge className="shrink-0" variant={item.delta_amount >= 0 ? 'accent' : 'secondary'}>
                     {item.delta_amount >= 0 ? '+' : ''}
                     {formatMoney(item.delta_amount)}
                   </Badge>

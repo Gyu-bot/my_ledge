@@ -72,7 +72,7 @@ export function HorizontalBarChart({
 }: HorizontalBarChartProps) {
   return (
     <div className={`${heightClassName} w-full`} aria-label={ariaLabel}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={288}>
+      <ResponsiveContainer width="100%" height="100%" minHeight={288}>
         <BarChart data={data} layout="vertical" margin={{ top: 8, right: 12, left: 12, bottom: 8 }}>
           <CartesianGrid horizontal={false} stroke="#e4e4e7" />
           <XAxis

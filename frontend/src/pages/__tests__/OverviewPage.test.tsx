@@ -147,6 +147,9 @@ describe('OverviewPage', () => {
     expect(screen.getByText('반복 결제').closest('.p-3\\.5')).toHaveClass(
       'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
     );
+    expect(screen.getByText('수입 안정성').className).toContain('min-w-0');
+    expect(screen.getByText('수입 안정성').className).toContain('truncate');
+    expect(screen.getByText('안정적').className).toContain('shrink-0');
   });
 
   it('renders monthly cashflow as income/expense bars with a net cashflow line and no per-card descriptions', () => {

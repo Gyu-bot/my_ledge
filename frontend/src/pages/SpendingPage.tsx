@@ -166,16 +166,19 @@ const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
 
 const DetailFilterSection = memo(function DetailFilterSection({
   detailFilters,
+  monthOptions,
   resetDetailFilters,
   setDetailFilters,
 }: {
   detailFilters: TransactionFilterValues;
+  monthOptions: string[];
   resetDetailFilters: SpendingPageState['resetDetailFilters'];
   setDetailFilters: SpendingPageState['updateDetailFilters'];
 }) {
   return (
     <>
       <TransactionFilterBar
+        monthOptions={monthOptions}
         values={detailFilters}
         onApply={setDetailFilters}
         onReset={resetDetailFilters}
@@ -760,11 +763,11 @@ export function SpendingPage() {
       />
 
       <div className="space-y-3" data-testid="spending-detail-scope-separator">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4 overflow-hidden">
           <p className="shrink-0 text-xs font-semibold tracking-[0.18em] text-[color:var(--color-text-subtle)]">
             아래 카드부터 월 필터 적용
           </p>
-          <Separator />
+          <Separator className="min-w-0 flex-1 shrink" />
         </div>
         <p className="text-sm text-[color:var(--color-text-muted)]">
           카테고리별, 거래처별, 거래 내역은 아래 월 범위를 기준으로 함께 집계됩니다.
@@ -773,6 +776,7 @@ export function SpendingPage() {
 
       <DetailFilterSection
         detailFilters={detailFilters}
+        monthOptions={timelineQuery.data?.available_months ?? []}
         resetDetailFilters={spendingState.resetDetailFilters}
         setDetailFilters={spendingState.updateDetailFilters}
       />

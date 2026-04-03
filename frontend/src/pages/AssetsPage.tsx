@@ -209,8 +209,8 @@ export function AssetsPage() {
                         getCardGroupSurfaceClass('secondary'),
                       )}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
                           <p className="font-semibold text-[color:var(--color-text)]">
                             {item.product_name}
                           </p>
@@ -219,7 +219,7 @@ export function AssetsPage() {
                             {item.loan_type ? ` · ${item.loan_type}` : ''}
                           </p>
                         </div>
-                        <div className="text-right">
+                        <div className="shrink-0 text-left sm:text-right">
                           <p className="font-semibold text-[color:var(--color-text)]">
                             {formatMoney(item.balance ?? 0)}
                           </p>

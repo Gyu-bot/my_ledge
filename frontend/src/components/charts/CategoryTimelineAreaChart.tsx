@@ -96,7 +96,7 @@ export function CategoryTimelineAreaChart({
       </div>
 
       <div className="h-80 w-full" aria-label="Monthly category spend trend chart">
-        <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
+        <ResponsiveContainer width="100%" height="100%" minHeight={320}>
           <AreaChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#e4e4e7" strokeDasharray="4 4" />
             <XAxis

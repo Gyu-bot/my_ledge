@@ -1,5 +1,6 @@
 import type { SpendingBreakdownDatum } from '../../hooks/useSpending';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
+import { TableMobileCard } from '../common/TableMobileCard';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import {
   Table,
@@ -51,29 +52,42 @@ export function CategoryBreakdownTable({ rows, title }: CategoryBreakdownTablePr
         </p>
       </CardHeader>
       <CardContent>
-        <div className="overflow-hidden rounded-[var(--radius)]">
-          <Table density="compact">
-            <TableHeader className="bg-[color:var(--color-secondary-soft)]/72">
-              <TableRow className="hover:bg-transparent">
-                <TableHead>카테고리</TableHead>
-                <TableHead className="text-right">비중</TableHead>
-                <TableHead className="text-right">금액</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <div className="overflow-hidden rounded-[var(--radius)] md:overflow-x-auto">
+          <div className="hidden md:block">
+            <Table density="compact">
+              <TableHeader className="bg-[color:var(--color-secondary-soft)]/72">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>카테고리</TableHead>
+                  <TableHead className="text-right">비중</TableHead>
+                  <TableHead className="text-right">금액</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+              {rows.map((row) => (
+                <TableRow
+                  key={row.label}
+                >
+                  <TableCell className="font-medium text-[color:var(--color-text)]">{row.label}</TableCell>
+                  <TableCell className="text-right text-[color:var(--color-text-muted)]">
+                    {formatShare(row.share)}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">{formatCurrency(row.amount)}</TableCell>
+                </TableRow>
+              ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="space-y-3 md:hidden">
             {rows.map((row) => (
-              <TableRow
+              <TableMobileCard
                 key={row.label}
-              >
-                <TableCell className="font-medium text-[color:var(--color-text)]">{row.label}</TableCell>
-                <TableCell className="text-right text-[color:var(--color-text-muted)]">
-                  {formatShare(row.share)}
-                </TableCell>
-                <TableCell className="text-right font-semibold">{formatCurrency(row.amount)}</TableCell>
-              </TableRow>
+                rows={[{ label: '비중', value: formatShare(row.share) }]}
+                title={row.label}
+                value={formatCurrency(row.amount)}
+              />
             ))}
-            </TableBody>
-          </Table>
+          </div>
         </div>
       </CardContent>
     </Card>

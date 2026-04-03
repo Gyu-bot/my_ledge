@@ -113,7 +113,7 @@ export function OverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="h-80 w-full" aria-label="월간 현금흐름 차트">
-              <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
+              <ResponsiveContainer width="100%" height="100%" minHeight={320}>
                 <ComposedChart
                   data={monthly_cashflow}
                   margin={{ top: 12, right: 12, left: 4, bottom: 0 }}
@@ -186,8 +186,10 @@ export function OverviewPage() {
                 )}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.label}</p>
-                  <Badge variant="accent">{item.value}</Badge>
+                  <p className="min-w-0 truncate text-sm font-semibold text-[color:var(--color-text)]">
+                    {item.label}
+                  </p>
+                  <Badge className="shrink-0" variant="accent">{item.value}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">{item.detail}</p>
               </div>

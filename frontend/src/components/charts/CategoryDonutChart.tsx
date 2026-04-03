@@ -79,7 +79,7 @@ export function CategoryDonutChart({ data }: CategoryDonutChartProps) {
 
   return (
     <div className="h-64 w-full" aria-label="카테고리 비중 차트">
-      <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={256}>
+      <ResponsiveContainer width="100%" height="100%" minHeight={256}>
         <PieChart>
           <Pie
             cx="50%"

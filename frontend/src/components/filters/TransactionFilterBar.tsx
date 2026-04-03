@@ -12,6 +12,7 @@ interface TransactionFilterBarProps {
   values: TransactionFilterValues;
   onApply: (next: TransactionFilterValues) => void;
   onReset: () => void;
+  monthOptions?: string[];
 }
 
 function areFiltersEqual(left: TransactionFilterValues, right: TransactionFilterValues) {
@@ -19,6 +20,7 @@ function areFiltersEqual(left: TransactionFilterValues, right: TransactionFilter
 }
 
 export function TransactionFilterBar({
+  monthOptions,
   onApply,
   onReset,
   values,
@@ -47,6 +49,7 @@ export function TransactionFilterBar({
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
             <div className="min-w-0 flex-1">
               <DateRangeFilter
+                monthOptions={monthOptions}
                 startMonth={draftValues.start_month}
                 endMonth={draftValues.end_month}
                 onStartMonthChange={(start_month) =>

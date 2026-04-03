@@ -24,6 +24,7 @@ describe('TimelineRangeSlider', () => {
     expect(screen.getByTestId('timeline-track-active').className).toContain(
       'bg-[color:var(--color-accent-soft)]',
     );
+    expect(screen.getByTestId('timeline-edge-labels').className).toContain('px-3');
 
     fireEvent.change(screen.getByLabelText('시작 월 슬라이더'), {
       target: { value: '2' },

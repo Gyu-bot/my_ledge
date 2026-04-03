@@ -2,7 +2,7 @@
 
 ## Current State
 - **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend visual system refresh와 chart tooltip/card-header polish 진행 중
-- **Last Worker:** codex (2026-04-03T14:49+0900, removed the treemap square-width constraint so the merchant treemap fills the full card width while keeping the existing card height)
+- **Last Worker:** codex (2026-04-03T16:37+0900, added min-w-0/max-w-full constraints to insights cards and card primitives so recurring-payment mobile cards no longer exceed the page width on iPhone-sized screens)
 - **Branch:** main
 
 ## Completed
@@ -86,6 +86,12 @@
 - [x] Frontend sidebar shell rollout 완료: canonical 5개 페이지의 `PageHeader` 제거, `AppChromeContext` 기반 topbar meta slot 연결, `일별 지출액` 카드 내부 독립 dropdown filter 추가, mobile topbar breadcrumb compact 처리
 - [x] Frontend 실브라우저 점검 완료: Playwright CLI로 desktop/mobile canonical route 캡처를 수집하고, mobile 상단 chrome 중복 문제를 `AppTopbar` compact patch로 수정한 뒤 재촬영/재검증 완료
 - [x] Frontend 최종 검증 완료: `cd frontend && npm test`, `npm run lint`, `npm run typecheck` 통과
+- [x] Frontend mobile overflow hotfix follow-up 완료: 주요 chart `ResponsiveContainer` 의 desktop `minWidth` 제약 제거, `SpendingPage` 의 detail-scope separator row를 `min-w-0 + flex-1` 구조로 교체, iPhone Pro 폭 headless Chrome 재캡처로 overview/spending/assets 재검토
+- [x] Frontend spending detail month filter mobile hotfix 완료: `DateRangeFilter` 를 mobile 1열 + `min-w-0` month input 구조로 조정해 두 번째 월 필터가 카드 폭을 넘지 않도록 수정하고, 지출 페이지 iPhone Pro 폭 캡처로 재확인
+- [x] Frontend spending detail month picker iPhone Safari hotfix 완료: `SpendingPage` 상세 월 필터에 month option 기반 `Select` picker를 도입해 native `type="month"` intrinsic width overflow를 제거하고, mobile 캡처로 재확인
+- [x] Frontend read-only table mobile card rollout 완료: `RecurringPaymentsTable`, `SpendingAnomaliesTable`, `CategoryBreakdownTable` 에 `desktop table + mobile cards` 분기를 추가하고, 인사이트 모바일 캡처로 반복결제/이상지출 카드형 표시를 재확인
+- [x] Frontend mobile table-card overflow tightening 완료: `TableMobileCard` 와 읽기용 테이블 wrapper에 `overflow-hidden`, `min-w-0`, grid-based value rows를 적용해 인사이트 `반복 결제` 카드가 iPhone 폭에서 카드 밖으로 밀리지 않도록 보정
+- [x] Frontend insights mobile row/pagination overflow tightening 완료: `InsightsPage` 의 `거래처 소비 Top N`, `카테고리 증감 요약`, card pagination row에 `min-w-0`, `truncate`, `shrink-0`, mobile stack layout을 적용해 인사이트 모바일 카드 전반의 좌우 밀림을 추가 보정
 
 ## In Progress
 - [ ] Advisor analytics Phase 4 후속 설계/구현
@@ -98,8 +104,8 @@
   - 남은 작업: legacy `PrimarySectionNav` / `SectionTabNav` / `PageHeader` 정리, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
-  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 현재 수동 확인용 dev server는 backend `:8000`, frontend `:4173` 으로 다시 올라와 있다
-  - 남은 작업: 필요 시 운영 환경 기준 추가 캡처 수집
+  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 이번 턴에는 `output/playwright/mobile-review-20260403/` 아래 iPhone Pro 폭 재캡처를 추가 수집했고, spending 가로 overflow 원인인 separator row까지 제거했다. 이어서 insights `반복 결제` 카드에 `min-w-0/w-full/max-w-full` 제약을 추가하고 Chrome CDP로 `clientWidth === scrollWidth === 417px` 를 확인했다. 현재 수동 확인용 dev server는 backend `:8000`, frontend `:4173` 으로 다시 올라와 있다
+  - 남은 작업: 필요 시 운영 환경 또는 실제 기기 기준 추가 캡처 수집
 
 ## Blocked
 - 없음
@@ -140,6 +146,7 @@
   - [x] 로컬 사용자 리뷰용 dev server 재기동 (`4173`/`8000`, Tailscale 접속 확인)
   - [x] `operations/workbench` 및 `/data` wrapper desktop 캡처 재수집
   - [x] mobile viewport canonical route 5종 캡처
+  - [x] insights iPhone 폭 overflow pass 4 캡처 + card width CDP 측정 확인
   - [x] `/data` wrapper 제거 후 canonical workbench redirect 반영
   - [x] 분석/운영 canonical route API proxy 200 재확인
   - [x] root `.env` `API_KEY` → frontend `VITE_API_KEY` 승계 확인

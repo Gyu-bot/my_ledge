@@ -96,5 +96,7 @@ describe('AssetsPage', () => {
     expect(screen.getByText('주택담보대출').closest('.p-3\\.5')).toHaveClass(
       'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
     );
+    expect(screen.getByText('주택담보대출').closest('.flex')).toHaveClass('flex-col');
+    expect(screen.getByText('주택담보대출').closest('.flex')).toHaveClass('sm:flex-row');
   });
 });

@@ -75,16 +75,16 @@ export function TransactionsTable({ rows }: TransactionsTableProps) {
         {rows.map((row) => (
           <Card key={row.id} className="bg-white/80">
             <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-[color:var(--color-text)]">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[color:var(--color-text)]">
                   {row.merchant?.trim() || row.description}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[color:var(--color-text-subtle)]">
                   {row.date ?? '-'}
                 </p>
               </div>
-              <p className="text-sm font-semibold text-[color:var(--color-text)]">
+              <p className="shrink-0 text-right text-sm font-semibold text-[color:var(--color-text)]">
                 {formatCurrency(row.amount)}
               </p>
             </div>

@@ -174,7 +174,7 @@ describe('InsightsPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: '이상 지출' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 3, name: 'Assumptions' })).not.toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '거래처' })).toBeInTheDocument();
-    expect(screen.getByText('넷플릭스')).toBeInTheDocument();
+    expect(screen.getAllByText('넷플릭스').length).toBeGreaterThan(0);
     expect(screen.getByRole('group', { name: '거래처 소비 Top N 적용 기간' })).toHaveTextContent(
       '2026-03',
     );
@@ -193,10 +193,25 @@ describe('InsightsPage', () => {
     expect(screen.getByText('배달의민족').closest('.px-4')).toHaveClass(
       'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,238,229,0.86))]',
     );
+    expect(screen.getByText('배달의민족')).toHaveClass('truncate');
+    expect(screen.getByText('220,000원').className).toContain('shrink-0');
     const categoryLabels = screen.getAllByText('교통');
     expect(categoryLabels[categoryLabels.length - 1]?.closest('.p-3\\.5')).toHaveClass(
       'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,232,231,0.9))]',
     );
+    expect(categoryLabels[categoryLabels.length - 1]?.className).toContain('truncate');
+
+    const recurringPagination = screen
+      .getByRole('button', { name: '반복 결제 이전 페이지' })
+      .closest('.flex');
+    expect(recurringPagination).toHaveClass('flex-col');
+    expect(recurringPagination).toHaveClass('sm:flex-row');
+
+    const recurringHeading = screen.getByRole('heading', { level: 3, name: '반복 결제' });
+    const recurringCard = recurringHeading.closest('.rounded-\\[var\\(--radius\\)\\]');
+    expect(recurringCard).toHaveClass('min-w-0');
+    expect(recurringCard).toHaveClass('w-full');
+    expect(recurringCard).toHaveClass('overflow-hidden');
 
     fireEvent.click(screen.getByRole('button', { name: '수입 안정성 가정 보기' }));
     expect(screen.getByText('표본 3개월 기준으로 계산했습니다.')).toBeInTheDocument();
@@ -272,19 +287,19 @@ describe('InsightsPage', () => {
     render(<InsightsPage />);
 
     expect(screen.getAllByText('1 / 2 페이지 · 총 12건')).toHaveLength(2);
-    expect(screen.getByText('정기결제-01')).toBeInTheDocument();
-    expect(screen.getByText('카테고리-01')).toBeInTheDocument();
+    expect(screen.getAllByText('정기결제-01').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('카테고리-01').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: '반복 결제 다음 페이지' }));
 
-    expect(screen.getByText('정기결제-11')).toBeInTheDocument();
-    expect(screen.queryByText('정기결제-01')).not.toBeInTheDocument();
-    expect(screen.getByText('카테고리-01')).toBeInTheDocument();
+    expect(screen.getAllByText('정기결제-11').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('정기결제-01')).toHaveLength(0);
+    expect(screen.getAllByText('카테고리-01').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: '이상 지출 다음 페이지' }));
 
-    expect(screen.getByText('카테고리-11')).toBeInTheDocument();
-    expect(screen.queryByText('카테고리-01')).not.toBeInTheDocument();
+    expect(screen.getAllByText('카테고리-11').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('카테고리-01')).toHaveLength(0);
   });
 
   it('renders a loading state while insights data is pending', () => {

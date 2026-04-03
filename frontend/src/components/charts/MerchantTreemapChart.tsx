@@ -115,9 +115,9 @@ export function MerchantTreemapChart({ ariaLabel, data }: MerchantTreemapChartPr
   }
 
   return (
-    <div className="min-h-[40rem] w-full">
-      <div className="h-full w-full" aria-label={ariaLabel}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
+    <div className="h-[40rem] w-full" aria-label={ariaLabel}>
+      <div className="h-full w-full">
+        <ResponsiveContainer width="100%" height="100%" minHeight={320}>
           <Treemap
             data={data}
             dataKey="amount"

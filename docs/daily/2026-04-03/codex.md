@@ -72,6 +72,217 @@
   - `cd frontend && npm run lint`
   - `cd frontend && npm run typecheck`
 
+## Merchant Treemap Height Fill Follow-up
+- 사용자 후속 요청으로, 가로폭만 넓힌 뒤 세로가 다시 작아진 문제를 추가 보정했다.
+- 원인:
+  - outer wrapper가 실높이를 전달하지 않아 `ResponsiveContainer height="100%"` 가 카드 본문 높이를 끝까지 쓰지 못했다.
+- 변경:
+  - `frontend/src/components/charts/MerchantTreemapChart.tsx`
+    - treemap root를 `h-[40rem] w-full`로 명시해 카드의 기존 높이를 실제 차트 높이로 전달
+  - `frontend/src/components/charts/MerchantTreemapChart.test.tsx`
+  - `frontend/src/pages/__tests__/SpendingPage.test.tsx`
+    - 기대값을 `h-[40rem] w-full` 기준으로 갱신
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/charts/MerchantTreemapChart.test.tsx src/pages/__tests__/SpendingPage.test.tsx`
+  - `cd frontend && npm run typecheck`
+
+## Mobile Layout Repair
+- 사용자 제보 기준으로 iPhone Pro 폭에서 `인사이트`, `거래 작업대`를 제외한 나머지 페이지 모바일 레이아웃을 다시 점검했다.
+- 실측:
+  - Playwright CLI는 이 환경에서 브라우저 바이너리 부재로 바로 못 썼고, 대신 Chrome headless fallback으로 mobile tall screenshot을 다시 수집했다.
+  - 확인 파일:
+    - `output/playwright/mobile-review/overview-tall-fixed.png`
+    - `output/playwright/mobile-review/spending-top-fixed2.png`
+    - `output/playwright/mobile-review/assets-tall-fixed.png`
+- 실제 원인:
+  - `최근 거래` 모바일 카드 행이 `min-w-0` 없이 좌우 배치를 유지해 금액이 오른쪽에서 잘림
+  - `대출 요약` 개별 항목이 mobile에서도 좌우 2열 행을 유지해 잔액/금리 텍스트가 눌림
+  - `시계열 기간` 슬라이더 양끝 라벨과 thumb가 카드 가장자리에 너무 붙어 있어 우측 라벨이 잘려 보임
+  - `주의 신호` 카드의 label/badge row도 shrink 여지가 없어 badge가 카드 가장자리로 몰림
+- 변경:
+  - `frontend/src/components/tables/TransactionsTable.tsx`
+    - mobile row에 `min-w-0`, merchant `truncate`, amount `shrink-0 text-right` 적용
+  - `frontend/src/pages/AssetsPage.tsx`
+    - 대출 항목 row를 `flex-col sm:flex-row` 로 바꿔 mobile에서는 세로 스택
+  - `frontend/src/components/filters/TimelineRangeSlider.tsx`
+    - track/input/edge label row 좌우 padding 확대
+    - edge label row에 `data-testid="timeline-edge-labels"` 추가
+  - `frontend/src/pages/OverviewPage.tsx`
+    - `주의 신호` label을 `min-w-0 truncate`, badge를 `shrink-0`로 조정
+- 테스트:
+  - 추가/수정:
+    - `frontend/src/components/tables/TransactionsTable.test.tsx`
+    - `frontend/src/pages/__tests__/AssetsPage.test.tsx`
+    - `frontend/src/components/filters/__tests__/TimelineRangeSlider.test.tsx`
+    - `frontend/src/pages/__tests__/OverviewPage.test.tsx`
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/tables/TransactionsTable.test.tsx src/pages/__tests__/AssetsPage.test.tsx src/components/filters/__tests__/TimelineRangeSlider.test.tsx src/pages/__tests__/OverviewPage.test.tsx`
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run typecheck`
+
+## Mobile Layout Repair Follow-up
+- 사용자 제보 기준으로 iPhone Pro 폭에서 여전히 남아 있던 mobile layout 흔들림을 다시 추적했다.
+- 실제 확인:
+  - headless Chrome mobile capture를 다시 수집했다.
+    - `output/playwright/mobile-review-20260403/overview-iphone-pro-postfix.png`
+    - `output/playwright/mobile-review-20260403/spending-iphone-pro-postfix.png`
+    - `output/playwright/mobile-review-20260403/assets-iphone-pro-postfix.png`
+    - `output/playwright/mobile-review-20260403/overview-iphone-pro-tall.png`
+    - `output/playwright/mobile-review-20260403/spending-iphone-pro-tall.png`
+    - `output/playwright/mobile-review-20260403/assets-iphone-pro-tall.png`
+  - `spending` 페이지의 실제 가로 overflow는 `아래 카드부터 월 필터 적용` row 안의 `Separator` 가 `w-full + shrink-0` 로 남아 있어 발생한 것을 확인했다.
+  - 추가로 여러 chart wrapper에 남아 있던 desktop 기준 `minWidth` 가 mobile card 폭을 강하게 밀 수 있어 공통 제거가 필요했다.
+- 변경:
+  - `frontend/src/pages/OverviewPage.tsx`
+  - `frontend/src/components/charts/BreakdownPieChart.tsx`
+  - `frontend/src/components/charts/CategoryDonutChart.tsx`
+  - `frontend/src/components/charts/CategoryTimelineAreaChart.tsx`
+  - `frontend/src/components/charts/HorizontalBarChart.tsx`
+  - `frontend/src/components/charts/LineTrendChart.tsx`
+  - `frontend/src/components/charts/MerchantTreemapChart.tsx`
+    - `ResponsiveContainer` 의 `minWidth` 강제값 제거
+  - `frontend/src/pages/SpendingPage.tsx`
+    - detail scope separator row를 `min-w-0 overflow-hidden`
+    - `Separator` 를 `min-w-0 flex-1 shrink` 로 바꿔 mobile 가로 overflow 제거
+  - `frontend/src/components/charts/mobileResponsiveContainers.test.tsx`
+    - 대표 chart들이 mobile에서 desktop `minWidth` 를 강제하지 않는지 회귀 테스트 추가
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/charts/mobileResponsiveContainers.test.tsx src/components/tables/TransactionsTable.test.tsx src/pages/__tests__/AssetsPage.test.tsx src/components/filters/__tests__/TimelineRangeSlider.test.tsx src/pages/__tests__/OverviewPage.test.tsx src/pages/__tests__/SpendingPage.test.tsx`
+  - `cd frontend && npm run typecheck`
+  - `cd frontend && npm run lint`
+- 결과:
+  - targeted test: `6 files, 12 tests passed`
+  - typecheck/lint: 통과
+  - screenshot 기준으로 overview/spending/assets 모두 iPhone Pro 폭에서 전역 가로 overflow 없이 표시되는 것을 다시 확인했다.
+
+## Spending Detail Month Filter Mobile Fix
+- 사용자 후속 제보로, `지출` 페이지의 두 번째 월 필터(`TransactionFilterBar`) 안 month picker가 mobile 폭을 다시 넘치는 문제를 추가 수정했다.
+- 원인:
+  - `DateRangeFilter` 가 기본 `grid` + `md:grid-cols-2` 만 쓰고 있어 mobile 기본 1열이 명시되지 않았고,
+  - `type="month"` input 이 브라우저 기본 최소폭을 가져오면서 카드 폭을 밀 수 있었다.
+- 변경:
+  - `frontend/src/components/filters/DateRangeFilter.tsx`
+    - root를 `grid grid-cols-1 gap-3 md:grid-cols-2` 로 명시
+    - 각 label에 `min-w-0`
+    - 각 month input에 `min-w-0`
+  - `frontend/src/components/filters/__tests__/DateRangeFilter.test.tsx`
+    - mobile 1열 + shrinkable input 회귀 테스트 추가
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/filters/__tests__/DateRangeFilter.test.tsx src/pages/__tests__/SpendingPage.test.tsx`
+  - `cd frontend && npm run typecheck`
+  - headless Chrome capture:
+    - `output/playwright/mobile-review-20260403/spending-filter-iphone-pro.png`
+- 결과:
+  - targeted test: `2 files, 3 tests passed`
+  - typecheck: 통과
+  - iPhone Pro 폭 캡처 기준으로 detail month filter가 카드 폭 안에 유지되는 것을 확인했다.
+
+## Spending Detail Month Picker Safari Follow-up
+- 사용자 재제보 기준으로, iPhone Safari에서 native `type="month"` picker가 여전히 intrinsic width를 밀어 카드 밖으로 삐져나오는 문제를 추가 수정했다.
+- 판단:
+  - CSS `min-w-0` 만으로는 iOS Safari native month control 폭을 완전히 제어하기 어려웠다.
+  - 이 필터는 `SpendingPage` 에만 연결되어 있어, month option 기반 select picker로 교체하는 편이 영향 범위가 가장 작고 안정적이었다.
+- 변경:
+  - `frontend/src/components/filters/DateRangeFilter.tsx`
+    - `monthOptions?: string[]` 지원 추가
+    - option이 있으면 native month input 대신 `SelectTrigger` / `SelectContent` 기반 picker 사용
+  - `frontend/src/components/filters/TransactionFilterBar.tsx`
+    - `monthOptions` 전달 지원
+  - `frontend/src/pages/SpendingPage.tsx`
+    - `timelineQuery.data?.available_months` 를 상세 월 필터에 전달
+  - `frontend/src/components/filters/__tests__/DateRangeFilter.test.tsx`
+    - select-mode 회귀 테스트 추가
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/filters/__tests__/DateRangeFilter.test.tsx src/pages/__tests__/SpendingPage.test.tsx`
+  - `cd frontend && npm run typecheck`
+  - headless Chrome capture:
+    - `output/playwright/mobile-review-20260403/spending-filter-select-iphone-pro.png`
+- 결과:
+  - targeted test: `2 files, 4 tests passed`
+  - typecheck: 통과
+  - 지출 상세 월 필터가 select 기반으로 교체되어 mobile 폭을 넘지 않도록 정리됐다.
+
+## Read-only Table Mobile Card Rollout
+- 사용자 확인 결과, 거래 작업대만 모바일 카드형이고 나머지 읽기용 테이블은 desktop 표를 그대로 줄여 쓰고 있어 모바일에서 깨져 보이는 차이가 있었다.
+- 결정:
+  - 거래 작업대처럼 편집 동작이 있는 표를 그대로 복제하지는 않고,
+  - 읽기 전용 테이블에 한해 `desktop table + mobile card list` 패턴을 공통화하기로 했다.
+- TDD:
+  - 먼저 `frontend/src/components/tables/tableSurfaceWrappers.test.tsx` 에서 읽기용 테이블들이 `hidden md:block` desktop table과 `space-y-3 md:hidden` mobile card 영역을 모두 가지는지 red 로 고정했다.
+- 구현:
+  - 추가:
+    - `frontend/src/components/common/TableMobileCard.tsx`
+      - title/value, badge, key-value row를 공통 렌더링하는 모바일 카드 primitive
+  - 변경:
+    - `frontend/src/components/insights/RecurringPaymentsTable.tsx`
+    - `frontend/src/components/insights/SpendingAnomaliesTable.tsx`
+    - `frontend/src/components/tables/CategoryBreakdownTable.tsx`
+      - desktop table은 `hidden md:block`
+      - mobile card list는 `space-y-3 md:hidden`
+  - 테스트 보정:
+    - `frontend/src/components/tables/tableSurfaceWrappers.test.tsx`
+    - `frontend/src/pages/__tests__/InsightsPage.test.tsx`
+      - hidden desktop table과 mobile card가 동시에 DOM에 존재하므로 단일 `getByText` 기대값을 `getAllByText` 기준으로 보정
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/tables/tableSurfaceWrappers.test.tsx src/pages/__tests__/InsightsPage.test.tsx`
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run typecheck`
+  - mobile capture:
+    - `output/playwright/mobile-review-20260403/insights-mobile-table-cards.png`
+- 결과:
+  - targeted test: `2 files, 8 tests passed`
+  - lint/typecheck: 통과
+  - 모바일 인사이트 화면에서 `반복 결제`와 `이상 지출`이 카드형으로 내려오는 것을 확인했다.
+
+## Read-only Table Mobile Card Overflow Tightening
+- 사용자 후속 제보로, 인사이트 `반복 결제` 카드가 iPhone 17 Pro 폭에서 일부 항목 폭이 카드 밖으로 미는 현상을 추가 보정했다.
+- 원인:
+  - 모바일 카드 분기 자체는 적용됐지만, 공통 `TableMobileCard` 의 상단 row/value row 제약이 Safari 계열에서 충분히 강하지 않았다.
+  - 읽기용 테이블 root wrapper도 mobile에서 여전히 `overflow-x-auto` 성격을 유지하고 있었다.
+- 변경:
+  - `frontend/src/components/common/TableMobileCard.tsx`
+    - 카드 루트 `w-full overflow-hidden`
+    - content `min-w-0`
+    - 상단 메타 row를 `grid-cols-[minmax(0,1fr)_auto]` 구조로 보강
+    - title/subtitle `block min-w-0 truncate`
+    - key-value row를 `grid-cols-[auto_minmax(0,1fr)]`
+    - value text를 `break-words` 로 변경
+  - `frontend/src/components/insights/RecurringPaymentsTable.tsx`
+  - `frontend/src/components/insights/SpendingAnomaliesTable.tsx`
+  - `frontend/src/components/tables/CategoryBreakdownTable.tsx`
+    - mobile에서는 `overflow-hidden`, desktop부터 `md:overflow-x-auto`
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/components/tables/tableSurfaceWrappers.test.tsx src/pages/__tests__/InsightsPage.test.tsx`
+  - `cd frontend && npm run typecheck`
+  - mobile capture:
+    - `output/playwright/mobile-review-20260403/insights-mobile-table-cards-tightened.png`
+- 결과:
+  - targeted test: `2 files, 8 tests passed`
+  - typecheck: 통과
+  - 인사이트 `반복 결제` 카드가 iPhone 폭에서도 카드 밖으로 밀리지 않도록 정리했다.
+
+## Insights Mobile List Row Overflow Follow-up
+- 사용자 재제보 기준으로, `반복 결제` 카드만이 아니라 인사이트 페이지의 카드 리스트 전반이 iPhone 17 Pro 폭에서 좌우로 밀릴 수 있는 구조를 추가로 정리했다.
+- 추가 원인:
+  - `InsightCardPagination` 이 mobile에서도 `justify-between` 1행 배치를 유지하고 있었다.
+  - `거래처 소비 Top N` / `카테고리 증감 요약` 카드 행은 `min-w-0` 없이 좌우 정렬을 사용하고 있었고, 금액 badge도 `shrink-0` 고정이 없었다.
+- 변경:
+  - `frontend/src/pages/InsightsPage.tsx`
+    - `InsightCardPagination` 를 `flex-col sm:flex-row` 로 변경
+    - `거래처 소비 Top N` row에 `min-w-0`, merchant `truncate`, amount badge `shrink-0`
+    - `카테고리 증감 요약` row에 `min-w-0`, category `truncate`, delta badge `shrink-0`
+  - `frontend/src/pages/__tests__/InsightsPage.test.tsx`
+    - merchant/category truncate 및 pagination mobile stack 기대값 추가
+- 검증:
+  - `cd frontend && npm test -- --runInBand src/pages/__tests__/InsightsPage.test.tsx src/components/tables/tableSurfaceWrappers.test.tsx`
+  - `cd frontend && npm run typecheck`
+  - mobile capture:
+    - `output/playwright/mobile-review-20260403/insights-mobile-overflow-pass2.png`
+- 결과:
+  - targeted test: `2 files, 8 tests passed`
+  - typecheck: 통과
+  - 인사이트 모바일 화면에서 반복결제/거래처 Top N/카테고리 증감 카드 행이 iPhone 폭에서도 카드 바깥으로 밀리지 않도록 보정했다.
+
 ## Chart And Control Density Refresh
 - 사용자 요청으로 지출 `월별 카테고리 추이` 를 stacked area 에서 stacked bar 로 바꾸고 y축을 제거했다.
 - tooltip / popover depth와 공통 control / table primitive도 함께 정리했다.
@@ -673,3 +884,39 @@
     - `cd frontend && npm run lint`
     - `cd frontend && npm run typecheck`
     - 결과: `33 files, 85 tests` 통과 / lint 통과 / typecheck 통과
+
+## Insights Mobile Card Width Clamp
+- 사용자 피드백:
+  - iPhone 17 Pro 기준으로 `인사이트 > 반복 결제` 는 카드 밖으로 튀어나오지는 않지만, 카드 자체가 페이지 전체 폭보다 넓어 보인다는 보고가 있었다.
+- 원인 조사:
+  - `TableMobileCard` 내부만 조여서는 부족했고, `InsightsPage` 의 `반복 결제` / `이상 지출` outer card와 공통 `Card` primitive가 grid/flex 자식 폭 계산에서 충분히 clamp되지 않는 상태였다.
+  - Chrome headless CDP로 `document.documentElement.scrollWidth` 와 반복 결제 card `clientWidth/scrollWidth` 를 직접 확인했다.
+- 수정 파일:
+  - `frontend/src/components/ui/card.tsx`
+  - `frontend/src/components/common/TableMobileCard.tsx`
+  - `frontend/src/components/insights/RecurringPaymentsTable.tsx`
+  - `frontend/src/components/insights/SpendingAnomaliesTable.tsx`
+  - `frontend/src/pages/InsightsPage.tsx`
+  - `frontend/src/pages/__tests__/InsightsPage.test.tsx`
+  - `frontend/src/components/tables/tableSurfaceWrappers.test.tsx`
+- 구현:
+  - 공통 `Card` primitive에 `min-w-0 max-w-full` 추가
+  - `CardHeader`, `CardContent`, `CardFooter` 도 `min-w-0` 로 통일
+  - `TableMobileCard` root/content 에 `min-w-0 w-full max-w-full overflow-hidden` 추가
+  - insights `반복 결제` / `이상 지출` outer card를 `min-w-0 w-full overflow-hidden` 으로 고정
+  - 해당 섹션 header row와 `IconTitle` 에도 `min-w-0/flex-1` 를 넣어 header 자체가 폭을 밀지 않게 정리
+- 검증:
+  - targeted regression:
+    - `cd frontend && npm test -- --runInBand src/pages/__tests__/InsightsPage.test.tsx src/components/tables/tableSurfaceWrappers.test.tsx`
+    - 결과: `2 files, 8 tests` 통과
+  - static verification:
+    - `cd frontend && npm run typecheck`
+    - `cd frontend && npm run lint`
+    - 결과: 통과
+  - browser capture:
+    - `output/playwright/mobile-review-20260403/insights-mobile-overflow-pass4.png`
+  - CDP measurement:
+    - `window.innerWidth = 500`
+    - `document.documentElement.scrollWidth = 485`
+    - 반복 결제 outer card `clientWidth = 417`, `scrollWidth = 417`
+    - 카드 자체 horizontal overflow 없음 확인
