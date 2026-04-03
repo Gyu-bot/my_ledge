@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend visual system refresh와 chart/control/table density 조정 완료
-- **Last Worker:** codex (2026-04-03T14:15+0900, restored shared table separators, kept card-internal wrappers borderless, and constrained recurring-payment merchant column truncation)
+- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend visual system refresh와 chart tooltip/card-header polish 진행 중
+- **Last Worker:** codex (2026-04-03T14:43+0900, unified chart tooltips, restored spending trend to linear stacked area, tightened popovers, and polished period badges/treemap surfaces)
 - **Branch:** main
 
 ## Completed
@@ -71,6 +71,8 @@
 - [x] Frontend chart/control/table refinement 완료: `월별 카테고리 추이` 를 stacked bar + no y-axis 로 전환, chart tooltip / popover shadow 강화, `Button` 기본 크기를 small 기준으로 통일, `Input` / `Select` 높이 정렬, 공통 `Table` border 제거
 - [x] Frontend table surface cleanup 완료: 카드 내부 읽기용 테이블과 거래 작업대의 table wrapper border까지 제거해 card-in-card 표면을 borderless로 통일하고 회귀 테스트 추가
 - [x] Frontend table separator rollback 완료: 카드 내부 wrapper border 제거는 유지하고 공통 `Table` row/header separator를 복구, `반복결제` 거래처 컬럼은 fixed layout + truncate로 폭 변동을 방지
+- [x] Frontend chart tooltip/card-header polish 완료: 개요 `월간 현금흐름` y축 제거, 공통 `ChartTooltipContent` 로 tooltip text size/color indicator 통일, 지출 `월별 카테고리 추이` 를 linear stacked area 로 복귀, range badge nowrap 보정, 거래처 treemap square ratio/높이 확대, `일별 지출액` 기간 badge 제거, popover padding 축소, KPI 카드 그룹 border contrast 강화
+- [x] 누적 visual refresh baseline 커밋/푸시 완료 (`395c66a`, `[frontend] visual system refresh and workbench polish (codex)`)
 - [x] Git hygiene 정리: ignored review artifact 디렉터리 `output/`, `.playwright-cli/`, `.codex/` 를 Git index 에서 제거하고, `.gitignore` 를 Python/test/build cache 산출물까지 확장
 - [x] 개요/인사이트 거래처 표기 정리 완료: 개요 `최근 거래` 카드와 인사이트 `반복 결제` 카드의 주요 식별 컬럼을 `description` 대신 `merchant` 기준으로 표시하도록 정렬
 - [x] 인사이트 카드 API 페이지네이션 완료: `반복 결제`, `이상 지출` endpoint/card에 `page`, `per_page`, `total` 기반 10건 단위 페이지네이션을 추가해 카드 길이와 payload를 함께 제어
@@ -273,6 +275,9 @@
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
 - 2026-04-03: 카드 내부 테이블은 바깥 `Card`가 이미 외곽 경계를 제공하므로 내부 table wrapper에는 별도 border를 두지 않는다. Data Table 전환 검토 시에도 server-driven filter bar와 mobile 카드 레이아웃은 별도 구조로 유지한다.
 - 2026-04-03: 공통 `Table`의 행/헤더 separator는 정보 구분을 위해 유지하고, 제거 대상은 카드 내부의 별도 table wrapper border만 한정한다. `반복결제`처럼 문자열 길이가 긴 열은 `table-fixed` + truncate로 폭 흔들림을 막는다.
+- 2026-04-03: chart tooltip은 chart 종류별로 별도 DOM 스타일을 유지하지 않고 공통 `ChartTooltipContent` 컴포넌트로 통일한다. compact text size와 line indicator를 한 곳에서 관리해야 mobile density와 palette consistency를 함께 유지할 수 있다.
+- 2026-04-03: range 기준 badge가 2개 이상 필요한 카드 헤더는 줄바꿈보다 `CardPeriodBadgeGroup`의 nowrap + 가로 스크롤을 우선한다. 헤더 높이 증가로 card body가 밀리는 비용이 더 크기 때문이다.
+- 2026-04-03: KPI 성격의 summary card group은 저채도 gradient surface 위에 동일 계열의 더 진한 border variant를 사용한다. 배경 채도는 낮게 유지하면서도 카드 경계 인지를 살리는 쪽이 overview/assets/insights 공통 패턴으로 더 안정적이다.
 - 2026-04-03: 다음 frontend IA 리패스는 기존 top navigation shell을 누적 수정하지 않고 새 sidebar shell로 재작성한다. desktop은 lean collapsible sidebar, mobile은 drawer, content는 넓은 max-width, page chrome은 thin topbar를 기준으로 하고, 그룹 항목은 route link가 아니라 disclosure/flyout trigger로 정의한다.
 - 2026-04-03: sidebar shell의 breadcrumb/title/active group은 `frontend/src/app/navigation.ts` 하나에서 파생한다. `AppLayout` 에 route prefix 분기를 다시 흩뿌리지 않고, shell chrome과 nav 컴포넌트가 같은 구성을 참조하는 쪽이 이후 page-level header 제거에도 안전하다.
 - 2026-04-03: desktop sidebar expansion state는 `AppShellState` 에서 localStorage로만 영속화하고, mobile drawer open state는 세션 메모리 상태로만 둔다. mobile open 상태를 영속화할 이유는 없고, desktop 정보 밀도 선호만 복원하면 충분하다.

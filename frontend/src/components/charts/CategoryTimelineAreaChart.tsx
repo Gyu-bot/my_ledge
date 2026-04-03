@@ -1,16 +1,15 @@
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
 } from 'recharts';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
+import { ChartTooltipContent } from './ChartTooltipContent';
 import {
-  CHART_BAR_RADIUS_VERTICAL,
   CHART_NEUTRALS,
-  CHART_TOOLTIP_SHADOW,
 } from './chartTheme';
 
 export interface CategoryTimelinePoint {
@@ -49,32 +48,14 @@ function TooltipContent({
   }
 
   return (
-    <div
-      className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2"
-      style={{ boxShadow: CHART_TOOLTIP_SHADOW }}
-    >
-      <p className="text-sm font-semibold text-[color:var(--color-text)]">{label}</p>
-      <div className="mt-2 space-y-1.5">
-        {payload.map((entry) => (
-          <div
-            key={entry.name}
-            className="flex items-center justify-between gap-4 text-sm text-[color:var(--color-text-muted)]"
-          >
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className="h-px w-3.5 shrink-0 rounded-full"
-                style={{ backgroundColor: entry.color ?? '#223a5e' }}
-              />
-              <span>{entry.name}</span>
-            </div>
-            <span className="font-medium text-[color:var(--color-text)]">
-              {formatCurrency(entry.value)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <ChartTooltipContent
+      title={label}
+      items={payload.map((entry) => ({
+        color: entry.color ?? '#223a5e',
+        label: entry.name ?? '금액',
+        value: formatCurrency(entry.value),
+      }))}
+    />
   );
 }
 
@@ -116,7 +97,7 @@ export function CategoryTimelineAreaChart({
 
       <div className="h-80 w-full" aria-label="Monthly category spend trend chart">
         <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
-          <BarChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#e4e4e7" strokeDasharray="4 4" />
             <XAxis
               axisLine={false}
@@ -126,16 +107,18 @@ export function CategoryTimelineAreaChart({
             />
             <Tooltip content={<TooltipContent />} />
             {categories.map((category, index) => (
-              <Bar
+              <Area
                 key={category}
                 dataKey={category}
+                type="linear"
                 stackId="category-spend"
                 fill={SERIES_COLORS[index % SERIES_COLORS.length]}
-                maxBarSize={48}
-                radius={CHART_BAR_RADIUS_VERTICAL}
+                fillOpacity={0.18}
+                stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
+                strokeWidth={2}
               />
             ))}
-          </BarChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

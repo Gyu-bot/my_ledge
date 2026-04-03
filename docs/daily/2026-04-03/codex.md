@@ -1,5 +1,63 @@
 # 2026-04-03 Codex Log
 
+## Chart Tooltip And Card Header Polish
+- 사용자 요청 기준으로, 먼저 누적 visual refresh 작업을 커밋/푸시했다.
+  - commit: `395c66a`
+  - message: `[frontend] visual system refresh and workbench polish (codex)`
+  - push: `origin/main`
+- 이후 frontend UI polish batch를 이어서 반영했다.
+- 구현 범위:
+  - `frontend/src/pages/OverviewPage.tsx`
+    - `월간 현금흐름` y축 제거
+    - tooltip을 공통 컴포넌트로 교체
+  - `frontend/src/components/charts/ChartTooltipContent.tsx`
+    - compact `text-xs` 기준 tooltip typography 통일
+    - 공통 color line indicator 추가
+    - chart 종류별 tooltip DOM 파편화를 제거
+  - `frontend/src/components/charts/CategoryTimelineAreaChart.tsx`
+    - `월별 카테고리 추이`를 다시 linear stacked area chart로 복귀
+    - y축 제거 유지
+  - `frontend/src/components/charts/HorizontalBarChart.tsx`
+  - `frontend/src/components/charts/BreakdownPieChart.tsx`
+  - `frontend/src/components/charts/CategoryDonutChart.tsx`
+  - `frontend/src/components/charts/LineTrendChart.tsx`
+  - `frontend/src/components/charts/MerchantTreemapChart.tsx`
+    - tooltip 공통화
+    - treemap wrapper를 더 크게 잡고 square ratio로 고정
+  - `frontend/src/components/common/CardPeriodBadgeGroup.tsx`
+  - `frontend/src/components/ui/badge.tsx`
+    - 범위형 badge 2개가 줄바꿈되지 않도록 nowrap 처리
+  - `frontend/src/pages/SpendingPage.tsx`
+    - `일별 지출액` 카드에서 기준 기간 badge 제거
+  - `frontend/src/components/ui/popover.tsx`
+    - 내부 padding을 기존 대비 절반 수준으로 축소
+  - `frontend/src/components/common/cardGroupSurface.ts`
+  - `frontend/src/components/common/StatusCard.tsx`
+  - `frontend/src/index.css`
+    - KPI card group border를 same-family darker soft variant로 보강
+- 테스트/회귀 방지:
+  - 추가:
+    - `frontend/src/components/charts/ChartTooltipContent.test.tsx`
+    - `frontend/src/components/charts/MerchantTreemapChart.test.tsx`
+    - `frontend/src/components/common/CardPeriodBadgeGroup.test.tsx`
+    - `frontend/src/components/ui/popover.test.tsx`
+  - 수정:
+    - `frontend/src/components/charts/CategoryTimelineAreaChart.test.tsx`
+    - `frontend/src/components/common/StatusCard.test.tsx`
+    - `frontend/src/pages/__tests__/OverviewPage.test.tsx`
+    - `frontend/src/pages/__tests__/SpendingPage.test.tsx`
+- 검증:
+  - targeted:
+    - `cd frontend && npm test -- --runInBand src/components/ui/popover.test.tsx src/components/charts/MerchantTreemapChart.test.tsx src/pages/__tests__/SpendingPage.test.tsx`
+  - final:
+    - `cd frontend && npm test -- --runInBand`
+    - `cd frontend && npm run lint`
+    - `cd frontend && npm run typecheck`
+- 결과:
+  - frontend test: `37 files, 89 tests passed`
+  - lint/typecheck: 통과
+  - Recharts `ResponsiveContainer` zero-size warning은 jsdom 한계로 stderr에 계속 남았지만 실패는 없었다.
+
 ## Chart And Control Density Refresh
 - 사용자 요청으로 지출 `월별 카테고리 추이` 를 stacked area 에서 stacked bar 로 바꾸고 y축을 제거했다.
 - tooltip / popover depth와 공통 control / table primitive도 함께 정리했다.

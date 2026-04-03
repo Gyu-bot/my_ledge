@@ -181,8 +181,9 @@ describe('SpendingPage', () => {
     expect(screen.getByRole('group', { name: '거래처별 Tree Map 적용 기간' })).toHaveTextContent(
       '2026-03',
     );
+    expect(screen.getByLabelText('거래처별 지출 트리맵')).toHaveClass('aspect-square');
     expect(screen.getByRole('heading', { level: 3, name: '일별 지출액' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '일별 지출액 적용 기간' })).toHaveTextContent('2026-01');
+    expect(screen.queryByRole('group', { name: '일별 지출액 적용 기간' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '기간 적용' })).toBeInTheDocument();
     expect(screen.queryByText('카테고리', { selector: 'span' })).not.toBeInTheDocument();
     expect(screen.queryByText('결제수단', { selector: 'span' })).not.toBeInTheDocument();
@@ -295,5 +296,6 @@ describe('SpendingPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '초기화' }));
     expect(screen.getByText('2026-03 기준')).toBeInTheDocument();
     expect(screen.queryByText('2026-01 기준')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '일별 지출액 적용 기간' })).not.toBeInTheDocument();
   });
 });

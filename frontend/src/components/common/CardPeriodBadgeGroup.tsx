@@ -16,14 +16,14 @@ export function CardPeriodBadgeGroup({
   return (
     <div
       aria-label={ariaLabel}
-      className="flex flex-wrap items-center gap-2"
+      className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap"
       role="group"
     >
-      <Badge variant="reference">{start}</Badge>
+      <Badge className="shrink-0 whitespace-nowrap" variant="reference">{start}</Badge>
       {hasRange ? (
         <>
-          <span className="text-sm text-[color:var(--color-text-muted)]">~</span>
-          <Badge variant="reference">{end}</Badge>
+          <span className="shrink-0 text-sm text-[color:var(--color-text-muted)]">~</span>
+          <Badge className="shrink-0 whitespace-nowrap" variant="reference">{end}</Badge>
         </>
       ) : null}
     </div>

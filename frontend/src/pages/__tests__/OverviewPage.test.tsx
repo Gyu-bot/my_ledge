@@ -172,12 +172,14 @@ describe('OverviewPage', () => {
     expect(screen.getByTestId('bar-series-income')).toBeInTheDocument();
     expect(screen.getByTestId('bar-series-expense')).toBeInTheDocument();
     expect(screen.getByTestId('line-series-net_cashflow')).toBeInTheDocument();
+    expect(screen.queryByTestId('y-axis')).not.toBeInTheDocument();
     expect(screen.getByTestId('bar-series-income')).toHaveAttribute('data-radius', '2,2,0,0');
     expect(screen.getByTestId('bar-series-expense')).toHaveAttribute('data-radius', '2,2,0,0');
     expect(screen.queryByTestId('bar-series-transfer')).not.toBeInTheDocument();
     expect(screen.queryByTestId('line-series-transfer')).not.toBeInTheDocument();
     expect(screen.queryByTestId('line-series-income')).not.toBeInTheDocument();
     expect(screen.queryByTestId('line-series-expense')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('y-axis')).not.toBeInTheDocument();
   });
 
   it('gives recent transactions more width than category top 5 on desktop', () => {

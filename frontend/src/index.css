@@ -22,12 +22,15 @@
   --color-primary: #223a5e;
   --color-primary-strong: #172a45;
   --color-primary-soft: #e7edf5;
+  --color-primary-soft-strong: #cfd8e6;
   --color-secondary: #c96a1b;
   --color-secondary-strong: #9f5415;
   --color-secondary-soft: #f7eee5;
+  --color-secondary-soft-strong: #ebd9c5;
   --color-accent: #b6413b;
   --color-accent-strong: #8f302c;
   --color-accent-soft: #f6e8e7;
+  --color-accent-soft-strong: #e4c6c3;
   --color-text: #0f172a;
   --color-text-muted: #475569;
   --color-text-subtle: #64748b;

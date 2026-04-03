@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CategoryTimelineAreaChart } from './CategoryTimelineAreaChart';
 
@@ -7,8 +7,8 @@ vi.mock('recharts', async () => {
 
   return {
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    BarChart: ({ children }: { children: React.ReactNode }) => (
-      <div data-testid="category-timeline-bar-chart">{children}</div>
+    AreaChart: ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="category-timeline-area-chart">{children}</div>
     ),
     CartesianGrid: () => <div data-testid="category-timeline-grid" />,
     XAxis: () => <div data-testid="category-timeline-x-axis" />,
@@ -50,30 +50,33 @@ vi.mock('recharts', async () => {
 
       return <div data-testid="category-timeline-tooltip" />;
     },
-    Bar: ({
+    Area: ({
       dataKey,
-      stackId,
       fill,
-      radius,
+      stackId,
+      stroke,
+      type,
     }: {
       dataKey: string;
-      stackId?: string;
       fill: string;
-      radius?: number[];
+      stackId?: string;
+      stroke?: string;
+      type?: string;
     }) => (
       <div
         data-fill={fill}
         data-key={dataKey}
-        data-radius={radius?.join(',')}
         data-stack={stackId}
-        data-testid={`category-bar-${dataKey}`}
+        data-stroke={stroke}
+        data-type={type}
+        data-testid={`category-area-${dataKey}`}
       />
     ),
   };
 });
 
 describe('CategoryTimelineAreaChart', () => {
-  it('renders a stacked bar chart without a y-axis and shows tooltip line indicators', () => {
+  it('renders a linear stacked area chart without a y-axis and shows tooltip line indicators', () => {
     render(
       <CategoryTimelineAreaChart
         categories={['식비', '교통']}
@@ -84,15 +87,17 @@ describe('CategoryTimelineAreaChart', () => {
       />,
     );
 
-    expect(screen.getByTestId('category-timeline-bar-chart')).toBeInTheDocument();
+    expect(screen.getByTestId('category-timeline-area-chart')).toBeInTheDocument();
     expect(screen.queryByTestId('category-timeline-y-axis')).not.toBeInTheDocument();
-    expect(screen.getByTestId('category-bar-식비')).toHaveAttribute('data-stack', 'category-spend');
-    expect(screen.getByTestId('category-bar-교통')).toHaveAttribute('data-stack', 'category-spend');
+    expect(screen.getByTestId('category-area-식비')).toHaveAttribute('data-stack', 'category-spend');
+    expect(screen.getByTestId('category-area-교통')).toHaveAttribute('data-stack', 'category-spend');
+    expect(screen.getByTestId('category-area-식비')).toHaveAttribute('data-type', 'linear');
+    expect(screen.getByTestId('category-area-교통')).toHaveAttribute('data-type', 'linear');
     expect(screen.getByText('2026-01')).toBeInTheDocument();
-    expect(screen.getByTestId('category-bar-식비')).toBeInTheDocument();
-    expect(screen.getByTestId('category-bar-교통')).toBeInTheDocument();
+    expect(screen.getByTestId('category-area-식비')).toBeInTheDocument();
+    expect(screen.getByTestId('category-area-교통')).toBeInTheDocument();
 
     const tooltip = screen.getByTestId('category-timeline-tooltip');
-    expect(tooltip.querySelectorAll('.h-px.w-3\\.5')).toHaveLength(2);
+    expect(within(tooltip).getAllByTestId('chart-tooltip-indicator')).toHaveLength(2);
   });
 });

@@ -11,8 +11,8 @@ import {
   CHART_ACCENT,
   CHART_ACCENT_SOFT,
   CHART_BAR_RADIUS_HORIZONTAL,
-  CHART_TOOLTIP_SHADOW,
 } from './chartTheme';
+import { ChartTooltipContent } from './ChartTooltipContent';
 
 export interface HorizontalBarDatum {
   label: string;
@@ -51,13 +51,16 @@ function TooltipContent({
   const item = payload[0].payload;
 
   return (
-    <div
-      className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2"
-      style={{ boxShadow: CHART_TOOLTIP_SHADOW }}
-    >
-      <p className="text-sm font-medium text-[color:var(--color-text)]">{item.label}</p>
-      <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{formatCurrency(item.amount)}</p>
-    </div>
+    <ChartTooltipContent
+      title={item.label}
+      items={[
+        {
+          color: CHART_ACCENT,
+          label: '금액',
+          value: formatCurrency(item.amount),
+        },
+      ]}
+    />
   );
 }
 

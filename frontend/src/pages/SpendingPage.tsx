@@ -376,15 +376,11 @@ const BreakdownSection = memo(function BreakdownSection({
 
 const DailySpendSection = memo(function DailySpendSection({
   displayMode,
-  endMonth,
   selectedMonth,
-  startMonth,
   setDisplayMode,
   setSelectedMonth,
 }: {
   displayMode: 'expense' | 'net';
-  startMonth: string;
-  endMonth: string;
   selectedMonth: string;
   setDisplayMode: (next: 'expense' | 'net') => void;
   setSelectedMonth: SpendingPageState['updateDailyCalendarMonth'];
@@ -432,11 +428,6 @@ const DailySpendSection = memo(function DailySpendSection({
           title={includeIncome ? '일별 수입/지출액' : '일별 지출액'}
         />
         <div className="flex flex-wrap items-center gap-3">
-          <CardPeriodBadgeGroup
-            ariaLabel={`${includeIncome ? '일별 수입/지출액' : '일별 지출액'} 적용 기간`}
-            end={endMonth || startMonth || '기간 데이터 없음'}
-            start={startMonth || endMonth || '기간 데이터 없음'}
-          />
           <label className="block min-w-[10rem]">
             <span className="sr-only">일별 카드 표시 기준</span>
             <Select
@@ -795,8 +786,6 @@ export function SpendingPage() {
 
       <DailySpendSection
         displayMode={dailyCardDisplayMode}
-        startMonth={detailFilters.start_month}
-        endMonth={detailFilters.end_month}
         selectedMonth={dailyCalendarMonth}
         setDisplayMode={setDailyCardDisplayMode}
         setSelectedMonth={setDailyCalendarMonth}

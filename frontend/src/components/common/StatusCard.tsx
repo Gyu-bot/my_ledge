@@ -13,6 +13,9 @@ export function StatusCard({ label, value, detail, tone = 'primary' }: StatusCar
       className={cn(
         'p-0',
         getCardGroupSurfaceClass(tone),
+        tone === 'accent'
+          ? 'border-[color:var(--color-accent)]'
+          : 'border-[color:var(--color-primary)]',
       )}
     >
       <CardContent className="p-4">

@@ -1,7 +1,8 @@
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 import type { MerchantTreemapDatum } from '../../hooks/useSpending';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
-import { CHART_NEUTRALS, CHART_TOOLTIP_SHADOW, chartTooltipStyle } from './chartTheme';
+import { ChartTooltipContent } from './ChartTooltipContent';
+import { CHART_NEUTRALS, chartTooltipStyle } from './chartTheme';
 
 interface MerchantTreemapChartProps {
   ariaLabel: string;
@@ -26,22 +27,25 @@ function TooltipContent({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: MerchantTreemapDatum }>;
+  payload?: Array<{ color?: string; payload: MerchantTreemapDatum }>;
 }) {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
 
   const item = payload[0].payload;
+  const color = payload[0].color ?? BLOCK_COLORS[0] ?? '#223a5e';
 
   return (
-    <div
-      className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2"
-      style={{ boxShadow: CHART_TOOLTIP_SHADOW }}
-    >
-      <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.name}</p>
-      <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{formatCurrency(item.amount)}</p>
-    </div>
+    <ChartTooltipContent
+      items={[
+        {
+          color,
+          label: item.name,
+          value: formatCurrency(item.amount),
+        },
+      ]}
+    />
   );
 }
 
@@ -111,18 +115,20 @@ export function MerchantTreemapChart({ ariaLabel, data }: MerchantTreemapChartPr
   }
 
   return (
-    <div className="h-80 w-full" aria-label={ariaLabel}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={288}>
-        <Treemap
-          data={data}
-          dataKey="amount"
-          stroke="rgba(255,255,255,0.7)"
-          content={<TreemapNode />}
-          isAnimationActive={false}
-        >
-          <Tooltip content={<TooltipContent />} contentStyle={chartTooltipStyle} />
-        </Treemap>
-      </ResponsiveContainer>
+    <div className="flex min-h-[40rem] w-full items-center justify-center">
+      <div className="mx-auto aspect-square w-full max-w-[40rem]" aria-label={ariaLabel}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={320}>
+          <Treemap
+            data={data}
+            dataKey="amount"
+            stroke="rgba(255,255,255,0.7)"
+            content={<TreemapNode />}
+            isAnimationActive={false}
+          >
+            <Tooltip content={<TooltipContent />} contentStyle={chartTooltipStyle} />
+          </Treemap>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

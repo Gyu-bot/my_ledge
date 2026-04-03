@@ -6,10 +6,10 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis,
 } from 'recharts';
 import { useMemo } from 'react';
 import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
+import { ChartTooltipContent } from '../components/charts/ChartTooltipContent';
 import { EmptyState } from '../components/common/EmptyState';
 import { ErrorState } from '../components/common/ErrorState';
 import { IconTitle } from '../components/common/IconTitle';
@@ -26,9 +26,7 @@ import {
   CHART_BAR_RADIUS_VERTICAL,
   CHART_COMPLEMENTARY,
   CHART_SECONDARY,
-  chartTooltipStyle,
 } from '../components/charts/chartTheme';
-import { formatAxisMoneyInThousands } from '../components/charts/moneyFormat';
 import { cn } from '../lib/utils';
 
 function formatMoney(value: number | string | readonly (number | string)[] | null | undefined) {
@@ -122,14 +120,24 @@ export function OverviewPage() {
                 >
                   <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
                   <XAxis axisLine={false} dataKey="period" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
-                  <YAxis
-                    axisLine={false}
-                    tick={{ fill: '#64748b', fontSize: 12 }}
-                    tickFormatter={formatAxisMoneyInThousands}
-                    tickLine={false}
-                    width={56}
+                  <Tooltip
+                    content={({ active, label, payload }) => {
+                      if (!active || !payload || payload.length === 0) {
+                        return null;
+                      }
+
+                      return (
+                        <ChartTooltipContent
+                          title={typeof label === 'string' ? label : undefined}
+                          items={payload.map((entry) => ({
+                            color: entry.color ?? CHART_ACCENT,
+                            label: entry.name !== undefined ? String(entry.name) : '금액',
+                            value: formatMoney(entry.value),
+                          }))}
+                        />
+                      );
+                    }}
                   />
-                  <Tooltip contentStyle={chartTooltipStyle} formatter={(value) => formatMoney(value)} />
                   <Bar
                     dataKey="income"
                     fill={CHART_ACCENT}
@@ -147,6 +155,7 @@ export function OverviewPage() {
                   <Line
                     dataKey="net_cashflow"
                     dot={false}
+                    name="순현금흐름"
                     stroke={CHART_COMPLEMENTARY}
                     strokeWidth={3}
                     type="monotone"

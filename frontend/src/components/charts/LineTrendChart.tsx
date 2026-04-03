@@ -8,7 +8,8 @@ import {
   YAxis,
 } from 'recharts';
 import type { TrendPoint } from '../../types/dashboard';
-import { CHART_ACCENT, CHART_ACCENT_SOFT, chartTooltipStyle } from './chartTheme';
+import { ChartTooltipContent } from './ChartTooltipContent';
+import { CHART_ACCENT, CHART_ACCENT_SOFT } from './chartTheme';
 import { formatAxisMoneyInThousands } from './moneyFormat';
 
 interface LineTrendChartProps {
@@ -73,9 +74,26 @@ export function LineTrendChart({ data }: LineTrendChartProps) {
             width={56}
           />
           <Tooltip
-            contentStyle={chartTooltipStyle}
-            formatter={(value) => formatCurrency(value)}
-            labelStyle={{ color: '#18181b', fontWeight: 600 }}
+            content={({ active, label, payload }) => {
+              if (!active || !payload || payload.length === 0) {
+                return null;
+              }
+
+              const item = payload[0];
+
+              return (
+                <ChartTooltipContent
+                  title={label !== undefined ? String(label) : undefined}
+                  items={[
+                    {
+                      color: CHART_ACCENT,
+                      label: item.name !== undefined ? String(item.name) : '금액',
+                      value: formatCurrency(item.value),
+                    },
+                  ]}
+                />
+              );
+            }}
           />
           <Area
             dataKey="amount"

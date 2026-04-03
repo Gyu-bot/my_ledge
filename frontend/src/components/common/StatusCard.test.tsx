@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { StatusCard } from './StatusCard';
 
 describe('StatusCard', () => {
-  it('uses a subtle gradient surface for highlighted KPI cards', () => {
+  it('uses a subtle gradient surface and stronger same-family border for highlighted KPI cards', () => {
     const { rerender } = render(
       <StatusCard
         detail="2026-03-24 기준"
@@ -15,6 +15,9 @@ describe('StatusCard', () => {
 
     expect(screen.getByText('순자산').closest('.p-0')).toHaveClass(
       'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(231,237,245,0.9))]',
+    );
+    expect(screen.getByText('순자산').closest('.p-0')).toHaveClass(
+      'border-[color:var(--color-primary)]',
     );
 
     rerender(
@@ -28,6 +31,9 @@ describe('StatusCard', () => {
 
     expect(screen.getByText('저축률').closest('.p-0')).toHaveClass(
       'bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,232,231,0.9))]',
+    );
+    expect(screen.getByText('저축률').closest('.p-0')).toHaveClass(
+      'border-[color:var(--color-accent)]',
     );
   });
 });

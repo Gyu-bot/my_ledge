@@ -1,7 +1,8 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { SpendingBreakdownDatum } from '../../hooks/useSpending';
 import { SectionPlaceholder } from '../common/SectionPlaceholder';
-import { CHART_NEUTRALS, CHART_TOOLTIP_SHADOW, chartTooltipStyle } from './chartTheme';
+import { ChartTooltipContent } from './ChartTooltipContent';
+import { CHART_NEUTRALS, chartTooltipStyle } from './chartTheme';
 
 interface BreakdownPieChartProps {
   ariaLabel: string;
@@ -28,25 +29,26 @@ function TooltipContent({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: SpendingBreakdownDatum }>;
+  payload?: Array<{ color?: string; payload: SpendingBreakdownDatum }>;
 }) {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
 
   const item = payload[0].payload;
+  const color = payload[0].color ?? '#223a5e';
 
   return (
-    <div
-      className="rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2"
-      style={{ boxShadow: CHART_TOOLTIP_SHADOW }}
-    >
-      <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.label}</p>
-      <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">{formatCurrency(item.amount)}</p>
-      <p className="mt-1 text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-        비중 {item.share.toFixed(1)}%
-      </p>
-    </div>
+    <ChartTooltipContent
+      footer={`비중 ${item.share.toFixed(1)}%`}
+      items={[
+        {
+          color,
+          label: item.label,
+          value: formatCurrency(item.amount),
+        },
+      ]}
+    />
   );
 }
 
