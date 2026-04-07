@@ -1,9 +1,9 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Phase 4B — P1 rule-based diagnostics 4종 구현 완료, P2 대기 / frontend visual system refresh와 chart tooltip/card-header polish 진행 중
-- **Last Worker:** codex (2026-04-03T16:37+0900, added min-w-0/max-w-full constraints to insights cards and card primitives so recurring-payment mobile cards no longer exceed the page width on iPhone-sized screens)
-- **Branch:** main
+- **Phase:** Frontend v2 설계 완료, 구현 대기 중
+- **Last Worker:** Claude Sonnet 4.6 (2026-04-07T+0900, frontend v2 디자인 스펙 + 12-task TDD 구현 계획서 작성 완료)
+- **Branch:** main (구현은 `feat/frontend-v2` 브랜치에서 시작)
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -92,16 +92,15 @@
 - [x] Frontend read-only table mobile card rollout 완료: `RecurringPaymentsTable`, `SpendingAnomaliesTable`, `CategoryBreakdownTable` 에 `desktop table + mobile cards` 분기를 추가하고, 인사이트 모바일 캡처로 반복결제/이상지출 카드형 표시를 재확인
 - [x] Frontend mobile table-card overflow tightening 완료: `TableMobileCard` 와 읽기용 테이블 wrapper에 `overflow-hidden`, `min-w-0`, grid-based value rows를 적용해 인사이트 `반복 결제` 카드가 iPhone 폭에서 카드 밖으로 밀리지 않도록 보정
 - [x] Frontend insights mobile row/pagination overflow tightening 완료: `InsightsPage` 의 `거래처 소비 Top N`, `카테고리 증감 요약`, card pagination row에 `min-w-0`, `truncate`, `shrink-0`, mobile stack layout을 적용해 인사이트 모바일 카드 전반의 좌우 밀림을 추가 보정
+- [x] Frontend 재구현 handoff 문서화 완료: 기존 CSS/토큰/디자인시스템을 제외하고 현재 shell, 라우트, page wireframe, content block, 상호작용, API 의존성을 정리한 `docs/frontend-reimplementation-wireframe-functional-requirements.md` 작성
 
 ## In Progress
+- [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
+  - 현재 상태: 디자인 스펙(`docs/superpowers/specs/2026-04-07-frontend-v2-design.md`) + 12-task TDD 구현 계획서(`docs/superpowers/plans/2026-04-07-frontend-v2-implementation.md`) 완료
+  - 현재 지점: 계획서 작성 완료, 구현 미시작
+  - 남은 작업: Task 1~12 순서대로 TDD 구현 (Tailwind config → 타입/API → hooks → UI components → shell → charts → 5 pages → validation)
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
-  - 현재 지점: workbench bulk edit v1은 완료됐다. 다음 우선순위는 P2 (`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`) 또는 bulk delete / restore 중 결정 필요
-  - 남은 구현: OpenClaw 실사용으로 P1 응답 품질 확인 → schema enrichment 필요성 판단
-- [ ] Frontend 재설계 구현
-  - 현재 상태: approved wireframe/spec/plan 기준 shell rollout, page-level hero/title migration, browser review, heroicon/density/color polish, KPI gradient emphasis까지 완료
-  - 현재 지점: `AppLayout` 은 `AppSidebar + MobileSidebarDrawer + AppTopbar + ContentFrame` 조합으로 안정화됐고, canonical 5개 페이지는 topbar meta slot, compact mobile chrome, small-sized controls 기준으로 정렬됐다
-  - 남은 작업: legacy `PrimarySectionNav` / `SectionTabNav` / `PageHeader` 정리, 거래처 정규화 정책(`merchant_normalized` 필요 여부) 검토
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
   - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 이번 턴에는 `output/playwright/mobile-review-20260403/` 아래 iPhone Pro 폭 재캡처를 추가 수집했고, spending 가로 overflow 원인인 separator row까지 제거했다. 이어서 insights `반복 결제` 카드에 `min-w-0/w-full/max-w-full` 제약을 추가하고 Chrome CDP로 `clientWidth === scrollWidth === 417px` 를 확인했다. 현재 수동 확인용 dev server는 backend `:8000`, frontend `:4173` 으로 다시 올라와 있다
@@ -238,6 +237,7 @@
 - 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리한다. 초기 구현은 frontend build 주입 방식이었지만, 2026-04-03부터는 container start 시 `runtime-config.js` 생성으로 대체했다.
 - 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
 - 2026-04-03: sidebar/drawer 아이콘은 외부 Heroicons 패키지 없이 저장소 내부 SVG 컴포넌트로 고정한다. 배포 의존성을 늘리지 않고 outline 스타일을 유지하기 위함이다
+- 2026-04-06: frontend 재구현용 handoff는 기존 CSS/디자인 토큰/디자인시스템을 계승 대상으로 보지 않고, 현재 route map, shell, content hierarchy, functional behavior만 기준 문서로 남긴다
 - 2026-04-03: 개요 KPI 카드와 자산 요약 카드처럼 강조가 필요한 summary group은 그림자나 강한 채도 대신 매우 옅은 gradient surface로만 구분한다. 이후 같은 역할의 card group은 페이지를 가리지 않고 같은 규칙을 재사용한다.
 - 2026-04-03: `Button`, `Input`, `Select`, `Checkbox` 의 기본 밀도는 small 기준으로 통일한다. 화면 전반의 정보 밀도를 맞추고 모바일에서 필터 행과 card header가 과도하게 커지는 문제를 줄이는 편이 더 중요하다.
 - 2026-04-03: 지출 `월별 카테고리 추이` 는 stacked area 대신 stacked bar 로 표현하고 y축은 제거한다. 월 단위 비교에서는 누적 막대가 더 직관적이고, mobile width 제약에서 축을 없애는 쪽이 정보 밀도와 가독성 모두 낫다.
