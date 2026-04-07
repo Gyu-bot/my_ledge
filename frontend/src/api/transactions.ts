@@ -9,10 +9,10 @@ import type {
   CategoryBreakdownItem,
 } from '../types/transaction'
 
-function buildQuery(params: Record<string, unknown>): string {
+function buildQuery(params: object): string {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== '') q.set(k, String(v))
+    if (v !== undefined && v !== null && v !== '' && v !== false) q.set(k, String(v))
   }
   const s = q.toString()
   return s ? `?${s}` : ''
@@ -20,7 +20,7 @@ function buildQuery(params: Record<string, unknown>): string {
 
 export const transactionApi = {
   list: (params: TransactionListParams = {}) =>
-    apiFetch<TransactionListResponse>(`/transactions${buildQuery(params as Record<string, unknown>)}`),
+    apiFetch<TransactionListResponse>(`/transactions${buildQuery(params)}`),
 
   filterOptions: () =>
     apiFetch<TransactionFilterOptionsResponse>('/transactions/filter-options'),
@@ -49,8 +49,8 @@ export const transactionApi = {
     apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/category-timeline${buildQuery(params)}`),
 
   categoryBreakdown: (params: { start_month?: string; end_month?: string; include_income?: boolean } = {}) =>
-    apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery(params as Record<string, unknown>)}`),
+    apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery(params)}`),
 
   dailySpend: (params: { month: string; include_income?: boolean }) =>
-    apiFetch<{ items: Array<{ date: string; amount: number }> }>(`/transactions/daily-spend${buildQuery(params as Record<string, unknown>)}`),
+    apiFetch<{ items: Array<{ date: string; amount: number }> }>(`/transactions/daily-spend${buildQuery(params)}`),
 }

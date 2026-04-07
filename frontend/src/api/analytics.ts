@@ -5,10 +5,10 @@ import type {
   SpendingAnomaliesResponse,
 } from '../types/analytics'
 
-function buildQuery(params: Record<string, unknown>): string {
+function buildQuery(params: object): string {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== '') q.set(k, String(v))
+    if (v !== undefined && v !== null && v !== '' && v !== false) q.set(k, String(v))
   }
   const s = q.toString()
   return s ? `?${s}` : ''
