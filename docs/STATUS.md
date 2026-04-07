@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend 폰트 시스템 토큰화 및 차트/버그 수정
-- **Last Worker:** Claude (2026-04-07T16:20+0900, 폰트 토큰 시스템 도입 + 차트 URL 수정 + Treemap + badge 수정)
+- **Phase:** Frontend 계약 정합화 완료, UI/IA 선결정 완료 후 구현 준비 단계
+- **Last Worker:** Codex (2026-04-07T19:41+0900, shared interaction spec까지 사용자 결정 반영 완료)
 - **Branch:** main
 
 ## Completed
@@ -98,6 +98,15 @@
 - [x] Frontend 폰트 시스템 토큰화 완료: `html { font-size: 21px }` (1.5× 스케일) + `tailwind.config.js` 에 `nano/micro/caption/label/body-sm/body-md/body/kpi/display` rem 기반 토큰 9종 추가, 전체 `.tsx` 에서 `text-[Npx]` 하드코딩 → 시멘틱 토큰으로 1-pass 치환
 - [x] Frontend heroicons → lucide-react 교체: `AppSidebar`, `AppTopbar`, `MobileDrawer` 의 `@heroicons/react` import 를 `lucide-react` 동등 아이콘으로 교체 (`@heroicons/react` 미설치 상태)
 - [x] Frontend 차트/버그 수정 완료: `categoryTimeline` URL 오타 수정(`/category-timeline` → `/by-category/timeline`), 거래처별 지출 비중 Recharts `Treemap` 전환, `StatusBadge` `whitespace-nowrap` 추가, `text-[9.5px]` 잔여값 토큰화, Pagination `'...'` key 충돌 수정, `useDailySpend` `retry: false` 설정
+- [x] 로컬 도구 정비: Codex `playwright` skill 을 `~/.codex/skills/playwright` 에 설치해 후속 브라우저 자동화/캡처 작업 준비
+- [x] 로컬 도구 정비: Codex `frontend-skill` 을 `~/.codex/skills/frontend-skill` 에 설치해 frontend 전용 구현 워크플로 사용 준비
+- [x] Frontend source-of-truth 문서 갱신 완료: `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md` 를 현재 구현 기준으로 전면 재작성
+- [x] Frontend historical 문서 archive 완료: 과거 재설계 plan/spec 문서를 `docs/archive/frontend/{plans,specs}/` 로 이동하고 historical 경고 문구를 추가해 현재 문서와 분리
+- [x] Frontend semantic token sweep 완료: `index.css`/`tailwind.config.js` 를 기준으로 surface, border, info, accent, chart 계열 토큰을 재정의하고 차트/페이지/워크벤치의 raw hex 및 palette class를 토큰 기반으로 정리
+- [x] Frontend 검증 기준 복구 완료: `AppSidebar` prop drift 제거, layout chrome context 분리, effect deps 정리, `chartTheme` 테스트 추가 후 `npm test`, `npm run lint`, `npm run typecheck` 재통과
+- [x] Frontend contract alignment 완료: `apiClient.ts` 를 `__MY_LEDGE_RUNTIME_CONFIG__.{apiKey, apiBaseUrl}` 기준으로 정렬하고, month-based UI query를 backend `start_date`/`end_date` 계약으로 어댑트하며, 누락된 `daily-spend` endpoint는 기존 transactions list 기반 client aggregation으로 대체
+- [x] Legacy route fallback 정리 완료: `/income`, `/transfers` 를 overview(`/`) redirect로 명시하고 관련 문서/테스트/AGENTS route 설명을 현재 기준으로 갱신
+- [x] Frontend review 완료: `frontend-developer` 병렬 코드 구조 검토 + 현재 frontend `npm test`/`npm run lint`/`npm run typecheck` 재검증 + 후속 우선순위 재정렬
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
@@ -114,13 +123,37 @@
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
-  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 이번 턴에는 layout icon import가 실제 설치 상태와 어긋나던 문제를 `lucide-react` 로 정리했고, review용 dev server를 backend `:8000`, frontend `:4173` 으로 다시 올렸다. Tailnet IP(`100.69.156.40`) 경로에서는 frontend `/` 와 proxied `/api/v1/health` 가 모두 200이다
-  - 남은 작업: 필요 시 운영 환경 또는 실제 기기 기준 추가 캡처 수집, Vite dev server의 MagicDNS host allowlist 정리
+  - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, lint/typecheck 복구는 완료했다. 현재 남은 프론트 리스크는 MagicDNS host allowlist와 운영 배포본 smoke capture다
+  - 남은 작업: 운영 배포본 기준 smoke capture, 실제 기기 기준 추가 캡처 수집, Vite dev server의 MagicDNS host allowlist 정리
 
 ## Blocked
 - 없음
 
 ## Next Up
+- [ ] Frontend UI/IA 선결정
+  - [x] shell contract 고정: desktop sidebar는 label이 보이는 standard sidebar로 전환하고, topbar는 breadcrumb + title + meta 중심으로 유지
+  - [x] page filter ownership 정의: `SpendingPage` 는 `detail range`, `income toggle` 을 page-global filter로 두고, `calendar month`, `category drill-down` 은 section-local control로 유지
+  - [x] shared interaction spec 방향 고정: card/table/state/mobile/action 규칙은 page별 예외보다 공통 규칙으로 강하게 묶는 방향 채택
+- [ ] Frontend correctness / structure batch
+  - [ ] 지출 분석 `조회 범위` 슬라이더를 controlled state로 재구성하고 시작 구간 drag 동작을 복구
+  - [ ] 지출 분석 `소분류별 지출` 을 실제 minor-category 집계로 교체
+  - [ ] `거래처별 지출 비중` TreeMap 기간을 `월별 상세필터` 와 동기화
+  - [ ] Spending / Insights / Workbench section에 공통 `loading / error / empty / ready` 경계 도입
+- [ ] Frontend shell/source-of-truth 정리
+  - [ ] router / sidebar / mobile drawer / topbar breadcrumb-title metadata를 단일 route manifest로 통합
+  - [ ] topbar meta badge 주입 계약을 구조화하고 route change / unmount 시 stale meta가 남지 않도록 정리
+- [ ] Frontend behavior test 보강
+  - [ ] 지출 분석 range/detail interaction 회귀 테스트 추가
+  - [ ] Workbench read-only gating / bulk toolbar / mutation success-error 흐름 테스트 추가
+  - [ ] topbar meta lifecycle 및 canonical route metadata 테스트 추가
+- [ ] Frontend UI/UX 후속 개선 묶음
+  - [ ] `월별 카테고리 추이` 는 Top 5 카테고리만 개별 series로 표시하고 나머지는 `기타` 로 묶기
+  - [ ] `일별 지출 달력` 에 hover/popover 금액 표시 추가
+  - [ ] 프로젝트 전체 pagination 폰트 크기를 토큰화하고 토큰 값을 한 단계 축소
+  - [ ] 인사이트 `거래처 소비 Top 5` 기간 선택지 추가: 최근 1개월 / 3개월 / 6개월 / 1년
+  - [ ] 인사이트 `카테고리 전월 대비` 기준월 선택 UI 추가
+  - [ ] dark theme 에서 가독성이 낮은 `soft` 계열 font color를 전역적으로 상향 조정
+  - [ ] sidebar/topbar/card/filter hierarchy를 재정렬하는 UI polish batch를 correctness batch 직후에 착수
 - [ ] Vite dev server의 Tailnet hostname(`moltbot.tailbe7385.ts.net`) 접근 시 403이 나오는 host allowlist 경로를 정리해 MagicDNS 기반 review URL도 안정화
 - [ ] Frontend 재설계
   - [x] 상세 wireframe 승인 반영
@@ -292,6 +325,12 @@
 - 2026-04-03: 거래 작업대의 상태 셀은 작업 상태만 보여주고 입력 출처 badge는 숨긴다. 현재 신규 입력 경로가 사실상 업로드 하나라 `업로드` 표시는 구분 가치보다 시각 잡음이 크다.
 - 2026-04-03: 카드 헤더의 기간/기준일 메타데이터는 개별 페이지에서 직접 `Badge`를 흩뿌리지 않고 공통 `CardPeriodBadgeGroup`으로 렌더링한다. 범위형(`start ~ end`)과 단일 기준일형을 같은 reference token과 gap 규칙으로 통일해야 페이지 간 밀도가 안정적이다.
 - 2026-04-03: frontend 현재 구조 문서는 구현 코드와 분리해 `docs/frontend/` 아래에 유지한다. `components-and-design-token-inventory.md`는 현재 UI surface 인벤토리와 토큰 연결표, `page-wireframes.md`는 실제 route 기준 section 구성을 담당한다.
+- 2026-04-07: 프론트엔드 current source-of-truth는 `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md` 네 문서로 제한한다. 과거 redesign plan/spec은 `docs/archive/frontend/` 로 이동해 historical reference로만 남긴다.
+- 2026-04-07: frontend는 month-based UI 입력을 유지하되 backend API 호출 직전 `start_date` / `end_date` 로 변환한다. backend에 없는 `daily-spend` endpoint는 추가하지 않고 기존 `transactions` list 응답을 클라이언트에서 일자별 합산해 대체한다.
+- 2026-04-07: `/income`, `/transfers` 는 live page를 복구하지 않고 compatibility redirect만 유지한다. stale 링크는 overview(`/`)로 흡수하고 current route map은 `docs/frontend/` 와 `AGENTS.md` 에서만 관리한다.
+- 2026-04-07: frontend shell은 desktop 기준 label이 보이는 standard sidebar로 정리하고, topbar는 breadcrumb + page title + meta badge 중심으로 유지한다. page-level filter/action은 기본적으로 본문에 둔다.
+- 2026-04-07: `SpendingPage` filter ownership은 `detail range`, `income toggle` 을 page-global 로 두고, `calendar month`, `category drill-down` 은 section-local control로 유지한다. timeline range는 상단 추이 section 전용 control로 취급한다.
+- 2026-04-07: shared interaction spec은 page별 예외를 늘리기보다 공통 규칙으로 강하게 묶는다. 우선 고정 대상은 card header action, accordion 사용 기준, pagination 위치/크기, empty/loading/error 배치, mobile table-card fallback, destructive action 표현 규칙이다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
 - 2026-04-03: 카드 내부 테이블은 바깥 `Card`가 이미 외곽 경계를 제공하므로 내부 table wrapper에는 별도 border를 두지 않는다. Data Table 전환 검토 시에도 server-driven filter bar와 mobile 카드 레이아웃은 별도 구조로 유지한다.
 - 2026-04-03: 공통 `Table`의 행/헤더 separator는 정보 구분을 위해 유지하고, 제거 대상은 카드 내부의 별도 table wrapper border만 한정한다. `반복결제`처럼 문자열 길이가 긴 열은 `table-fixed` + truncate로 폭 흔들림을 막는다.
