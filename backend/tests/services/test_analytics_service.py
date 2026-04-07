@@ -648,12 +648,14 @@ async def test_get_recurring_payments_detects_monthly(
 
     assert len(response.items) == 1
     item = response.items[0]
-    assert item.description == "넷플릭스"
+    assert item.merchant == "넷플릭스"
     assert item.interval_type == "monthly"
     assert item.occurrences == 3
     assert item.avg_amount == 15000
     assert item.last_date == date(2026, 3, 1)
     assert 0.0 <= item.confidence <= 1.0
+    assert response.page == 1
+    assert response.per_page == 10
 
 
 async def test_get_recurring_payments_filters_by_min_occurrences(
@@ -738,6 +740,8 @@ async def test_get_spending_anomalies_detects_spike(
     assert item.baseline_avg == 100000
     assert item.anomaly_score >= 0.5
     assert "급증" in item.reason
+    assert response.page == 1
+    assert response.per_page == 10
 
 
 async def test_get_spending_anomalies_filters_by_threshold(

@@ -178,7 +178,7 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
     assert first_asset_amount == 123456789
 
 
-async def test_import_transactions_keeps_existing_rows_and_appends_exact_new_rows_from_rolling_window(
+async def test_import_transactions_reconciles_window_and_keeps_history_outside_latest_range(
     db_session: AsyncSession,
     sample_workbook_bytes: bytes,
     rolling_window_workbook_bytes: bytes,
@@ -200,12 +200,50 @@ async def test_import_transactions_keeps_existing_rows_and_appends_exact_new_row
     existing_transactions = list((await db_session.scalars(select(Transaction))).all())
     previous_rows = parse_transactions_from_bytes(sample_workbook_bytes)
     latest_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
+    latest_window_start = min(transaction_datetime(row) for row in latest_rows)
+    latest_window_end = max(transaction_datetime(row) for row in latest_rows)
+    historical_rows_outside_window = [
+        row
+        for row in previous_rows
+        if transaction_datetime(row) < latest_window_start
+        or transaction_datetime(row) > latest_window_end
+    ]
 
     assert result.status == "success"
     assert result.tx_total == len(latest_rows)
     assert result.tx_new == 68
     assert result.tx_skipped == 2158
-    assert len(existing_transactions) == len(previous_rows) + 68
+    assert len(existing_transactions) == len(historical_rows_outside_window) + len(latest_rows)
+
+
+async def test_import_transactions_reconciles_across_real_workbook_chain(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+    rolling_window_workbook_bytes: bytes,
+    rolling_window_workbook_v2_bytes: bytes,
+    latest_workbook_bytes: bytes,
+) -> None:
+    workbooks = [
+        ("finance_sample.xlsx", date(2026, 3, 11), sample_workbook_bytes),
+        ("sample_260324.xlsx", date(2026, 3, 24), rolling_window_workbook_bytes),
+        ("sample_260326.xlsx", date(2026, 3, 26), rolling_window_workbook_v2_bytes),
+        ("sample_260407.xlsx", date(2026, 4, 7), latest_workbook_bytes),
+    ]
+    expected_rows: list[dict[str, object]] = []
+
+    for filename, snapshot_date, workbook_bytes in workbooks:
+        parsed_rows = parse_transactions_from_bytes(workbook_bytes)
+        expected_rows = reconcile_expected_history(expected_rows, parsed_rows)
+        await import_transactions_from_workbook(
+            db_session=db_session,
+            file_bytes=workbook_bytes,
+            filename=filename,
+            snapshot_date=snapshot_date,
+        )
+
+    existing_transactions = list((await db_session.scalars(select(Transaction))).all())
+
+    assert len(existing_transactions) == len(expected_rows)
 
 
 async def test_import_transactions_does_not_append_duplicate_when_later_window_only_changes_time_or_category(
@@ -260,6 +298,24 @@ async def test_import_transactions_does_not_append_duplicate_when_later_window_o
 def parse_transactions_from_bytes(sample_workbook_bytes: bytes) -> list[dict[str, object]]:
     workbook = load_workbook(BytesIO(sample_workbook_bytes), data_only=True)
     return parse_transactions(workbook)
+
+
+def reconcile_expected_history(
+    existing_rows: list[dict[str, object]],
+    latest_rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    if not latest_rows:
+        return existing_rows
+
+    window_start = min(transaction_datetime(row) for row in latest_rows)
+    window_end = max(transaction_datetime(row) for row in latest_rows)
+    preserved_rows = [
+        row
+        for row in existing_rows
+        if transaction_datetime(row) < window_start
+        or transaction_datetime(row) > window_end
+    ]
+    return preserved_rows + latest_rows
 
 
 def transaction_datetime(row: dict[str, object] | Transaction) -> datetime:

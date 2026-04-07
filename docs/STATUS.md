@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend/doc archive 정리까지 포함한 repo snapshot commit 완료, shared interaction 확장 대기
-- **Last Worker:** Codex (2026-04-07T20:52+0900, 신규 기능보다 현행 기능 정합성/안정화 우선으로 재정렬)
+- **Phase:** backend 안정화 배치 진행 중, real workbook rolling-window/import parity 재검증 완료
+- **Last Worker:** Codex (2026-04-07T21:32+0900, 실DB reset + `fs_*.xlsx` 4종 sweep + rolling-window contract/test 보강 + backend 전체 테스트 green)
 - **Branch:** main
 
 ## Completed
@@ -59,6 +59,12 @@
 - [x] 대출상환 analytics 정책 정리: 기본 spending/fixed-cost 분석은 상환액을 포함하고, debt-health/transfer slice에서는 원금·이자 추정치를 별도 파생 지표로 제공
 - [x] 우선순위 조정: 대출상환의 expense-side 원금/이자 파생 해석 구현은 transfer/liquidity/debt 기본 기능 안정화 이후로 미룸
 - [x] 우선순위 재정렬: 신규 기능 구현보다 현재 API/백엔드/프론트엔드 정합성 수정과 안정적 구현을 최우선으로 전환
+- [x] 안정화 1차 배치 완료: analytics service pagination 기본값 복구, `merchant-spend` month-span 계약 추가, `SpendingPage` treemap query 범위 정렬, workbook fixture alias 복구
+- [x] 회귀 검증 완료: `cd backend && uv run pytest -q` → `62 passed`, `cd frontend && npm test -- --runInBand` → `38 passed`, `cd frontend && npm run lint && npm run typecheck` → 통과
+- [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
+- [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
+- [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
+- [x] Backend 전체 회귀 재검증 완료: `cd backend && uv run pytest -q` → `65 passed`
 - [x] 테이블 밀도 개선 완료: `ui/table` 에 `compact` density variant 추가 후 거래 작업대, 최근 거래, 인사이트 테이블에 적용
 - [x] Frontend shell redesign spec 완료: `docs/superpowers/specs/2026-04-03-frontend-sidebar-shell-redesign-design.md` 작성 및 subagent review 승인
 - [x] Frontend shell redesign implementation plan 완료: `docs/superpowers/plans/2026-04-03-frontend-sidebar-shell-redesign-implementation.md` 작성 및 subagent review 승인
@@ -133,8 +139,8 @@
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. 신규 analytics 확장은 안정화 배치 완료 전까지 후순위 보류
 - [ ] Review follow-up triage
-  - 현재 상태: backend 전체 테스트에서 analytics service 4건 실패(`get_recurring_payments`, `get_spending_anomalies` pagination 시그니처 drift), `SpendingPage` 거래처 treemap가 선택한 상세 기간이 아니라 최근 N개월 기준으로 조회되고, reset 이후 `upload_logs`는 유지되어 현재 적재 상태와 업로드 이력이 분리될 수 있음
-  - 현재 지점: 신규 기능은 모두 뒤로 미루고 backend regression fix / frontend date-range contract fix / upload_logs semantics / 문서-라이브 계약 정렬을 먼저 처리
+  - 현재 상태: analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적은 복구 완료. 남은 안정화 범위는 `upload_logs` semantics와 운영 문서/live contract 정렬
+  - 현재 지점: backend 테스트는 `65 passed`, real workbook 4종 import/snapshot/API smoke 확인 완료. 다음은 reset 이후 `upload_logs` retained contract와 문서/운영 copy 정리
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
   - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, lint/typecheck 복구는 완료했다. 현재 남은 프론트 리스크는 MagicDNS host allowlist와 운영 배포본 smoke capture다
@@ -144,17 +150,15 @@
 - 없음
 
 ## Next Up
-- [ ] Backend analytics regression fix
-  - [ ] `get_recurring_payments`, `get_spending_anomalies` service 함수 기본 pagination 계약 또는 테스트 호출부 정렬로 `cd backend && uv run pytest` green 복구
-- [ ] Frontend analytics date-range contract fix
-  - [ ] `SpendingPage` 거래처 treemap가 badge와 동일한 `detailStart~detailEnd` 범위를 실제 query에 사용하도록 hook/API 계약 정렬
 - [ ] Upload log semantics 정리
   - [ ] reset 이후 `upload_logs` retained contract를 운영 문서와 UI copy에 명시할지, 또는 current-state와 history를 분리 표기할지 결정
+- [ ] Source verification scope 정리
+  - [ ] `verify_import_parity` 가 transaction sample presence 검증에 머무르는 현재 범위를 문서화할지, overlap window extra-row 검증까지 확장할지 결정
 - [ ] Backend/API 문서 운영 정리
   - [ ] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
   - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
 - [ ] 현행 기능 system validation
-  - [ ] 수정 후 `input -> process -> storage -> output` 기준으로 upload/read/edit/analytics/reset 전체 플로우 재검증
+  - [ ] 수정 후 `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 운영 플로우 재검증
 - [ ] 신규 기능은 후순위 보류
   - [ ] `merchant normalization`, `transfers/*`, `liquidity-health`, `debt-health`, `snapshot-compare`, 대출상환 원금/이자 파생 해석은 안정화 배치 이후 재개
 - [ ] Snapshot coverage 결정
@@ -354,6 +358,7 @@
 - 2026-04-07: 신규 기능 구현은 모두 후순위로 미루고, 현재 live 기능의 API 계약, backend 테스트, frontend-backend 정합성, 운영 문서와 실제 동작의 일치를 먼저 복구한다.
 - 2026-04-07: backend/API live contract의 문서상 SSOT는 `docs/backend-api-ssot.md` 로 두고, `README.md`/`PRD.md` 는 이 문서를 참조해 동기화한다.
 - 2026-04-07: snapshot import의 live behavior는 `snapshot_date` 단위 UPSERT가 아니라 기존 row delete 후 전체 re-insert 하는 date-scoped replace다.
+- 2026-04-07: 실제 `fs_*.xlsx` 샘플은 전체 누적 export가 아니라 약 1년 rolling window 이다. 따라서 import 계약은 최신 workbook 전체와 DB를 동일하게 맞추는 것이 아니라, overlap window 는 최신 workbook 기준으로 reconcile 하고 window 밖 과거 history 는 유지한다.
 - 2026-04-07: 리뷰 기준 우선순위는 `backend 구현 코드 -> docs/backend-api-ssot.md -> PRD.md` 로 고정한다. PRD의 미구현 항목은 제품 계획으로 유지하되 live contract로 취급하지 않는다.
 - 2026-04-07: shared interaction spec은 page별 예외를 늘리기보다 공통 규칙으로 강하게 묶는다. 우선 고정 대상은 card header action, accordion 사용 기준, pagination 위치/크기, empty/loading/error 배치, mobile table-card fallback, destructive action 표현 규칙이다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
@@ -391,9 +396,9 @@
 - 현재 실데이터 기준 대출원금상환은 raw `type='이체'`가 아니라 `type='지출'`, `category_major='금융'`에 섞여 있다. transfer tracking 구현은 expense-side 재분류를 반드시 포함해야 한다
 - 대출상환은 사용자 의도상 고정비 지출로도 해석될 수 있으므로 MVP에서는 raw `지출`을 `이체`로 바꾸지 않는다. 별도 transfer/debt movement slice는 파생 레이어로만 제공한다
 - 대출상환의 원금/이자 파생 분리 구현은 설계는 정리됐지만 우선순위를 뒤로 미뤘다. 먼저 raw transfer slice, liquidity-health, debt-health, snapshot-compare의 기본 계약과 안정성을 확보한다
-- 현재 실데이터는 `asset_snapshots`/`investments`/`loans` 모두 `snapshot_date` 1개만 적재되어 있어 자산 시계열/성과 추이 화면은 구조는 live지만 실제 인사이트 밀도는 낮다
+- 현재 실DB는 `fs_260311`, `fs_260324`, `fs_260326`, `fs_260407` 기준으로 snapshot date 4개가 적재되어 있다. 실샘플 검증은 이 state를 기준으로 수행한다
 - 현재 지출 실데이터에서 `cost_kind`, `fixed_cost_necessity`가 전혀 채워져 있지 않아 fixed-cost/essential/discretionary 진단은 구현 완료 대비 실사용 효용이 낮다
-- backend 전체 테스트는 현재 `tests/services/test_analytics_service.py` 4건 실패 상태이며, 원인은 `get_recurring_payments` / `get_spending_anomalies`의 required pagination 인자와 기존 테스트 계약 불일치다
+- 2026-04-07 기준 analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적은 복구됐다. 현재 backend 전체 pytest는 real workbook fixture alias(`finance_sample.xlsx -> fs_260311.xlsx`, `sample_260324.xlsx -> fs_260324.xlsx`, `sample_260326.xlsx -> fs_260326.xlsx`, `sample_260407.xlsx -> fs_260407.xlsx`)까지 포함해 green이다
 - frontend 재설계 1차 단계에서는 `SpendingPage`, `AssetsPage` 본문이 기존 구현을 재사용한다. 새 shell/route 아래에서 동작하지만 시각 언어와 정보 밀도 정리는 후속 단계다.
 - Playwright CLI는 현재 환경에서 session 유지와 캐시 경로 이슈가 있어 장시간 일괄 캡처가 불안정하다. 이번 턴에서는 실제 desktop 캡처 4장을 확보한 뒤 서버/브라우저 프로세스를 모두 종료했다.
 - Playwright CLI는 현재 샌드박스에서 cache/namespace 제약으로 browser launch 자체가 실패한다. 이번 턴의 스크린샷 재수집은 Chrome headless `--no-sandbox --disable-dev-shm-usage` fallback으로 수행했다.

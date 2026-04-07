@@ -17,6 +17,10 @@ from app.models.loan import Loan
 from app.models.transaction import Transaction
 from app.parsers.snapshots import parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
+from app.services.upload_service import (
+    _seconds_since_midnight,
+    _transaction_fallback_signature,
+)
 from app.services.upload_service import normalize_snapshots_for_storage
 
 
@@ -105,21 +109,9 @@ async def _verify_transaction_parity(
     missing_sample_indices: list[int] = []
     for index in sampled_indices:
         row = parsed_transactions[index]
-        exists = await db_session.scalar(
-            select(func.count())
-            .select_from(Transaction)
-            .where(Transaction.date == row["date"])
-            .where(Transaction.time == row["time"])
-            .where(Transaction.type == row["type"])
-            .where(Transaction.category_major == row["category_major"])
-            .where(Transaction.category_minor.is_(row["category_minor"]) if row["category_minor"] is None else Transaction.category_minor == row["category_minor"])
-            .where(Transaction.description == row["description"])
-            .where(Transaction.amount == row["amount"])
-            .where(Transaction.currency == row["currency"])
-            .where(Transaction.payment_method.is_(row["payment_method"]) if row["payment_method"] is None else Transaction.payment_method == row["payment_method"])
-            .where(Transaction.memo.is_(row["memo"]) if row["memo"] is None else Transaction.memo == row["memo"])
-        )
-        if not exists:
+        if not await _row_exists_exactly(db_session, row):
+            if await _row_exists_by_import_fallback(db_session, row):
+                continue
             missing_sample_indices.append(index)
 
     return TransactionParityReport(
@@ -130,6 +122,64 @@ async def _verify_transaction_parity(
         sampled_indices=sampled_indices,
         missing_sample_indices=missing_sample_indices,
     )
+
+
+async def _row_exists_exactly(
+    db_session: AsyncSession,
+    row: TransactionRow,
+) -> bool:
+    exists = await db_session.scalar(
+        select(func.count())
+        .select_from(Transaction)
+        .where(Transaction.date == row["date"])
+        .where(Transaction.time == row["time"])
+        .where(Transaction.type == row["type"])
+        .where(Transaction.category_major == row["category_major"])
+        .where(
+            Transaction.category_minor.is_(row["category_minor"])
+            if row["category_minor"] is None
+            else Transaction.category_minor == row["category_minor"]
+        )
+        .where(Transaction.description == row["description"])
+        .where(Transaction.amount == row["amount"])
+        .where(Transaction.currency == row["currency"])
+        .where(
+            Transaction.payment_method.is_(row["payment_method"])
+            if row["payment_method"] is None
+            else Transaction.payment_method == row["payment_method"]
+        )
+        .where(
+            Transaction.memo.is_(row["memo"])
+            if row["memo"] is None
+            else Transaction.memo == row["memo"]
+        )
+    )
+    return bool(exists)
+
+
+async def _row_exists_by_import_fallback(
+    db_session: AsyncSession,
+    row: TransactionRow,
+) -> bool:
+    fallback_signature = _transaction_fallback_signature(row)
+    result = await db_session.execute(
+        select(Transaction)
+        .where(Transaction.date == fallback_signature[0])
+        .where(Transaction.type == fallback_signature[1])
+        .where(Transaction.description == fallback_signature[2])
+        .where(Transaction.amount == fallback_signature[3])
+        .where(Transaction.currency == fallback_signature[4])
+        .where(
+            Transaction.payment_method.is_(fallback_signature[5])
+            if fallback_signature[5] is None
+            else Transaction.payment_method == fallback_signature[5]
+        )
+    )
+    row_seconds = _seconds_since_midnight(row)
+    for candidate in result.scalars().all():
+        if abs(_seconds_since_midnight(candidate) - row_seconds) <= 60:
+            return True
+    return False
 
 
 async def _verify_asset_snapshot_parity(

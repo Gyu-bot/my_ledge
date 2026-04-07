@@ -32,9 +32,17 @@ export const analyticsApi = {
       monthSpanToDateRange(params.start_month, params.end_month),
     )}`),
 
-  merchantSpend: (params: { months?: number; limit?: number } = {}) =>
+  merchantSpend: (
+    params: { start_month?: string; end_month?: string; months?: number; limit?: number } = {},
+  ) =>
     apiFetch<MerchantSpendResponse>(`/analytics/merchant-spend${buildQuery({
-      ...(params.months ? recentMonthsToDateRange(params.months) : {}),
+      ...(
+        params.start_month || params.end_month
+          ? monthSpanToDateRange(params.start_month, params.end_month)
+          : params.months
+            ? recentMonthsToDateRange(params.months)
+            : {}
+      ),
       limit: params.limit,
       type: '지출',
     })}`),

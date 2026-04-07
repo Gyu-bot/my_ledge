@@ -96,8 +96,11 @@ export function SpendingPage() {
       }
     : null)
   const fixedCost = useFixedCostSummary({ start_month: detailStart, end_month: detailEnd })
-  const merchantWindowMonths = Math.max(1, monthRange(detailStart, detailEnd).length)
-  const merchants = useMerchantSpend({ months: merchantWindowMonths, limit: 10 })
+  const merchants = useMerchantSpend({
+    start_month: detailStart,
+    end_month: detailEnd,
+    limit: 10,
+  })
   const dailySpend = useDailySpend({ month: calendarMonth, include_income: includeIncome })
   const transactions = useTransactionList({
     page: txPage, per_page: 20,

@@ -78,3 +78,32 @@ async def test_verify_import_parity_reports_snapshot_mismatch_after_db_tamper(
     assert report.transaction.missing_sample_indices == []
     assert len(report.snapshots.asset_snapshots.missing_rows) == 1
     assert len(report.snapshots.asset_snapshots.extra_rows) == 1
+
+
+async def test_verify_import_parity_accepts_rolling_window_fallback_matches(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+    rolling_window_workbook_bytes: bytes,
+) -> None:
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=sample_workbook_bytes,
+        filename="finance_sample.xlsx",
+        snapshot_date=date(2026, 3, 11),
+    )
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=rolling_window_workbook_bytes,
+        filename="sample_260324.xlsx",
+        snapshot_date=date(2026, 3, 24),
+    )
+
+    report = await verify_import_parity(
+        db_session=db_session,
+        workbook_bytes=rolling_window_workbook_bytes,
+        snapshot_date=date(2026, 3, 24),
+        transaction_sample_size=12,
+        transaction_sample_seed=20260324,
+    )
+
+    assert report.transaction.missing_sample_indices == []

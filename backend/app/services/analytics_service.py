@@ -302,8 +302,8 @@ async def get_recurring_payments(
     start_date: date | None,
     end_date: date | None,
     min_occurrences: int,
-    page: int,
-    per_page: int,
+    page: int = 1,
+    per_page: int = 10,
 ) -> RecurringPaymentsResponse:
     rows = await _load_analytics_transactions(
         db_session,
@@ -375,8 +375,8 @@ async def get_spending_anomalies(
     end_date: date | None,
     baseline_months: int,
     anomaly_threshold: float,
-    page: int,
-    per_page: int,
+    page: int = 1,
+    per_page: int = 10,
 ) -> SpendingAnomaliesResponse:
     ref_date = end_date or date.today()
     target_period = _month_key(ref_date)

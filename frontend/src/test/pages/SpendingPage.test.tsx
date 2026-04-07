@@ -1,11 +1,12 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { SpendingPage } from '../../pages/SpendingPage'
 
 const useCategoryBreakdownMock = vi.fn()
 const useSubcategoryBreakdownMock = vi.fn()
+const useMerchantSpendMock = vi.fn()
 
 vi.mock('../../hooks/useTransactions', () => ({
   useCategoryTimeline: () => ({ data: { items: [] }, isLoading: false, error: null, refetch: vi.fn() }),
@@ -27,7 +28,7 @@ vi.mock('../../hooks/useAnalytics', () => ({
     },
     isLoading: false,
   }),
-  useMerchantSpend: () => ({ data: { items: [] }, isLoading: false }),
+  useMerchantSpend: (params: unknown) => useMerchantSpendMock(params),
 }))
 
 vi.mock('../../components/layout/chromeContext', () => ({
@@ -45,6 +46,9 @@ function wrap(ui: React.ReactNode) {
 
 describe('SpendingPage', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-15T12:00:00Z'))
+    useMerchantSpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useCategoryBreakdownMock.mockImplementation(() => ({
       data: {
         items: [
@@ -57,19 +61,33 @@ describe('SpendingPage', () => {
     useSubcategoryBreakdownMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('requests subcategory data for the selected major category', async () => {
     wrap(<SpendingPage />)
 
-    await waitFor(() => {
-      expect(useSubcategoryBreakdownMock).toHaveBeenCalledWith(
-        expect.objectContaining({ category_major: '식비' }),
-      )
-    })
+    expect(useSubcategoryBreakdownMock).toHaveBeenCalledWith(
+      expect.objectContaining({ category_major: '식비' }),
+    )
   })
 
   it('shows the detail range on the merchant treemap card instead of a hardcoded recent-period badge', () => {
     wrap(<SpendingPage />)
 
     expect(screen.queryByText('최근 3개월')).not.toBeInTheDocument()
+  })
+
+  it('requests merchant spend using the selected detail month span', () => {
+    wrap(<SpendingPage />)
+
+    expect(useMerchantSpendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start_month: '2025-10',
+        end_month: '2026-03',
+        limit: 10,
+      }),
+    )
   })
 })

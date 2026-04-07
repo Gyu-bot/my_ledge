@@ -53,11 +53,17 @@ async def import_transactions_from_workbook(
     try:
         parsed_rows = parse_transactions(workbook)
         tx_total = len(parsed_rows)
-        rows_to_insert, tx_new, tx_skipped = await _reconcile_transaction_rows(
+        rows_to_insert, rows_to_delete, tx_new, tx_skipped = await _reconcile_transaction_rows(
             db_session,
             parsed_rows,
         )
 
+        if rows_to_delete:
+            await db_session.execute(
+                delete(Transaction).where(
+                    Transaction.id.in_([row.id for row in rows_to_delete])
+                )
+            )
         db_session.add_all(Transaction(**row) for row in rows_to_insert)
         await db_session.commit()
 
@@ -110,9 +116,9 @@ async def import_transactions_from_workbook(
 async def _reconcile_transaction_rows(
     db_session: AsyncSession,
     parsed_rows: list[TransactionRow],
-) -> tuple[list[TransactionRow], int, int]:
+) -> tuple[list[TransactionRow], list[Transaction], int, int]:
     if not parsed_rows:
-        return [], 0, 0
+        return [], [], 0, 0
 
     window_start, window_end = _transaction_window_bounds(parsed_rows)
     existing_rows = await _get_imported_transactions_in_window(
@@ -120,10 +126,10 @@ async def _reconcile_transaction_rows(
         window_start,
         window_end,
     )
-    rows_to_insert = _build_rows_to_insert(parsed_rows, existing_rows)
+    rows_to_insert, rows_to_delete = _build_reconciliation_plan(parsed_rows, existing_rows)
     tx_new = len(rows_to_insert)
     tx_skipped = len(parsed_rows) - tx_new
-    return rows_to_insert, tx_new, tx_skipped
+    return rows_to_insert, rows_to_delete, tx_new, tx_skipped
 
 
 async def _get_imported_transactions_in_window(
@@ -180,10 +186,10 @@ def _transaction_comparison_signature(
     )
 
 
-def _build_rows_to_insert(
+def _build_reconciliation_plan(
     parsed_rows: list[TransactionRow],
     existing_rows: list[Transaction],
-) -> list[TransactionRow]:
+) -> tuple[list[TransactionRow], list[Transaction]]:
     existing_counter = Counter(
         _transaction_comparison_signature(row) for row in existing_rows
     )
@@ -212,7 +218,13 @@ def _build_rows_to_insert(
             continue
         rows_to_insert.append(row)
 
-    return rows_to_insert
+    rows_to_delete = [
+        row
+        for rows in fallback_buckets.values()
+        for row in rows
+    ]
+
+    return rows_to_insert, rows_to_delete
 
 
 def _remaining_existing_rows(

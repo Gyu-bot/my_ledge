@@ -812,3 +812,172 @@
 - `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
   - rollout order 최상단에 `Freeze new analytics feature work until current API/backend/frontend contract is green end-to-end` 를 추가
   - 신규 analytics workstream 재개 조건을 `existing surfaces are stable in code, tests, and docs` 로 명시
+
+## Stability Batch 1
+
+- 사용자 요청
+  - 현재까지 내용은 커밋/푸시한 뒤, 신규 기능보다 현행 기능의 정합성과 오류 수정부터 시작
+
+### 배포/정리
+
+- 실행
+  - `git commit -m "[docs] advisor review and stability priority sync (codex)"`
+  - `git push origin main`
+- 결과
+  - `171b4f8 [docs] advisor review and stability priority sync (codex)` 가 `origin/main` 까지 push 완료
+
+### root cause 확인
+
+- backend
+  - `get_recurring_payments`, `get_spending_anomalies` service 함수가 API endpoint와 달리 `page`, `per_page` 기본값이 없어 service test와 계약 drift 발생
+- frontend
+  - `SpendingPage` 의 거래처 treemap는 badge만 상세 범위를 보여주고, 실제 API query는 여전히 `months -> recentMonthsToDateRange()` 로 변환돼 relative 최근 N개월 기준으로 조회
+- backend full regression
+  - analytics 수정 후 전체 `pytest`를 다시 돌리니 추가로 workbook fixture 이름 drift 확인
+  - 테스트는 `finance_sample.xlsx`, `sample_260324.xlsx` 를 찾지만 저장소 `tmp/` 에는 `fs_260311.xlsx`, `fs_260324.xlsx` 만 존재
+  - 확인 결과 `finance_sample.xlsx` 와 `fs_260311.xlsx` 는 파일 크기가 동일했고 workbook 구조도 일치
+
+### 수정
+
+- backend
+  - `backend/app/services/analytics_service.py`
+    - `get_recurring_payments(page=1, per_page=10)`
+    - `get_spending_anomalies(page=1, per_page=10)`
+  - `backend/tests/services/test_analytics_service.py`
+    - recurring test를 `merchant` 필드 기준으로 정렬
+    - default pagination 응답값 검증 추가
+  - `backend/tests/conftest.py`
+    - fixture alias fallback 추가
+    - `finance_sample.xlsx -> fs_260311.xlsx`
+    - `sample_260324.xlsx -> fs_260324.xlsx`
+- frontend
+  - `frontend/src/api/analytics.ts`
+    - `merchantSpend` 가 `start_month` / `end_month` 입력을 우선 사용하도록 수정
+  - `frontend/src/hooks/useAnalytics.ts`
+    - `useMerchantSpend` 파라미터 타입 확장
+  - `frontend/src/pages/SpendingPage.tsx`
+    - treemap query를 `detailStart` / `detailEnd` month span 기준으로 변경
+  - `frontend/src/test/api/contracts.test.ts`
+    - `merchantSpend` month-span contract test 추가
+  - `frontend/src/test/pages/SpendingPage.test.tsx`
+    - 상세 범위 기준 query 인자 검증 추가
+    - system time 고정으로 test nondeterminism 제거
+
+### 검증
+
+- 통과
+  - `cd backend && uv run pytest tests/services/test_analytics_service.py -q` → `12 passed`
+  - `cd frontend && npm test -- --runInBand src/test/api/contracts.test.ts src/test/pages/SpendingPage.test.tsx` → `6 passed`
+  - `cd backend && uv run pytest -q` → `62 passed`
+  - `cd frontend && npm test -- --runInBand` → `38 passed`
+  - `cd frontend && npm run lint && npm run typecheck` → 통과
+
+### 남은 안정화 과제
+
+- `upload_logs` retained contract를 운영 문서와 UI copy에 명시할지 결정
+- upload retention(`/data/uploads/` recent 5) 문서와 live code 일치 여부 정리
+- 수정 후 upload/read/edit/reset 운영 플로우 재검증
+
+## Real Workbook Sweep
+
+- 사용자 요청
+  - 현재 DB를 비우고 `tmp/fs_*.xlsx` 실제 샘플을 파일명 기반 `snapshot_date` 로 적재한 뒤, backend 기능과 rolling window / snapshot 시계열 동작을 실데이터로 점검
+  - 별도 reviewer 에이전트 결과까지 반영
+
+### reviewer 요약
+
+- `Archimedes` 리뷰 결과:
+  - 실제 workbook 체인이 cumulative full export가 아니라 rolling window 라는 점을 다시 확인해야 함
+  - later workbook(`fs_260326`, `fs_260407`) 이 자동 테스트에 포함되지 않음
+  - `verify_import_parity` 는 sampled transaction presence 중심이라 extra stale row 검증은 하지 못함
+  - snapshot API는 single-date fixture 위주라 multi-date ordering/latest default coverage가 부족함
+
+### 실DB 초기화 및 순차 적재
+
+- 실행
+  - local Postgres 테이블 `transactions`, `asset_snapshots`, `investments`, `loans`, `upload_logs` 전체 삭제
+  - `fs_260311.xlsx` → `2026-03-11`
+  - `fs_260324.xlsx` → `2026-03-24`
+  - `fs_260326.xlsx` → `2026-03-26`
+  - `fs_260407.xlsx` → `2026-04-07`
+- 결과
+  - `fs_260311.xlsx`
+    - `tx_total=2219`, `tx_new=2219`, `tx_skipped=0`
+    - snapshots `45 / 11 / 5`
+  - `fs_260324.xlsx`
+    - `tx_total=2226`, `tx_new=68`, `tx_skipped=2158`
+    - DB import total `2286`
+    - snapshots `44 / 11 / 4`
+  - `fs_260326.xlsx`
+    - `tx_total=2227`, `tx_new=4`, `tx_skipped=2223`
+    - DB import total `2290`
+    - snapshots `44 / 11 / 4`
+  - `fs_260407.xlsx`
+    - `tx_total=2249`, `tx_new=136`, `tx_skipped=2113`
+    - DB import total `2359`
+    - snapshots `44 / 11 / 4`
+  - snapshot date는 최종적으로 `2026-03-11`, `2026-03-24`, `2026-03-26`, `2026-04-07` 4점 적재
+
+### root cause 재분석
+
+- 실제 workbook 범위를 재계산한 결과:
+  - `fs_260311.xlsx` 는 `2025-03-12 ~ 2026-03-11`
+  - `fs_260324.xlsx` 는 `2025-03-24 ~ 2026-03-24`
+  - `fs_260326.xlsx` 는 `2025-03-26 ~ 2026-03-25`
+  - `fs_260407.xlsx` 는 `2025-04-07 ~ 2026-04-07`
+- 결론
+  - 이 샘플들은 “전체 누적 export”가 아니라 “약 1년 rolling window export”
+  - 따라서 DB 최종 거래 건수가 최신 workbook row 수(`2249`)와 같지 않은 것은 기본적으로 정상
+  - 올바른 계약은:
+    - overlap window 내부는 최신 workbook 기준으로 reconcile
+    - overlap window 밖 과거 history는 유지
+
+### 수정
+
+- `backend/app/services/upload_service.py`
+  - `_reconcile_transaction_rows()` 가 `rows_to_insert` 뿐 아니라 `rows_to_delete` 도 반환하도록 변경
+  - rolling window 내부에서 최신 workbook과 매칭되지 않은 기존 import row는 stale row로 보고 삭제
+  - manual row는 기존처럼 대상으로 삼지 않음 (`source='import'` window only)
+- `backend/app/services/source_verification.py`
+  - exact signature 실패 시 import fallback signature + 60초 이내 시간 차 허용으로 parity false negative 제거
+- `backend/tests/conftest.py`
+  - fixture alias 확장
+  - `sample_260326.xlsx -> fs_260326.xlsx`
+  - `sample_260407.xlsx -> fs_260407.xlsx`
+  - 추가 fixture `rolling_window_workbook_v2_bytes`, `latest_workbook_bytes`
+- `backend/tests/services/test_upload_service.py`
+  - rolling window contract를 “latest workbook 전체 일치”가 아니라 “window 내부 reconcile + out-of-window history 유지”로 고정
+  - 실제 4개 workbook 체인 기준 cumulative history count 테스트 추가
+- `backend/tests/api/test_assets_api.py`
+  - multi-date snapshot history ordering
+  - latest default summary
+  - requested snapshot date semantics 테스트 추가
+- `backend/tests/services/test_source_verification.py`
+  - rolling window fallback parity 회귀 테스트 추가
+
+### API smoke
+
+- 실DB 기준 ASGI smoke 확인:
+  - `GET /api/v1/assets/snapshots` → 200, snapshot date 4점 반환
+  - `GET /api/v1/assets/net-worth-history` → 200, point 4개
+  - `GET /api/v1/investments/summary` → 200, latest `2026-04-07`, 11 items
+  - `GET /api/v1/loans/summary` → 200, latest `2026-04-07`, 4 items
+  - `GET /api/v1/transactions/summary` → 200
+  - `GET /api/v1/transactions/by-category` → 200
+  - `GET /api/v1/transactions/by-category/timeline` → 200
+  - `GET /api/v1/analytics/monthly-cashflow` → 200
+  - `GET /api/v1/analytics/merchant-spend` → 200
+  - `GET /api/v1/analytics/recurring-payments` → 200
+  - `GET /api/v1/analytics/spending-anomalies` → 200
+  - `GET /api/v1/upload/logs` → 200
+
+### 검증
+
+- 통과
+  - `cd backend && uv run pytest tests/services/test_upload_service.py::test_import_transactions_reconciles_window_and_keeps_history_outside_latest_range tests/services/test_upload_service.py::test_import_transactions_reconciles_across_real_workbook_chain tests/api/test_assets_api.py::test_asset_endpoints_return_multi_snapshot_history_and_latest_defaults tests/services/test_upload_service.py::test_import_transactions_does_not_append_duplicate_when_later_window_only_changes_time_or_category tests/services/test_source_verification.py -q` → `7 passed`
+  - `cd backend && uv run pytest -q` → `65 passed`
+
+### 남은 과제
+
+- `verify_import_parity` 를 sampled row presence checker로만 유지할지, overlap window extra stale row 검증까지 확장할지 결정
+- `upload_logs` retained contract와 reset semantics를 문서/UI copy에 반영

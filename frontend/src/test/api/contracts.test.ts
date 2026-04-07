@@ -16,6 +16,7 @@ describe('frontend query contract adapters', () => {
 
     await analyticsApi.monthlyCashflow({ months: 6 })
     await analyticsApi.fixedCostSummary({ start_month: '2026-01', end_month: '2026-03' })
+    await analyticsApi.merchantSpend({ start_month: '2026-01', end_month: '2026-03', limit: 5 })
     await analyticsApi.merchantSpend({ months: 3, limit: 5 })
 
     expect(fetchMock.mock.calls[0][0]).toContain('/analytics/monthly-cashflow?')
@@ -23,8 +24,12 @@ describe('frontend query contract adapters', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('end_date=')
     expect(fetchMock.mock.calls[1][0]).toContain('start_date=2026-01-01')
     expect(fetchMock.mock.calls[1][0]).toContain('end_date=2026-03-31')
+    expect(fetchMock.mock.calls[2][0]).toContain('start_date=2026-01-01')
+    expect(fetchMock.mock.calls[2][0]).toContain('end_date=2026-03-31')
     expect(fetchMock.mock.calls[2][0]).toContain('limit=5')
     expect(fetchMock.mock.calls[2][0]).not.toContain('months=')
+    expect(fetchMock.mock.calls[3][0]).toContain('limit=5')
+    expect(fetchMock.mock.calls[3][0]).not.toContain('months=')
   })
 
   it('replaces missing daily-spend endpoint with transactions list query', async () => {
