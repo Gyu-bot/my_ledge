@@ -1,1 +1,285 @@
-export function SpendingPage() { return <div>Spending</div> }
+import { useState, useEffect } from 'react'
+import { SectionCard } from '../components/ui/SectionCard'
+import { LoadingState } from '../components/ui/LoadingState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { ErrorState } from '../components/ui/ErrorState'
+import { Pagination } from '../components/ui/Pagination'
+import { SegmentedBar } from '../components/ui/SegmentedBar'
+import { RangeSlider } from '../components/ui/RangeSlider'
+import { DailyCalendar } from '../components/ui/DailyCalendar'
+import { StackedBarChart } from '../components/charts/StackedBarChart'
+import { HorizontalBarList } from '../components/charts/HorizontalBarList'
+import { useCategoryTimeline, useCategoryBreakdown, useTransactionList, useDailySpend } from '../hooks/useTransactions'
+import { useFixedCostSummary, useMerchantSpend } from '../hooks/useAnalytics'
+import { useChromeContext } from '../components/layout/AppLayout'
+import { monthRange, formatKRWCompact } from '../lib/utils'
+
+const TREEMAP_COLORS = ['#1e3a5f', '#1a3b2e', '#2d1f4a', '#3b2020', '#2a2210', '#1f2a1a', '#2a1a2e']
+
+export function SpendingPage() {
+  const now = new Date()
+  const endMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const startOfRange = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const allMonths = monthRange(startOfRange, endMonth)
+
+  const [timelineRange, setTimelineRange] = useState<[string, string]>([
+    allMonths[Math.max(0, allMonths.length - 6)],
+    endMonth,
+  ])
+  const [detailStart, setDetailStart] = useState(timelineRange[0])
+  const [detailEnd, setDetailEnd] = useState(timelineRange[1])
+  const [includeIncome, setIncludeIncome] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState(endMonth)
+  const [txPage, setTxPage] = useState(1)
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [accordionOpen, setAccordionOpen] = useState(true)
+
+  const { setMetaBadge } = useChromeContext()
+  useEffect(() => {
+    setMetaBadge(
+      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+        {detailStart} ~ {detailEnd}
+      </span>
+    )
+    return () => setMetaBadge(null)
+  }, [detailStart, detailEnd])
+
+  const timeline = useCategoryTimeline({ start_month: timelineRange[0], end_month: timelineRange[1] })
+  const breakdown = useCategoryBreakdown({ start_month: detailStart, end_month: detailEnd, include_income: includeIncome })
+  const subBreakdown = useCategoryBreakdown({ start_month: detailStart, end_month: detailEnd })
+  const fixedCost = useFixedCostSummary({ start_month: detailStart, end_month: detailEnd })
+  const merchants = useMerchantSpend({ months: 3, limit: 10 })
+  const dailySpend = useDailySpend({ month: calendarMonth, include_income: includeIncome })
+  const transactions = useTransactionList({
+    page: txPage, per_page: 20,
+    start_month: detailStart, end_month: detailEnd,
+    type: includeIncome ? 'all' : '지출',
+  })
+
+  const categories = [...new Set((breakdown.data?.items ?? []).map((i) => i.category))]
+
+  return (
+    <div className="flex flex-col gap-4">
+
+      {/* 1. 범위 슬라이더 */}
+      <SectionCard title="조회 범위">
+        <RangeSlider months={allMonths} value={timelineRange} onChange={setTimelineRange} />
+      </SectionCard>
+
+      {/* 2. 월별 카테고리 추이 */}
+      <SectionCard title="월별 카테고리 추이" badge="상위 카테고리">
+        {timeline.isLoading ? <LoadingState /> :
+         timeline.error ? <ErrorState onRetry={() => timeline.refetch()} /> :
+         timeline.data && timeline.data.items.length > 0 ? (
+           <StackedBarChart items={timeline.data.items} height={180} />
+         ) : <EmptyState />}
+      </SectionCard>
+
+      {/* 3. 상세 필터 */}
+      <div className="bg-surface-card border border-border rounded-card px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] text-text-faint">상세 필터</span>
+          <div className="w-px h-4 bg-border-strong" />
+          <select
+            value={detailStart}
+            onChange={(e) => { setDetailStart(e.target.value); setTxPage(1) }}
+            className="text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+          >
+            {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <span className="text-[10px] text-text-ghost">~</span>
+          <select
+            value={detailEnd}
+            onChange={(e) => { setDetailEnd(e.target.value); setTxPage(1) }}
+            className="text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+          >
+            {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <div className="w-px h-4 bg-border-strong" />
+          <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-text-faint">
+            <input
+              type="checkbox" checked={includeIncome}
+              onChange={(e) => { setIncludeIncome(e.target.checked); setTxPage(1) }}
+              className="w-3 h-3 accent-accent"
+            />
+            수입 포함
+          </label>
+        </div>
+      </div>
+
+      {/* 4. 카테고리 + 소분류 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="카테고리별 지출" badge={`${detailStart} ~ ${detailEnd}`}>
+          {breakdown.isLoading ? <LoadingState /> :
+           breakdown.data && breakdown.data.items.length > 0 ? (
+             <HorizontalBarList items={breakdown.data.items.map((i) => ({ label: i.category, amount: i.amount }))} />
+           ) : <EmptyState />}
+        </SectionCard>
+        <SectionCard title="소분류별 지출">
+          <div className="mb-3">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="text-[9px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+            >
+              <option value="">대분류 선택</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {selectedCategory && subBreakdown.data ? (
+            <HorizontalBarList
+              items={subBreakdown.data.items
+                .filter((i) => i.category === selectedCategory)
+                .map((i) => ({ label: i.category, amount: i.amount }))}
+            />
+          ) : <EmptyState message="대분류를 선택하세요" />}
+        </SectionCard>
+      </div>
+
+      {/* 5. 고정비/변동비 + 필수/비필수 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="고정비 / 변동비 비율" badge={`${detailStart} ~ ${detailEnd}`}>
+          {fixedCost.isLoading ? <LoadingState /> :
+           fixedCost.data ? (
+             fixedCost.data.unclassified_count > 0 && fixedCost.data.fixed_ratio == null ? (
+               <EmptyState message="cost_kind 미분류 데이터입니다. 작업대에서 분류해주세요." />
+             ) : (
+               <>
+                 <SegmentedBar
+                   segments={[
+                     { label: '고정비', value: (fixedCost.data.fixed_ratio ?? 0) * 100, color: '#1e40af' },
+                     { label: '변동비', value: (1 - (fixedCost.data.fixed_ratio ?? 0)) * 100, color: '#059669' },
+                   ]}
+                 />
+                 <div className="grid grid-cols-2 gap-3 mt-3">
+                   {[
+                     { label: '고정비', amount: fixedCost.data.fixed_total, color: 'text-blue-400' },
+                     { label: '변동비', amount: fixedCost.data.variable_total, color: 'text-accent' },
+                   ].map((s) => (
+                     <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-3">
+                       <div className={`text-[10px] ${s.color} font-semibold mb-1`}>{s.label}</div>
+                       <div className="text-[14px] font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
+                     </div>
+                   ))}
+                 </div>
+               </>
+             )
+           ) : <EmptyState />}
+        </SectionCard>
+
+        <SectionCard title="고정비 — 필수 / 비필수" badge="고정비 기준">
+          {fixedCost.isLoading ? <LoadingState /> :
+           fixedCost.data && fixedCost.data.fixed_total > 0 ? (
+             <>
+               <SegmentedBar
+                 segments={[
+                   { label: '필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.essential_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: '#047857' },
+                   { label: '비필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.discretionary_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: '#92400e' },
+                 ]}
+               />
+               <div className="grid grid-cols-2 gap-3 mt-3">
+                 {[
+                   { label: '필수 고정비', amount: fixedCost.data.essential_fixed_total, color: 'text-accent-bright' },
+                   { label: '비필수 고정비', amount: fixedCost.data.discretionary_fixed_total, color: 'text-warn' },
+                 ].map((s) => (
+                   <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-3">
+                     <div className={`text-[10px] ${s.color} font-semibold mb-1`}>{s.label}</div>
+                     <div className="text-[14px] font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
+                   </div>
+                 ))}
+               </div>
+             </>
+           ) : <EmptyState message="고정비 분류 데이터가 없습니다" />}
+        </SectionCard>
+      </div>
+
+      {/* 6. 거래처 Treemap */}
+      <SectionCard title="거래처별 지출 비중" badge="최근 3개월">
+        {merchants.isLoading ? <LoadingState /> :
+         merchants.data && merchants.data.items.length > 0 ? (
+           <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', height: 110 }}>
+             {merchants.data.items.slice(0, 8).map((m, i) => (
+               <div
+                 key={m.merchant}
+                 className="rounded-md flex flex-col items-center justify-center text-center gap-0.5 p-1"
+                 style={{ background: TREEMAP_COLORS[i % TREEMAP_COLORS.length] }}
+               >
+                 <span className="text-[9px] font-semibold text-white/80 truncate w-full text-center">{m.merchant}</span>
+                 <span className="text-[8px] text-white/50">₩{formatKRWCompact(m.amount)}</span>
+               </div>
+             ))}
+           </div>
+         ) : <EmptyState />}
+      </SectionCard>
+
+      {/* 7. 달력 + 거래내역 */}
+      <div className="grid md:grid-cols-[3fr_2fr] gap-4">
+        <SectionCard title="일별 지출 달력">
+          <div className="flex items-center gap-2 mb-3">
+            <select
+              value={calendarMonth}
+              onChange={(e) => setCalendarMonth(e.target.value)}
+              className="text-[9px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+            >
+              {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          {dailySpend.isLoading ? <LoadingState /> :
+           dailySpend.data ? (
+             <DailyCalendar month={calendarMonth} data={dailySpend.data.items} includeIncome={includeIncome} />
+           ) : <EmptyState />}
+        </SectionCard>
+
+        <div className="flex flex-col">
+          <div
+            className="flex items-center justify-between px-4 py-3 bg-surface-card border border-border rounded-t-card cursor-pointer"
+            onClick={() => setAccordionOpen((o) => !o)}
+          >
+            <div>
+              <div className="text-[11px] font-semibold text-text-secondary">거래 내역</div>
+              <div className="text-[10px] text-text-ghost mt-0.5">
+                {txPage} / {Math.ceil((transactions.data?.total ?? 0) / 20)} 페이지 · 총 {transactions.data?.total ?? 0}건
+              </div>
+            </div>
+            <span className="text-text-ghost text-[12px]">{accordionOpen ? '▲' : '▼'}</span>
+          </div>
+          {accordionOpen && (
+            <div className="bg-surface-card border border-border border-t-0 rounded-b-card">
+              {transactions.isLoading ? <LoadingState /> :
+               transactions.data && transactions.data.items.length > 0 ? (
+                 <>
+                   <table className="w-full border-collapse text-[10px]">
+                     <thead>
+                       <tr>
+                         {['날짜', '거래처', '카테고리', '금액'].map((h) => (
+                           <th key={h} className="text-[9px] text-text-ghost px-3 py-2 text-left border-b border-border-subtle">{h}</th>
+                         ))}
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {transactions.data.items.map((tx) => (
+                         <tr key={tx.id} className="border-b border-[#0d1117] last:border-0">
+                           <td className="px-3 py-2 text-text-ghost">{tx.date.slice(5)}</td>
+                           <td className="px-3 py-2 text-text-secondary truncate max-w-[80px]">{tx.merchant}</td>
+                           <td className="px-3 py-2 text-text-faint">{tx.effective_category_major}</td>
+                           <td className={`px-3 py-2 text-right font-semibold ${tx.amount < 0 ? 'text-danger' : 'text-accent'}`}>
+                             {tx.amount < 0 ? '-' : '+'}₩{Math.abs(tx.amount).toLocaleString()}
+                           </td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                   <Pagination
+                     page={txPage} perPage={20}
+                     total={transactions.data.total}
+                     onPageChange={setTxPage}
+                   />
+                 </>
+               ) : <EmptyState />}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
