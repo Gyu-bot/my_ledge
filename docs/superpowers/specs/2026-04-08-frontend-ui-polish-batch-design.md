@@ -13,10 +13,12 @@ Tailnet review 안정화를 함께 정비한다.
   - `AppTopbar`
   - `SectionCard`
   - `Pagination`
+  - chart tooltip / hover state styling
   - `SpendingPage`
   - `InsightsPage`
   - `WorkbenchPage`
   - `DailyCalendar`
+  - merchant treemap visualization
   - 관련 테스트와 `vite.config.ts`
 - 기존 canonical route와 page IA는 유지한다.
 - 실제 backend/frontend dev server는 그대로 사용하고, 이번 변경에서 Tailnet review 용 mockup/preview 접근성만 안정화한다.
@@ -53,18 +55,35 @@ Tailnet review 안정화를 함께 정비한다.
 - theme tokens
   - dark theme 에서 `text-text-ghost`, `text-text-faint`, 기타 soft 계열이 낮은 대비를 보이는 지점을 상향 조정한다.
   - 조정은 전역 토큰 중심으로 하고, page-level hardcoded color class 는 가능한 한 제거한다.
+- divider and dense border tone
+  - card 내부 table divider, list divider, accordion divider 는 현재보다 한 단계 낮은 대비를 사용한다.
+  - primary card boundary 는 유지하되, card 내부 구조선은 background tone 과 덜 충돌하는 subtler border 로 통일한다.
+- chart hover and tooltip contract
+  - chart hover 시 highlight background 는 현재 surface / accent palette 와 어울리는 tone 으로 맞춘다.
+  - chart tooltip 의 text color 는 기존 semantic token 을 우선 사용하고, chart tooltip 전용 semantic token 이 부족하면 토큰을 추가해 재사용 가능하게 만든다.
+  - hover active state 에서만 임시 hardcoded color 를 넣지 않고, line/area/bar/treemap 공통 hover contract 를 만든다.
 
 ### Spending page
 
 - `월별 카테고리 추이`
+  - stacked bar 를 stacked area 차트로 변경한다.
   - series 는 Top 5 카테고리만 개별 표시하고, 나머지는 `기타` 로 묶는다.
   - chart legend 와 section meta 는 이 집계 규칙을 드러내야 한다.
+  - 기존 range slider 는 제거하고, detail filter 와 같은 month picker 방식으로 기간을 선택하게 바꾼다.
+  - section badge 문구는 `조회 기간` 으로 통일하고 선택 기간을 직접 보여준다.
 - `일별 지출 달력`
   - hover 또는 focus 시 날짜와 금액을 보여주는 lightweight popover 를 추가한다.
   - mobile 에서는 tap 또는 pressed state 로 동일 정보를 읽을 수 있어야 한다.
+- `소분류별 지출`
+  - `카테고리별 지출` 과 같은 기준 기간 badge 를 추가한다.
+  - badge 는 공통 section meta token 을 사용해 동일한 시각 규칙을 따른다.
+- `거래처별 지출 비중`
+  - 단일 merchant treemap 대신 nested treemap 으로 바꿔 상위 depth 는 카테고리, 하위 depth 는 거래처가 되도록 한다.
+  - 사용자는 카테고리별 면적 비중과 각 카테고리 내부 merchant 비중을 한 번에 읽을 수 있어야 한다.
+  - nested hover/tooltip 도 공통 chart hover contract 를 따른다.
 - 상세 필터/section header
   - 현재 카드 밖에 흩어진 filter row 와 section header 표현을 공통 contract 에 맞게 정리한다.
-  - `조회 범위`, `상세 필터`, `거래 내역` 사이의 hierarchy 를 더 명확히 해서 시선 흐름이 slider → breakdown → calendar/table 로 자연스럽게 이어지게 한다.
+  - `조회 기간`, `상세 필터`, `거래 내역` 사이의 hierarchy 를 더 명확히 해서 시선 흐름이 period selection → breakdown → calendar/table 로 자연스럽게 이어지게 한다.
 
 ### Insights page
 
@@ -104,7 +123,10 @@ Tailnet review 안정화를 함께 정비한다.
 - component / page test 보강:
   - `SectionCard` 확장 contract
   - `Pagination` dense token contract
-  - Spending Top 5 + 기타 집계와 calendar hover interaction
+  - chart hover/tooltip semantic styling contract
+  - Spending stacked area Top 5 + 기타 집계와 calendar hover interaction
+  - Spending period picker contract 과 subcategory badge
+  - Spending nested treemap shape/tooltip data contract
   - Insights 기간 선택과 기준월 선택
   - Workbench read-only gating, bulk toolbar, mutation success/error state
   - topbar meta lifecycle 과 canonical route metadata
@@ -118,6 +140,7 @@ Tailnet review 안정화를 함께 정비한다.
 ## Risks
 
 - 전역 token 대비 조정이 기존 chart/table tone 에도 영향을 줄 수 있으므로, hardcoded text color 제거와 함께 확인해야 한다.
+- stacked area 와 nested treemap 으로 차트 타입이 바뀌면 기존 데이터 shape 또는 tooltip payload 가 달라질 수 있으므로 chart adapter 레이어를 정리하는 편이 안전하다.
 - `SectionCard` contract 확장은 여러 page 에 영향을 주므로, page-level ad hoc header markup 를 한 번에 정리하지 않으면 중간 상태가 더 복잡해질 수 있다.
 - calendar hover interaction 은 desktop pointer 기준으로만 만들면 mobile parity 가 깨질 수 있으므로 focus/tap fallback 을 같이 고려해야 한다.
 - Tailnet host allowlist 수정은 dev server 전용 범위로 제한해야 하며 production nginx 동작과 섞지 않는 편이 안전하다.
