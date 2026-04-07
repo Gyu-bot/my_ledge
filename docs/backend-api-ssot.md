@@ -78,6 +78,7 @@
 |---|---|---|---|
 | `GET` | `/api/v1/assets/snapshots` | live | query param 없음, snapshot totals list |
 | `GET` | `/api/v1/assets/net-worth-history` | live | query param 없음 |
+| `GET` | `/api/v1/assets/snapshot-compare` | live | `comparison_mode` optional, default `latest_available_vs_previous_available` |
 | `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest |
 | `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest |
 
@@ -135,13 +136,47 @@
 
 - `GET /api/v1/assets/snapshots`
 - `GET /api/v1/assets/net-worth-history`
+- `GET /api/v1/assets/snapshot-compare`
 
-위 두 endpoint는 현재 `start_date` / `end_date` filter를 받지 않는다.
+위 세 endpoint는 현재 `start_date` / `end_date` filter를 받지 않는다.
+
+### Snapshot Compare Contract
+
+- live 비교 endpoint는 현재 `GET /api/v1/assets/snapshot-compare` 다.
+- 과거 planning 문서에 있던 `GET /api/v1/analytics/snapshot-compare` 는 **현재 구현과 다르다**. live contract는 assets namespace를 기준으로 본다.
+- 지원 mode:
+  - `latest_available_vs_previous_available` (default)
+  - `last_closed_month_vs_previous_closed_month`
+  - `selected_snapshot_vs_baseline_snapshot`
+- `selected_snapshot_vs_baseline_snapshot` 모드에서는 `snapshot_date`, `baseline_snapshot_date` 둘 다 필요하다. 하나라도 없으면 `422` 를 반환한다.
+- 응답 메타데이터:
+  - `comparison_mode`
+  - `current`
+  - `baseline`
+  - `delta`
+  - `comparison_days`
+  - `is_partial`
+  - `is_stale`
+  - `can_compare`
+  - `comparison_label`
+- fallback 규칙:
+  - snapshot이 1개뿐이면 `can_compare=false`, `baseline=null`, `delta=null`, `comparison_label="비교 기준 부족"`
+  - default mode는 최신 snapshot과 직전 available snapshot을 비교한다
+  - closed-month mode는 실제 month-end snapshot pair만 비교한다
+  - latest comparison의 current snapshot이 month-end가 아니면 `is_partial=true`, `comparison_label="부분 기간"`
+  - stale 판정은 현재 snapshot이 오늘 기준 35일보다 오래됐을 때다
 
 ### Upload Retention
 
 - PRD/운영 문서에는 원본 업로드 파일을 `/data/uploads/` 에 최근 5개만 보관한다고 적혀 있었지만, **현재 backend 구현에서는 해당 보관 로직을 확인하지 못했다.**
 - 이 항목은 live contract가 아니라 운영 목표 또는 미구현 문서 항목으로 취급한다.
+
+### Reset / Upload Logs Semantics
+
+- `POST /api/v1/data/reset` 는 transaction/snapshot current state만 삭제한다.
+- `upload_logs` 는 reset 대상이 아니다.
+- reset response의 `upload_logs_retained` 는 현재 항상 `true` 다.
+- 따라서 작업대의 최근 업로드 이력은 “현재 남아 있는 데이터”가 아니라 “최근 import 실행 history” 로 읽어야 한다.
 
 ## Document Status
 

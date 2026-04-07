@@ -4,6 +4,7 @@ import { assetApi } from '../api/assets'
 export const assetKeys = {
   snapshots: () => ['assets', 'snapshots'] as const,
   netWorthHistory: () => ['assets', 'netWorthHistory'] as const,
+  snapshotCompare: () => ['assets', 'snapshotCompare'] as const,
   investments: () => ['assets', 'investments'] as const,
   loans: () => ['assets', 'loans'] as const,
 }
@@ -14,6 +15,10 @@ export function useAssetSnapshots() {
 
 export function useNetWorthHistory() {
   return useQuery({ queryKey: assetKeys.netWorthHistory(), queryFn: assetApi.netWorthHistory })
+}
+
+export function useAssetSnapshotCompare() {
+  return useQuery({ queryKey: assetKeys.snapshotCompare(), queryFn: assetApi.snapshotCompare })
 }
 
 export function useInvestmentSummary() {
