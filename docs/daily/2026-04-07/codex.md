@@ -981,3 +981,102 @@
 
 - `verify_import_parity` 를 sampled row presence checker로만 유지할지, overlap window extra stale row 검증까지 확장할지 결정
 - `upload_logs` retained contract와 reset semantics를 문서/UI copy에 반영
+
+## Snapshot Comparison Fallback
+
+- 사용자 질문
+  - 월별 비교 기능에서 현재월 snapshot이 아직 월말이 아니거나, 아직 전월 snapshot만 있는 경우 빈 데이터가 되는 문제를 어떻게 처리하는 게 좋은지 의견 요청
+
+### fintech-engineer 의견
+
+- 현재 구현은 snapshot summary/history 모두 `latest snapshot` 기준으로만 읽고 있고, irregular comparison metadata는 없다
+- 권장 기본 비교 모드:
+  - `latest_available_vs_previous_available`
+  - `last_closed_month_vs_previous_closed_month`
+- 권장 기본 정책:
+  - 기본 화면은 항상 `latest_available_vs_previous_available`
+  - month-end pair가 있을 때만 `last_closed_month_vs_previous_closed_month` 를 추가로 제공
+  - 현재월 snapshot이 아직 월말이 아니면 `부분 기간` / `마감월 아님` 라벨을 붙여 latest comparison만 보여준다
+  - 현재월 snapshot이 아예 없으면 현재월 비교를 억지로 만들지 않고, 마지막 마감월 기준 비교만 보여준다
+- comparison metadata 권장:
+  - `comparison_mode`
+  - `current_snapshot_date`
+  - `baseline_snapshot_date`
+  - `comparison_days`
+  - `is_partial`
+  - `is_stale`
+  - `can_compare`
+  - `comparison_label`
+- irregular snapshot에서도 안전한 지표:
+  - 순자산 증감액
+  - 총자산/총부채 증감액
+  - 투자 평가액 / 대출 잔액 변화
+  - 자산 구성비 변화
+- 주의할 지표:
+  - MoM 퍼센트
+  - 월간 수익률처럼 읽히는 값
+  - 기간이 다른 snapshot pair를 같은 `전월 대비`로 라벨링하는 것
+
+### 이번 턴 결론
+
+- “빈 데이터 방지”를 위해 전월 snapshot을 현재월 데이터처럼 조용히 fallback 하는 방식은 채택하지 않는다
+- 이후 snapshot compare를 구현할 때는:
+  - 기본값 `latest_available_vs_previous_available`
+  - 보조 모드 `last_closed_month_vs_previous_closed_month`
+  - irregular gap에서는 `comparison_days` 와 partial/stale 라벨 필수
+
+### 문서 반영
+
+- `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
+  - `snapshot-compare` 기본 모드를 `latest_vs_previous_available` 중심으로 재정리
+  - closed-month 비교 모드, partial/stale labeling, safe vs risky metrics, `can_compare=false` edge case를 계획에 명시
+  - 구현 직전 체크리스트 추가:
+    - 영향 화면
+    - fallback 규칙
+    - required metadata
+    - backend/frontend test matrix
+    - acceptance criteria
+- `docs/STATUS.md`
+  - snapshot comparison fallback 정책 정리 완료로 상태 반영
+
+### 후속 판단
+
+- 사용자 피드백 기준으로 이 항목은 `신규 기능`보다 `기존 기능 안정화`로 분류
+- 이유:
+  - 이미 존재하는 월별/비교형 자산 surface가 snapshot cadence 차이 때문에 빈 값 또는 오해 소지가 있는 라벨을 만들 수 있음
+  - 따라서 우선순위는 새 analytics endpoint 추가보다, 현재 비교형 화면/응답의 fallback 규칙과 labeling 안정화에 둠
+
+## Irregular Snapshot Comparison Guidance
+
+- 사용자 질문
+  - 스냅샷 업로드 날짜가 월말이 아니거나, 현재월 스냅샷이 비어 있고 전월 스냅샷만 있을 때 월별 비교 기능을 어떻게 처리하는 게 좋은지 검토 요청
+
+### 현재 구현 확인
+
+- backend는 `assets` 계열 응답에서 `snapshot_date` 와 raw totals만 제공하고 비교 메타데이터는 없다
+- frontend `AssetsPage` 는 latest snapshot 기준 카드/차트만 명시적으로 보여주며, irregular snapshot 비교에 대한 별도 fallback contract는 없다
+
+### 설계 방향 메모
+
+- 비교 모드는 하나로 강제하지 않고 분리하는 쪽이 안전:
+  - `latest_available_vs_previous_available`
+  - `last_closed_month_vs_previous_closed_month`
+  - `selected_snapshot_vs_previous_available`
+- partial 상태는 숨기지 말고 표시:
+  - `partial`, `month-to-date`, `stale`, `no-comparable-baseline`
+  - `comparison_days`, `current_snapshot_date`, `baseline_snapshot_date` 를 함께 노출
+- fallback 원칙:
+  - 현재월 월말 snapshot이 없지만 현재월 snapshot이 있으면 `latest available` 로 비교하되 `부분 기간`으로 명시
+  - 현재월 snapshot 자체가 없으면 `전월 말`을 현재월 데이터처럼 가장하지 말고, `마지막 마감월 기준` 또는 `비교 불가`로 명시
+- irregular snapshot에서도 안전한 지표:
+  - 순자산/자산/부채 absolute delta
+  - 포트폴리오 구성비, 대출 잔액 변화
+  - 단순 as-of 상태 비교
+- 추가 메타데이터 없이 위험한 지표:
+  - 진짜 `전월 성과`처럼 읽히는 수익률/월간 변화율
+  - 기간 길이가 다른 두 snapshot을 같은 month-over-month로 표시하는 퍼센트 지표
+
+### 후속
+
+- 이 내용은 아직 구현 결정이 아니라 design guidance 단계
+- 다음 안정화 묶음에서 irregular snapshot comparison contract를 별도 정리 예정

@@ -65,6 +65,8 @@
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
 - [x] Backend 전체 회귀 재검증 완료: `cd backend && uv run pytest -q` → `65 passed`
+- [x] Snapshot comparison fallback 정책 정리 완료: 기본 비교는 `latest_available_vs_previous_available`, closed-month pair가 있을 때만 `last_closed_month_vs_previous_closed_month` 를 보조로 노출하고, irregular gap에는 partial/stale metadata를 필수로 둔다
+- [x] Snapshot comparison stabilization pre-implementation checklist 정리 완료: 영향 화면, fallback 규칙, required metadata, backend/frontend test matrix, acceptance criteria를 계획 문서에 명시
 - [x] 테이블 밀도 개선 완료: `ui/table` 에 `compact` density variant 추가 후 거래 작업대, 최근 거래, 인사이트 테이블에 적용
 - [x] Frontend shell redesign spec 완료: `docs/superpowers/specs/2026-04-03-frontend-sidebar-shell-redesign-design.md` 작성 및 subagent review 승인
 - [x] Frontend shell redesign implementation plan 완료: `docs/superpowers/plans/2026-04-03-frontend-sidebar-shell-redesign-implementation.md` 작성 및 subagent review 승인
@@ -139,8 +141,8 @@
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. 신규 analytics 확장은 안정화 배치 완료 전까지 후순위 보류
 - [ ] Review follow-up triage
-  - 현재 상태: analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적은 복구 완료. 남은 안정화 범위는 `upload_logs` semantics와 운영 문서/live contract 정렬
-  - 현재 지점: backend 테스트는 `65 passed`, real workbook 4종 import/snapshot/API smoke 확인 완료. 다음은 reset 이후 `upload_logs` retained contract와 문서/운영 copy 정리
+  - 현재 상태: analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적은 복구 완료. 남은 안정화 범위는 `upload_logs` semantics, snapshot comparison fallback, 운영 문서/live contract 정렬
+  - 현재 지점: backend 테스트는 `65 passed`, real workbook 4종 import/snapshot/API smoke 확인 완료. 다음은 reset 이후 `upload_logs` retained contract와 월별 비교 fallback 계약을 안정화 관점에서 정리
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
   - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, lint/typecheck 복구는 완료했다. 현재 남은 프론트 리스크는 MagicDNS host allowlist와 운영 배포본 smoke capture다
@@ -150,10 +152,15 @@
 - 없음
 
 ## Next Up
+- [ ] Irregular snapshot comparison contract 정리
+  - [ ] snapshot 비교의 기본 모드를 `latest available`, `last closed month`, `exact snapshot pair` 중 어떤 조합으로 둘지 결정
+  - [ ] partial / incomplete / stale snapshot labeling 규칙과 API 메타데이터(`comparison_mode`, `comparison_days`, `is_partial`) 초안 정리
 - [ ] Upload log semantics 정리
   - [ ] reset 이후 `upload_logs` retained contract를 운영 문서와 UI copy에 명시할지, 또는 current-state와 history를 분리 표기할지 결정
 - [ ] Source verification scope 정리
   - [ ] `verify_import_parity` 가 transaction sample presence 검증에 머무르는 현재 범위를 문서화할지, overlap window extra-row 검증까지 확장할지 결정
+- [ ] Snapshot comparison fallback 정책 정리
+  - 현재 상태: 정책과 pre-implementation checklist는 정리 완료. 후속은 실제 영향 범위별 적용 순서와 API/UI 계약 구체화
 - [ ] Backend/API 문서 운영 정리
   - [ ] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
   - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
@@ -359,6 +366,8 @@
 - 2026-04-07: backend/API live contract의 문서상 SSOT는 `docs/backend-api-ssot.md` 로 두고, `README.md`/`PRD.md` 는 이 문서를 참조해 동기화한다.
 - 2026-04-07: snapshot import의 live behavior는 `snapshot_date` 단위 UPSERT가 아니라 기존 row delete 후 전체 re-insert 하는 date-scoped replace다.
 - 2026-04-07: 실제 `fs_*.xlsx` 샘플은 전체 누적 export가 아니라 약 1년 rolling window 이다. 따라서 import 계약은 최신 workbook 전체와 DB를 동일하게 맞추는 것이 아니라, overlap window 는 최신 workbook 기준으로 reconcile 하고 window 밖 과거 history 는 유지한다.
+- 2026-04-07: snapshot 비교는 `전월 대비`를 기본으로 두지 않는다. 기본값은 `latest_available_vs_previous_available` 이고, 실제 month-end pair가 있을 때만 `last_closed_month_vs_previous_closed_month` 를 보조 비교로 노출한다. irregular gap 비교에는 항상 `comparison_days`, `is_partial`, `comparison_label` 같은 메타데이터를 붙인다.
+- 2026-04-07: 월별 비교 fallback 정책 정리는 신규 기능 기획이 아니라 기존 자산/월별 비교 surface의 안정화 작업으로 취급한다. 빈 데이터나 잘못된 `전월 대비` 라벨을 줄이는 것이 목적이다.
 - 2026-04-07: 리뷰 기준 우선순위는 `backend 구현 코드 -> docs/backend-api-ssot.md -> PRD.md` 로 고정한다. PRD의 미구현 항목은 제품 계획으로 유지하되 live contract로 취급하지 않는다.
 - 2026-04-07: shared interaction spec은 page별 예외를 늘리기보다 공통 규칙으로 강하게 묶는다. 우선 고정 대상은 card header action, accordion 사용 기준, pagination 위치/크기, empty/loading/error 배치, mobile table-card fallback, destructive action 표현 규칙이다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
@@ -397,6 +406,7 @@
 - 대출상환은 사용자 의도상 고정비 지출로도 해석될 수 있으므로 MVP에서는 raw `지출`을 `이체`로 바꾸지 않는다. 별도 transfer/debt movement slice는 파생 레이어로만 제공한다
 - 대출상환의 원금/이자 파생 분리 구현은 설계는 정리됐지만 우선순위를 뒤로 미뤘다. 먼저 raw transfer slice, liquidity-health, debt-health, snapshot-compare의 기본 계약과 안정성을 확보한다
 - 현재 실DB는 `fs_260311`, `fs_260324`, `fs_260326`, `fs_260407` 기준으로 snapshot date 4개가 적재되어 있다. 실샘플 검증은 이 state를 기준으로 수행한다
+- 현재 snapshot read surface는 latest summary/history만 제공하고 irregular comparison metadata는 없다. 월별 비교 UX를 추가할 때는 partial/stale/closed-month fallback 규칙을 먼저 계약으로 고정해야 한다
 - 현재 지출 실데이터에서 `cost_kind`, `fixed_cost_necessity`가 전혀 채워져 있지 않아 fixed-cost/essential/discretionary 진단은 구현 완료 대비 실사용 효용이 낮다
 - 2026-04-07 기준 analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적은 복구됐다. 현재 backend 전체 pytest는 real workbook fixture alias(`finance_sample.xlsx -> fs_260311.xlsx`, `sample_260324.xlsx -> fs_260324.xlsx`, `sample_260326.xlsx -> fs_260326.xlsx`, `sample_260407.xlsx -> fs_260407.xlsx`)까지 포함해 green이다
 - frontend 재설계 1차 단계에서는 `SpendingPage`, `AssetsPage` 본문이 기존 구현을 재사용한다. 새 shell/route 아래에서 동작하지만 시각 언어와 정보 밀도 정리는 후속 단계다.

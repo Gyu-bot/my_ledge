@@ -110,7 +110,9 @@
 - `investment-performance` should expose history over snapshots, not just latest totals.
 - `liquidity-health` should show immediate survival capacity rather than portfolio quality.
 - `debt-health` should show repayment burden and rate risk rather than raw debt size alone.
-- `snapshot-compare` should compare against the previous available snapshot, not assume monthly spacing.
+- `snapshot-compare` should default to previous available snapshot comparison, not assume monthly spacing.
+- `snapshot-compare` should support a separate closed-month comparison mode when actual month-end pairs exist.
+- Do not leave snapshot-comparison cards empty just because the current month is incomplete; use latest-available comparison with explicit partial labeling.
 - If the asset/liability mapping is hard to stabilize, ship `net-worth-breakdown` and `investment-performance` first, then `snapshot-compare`, `liquidity-health`, and `debt-health`.
 
 ### Liquidity Health Logic
@@ -166,20 +168,103 @@
 
 - Supported compare modes:
   - `latest_vs_previous_available`
+  - `last_closed_month_vs_previous_closed_month`
   - `selected_snapshot_vs_previous_available`
   - `selected_snapshot_vs_baseline_snapshot`
 - Required outputs:
+  - `comparison_mode`
+  - `current_snapshot_date`
+  - `baseline_snapshot_date`
   - `comparison_days`
+  - `is_partial`
+  - `is_stale`
+  - `can_compare`
+  - `comparison_label`
   - `absolute_delta`
   - `pct_delta`
   - optional `daily_change_est`
   - optional `monthly_change_est`
   - `confidence`
   - `assumptions`
+- Default UX policy:
+  - use `latest_vs_previous_available` as the primary default comparison
+  - expose `last_closed_month_vs_previous_closed_month` only when real closed-month pairs exist
+  - if the current month has a snapshot but it is not month-end, still show comparison but label it as `partial`
+  - if the current month has no snapshot, do not pretend the previous month is the current month; fall back to the latest closed-month comparison or latest-state-only presentation
+- Labeling rules:
+  - examples: `부분 기간`, `마감월 아님`, `비교 기준 부족`, `stale snapshot`
+  - the UI should always show `current_snapshot_date`, `baseline_snapshot_date`, and `comparison_days` together when a delta is shown
+- Safe metrics for irregular snapshot gaps:
+  - net worth absolute delta
+  - asset total delta
+  - liability total delta
+  - investment market value delta
+  - loan balance delta
+  - allocation mix change
+- Metrics that need stronger guardrails:
+  - plain `MoM` wording on irregular gaps
+  - monthly return style ratios
+  - velocity-style percentages when baseline is zero or very small
 - Guardrails:
   - do not present irregular-gap comparisons as plain `MoM`
   - lower `confidence` as the gap widens
   - present velocity-style metrics only as estimates
+  - if only one snapshot exists, return `can_compare=false` and latest-state-only payload rather than an empty error surface
+  - if the baseline value is zero, suppress or null out percentage deltas instead of forcing infinity-like outputs
+
+### Snapshot Comparison Stabilization Checklist
+
+- Scope this as stabilization of existing comparison-oriented asset surfaces, not as net-new feature work.
+- Audit impacted live surfaces before coding:
+  - `frontend/src/pages/AssetsPage.tsx`
+  - `frontend/src/pages/OverviewPage.tsx`
+  - any existing KPI/meta badge copy that implies plain `전월 대비` or closed-month comparison
+  - any current or planned backend read surface that defaults to `latest snapshot` without comparison metadata
+- Freeze comparison vocabulary before implementation:
+  - `latest_available_vs_previous_available`
+  - `last_closed_month_vs_previous_closed_month`
+  - `selected_snapshot_vs_previous_available`
+  - `selected_snapshot_vs_baseline_snapshot`
+  - never use plain `MoM` unless the comparison is actually closed-month aligned
+- Freeze fallback rules before implementation:
+  - current month snapshot exists but is not month-end => show latest comparison with `is_partial=true`
+  - current month snapshot missing => do not synthesize a fake current-month comparison; show last closed-month comparison or latest-state-only
+  - only one snapshot exists => `can_compare=false`, no delta card, latest-state-only
+  - multiple snapshots in one month => latest comparison uses the latest available row; closed-month comparison uses the last snapshot in that month
+- Freeze required metadata before implementation:
+  - `comparison_mode`
+  - `current_snapshot_date`
+  - `baseline_snapshot_date`
+  - `comparison_days`
+  - `is_partial`
+  - `is_stale`
+  - `can_compare`
+  - `comparison_label`
+  - nullable percentage fields when baseline is zero or missing
+- Freeze safe output set before implementation:
+  - absolute deltas for net worth / total assets / total liabilities
+  - investment market value delta
+  - loan balance delta
+  - allocation mix change
+  - avoid monthly-return-style interpretation unless the period semantics truly support it
+- Decide stale labeling threshold before coding:
+  - define when a latest snapshot is considered stale relative to “today”
+  - keep the threshold explicit in code and docs, not implicit in UI copy
+- Prepare backend test matrix before coding:
+  - one snapshot only
+  - two snapshots, irregular gap
+  - same-month multiple snapshots
+  - current month missing, prior closed month available
+  - current month partial snapshot present
+  - baseline zero for percentage calculation
+- Prepare frontend acceptance criteria before coding:
+  - asset summary cards never show a misleading plain `전월 대비` label for irregular gaps
+  - cards do not render empty solely because the current month is incomplete
+  - every delta display also shows comparison context (`comparison_label` and/or dates)
+  - latest-state-only fallback is visually distinct from a true comparison card
+- Documentation gate before coding:
+  - update `docs/backend-api-ssot.md` only after the response contract is finalized
+  - keep `docs/STATUS.md` and daily log aligned on the fact that this workstream is stabilization-first
 
 **Verification**
 - `cd backend && uv run pytest tests/services/test_analytics_service.py -k "net_worth or investment or debt or emergency"`
