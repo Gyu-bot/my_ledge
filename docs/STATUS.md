@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 배치 유지, shell interaction polish 진행 중
-- **Last Worker:** Codex (2026-04-08T08:31+0900, desktop sidebar icon-only collapse/toggle 구현 및 frontend 검증 완료)
+- **Phase:** 안정화 배치 유지, frontend UI polish batch spec 작성 및 구현 대기
+- **Last Worker:** Codex (2026-04-08T08:38+0900, frontend UI polish batch spec 작성 및 tailscale visual companion 준비)
 - **Branch:** main
 
 ## Completed
@@ -62,6 +62,7 @@
 - [x] 안정화 1차 배치 완료: analytics service pagination 기본값 복구, `merchant-spend` month-span 계약 추가, `SpendingPage` treemap query 범위 정렬, workbook fixture alias 복구
 - [x] 회귀 검증 완료: `cd backend && uv run pytest -q` → `62 passed`, `cd frontend && npm test -- --runInBand` → `38 passed`, `cd frontend && npm run lint && npm run typecheck` → 통과
 - [x] Frontend shell polish: desktop 사이드바를 기본 icon-only 상태로 접고 클릭 토글로 펼치는 interaction 추가 + layout 테스트/린트/typecheck 통과
+- [x] Frontend UI polish batch 설계 문서 작성: shell hierarchy, shared interaction, Spending/Insights/Workbench polish, Tailnet review 안정화 범위를 spec 으로 고정 (`docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md`)
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
@@ -186,6 +187,7 @@
   - [ ] Workbench read-only gating / bulk toolbar / mutation success-error 흐름 테스트 추가
   - [ ] topbar meta lifecycle 및 canonical route metadata 테스트 추가
 - [ ] Frontend UI/UX 후속 개선 묶음
+  - 현재 상태: 전체 묶음을 한 배치로 처리하는 spec 작성 완료. 구현은 spec review 이후 착수
   - [ ] `월별 카테고리 추이` 는 Top 5 카테고리만 개별 series로 표시하고 나머지는 `기타` 로 묶기
   - [ ] `일별 지출 달력` 에 hover/popover 금액 표시 추가
   - [ ] 프로젝트 전체 pagination 폰트 크기를 토큰화하고 토큰 값을 한 단계 축소
