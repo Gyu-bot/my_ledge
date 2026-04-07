@@ -10,10 +10,8 @@ export async function apiFetch<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const apiKey = getApiKey()
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
-  }
-  if (apiKey) headers['X-API-Key'] = apiKey
+  const headers = new Headers(options.headers)
+  if (apiKey) headers.set('X-API-Key', apiKey)
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
   if (!res.ok) {
@@ -25,7 +23,6 @@ export async function apiFetch<T>(
 }
 
 export function hasWriteAccess(): boolean {
-  const key = (window as unknown as { __RUNTIME_CONFIG__?: { API_KEY?: string } })
-    .__RUNTIME_CONFIG__?.API_KEY ?? import.meta.env.VITE_API_KEY
+  const key = getApiKey()
   return !!key && key.length > 0
 }
