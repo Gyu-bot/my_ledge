@@ -5,9 +5,9 @@ import type { TransactionListParams, TransactionUpdateRequest, TransactionBulkUp
 export const txKeys = {
   list: (params: TransactionListParams) => ['transactions', 'list', params] as const,
   filterOptions: () => ['transactions', 'filterOptions'] as const,
-  categoryTimeline: (params: object) => ['transactions', 'categoryTimeline', params] as const,
-  categoryBreakdown: (params: object) => ['transactions', 'categoryBreakdown', params] as const,
-  dailySpend: (params: object) => ['transactions', 'dailySpend', params] as const,
+  categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
+  categoryBreakdown: (params: { start_month?: string; end_month?: string; include_income?: boolean }) => ['transactions', 'categoryBreakdown', params] as const,
+  dailySpend: (params: { month?: string; include_income?: boolean }) => ['transactions', 'dailySpend', params] as const,
 }
 
 export function useTransactionList(params: TransactionListParams = {}) {
