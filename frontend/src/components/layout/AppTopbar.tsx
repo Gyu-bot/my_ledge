@@ -1,58 +1,38 @@
-import type { ReactNode, Ref } from 'react';
-import { Menu } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
-import { getBreadcrumb, getPageTitle } from '../../app/navigation';
-import { Button } from '../ui/button';
-import { PageBreadcrumb } from './PageBreadcrumb';
+import { useLocation } from 'react-router-dom'
+import { Bars3Icon } from '@heroicons/react/24/outline'
+import { cn } from '../../lib/utils'
 
-export function AppTopbar({
-  meta,
-  mobileTriggerRef,
-  onOpenMobileSidebar,
-}: {
-  meta?: ReactNode;
-  mobileTriggerRef?: Ref<HTMLButtonElement>;
-  onOpenMobileSidebar?: () => void;
-}) {
-  const location = useLocation();
-  const breadcrumbItems = getBreadcrumb(location.pathname);
-  const pageTitle = getPageTitle(location.pathname);
+const PAGE_META: Record<string, { breadcrumb: string; title: string }> = {
+  '/': { breadcrumb: 'MyLedge', title: '개요' },
+  '/analysis/spending': { breadcrumb: '분석', title: '지출 분석' },
+  '/analysis/assets': { breadcrumb: '분석', title: '자산 현황' },
+  '/analysis/insights': { breadcrumb: '분석', title: '인사이트' },
+  '/operations/workbench': { breadcrumb: '운영', title: '거래 작업대' },
+}
+
+interface AppTopbarProps {
+  onMobileMenuOpen: () => void
+  metaBadge?: React.ReactNode
+  className?: string
+}
+
+export function AppTopbar({ onMobileMenuOpen, metaBadge, className }: AppTopbarProps) {
+  const { pathname } = useLocation()
+  const meta = PAGE_META[pathname] ?? { breadcrumb: 'MyLedge', title: pathname }
 
   return (
-    <header className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90">
-      <div className="flex min-h-16 items-center gap-3 px-4 py-3 sm:min-h-20 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          {onOpenMobileSidebar ? (
-            <Button
-              aria-label="메뉴 열기"
-              className="shrink-0 lg:hidden"
-              ref={mobileTriggerRef}
-              onClick={onOpenMobileSidebar}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <Menu className="h-5 w-5" aria-hidden="true" />
-            </Button>
-          ) : null}
-
-          <div className="min-w-0">
-            <PageBreadcrumb className="hidden md:block" items={breadcrumbItems} />
-            <h1
-              className="truncate text-2xl font-semibold tracking-tight text-[color:var(--color-text)] md:mt-1"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              {pageTitle}
-            </h1>
-          </div>
-        </div>
-
-        {meta ? (
-          <div className="hidden shrink-0 items-center gap-2 text-sm text-[color:var(--color-text-muted)] sm:flex">
-            {meta}
-          </div>
-        ) : null}
-      </div>
+    <header className={cn('h-12 bg-surface-bar border-b border-border flex items-center px-5 gap-2 sticky top-0 z-30', className)}>
+      <button
+        className="md:hidden text-text-ghost hover:text-text-secondary mr-1"
+        onClick={onMobileMenuOpen}
+        aria-label="메뉴 열기"
+      >
+        <Bars3Icon className="w-5 h-5" />
+      </button>
+      <span className="text-[11px] text-text-ghost hidden md:block">{meta.breadcrumb}</span>
+      <span className="text-[11px] text-text-ghost hidden md:block">›</span>
+      <span className="text-[13px] font-semibold text-text-primary">{meta.title}</span>
+      {metaBadge && <div className="ml-auto">{metaBadge}</div>}
     </header>
-  );
+  )
 }

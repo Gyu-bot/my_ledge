@@ -1,9 +1,9 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend v2 구현 완료, PR 준비 중
-- **Last Worker:** Claude Sonnet 4.6 (2026-04-07T+0900, feat/frontend-v2 Task 1~12 전체 구현 + 최종 검증 완료)
-- **Branch:** `feat/frontend-v2` (main 병합 대기)
+- **Phase:** Frontend v2 구현 중 — Task 3 완료 (React Query 훅 레이어)
+- **Last Worker:** Claude Sonnet 4.6 (2026-04-07 KST, Task 3 React Query 훅 5종 + useWriteAccess 테스트 완료)
+- **Branch:** feat/frontend-v2
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -93,13 +93,18 @@
 - [x] Frontend mobile table-card overflow tightening 완료: `TableMobileCard` 와 읽기용 테이블 wrapper에 `overflow-hidden`, `min-w-0`, grid-based value rows를 적용해 인사이트 `반복 결제` 카드가 iPhone 폭에서 카드 밖으로 밀리지 않도록 보정
 - [x] Frontend insights mobile row/pagination overflow tightening 완료: `InsightsPage` 의 `거래처 소비 Top N`, `카테고리 증감 요약`, card pagination row에 `min-w-0`, `truncate`, `shrink-0`, mobile stack layout을 적용해 인사이트 모바일 카드 전반의 좌우 밀림을 추가 보정
 - [x] Frontend 재구현 handoff 문서화 완료: 기존 CSS/토큰/디자인시스템을 제외하고 현재 shell, 라우트, page wireframe, content block, 상호작용, API 의존성을 정리한 `docs/frontend-reimplementation-wireframe-functional-requirements.md` 작성
-- [x] **Frontend v2 전면 재구현 완료** (`feat/frontend-v2` 브랜치): Task 1~12 완료 — Tailwind 디자인 토큰, TypeScript 타입/API 함수, React Query 훅, 공통 UI 컴포넌트, 앱 셸 (AppLayout/AppSidebar/AppTopbar/MobileDrawer/Router), 차트 컴포넌트, 5개 페이지 (Overview/Spending/Assets/Insights/Workbench), 최종 검증 (테스트 21/21 통과, TypeScript 에러 0, lint 0, 빌드 성공)
 
 ## In Progress
-- [ ] **Frontend v2 PR 병합** (`feat/frontend-v2` → `main`)
-  - 현재 상태: Task 1~12 전체 구현 완료. 테스트 21개 통과, TypeScript 에러 0, lint 경고 0, 빌드 성공
-  - 현재 지점: feat/frontend-v2 브랜치 커밋 완료, PR 생성 대기
-  - 남은 작업: PR 생성 → code review → merge
+- [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
+  - 현재 상태: Task 6 완료
+  - Task 1 완료: Tailwind 토큰, utils.ts, queryClient.ts, apiClient.ts
+  - Task 2 완료: TypeScript 타입 4종 + API 함수 4종 (transactions/assets/analytics/upload)
+  - Task 3 완료: React Query 훅 5종 (useTransactions/useAssets/useAnalytics/useUpload/useWriteAccess) + 테스트 2건 통과
+  - Task 4 완료: 공통 UI 컴포넌트 (Button, Card, Badge, Table, Select, Input, Checkbox, Popover 등)
+  - Task 5 완료: 앱 셸 (AppSidebar, MobileDrawer, AppTopbar, AppLayout, router, App, main) + @heroicons/react + 5개 placeholder 페이지, 테스트 19건 통과
+  - Task 6 완료: 차트 컴포넌트 5종 (DualBarChart, StackedBarChart, LineAreaChart, HorizontalBarList, MoMBarList), Recharts v3 타입 호환 처리, typecheck/build 통과
+  - 현재 지점: Task 6 커밋 완료
+  - 남은 작업: Task 7~12 순서대로 구현 (5 pages → validation)
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
 - [ ] Frontend 런타임 점검 후속

@@ -1,374 +1,209 @@
-import { useMemo, useState } from 'react';
-import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
-import { EmptyState } from '../components/common/EmptyState';
-import { ErrorState } from '../components/common/ErrorState';
-import { IconTitle } from '../components/common/IconTitle';
-import { LoadingState } from '../components/common/LoadingState';
-import { getCardGroupSurfaceClass } from '../components/common/cardGroupSurface';
-import { AssumptionPopover } from '../components/insights/AssumptionPopover';
-import { InsightSummaryCards } from '../components/insights/InsightSummaryCards';
-import { RecurringPaymentsTable } from '../components/insights/RecurringPaymentsTable';
-import { SpendingAnomaliesTable } from '../components/insights/SpendingAnomaliesTable';
-import { useAppChromeMeta } from '../components/layout/AppChromeContext';
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader } from '../components/ui/card';
-import { cn } from '../lib/utils';
+import { useEffect, useState } from 'react'
+import { KpiCard } from '../components/ui/KpiCard'
+import { SectionCard } from '../components/ui/SectionCard'
+import { LoadingState } from '../components/ui/LoadingState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { Pagination } from '../components/ui/Pagination'
+import { MoMBarList } from '../components/charts/MoMBarList'
 import {
-  INSIGHTS_CARD_PAGE_SIZE,
-  useInsights,
-  useRecurringPaymentsPage,
-  useSpendingAnomaliesPage,
-} from '../hooks/useInsights';
+  useMonthlyCashflow, useIncomeStability,
+  useRecurringPayments, useSpendingAnomalies,
+  useMerchantSpend, useCategoryMoM,
+} from '../hooks/useAnalytics'
+import { useChromeContext } from '../components/layout/AppLayout'
+import { formatKRW, formatKRWCompact, formatPct } from '../lib/utils'
 
-function formatMoney(value: number) {
-  return `${new Intl.NumberFormat('ko-KR', {
-    maximumFractionDigits: 0,
-  }).format(value)}원`;
+interface InsightItem {
+  icon: string
+  title: string
+  description: string
+  variant: 'ok' | 'warn' | 'danger'
 }
 
-function findAssumption(assumptions: string[], key: string) {
-  const prefix = `${key}:`;
-  const match = assumptions.find((item) => item.startsWith(prefix));
-  return match ? match.slice(prefix.length).trim() : null;
+const VARIANT_BADGE: Record<string, string> = {
+  ok:     'bg-accent-dim text-accent border border-accent-muted',
+  warn:   'bg-warn-dim text-warn border border-warn-muted',
+  danger: 'bg-danger-dim text-danger border border-danger-muted',
 }
-
-function toMonthKey(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-  return value.slice(0, 7);
-}
-
-function getMerchantSpendPeriod(items: Array<{ last_seen_at: string }>) {
-  const months = items
-    .map((item) => toMonthKey(item.last_seen_at))
-    .filter((value): value is string => value !== null)
-    .sort();
-
-  if (months.length === 0) {
-    return {
-      start: '기간 정보 없음',
-      end: '기간 정보 없음',
-    };
-  }
-
-  return {
-    start: months[0],
-    end: months[months.length - 1],
-  };
-}
-
-function getCategoryMoMPeriod(items: Array<{ previous_period: string; period: string }>) {
-  const months = items
-    .flatMap((item) => [item.previous_period, item.period])
-    .filter(Boolean)
-    .sort();
-
-  if (months.length === 0) {
-    return {
-      start: '기간 정보 없음',
-      end: '기간 정보 없음',
-    };
-  }
-
-  return {
-    start: months[0],
-    end: months[months.length - 1],
-  };
-}
-
-interface InsightCardPaginationProps {
-  currentPage: number;
-  totalItems: number;
-  perPage: number;
-  isFetching: boolean;
-  previousLabel: string;
-  nextLabel: string;
-  onPrevious: () => void;
-  onNext: () => void;
-}
-
-function InsightCardPagination({
-  currentPage,
-  totalItems,
-  perPage,
-  isFetching,
-  previousLabel,
-  nextLabel,
-  onPrevious,
-  onNext,
-}: InsightCardPaginationProps) {
-  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
-
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={currentPage <= 1 || isFetching}
-        aria-label={previousLabel}
-        onClick={onPrevious}
-      >
-        이전
-      </Button>
-      <p className="min-w-0 text-sm text-[color:var(--color-text-muted)]">
-        {currentPage} / {totalPages} 페이지 · 총 {totalItems}건
-        {isFetching ? ' · 불러오는 중' : ''}
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={currentPage >= totalPages || isFetching}
-        aria-label={nextLabel}
-        onClick={onNext}
-      >
-        다음
-      </Button>
-    </div>
-  );
+const VARIANT_LABEL: Record<string, string> = {
+  ok: '양호', warn: '주의', danger: '확인 필요',
 }
 
 export function InsightsPage() {
-  const [recurringPage, setRecurringPage] = useState(1);
-  const [anomalyPage, setAnomalyPage] = useState(1);
-  const insightsQuery = useInsights();
-  const recurringQuery = useRecurringPaymentsPage(recurringPage, INSIGHTS_CARD_PAGE_SIZE);
-  const anomalyQuery = useSpendingAnomaliesPage(anomalyPage, INSIGHTS_CARD_PAGE_SIZE);
-  const chromeMeta = useMemo(
-    () =>
-      insightsQuery.data ? (
-        <Badge variant="reference">핵심 인사이트 {insightsQuery.data.key_insights.length}건</Badge>
-      ) : null,
-    [insightsQuery.data],
-  );
-  useAppChromeMeta(chromeMeta);
+  const cashflow = useMonthlyCashflow(6)
+  const incomeStability = useIncomeStability()
+  const [recurringPage, setRecurringPage] = useState(1)
+  const [anomalyPage, setAnomalyPage] = useState(1)
+  const [showRecurringAssumption, setShowRecurringAssumption] = useState(false)
+  const [showAnomalyAssumption, setShowAnomalyAssumption] = useState(false)
+  const recurring = useRecurringPayments(recurringPage, 10)
+  const anomalies = useSpendingAnomalies(anomalyPage, 10)
+  const merchants = useMerchantSpend({ months: 3, limit: 5 })
+  const categoryMoM = useCategoryMoM(2)
+  const { setMetaBadge } = useChromeContext()
 
-  if (insightsQuery.isPending) {
-    return (
-      <LoadingState
-        title="인사이트 불러오는 중"
-        description="advisor analytics 기반 진단 카드와 반복 결제, 이상 지출을 불러오고 있습니다."
-      />
-    );
+  // 요약 지표 계산
+  const latestCashflow = cashflow.data?.items?.[cashflow.data.items.length - 1]
+  const savingsRate = latestCashflow?.savings_rate != null ? latestCashflow.savings_rate * 100 : null
+  const incomeCV = incomeStability.data?.coefficient_of_variation
+  const incomeStabilityLabel = incomeCV == null ? '—' : incomeCV < 0.1 ? '낮음' : incomeCV < 0.25 ? '보통' : '높음'
+  const anomalyCount = anomalies.data?.total ?? null
+
+  // 핵심 인사이트 생성 (클라이언트 조합)
+  const insights: InsightItem[] = []
+  if (savingsRate != null) {
+    if (savingsRate > 50) insights.push({ icon: '💰', title: `저축률 ${formatPct(savingsRate)} — 목표 초과 달성`, description: '지출이 수입 대비 잘 관리되고 있습니다.', variant: 'ok' })
+    else if (savingsRate > 0) insights.push({ icon: '📊', title: `저축률 ${formatPct(savingsRate)}`, description: '저축률 50% 목표까지 여유가 있습니다.', variant: 'warn' })
+  }
+  if (anomalyCount != null && anomalyCount > 0) {
+    insights.push({ icon: '⚠️', title: `이상 지출 ${anomalyCount}개 카테고리 감지`, description: '전월 대비 급증한 지출 카테고리가 있습니다. 이상 지출 탭을 확인해주세요.', variant: 'warn' })
+  }
+  if (recurring.data?.total != null && recurring.data.total > 0) {
+    insights.push({ icon: '🔁', title: `반복 결제 ${recurring.data.total}건 감지`, description: '정기 결제 항목을 확인하고 불필요한 구독을 정리해보세요.', variant: 'warn' })
+  }
+  if (incomeStabilityLabel === '낮음') {
+    insights.push({ icon: '✅', title: '수입 안정성이 높습니다', description: `최근 6개월 수입 변동계수 ${formatPct(incomeCV != null ? incomeCV * 100 : null)} — 안정적인 수입 흐름입니다.`, variant: 'ok' })
   }
 
-  if (insightsQuery.isError) {
-    return (
-      <ErrorState
-        title="인사이트 데이터를 불러올 수 없습니다"
-        description="진단 카드와 이상 탐지 데이터를 가져오지 못했습니다."
-        detail={insightsQuery.error instanceof Error ? insightsQuery.error.message : undefined}
-      />
-    );
-  }
-
-  if (!insightsQuery.data) {
-    return (
-      <EmptyState
-        title="표시할 인사이트가 없습니다"
-        description="analytics endpoint 응답이 준비되면 이 화면에서 진단 결과를 보여줍니다."
-      />
-    );
-  }
-
-  const { assumptions, category_mom, key_insights, merchant_spend, recurring_payments, spending_anomalies, summary_cards } =
-    insightsQuery.data;
-  const incomeStabilityAssumption = findAssumption(assumptions, 'income-stability');
-  const recurringPaymentsAssumption = findAssumption(assumptions, 'recurring-payments');
-  const spendingAnomaliesAssumption = findAssumption(assumptions, 'spending-anomalies');
-  const recurringPageData = recurringQuery.data;
-  const anomalyPageData = anomalyQuery.data;
-  const recurringItems = recurringPageData?.items ?? recurring_payments;
-  const anomalyItems = anomalyPageData?.items ?? spending_anomalies;
-  const recurringTotal = recurringPageData?.total ?? recurring_payments.length;
-  const anomalyTotal = anomalyPageData?.total ?? spending_anomalies.length;
-  const recurringCurrentPage = recurringPageData?.page ?? 1;
-  const anomalyCurrentPage = anomalyPageData?.page ?? 1;
-  const merchantSpendPeriod = getMerchantSpendPeriod(merchant_spend);
-  const categoryMoMPeriod = getCategoryMoMPeriod(category_mom);
+  useEffect(() => {
+    setMetaBadge(
+      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+        핵심 인사이트 {insights.length}건
+      </span>
+    )
+  }, [insights.length])
 
   return (
-    <div className="space-y-5">
-      <InsightSummaryCards
-        incomeStabilityAssumption={incomeStabilityAssumption}
-        items={summary_cards}
-      />
+    <div className="flex flex-col gap-4">
 
-      <section>
-        <Card>
-          <CardHeader>
-            <IconTitle
-              description="현재 데이터를 기준으로 가장 중요한 해석 포인트를 요약합니다."
-              icon="insights"
-              title="핵심 인사이트"
-            />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {key_insights.map((item) => (
-              <div
-                key={item.title}
-                className={cn(
-                  'rounded-[var(--radius)] border p-3.5',
-                  getCardGroupSurfaceClass('primary'),
-                )}
-              >
-                <p className="font-semibold text-[color:var(--color-text)]">{item.title}</p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">{item.description}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-3 gap-3">
+        <KpiCard label="저축률" value={formatPct(savingsRate)} subVariant={savingsRate != null && savingsRate > 50 ? 'up' : 'neutral'} />
+        <KpiCard label="수입 변동성" value={incomeStabilityLabel} />
+        <KpiCard label="이상 지출 카테고리" value={anomalyCount != null ? `${anomalyCount}개` : '—'} subVariant={anomalyCount ? 'down' : 'neutral'} />
+      </div>
 
-      <section className="grid min-w-0 gap-5 xl:grid-cols-2">
-        <Card className="min-w-0 w-full overflow-hidden">
-          <CardHeader className="min-w-0">
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <IconTitle className="flex-1" icon="arrowPath" title="반복 결제" />
-              {recurringPaymentsAssumption ? (
-                <AssumptionPopover
-                  ariaLabel="반복 결제 가정 보기"
-                  content={recurringPaymentsAssumption}
-                />
-              ) : null}
-            </div>
-            <CardDescription>정기적으로 반복되는 결제 후보를 표 형태로 정리했습니다.</CardDescription>
-          </CardHeader>
-          <CardContent className="min-w-0 space-y-4">
-            <RecurringPaymentsTable items={recurringItems} />
-            <InsightCardPagination
-              currentPage={recurringCurrentPage}
-              totalItems={recurringTotal}
-              perPage={INSIGHTS_CARD_PAGE_SIZE}
-              isFetching={recurringQuery.isFetching}
-              previousLabel="반복 결제 이전 페이지"
-              nextLabel="반복 결제 다음 페이지"
-              onPrevious={() => setRecurringPage(Math.max(1, recurringCurrentPage - 1))}
-              onNext={() =>
-                setRecurringPage(
-                  Math.min(
-                    Math.max(1, Math.ceil(recurringTotal / INSIGHTS_CARD_PAGE_SIZE)),
-                    recurringCurrentPage + 1,
-                  ),
-                )
-              }
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0 w-full overflow-hidden">
-          <CardHeader className="min-w-0">
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <IconTitle className="flex-1" icon="exclamationTriangle" title="이상 지출" />
-              {spendingAnomaliesAssumption ? (
-                <AssumptionPopover
-                  ariaLabel="이상 지출 가정 보기"
-                  content={spendingAnomaliesAssumption}
-                />
-              ) : null}
-            </div>
-            <CardDescription>baseline 대비 급증한 카테고리를 확인합니다.</CardDescription>
-          </CardHeader>
-          <CardContent className="min-w-0 space-y-4">
-            <SpendingAnomaliesTable items={anomalyItems} />
-            <InsightCardPagination
-              currentPage={anomalyCurrentPage}
-              totalItems={anomalyTotal}
-              perPage={INSIGHTS_CARD_PAGE_SIZE}
-              isFetching={anomalyQuery.isFetching}
-              previousLabel="이상 지출 이전 페이지"
-              nextLabel="이상 지출 다음 페이지"
-              onPrevious={() => setAnomalyPage(Math.max(1, anomalyCurrentPage - 1))}
-              onNext={() =>
-                setAnomalyPage(
-                  Math.min(
-                    Math.max(1, Math.ceil(anomalyTotal / INSIGHTS_CARD_PAGE_SIZE)),
-                    anomalyCurrentPage + 1,
-                  ),
-                )
-              }
-            />
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="merchant spend 기준 상위 거래처를 요약했습니다."
-              icon="buildingStorefront"
-              title="거래처 소비 Top N"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="거래처 소비 Top N 적용 기간"
-              end={merchantSpendPeriod.end}
-              start={merchantSpendPeriod.start}
-            />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {merchant_spend.map((item) => (
-              <div
-                key={`${item.merchant}-${item.last_seen_at}`}
-                className={cn(
-                  'flex min-w-0 items-start justify-between gap-3 rounded-[var(--radius)] border px-4 py-3',
-                  getCardGroupSurfaceClass('secondary'),
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-[color:var(--color-text)]" title={item.merchant}>
-                    {item.merchant}
-                  </p>
-                  <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                    {item.count}건 · 평균 {formatMoney(item.avg_amount)}
-                  </p>
+      {/* 핵심 인사이트 */}
+      <SectionCard title="핵심 인사이트" badge={`${insights.length}건`}>
+        {insights.length === 0 ? <EmptyState message="분석할 데이터가 부족합니다" /> : (
+          <div className="flex flex-col gap-2">
+            {insights.map((insight, i) => (
+              <div key={i} className="flex gap-3 p-3 bg-surface-bar border border-border rounded-lg">
+                <div className="w-7 h-7 rounded-md bg-border-subtle flex items-center justify-center text-[13px] shrink-0">{insight.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-semibold text-text-primary mb-0.5">{insight.title}</div>
+                  <div className="text-[10px] text-text-faint">{insight.description}</div>
                 </div>
-                <Badge className="shrink-0" variant="secondary">{formatMoney(item.amount)}</Badge>
+                <span className={`text-[8px] px-1.5 py-0.5 rounded self-start shrink-0 ${VARIANT_BADGE[insight.variant]}`}>
+                  {VARIANT_LABEL[insight.variant]}
+                </span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        )}
+      </SectionCard>
 
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="전월 대비 증감이 큰 카테고리를 우선 노출합니다."
-              icon="arrowsRightLeft"
-              title="카테고리 증감 요약"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="카테고리 증감 요약 적용 기간"
-              end={categoryMoMPeriod.end}
-              start={categoryMoMPeriod.start}
-            />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {category_mom.map((item) => (
-              <div
-                key={`${item.period}-${item.category}`}
-                className={cn(
-                  'rounded-[var(--radius)] border p-3.5',
-                  getCardGroupSurfaceClass(item.delta_amount >= 0 ? 'accent' : 'secondary'),
-                )}
-              >
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <p className="min-w-0 truncate font-medium text-[color:var(--color-text)]" title={item.category}>
-                    {item.category}
-                  </p>
-                  <Badge className="shrink-0" variant={item.delta_amount >= 0 ? 'accent' : 'secondary'}>
-                    {item.delta_amount >= 0 ? '+' : ''}
-                    {formatMoney(item.delta_amount)}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">
-                  {item.previous_period} 대비 {item.period} {formatMoney(item.current_amount)}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
+      {/* 반복 결제 + 이상 지출 */}
+      <div className="grid md:grid-cols-2 gap-4">
+
+        <SectionCard title="반복 결제"
+          badge={<button onClick={() => setShowRecurringAssumption((v) => !v)} className="text-[9px] text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
+        >
+          {showRecurringAssumption && recurring.data && (
+            <div className="text-[9px] text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
+              {recurring.data.assumptions}
+            </div>
+          )}
+          {recurring.isLoading ? <LoadingState /> :
+           recurring.data && recurring.data.items.length > 0 ? (
+             <>
+               <table className="w-full border-collapse text-[10px]">
+                 <thead>
+                   <tr>{['거래처', '주기', '평균금액', '횟수'].map((h) => (
+                     <th key={h} className="text-[9px] text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                   ))}</tr>
+                 </thead>
+                 <tbody>
+                   {recurring.data.items.map((item, i) => (
+                     <tr key={i} className="border-b border-[#0d1117] last:border-0">
+                       <td className="py-2 text-text-primary font-medium">{item.merchant}</td>
+                       <td className="py-2"><span className="text-[8px] bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">{item.interval_type}</span></td>
+                       <td className="py-2 text-right font-semibold">₩ {formatKRW(item.avg_amount)}</td>
+                       <td className="py-2 text-right text-text-muted">{item.occurrences}회</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+               <Pagination page={recurringPage} perPage={10} total={recurring.data.total} onPageChange={setRecurringPage} />
+             </>
+           ) : <EmptyState />}
+        </SectionCard>
+
+        <SectionCard title="이상 지출"
+          badge={<button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-[9px] text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
+        >
+          {showAnomalyAssumption && anomalies.data && (
+            <div className="text-[9px] text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
+              {anomalies.data.assumptions}
+            </div>
+          )}
+          {anomalies.isLoading ? <LoadingState /> :
+           anomalies.data && anomalies.data.items.length > 0 ? (
+             <>
+               <table className="w-full border-collapse text-[10px]">
+                 <thead>
+                   <tr>{['카테고리', '이번 달', '기준선', '증감'].map((h) => (
+                     <th key={h} className="text-[9px] text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                   ))}</tr>
+                 </thead>
+                 <tbody>
+                   {anomalies.data.items.map((item, i) => (
+                     <tr key={i} className="border-b border-[#0d1117] last:border-0">
+                       <td className="py-2 text-text-primary font-medium">{item.category}</td>
+                       <td className="py-2 text-right">₩ {formatKRWCompact(item.amount)}</td>
+                       <td className="py-2 text-right text-text-faint">₩ {formatKRWCompact(item.baseline_avg)}</td>
+                       <td className={`py-2 text-right font-semibold ${(item.delta_pct ?? 0) > 0 ? 'text-danger' : 'text-accent'}`}>
+                         {item.delta_pct != null ? `+${formatPct(item.delta_pct)}` : '—'}
+                       </td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+               <Pagination page={anomalyPage} perPage={10} total={anomalies.data.total} onPageChange={setAnomalyPage} />
+             </>
+           ) : <EmptyState />}
+        </SectionCard>
+
+      </div>
+
+      {/* 거래처 Top 5 + 카테고리 MoM */}
+      <div className="grid md:grid-cols-2 gap-4">
+
+        <SectionCard title="거래처 소비 Top 5" badge="최근 3개월">
+          {merchants.isLoading ? <LoadingState /> :
+           merchants.data && merchants.data.items.length > 0 ? (
+             <div className="flex flex-col divide-y divide-border-subtle">
+               {merchants.data.items.map((m, i) => (
+                 <div key={m.merchant} className="flex items-center gap-2.5 py-2">
+                   <span className="text-[10px] text-text-ghost w-4 shrink-0">#{i + 1}</span>
+                   <span className="text-[10px] text-text-primary font-medium flex-1 truncate">{m.merchant}</span>
+                   <span className="text-[10px] text-text-faint w-7 text-center">{m.count}건</span>
+                   <span className="text-[10px] text-text-muted w-20 text-right">평균 ₩{formatKRWCompact(m.avg_amount)}</span>
+                   <span className="text-[10px] text-danger font-semibold w-20 text-right">₩ {formatKRWCompact(m.amount)}</span>
+                 </div>
+               ))}
+             </div>
+           ) : <EmptyState />}
+        </SectionCard>
+
+        <SectionCard title="카테고리 전월 대비">
+          {categoryMoM.isLoading ? <LoadingState /> :
+           categoryMoM.data && categoryMoM.data.items.length > 0 ? (
+             <MoMBarList items={categoryMoM.data.items} />
+           ) : <EmptyState />}
+        </SectionCard>
+
+      </div>
     </div>
-  );
+  )
 }

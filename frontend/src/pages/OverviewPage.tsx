@@ -1,240 +1,146 @@
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-} from 'recharts';
-import { useMemo } from 'react';
-import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
-import { ChartTooltipContent } from '../components/charts/ChartTooltipContent';
-import { EmptyState } from '../components/common/EmptyState';
-import { ErrorState } from '../components/common/ErrorState';
-import { IconTitle } from '../components/common/IconTitle';
-import { LoadingState } from '../components/common/LoadingState';
-import { getCardGroupSurfaceClass } from '../components/common/cardGroupSurface';
-import { useAppChromeMeta } from '../components/layout/AppChromeContext';
-import { MetricCardGrid } from '../components/layout/MetricCardGrid';
-import { TransactionsTable } from '../components/tables/TransactionsTable';
-import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardHeader } from '../components/ui/card';
-import { useOverview } from '../hooks/useOverview';
-import {
-  CHART_ACCENT,
-  CHART_BAR_RADIUS_VERTICAL,
-  CHART_COMPLEMENTARY,
-  CHART_SECONDARY,
-} from '../components/charts/chartTheme';
-import { cn } from '../lib/utils';
-
-function formatMoney(value: number | string | readonly (number | string)[] | null | undefined) {
-  const normalized = Array.isArray(value) && value.length > 0 ? value[0] : (value ?? 0);
-  const numericValue = typeof normalized === 'number' ? normalized : Number(normalized);
-  return new Intl.NumberFormat('ko-KR', {
-    style: 'currency',
-    currency: 'KRW',
-    maximumFractionDigits: 0,
-  }).format(numericValue);
-}
+import { useEffect } from 'react'
+import { KpiCard } from '../components/ui/KpiCard'
+import { SectionCard } from '../components/ui/SectionCard'
+import { LoadingState } from '../components/ui/LoadingState'
+import { ErrorState } from '../components/ui/ErrorState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { DualBarChart } from '../components/charts/DualBarChart'
+import { HorizontalBarList } from '../components/charts/HorizontalBarList'
+import { useMonthlyCashflow, useIncomeStability, useRecurringPayments, useSpendingAnomalies } from '../hooks/useAnalytics'
+import { useAssetSnapshots } from '../hooks/useAssets'
+import { useTransactionList, useCategoryBreakdown } from '../hooks/useTransactions'
+import { formatKRW, formatKRWCompact, formatPct, formatDate } from '../lib/utils'
+import { useChromeContext } from '../components/layout/AppLayout'
 
 export function OverviewPage() {
-  const overviewQuery = useOverview();
-  const chromeMeta = useMemo(
-    () =>
-      overviewQuery.data?.snapshot_date ? (
-        <Badge variant="reference">기준일 {overviewQuery.data.snapshot_date}</Badge>
-      ) : null,
-    [overviewQuery.data?.snapshot_date],
-  );
-  useAppChromeMeta(chromeMeta);
+  const cashflow = useMonthlyCashflow(6)
+  const snapshots = useAssetSnapshots()
+  const incomeStability = useIncomeStability()
+  const recurringPayments = useRecurringPayments(1, 1)
+  const spendingAnomalies = useSpendingAnomalies(1, 1)
+  const recentTx = useTransactionList({ page: 1, per_page: 5, type: 'all' })
+  const categoryBreakdown = useCategoryBreakdown()
+  const { setMetaBadge } = useChromeContext()
 
-  if (overviewQuery.isPending) {
-    return (
-      <LoadingState
-        title="개요 불러오는 중"
-        description="최신 KPI와 월간 현금흐름, 최근 거래를 불러오고 있습니다."
-      />
-    );
-  }
+  const latestSnapshot = snapshots.data?.items?.[snapshots.data.items.length - 1]
+  const snapshotDate = latestSnapshot?.snapshot_date
+  const currentMonth = cashflow.data?.items?.[cashflow.data.items.length - 1]
+  const netWorth = latestSnapshot ? parseFloat(latestSnapshot.net_worth) : null
+  const monthExpense = currentMonth?.expense ?? null
+  const monthIncome = currentMonth?.income ?? null
+  const savingsRate = currentMonth?.savings_rate ?? null
+  const anomalyCount = spendingAnomalies.data?.total ?? null
+  const recurringCount = recurringPayments.data?.total ?? null
+  const incomeCV = incomeStability.data?.coefficient_of_variation ?? null
+  const incomeLabel = incomeCV == null ? '—' : incomeCV < 0.1 ? '안정' : incomeCV < 0.25 ? '보통' : '불안정'
 
-  if (overviewQuery.isError) {
-    return (
-      <ErrorState
-        title="개요 데이터를 불러올 수 없습니다"
-        description="개요 화면에 필요한 요약 데이터를 가져오지 못했습니다."
-        detail={overviewQuery.error instanceof Error ? overviewQuery.error.message : undefined}
-      />
-    );
-  }
-
-  if (!overviewQuery.data) {
-    return (
-      <EmptyState
-        title="표시할 개요 데이터가 없습니다"
-        description="데이터를 업로드하면 월간 현금흐름과 최근 거래, 경고 신호를 여기서 보여줍니다."
-      />
-    );
-  }
-
-  const { category_top5, monthly_cashflow, recent_transactions, recent_upload_status, signal_summaries, summary_cards } =
-    overviewQuery.data;
-  const monthlyCashflowStart = monthly_cashflow[0]?.period ?? '기간 정보 없음';
-  const monthlyCashflowEnd =
-    monthly_cashflow[monthly_cashflow.length - 1]?.period ?? monthlyCashflowStart;
-  const recentTransactionDates = recent_transactions.map((item) => item.date).sort();
-  const recentTransactionsStart = recentTransactionDates[0] ?? '기간 정보 없음';
-  const recentTransactionsEnd =
-    recentTransactionDates[recentTransactionDates.length - 1] ?? recentTransactionsStart;
+  useEffect(() => {
+    if (snapshotDate) {
+      setMetaBadge(
+        <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+          기준일 {snapshotDate}
+        </span>
+      )
+    }
+    return () => setMetaBadge(null)
+  }, [snapshotDate])
 
   return (
-    <div className="space-y-5">
-      <MetricCardGrid items={summary_cards} />
+    <div className="flex flex-col gap-4">
+      {/* KPI */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          label="순자산"
+          value={netWorth != null ? `₩ ${formatKRWCompact(netWorth)}` : '—'}
+          sub={snapshotDate ? `기준일 ${formatDate(snapshotDate)}` : ''}
+          className="border-t-2 border-t-accent"
+        />
+        <KpiCard
+          label="이번 달 지출"
+          value={monthExpense != null ? `₩ ${formatKRWCompact(Math.abs(monthExpense))}` : '—'}
+          subVariant="down"
+        />
+        <KpiCard
+          label="이번 달 수입"
+          value={monthIncome != null ? `₩ ${formatKRWCompact(monthIncome)}` : '—'}
+        />
+        <KpiCard
+          label="저축률"
+          value={formatPct(savingsRate != null ? savingsRate * 100 : null)}
+          subVariant={savingsRate != null && savingsRate > 0.3 ? 'up' : 'neutral'}
+          sub={savingsRate != null && savingsRate > 0.5 ? '목표 50% 초과' : ''}
+          className="border-t-2 border-t-accent"
+        />
+      </div>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(20rem,0.9fr)]">
-        <Card>
-          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <IconTitle
-              description="월별 수입·지출과 순현금흐름을 함께 확인합니다."
-              icon="presentationChartLine"
-              title="월간 현금흐름"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <CardPeriodBadgeGroup
-                ariaLabel="월간 현금흐름 적용 기간"
-                end={monthlyCashflowEnd}
-                start={monthlyCashflowStart}
-              />
-              {recent_upload_status ? (
-                <Badge variant="secondary">최근 업로드 {recent_upload_status}</Badge>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-80 w-full" aria-label="월간 현금흐름 차트">
-              <ResponsiveContainer width="100%" height="100%" minHeight={320}>
-                <ComposedChart
-                  data={monthly_cashflow}
-                  margin={{ top: 12, right: 12, left: 4, bottom: 0 }}
-                >
-                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
-                  <XAxis axisLine={false} dataKey="period" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
-                  <Tooltip
-                    content={({ active, label, payload }) => {
-                      if (!active || !payload || payload.length === 0) {
-                        return null;
-                      }
+      {/* 현금흐름 + 주의 신호 */}
+      <div className="grid md:grid-cols-[2fr_1fr] gap-4">
+        <SectionCard title="월간 현금흐름" badge="최근 6개월">
+          {cashflow.isLoading ? <LoadingState /> :
+           cashflow.error ? <ErrorState onRetry={() => cashflow.refetch()} /> :
+           cashflow.data && cashflow.data.items.length > 0 ? (
+             <>
+               <DualBarChart data={cashflow.data.items} />
+               <div className="flex gap-3 mt-2">
+                 <span className="flex items-center gap-1 text-[9px] text-text-muted"><span className="w-2 h-2 rounded-sm bg-accent" />수입</span>
+                 <span className="flex items-center gap-1 text-[9px] text-text-muted"><span className="w-2 h-2 rounded-sm bg-danger" />지출</span>
+               </div>
+             </>
+           ) : <EmptyState message="현금흐름 데이터가 없습니다" />}
+        </SectionCard>
 
-                      return (
-                        <ChartTooltipContent
-                          title={typeof label === 'string' ? label : undefined}
-                          items={payload.map((entry) => ({
-                            color: entry.color ?? CHART_ACCENT,
-                            label: entry.name !== undefined ? String(entry.name) : '금액',
-                            value: formatMoney(entry.value),
-                          }))}
-                        />
-                      );
-                    }}
-                  />
-                  <Bar
-                    dataKey="income"
-                    fill={CHART_ACCENT}
-                    maxBarSize={28}
-                    name="수입"
-                    radius={CHART_BAR_RADIUS_VERTICAL}
-                  />
-                  <Bar
-                    dataKey="expense"
-                    fill={CHART_SECONDARY}
-                    maxBarSize={28}
-                    name="지출"
-                    radius={CHART_BAR_RADIUS_VERTICAL}
-                  />
-                  <Line
-                    dataKey="net_cashflow"
-                    dot={false}
-                    name="순현금흐름"
-                    stroke={CHART_COMPLEMENTARY}
-                    strokeWidth={3}
-                    type="monotone"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <IconTitle icon="exclamationTriangle" title="주의 신호" />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {signal_summaries.map((item) => (
-              <div
-                key={item.label}
-                className={cn(
-                  'rounded-[var(--radius)] border p-3.5',
-                  getCardGroupSurfaceClass(
-                    item.label.includes('이상')
-                      ? 'accent'
-                      : item.label.includes('반복')
-                        ? 'secondary'
-                        : 'primary',
-                  ),
-                )}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="min-w-0 truncate text-sm font-semibold text-[color:var(--color-text)]">
-                    {item.label}
-                  </p>
-                  <Badge className="shrink-0" variant="accent">{item.value}</Badge>
-                </div>
-                <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">{item.detail}</p>
+        <SectionCard title="주의 신호">
+          <div className="flex flex-col gap-2">
+            {[
+              { label: '이상 지출 카테고리', value: anomalyCount, warn: (anomalyCount ?? 0) > 0 },
+              { label: '반복 결제 감지', value: recurringCount, warn: false },
+              { label: '수입 안정성', value: incomeLabel, warn: false },
+            ].map((signal) => (
+              <div key={signal.label} className="flex items-center justify-between px-3 py-2.5 bg-surface-bar border border-border rounded-lg">
+                <span className="text-[11px] text-text-secondary">{signal.label}</span>
+                <span className={`text-[12px] font-semibold ${signal.warn ? 'text-warn' : 'text-accent'}`}>
+                  {signal.value == null ? '—' : typeof signal.value === 'number' ? `${signal.value}건` : signal.value}
+                </span>
               </div>
             ))}
-          </CardContent>
-        </Card>
-      </section>
+          </div>
+        </SectionCard>
+      </div>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(17rem,0.82fr)_minmax(0,1.38fr)]">
-        <Card>
-          <CardHeader>
-            <IconTitle icon="tag" title="카테고리 요약 Top 5" />
-          </CardHeader>
-          <CardContent className="space-y-2.5">
-            {category_top5.map((item, index) => (
-              <div
-                key={item.category}
-                className="rounded-[var(--radius)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3.5 py-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <Badge variant={index === 0 ? 'default' : 'secondary'}>{index + 1}</Badge>
-                    <p className="font-medium text-[color:var(--color-text)]">{item.category}</p>
-                  </div>
-                  <p className="text-sm font-semibold text-[color:var(--color-text)]">{item.share.toFixed(1)}%</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      {/* 카테고리 Top 5 + 최근 거래 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="카테고리 Top 5" badge="이번 달">
+          {categoryBreakdown.isLoading ? <LoadingState /> :
+           categoryBreakdown.data && categoryBreakdown.data.items.length > 0 ? (
+             <HorizontalBarList
+               items={categoryBreakdown.data.items.slice(0, 5).map((i) => ({
+                 label: i.category,
+                 amount: i.amount,
+               }))}
+             />
+           ) : <EmptyState message="카테고리 데이터가 없습니다" />}
+        </SectionCard>
 
-        <Card>
-          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <IconTitle icon="clock" title="최근 거래" />
-            <CardPeriodBadgeGroup
-              ariaLabel="최근 거래 적용 기간"
-              end={recentTransactionsEnd}
-              start={recentTransactionsStart}
-            />
-          </CardHeader>
-          <CardContent>
-            <TransactionsTable rows={recent_transactions} />
-          </CardContent>
-        </Card>
-      </section>
+        <SectionCard title="최근 거래" badge="read-only">
+          {recentTx.isLoading ? <LoadingState /> :
+           recentTx.data && recentTx.data.items.length > 0 ? (
+             <div className="flex flex-col divide-y divide-border-subtle">
+               {recentTx.data.items.map((tx) => (
+                 <div key={tx.id} className="flex items-center gap-3 py-2">
+                   <div className="flex-1 min-w-0">
+                     <div className="text-[11px] text-text-primary truncate">{tx.merchant}</div>
+                     <div className="text-[10px] text-text-faint">{tx.effective_category_major}</div>
+                   </div>
+                   <div className="text-[9px] text-text-ghost shrink-0">{formatDate(tx.date)}</div>
+                   <div className={`text-[11px] font-semibold shrink-0 ${tx.amount < 0 ? 'text-danger' : 'text-accent'}`}>
+                     {tx.amount < 0 ? '-' : '+'}₩{formatKRW(tx.amount)}
+                   </div>
+                 </div>
+               ))}
+             </div>
+           ) : <EmptyState message="거래 내역이 없습니다" />}
+        </SectionCard>
+      </div>
     </div>
-  );
+  )
 }

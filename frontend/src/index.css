@@ -2,132 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-  --font-heading: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Source Code Pro", ui-monospace, SFMono-Regular, monospace;
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
-  --color-canvas: #f8fafc;
-  --color-surface: #ffffff;
-  --color-surface-raised: #ffffff;
-  --color-surface-muted: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
-  --color-primary: #223a5e;
-  --color-primary-strong: #172a45;
-  --color-primary-soft: #e7edf5;
-  --color-primary-soft-strong: #cfd8e6;
-  --color-secondary: #c96a1b;
-  --color-secondary-strong: #9f5415;
-  --color-secondary-soft: #f7eee5;
-  --color-secondary-soft-strong: #ebd9c5;
-  --color-accent: #b6413b;
-  --color-accent-strong: #8f302c;
-  --color-accent-soft: #f6e8e7;
-  --color-accent-soft-strong: #e4c6c3;
-  --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-text-subtle: #64748b;
-  --color-text-inverse: #ffffff;
-  --color-positive: #2f8f57;
-  --color-positive-soft: #e9f4ed;
-  --color-warning: #c96a1b;
-  --color-warning-soft: #f7eee5;
-  --color-danger: #b42318;
-  --color-danger-soft: #f7e8e7;
-  --color-info: #5b7192;
-  --color-info-soft: #ecf0f5;
-  --color-ring: #223a5e;
-  --color-selection: rgba(34, 58, 94, 0.16);
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-medium: 0 4px 10px rgba(15, 23, 42, 0.08);
-  --shadow-large: 0 12px 24px rgba(15, 23, 42, 0.12);
-  --shadow-overlay: 0 20px 40px rgba(15, 23, 42, 0.18);
-  background-color: var(--color-canvas);
-}
-
-html {
-  min-height: 100%;
-  background-color: var(--color-canvas);
-  scroll-behavior: smooth;
-}
-
-body {
-  min-height: 100vh;
-  margin: 0;
-  background-color: var(--color-canvas);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-#root {
-  min-height: 100vh;
-}
-
-::selection {
-  background: var(--color-selection);
-  color: var(--color-text);
-}
-
-a {
-  color: inherit;
-}
-
-.skip-link {
-  position: absolute;
-  left: 1rem;
-  top: -3rem;
-  z-index: 50;
-  border-radius: var(--radius-sm);
-  background: var(--color-primary);
-  color: #fff;
-  padding: 0.75rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-decoration: none;
-  transition: top 0.2s ease;
-}
-
-.skip-link:focus-visible {
-  top: 1rem;
-  outline: 2px solid var(--color-ring);
-  outline-offset: 3px;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-ring);
-  outline-offset: 2px;
-}
-
-.bg-dashboard-grid {
-  background:
-    radial-gradient(circle at top left, rgba(34, 58, 94, 0.08), transparent 32%),
-    radial-gradient(circle at top right, rgba(201, 106, 27, 0.08), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(182, 65, 59, 0.07), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 250, 252, 0.94)),
-    var(--color-canvas);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html { font-size: 14px; }
+  body {
+    background-color: #060810;
+    color: #d1d5db;
+    font-family: -apple-system, 'Pretendard', 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
+  input, select, textarea, button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0b0f1a; }
+  ::-webkit-scrollbar-thumb { background: #1a2035; border-radius: 3px; }
+}
 
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+@layer utilities {
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #1a2035 #0b0f1a; }
+  .text-balance { text-wrap: balance; }
 }

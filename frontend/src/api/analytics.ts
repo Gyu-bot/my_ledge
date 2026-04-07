@@ -1,43 +1,38 @@
-import { apiRequest, type QueryParams } from './client';
+import { apiFetch } from '../lib/apiClient'
 import type {
-  CategoryMoMResponse,
-  FixedCostSummaryResponse,
-  IncomeStabilityResponse,
-  MerchantSpendResponse,
-  MonthlyCashflowResponse,
-  PaymentMethodPatternsResponse,
-  RecurringPaymentsResponse,
+  MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse,
+  MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
   SpendingAnomaliesResponse,
-} from '../types/analytics';
+} from '../types/analytics'
 
-export function getMonthlyCashflow(query?: QueryParams) {
-  return apiRequest<MonthlyCashflowResponse>('/analytics/monthly-cashflow', { query });
+function buildQuery(params: object): string {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '' && v !== false) q.set(k, String(v))
+  }
+  const s = q.toString()
+  return s ? `?${s}` : ''
 }
 
-export function getCategoryMoM(query?: QueryParams) {
-  return apiRequest<CategoryMoMResponse>('/analytics/category-mom', { query });
-}
+export const analyticsApi = {
+  monthlyCashflow: (params: { months?: number } = {}) =>
+    apiFetch<MonthlyCashflowResponse>(`/analytics/monthly-cashflow${buildQuery(params)}`),
 
-export function getFixedCostSummary(query?: QueryParams) {
-  return apiRequest<FixedCostSummaryResponse>('/analytics/fixed-cost-summary', { query });
-}
+  categoryMoM: (params: { months?: number } = {}) =>
+    apiFetch<CategoryMoMResponse>(`/analytics/category-mom${buildQuery(params)}`),
 
-export function getMerchantSpend(query?: QueryParams) {
-  return apiRequest<MerchantSpendResponse>('/analytics/merchant-spend', { query });
-}
+  fixedCostSummary: (params: { start_month?: string; end_month?: string } = {}) =>
+    apiFetch<FixedCostSummaryResponse>(`/analytics/fixed-cost-summary${buildQuery(params)}`),
 
-export function getPaymentMethodPatterns(query?: QueryParams) {
-  return apiRequest<PaymentMethodPatternsResponse>('/analytics/payment-method-patterns', { query });
-}
+  merchantSpend: (params: { months?: number; limit?: number } = {}) =>
+    apiFetch<MerchantSpendResponse>(`/analytics/merchant-spend${buildQuery(params)}`),
 
-export function getIncomeStability(query?: QueryParams) {
-  return apiRequest<IncomeStabilityResponse>('/analytics/income-stability', { query });
-}
+  incomeStability: () =>
+    apiFetch<IncomeStabilityResponse>('/analytics/income-stability'),
 
-export function getRecurringPayments(query?: QueryParams) {
-  return apiRequest<RecurringPaymentsResponse>('/analytics/recurring-payments', { query });
-}
+  recurringPayments: (params: { page?: number; per_page?: number } = {}) =>
+    apiFetch<RecurringPaymentsResponse>(`/analytics/recurring-payments${buildQuery(params)}`),
 
-export function getSpendingAnomalies(query?: QueryParams) {
-  return apiRequest<SpendingAnomaliesResponse>('/analytics/spending-anomalies', { query });
+  spendingAnomalies: (params: { page?: number; per_page?: number } = {}) =>
+    apiFetch<SpendingAnomaliesResponse>(`/analytics/spending-anomalies${buildQuery(params)}`),
 }

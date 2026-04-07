@@ -1,246 +1,151 @@
-import { useMemo } from 'react';
-import { BreakdownPieChart } from '../components/charts/BreakdownPieChart';
-import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
-import { EmptyState } from '../components/common/EmptyState';
-import { ErrorState } from '../components/common/ErrorState';
-import { IconTitle } from '../components/common/IconTitle';
-import { LineTrendChart } from '../components/charts/LineTrendChart';
-import { LoadingState } from '../components/common/LoadingState';
-import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
-import { StatusCard } from '../components/common/StatusCard';
-import { getCardGroupSurfaceClass } from '../components/common/cardGroupSurface';
-import { useAppChromeMeta } from '../components/layout/AppChromeContext';
-import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardHeader } from '../components/ui/card';
-import { useAssets } from '../hooks/useAssets';
-import { cn } from '../lib/utils';
-
-function formatMoney(value: number) {
-  return `${new Intl.NumberFormat('ko-KR', {
-    maximumFractionDigits: 0,
-  }).format(value)}원`;
-}
-
-const assetSummarySecondaryCardClass = cn(
-  'rounded-[var(--radius)] border p-3.5',
-  getCardGroupSurfaceClass('secondary'),
-);
-
-const assetSummaryPrimaryCardClass = cn(
-  'rounded-[var(--radius)] border p-3.5',
-  getCardGroupSurfaceClass('primary'),
-);
+import { useEffect } from 'react'
+import { KpiCard } from '../components/ui/KpiCard'
+import { SectionCard } from '../components/ui/SectionCard'
+import { LoadingState } from '../components/ui/LoadingState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { ErrorState } from '../components/ui/ErrorState'
+import { LineAreaChart } from '../components/charts/LineAreaChart'
+import { HorizontalBarList } from '../components/charts/HorizontalBarList'
+import { useAssetSnapshots, useNetWorthHistory, useInvestmentSummary, useLoanSummary } from '../hooks/useAssets'
+import { useChromeContext } from '../components/layout/AppLayout'
+import { formatKRWCompact, formatPct } from '../lib/utils'
 
 export function AssetsPage() {
-  const assetsQuery = useAssets();
-  const chromeMeta = useMemo(
-    () =>
-      assetsQuery.data?.snapshot_date ? (
-        <Badge variant="reference">기준일 {assetsQuery.data.snapshot_date}</Badge>
-      ) : null,
-    [assetsQuery.data?.snapshot_date],
-  );
-  useAppChromeMeta(chromeMeta);
+  const snapshots = useAssetSnapshots()
+  const netWorthHistory = useNetWorthHistory()
+  const investments = useInvestmentSummary()
+  const loans = useLoanSummary()
+  const { setMetaBadge } = useChromeContext()
 
-  if (assetsQuery.isPending) {
-    return (
-      <LoadingState
-        title="자산 화면 불러오는 중"
-        description="순자산 추이와 투자·대출 요약을 가져오고 있습니다."
-      />
-    );
-  }
+  const latest = snapshots.data?.items?.[snapshots.data.items.length - 1]
+  const snapshotDate = latest?.snapshot_date
 
-  if (assetsQuery.isError) {
-    return (
-      <ErrorState
-        title="자산 데이터를 불러올 수 없습니다"
-        description="자산 시계열 또는 투자·대출 요약을 가져오지 못했습니다."
-        detail={assetsQuery.error instanceof Error ? assetsQuery.error.message : undefined}
-      />
-    );
-  }
+  useEffect(() => {
+    if (snapshotDate) setMetaBadge(
+      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+        기준일 {snapshotDate}
+      </span>
+    )
+  }, [snapshotDate])
 
-  if (!assetsQuery.data) {
-    return (
-      <EmptyState
-        title="표시할 자산 데이터가 없습니다"
-        description="재무현황 스냅샷이 적재되면 자산 현황 페이지를 표시합니다."
-      />
-    );
-  }
-
-  const { investments, loans, net_worth_history, snapshot_date, summary_cards } =
-    assetsQuery.data;
-  const netWorthStartPeriod = net_worth_history[0]?.period ?? snapshot_date ?? '기준일 없음';
-  const netWorthEndPeriod =
-    net_worth_history[net_worth_history.length - 1]?.period ?? snapshot_date ?? '기준일 없음';
+  const netWorth = latest ? parseFloat(latest.net_worth) : null
+  const assetTotal = latest ? parseFloat(latest.asset_total) : null
+  const liabilityTotal = latest ? parseFloat(latest.liability_total) : null
+  const investMarketValue = investments.data ? parseFloat(investments.data.totals.market_value) : null
+  const investCostBasis = investments.data ? parseFloat(investments.data.totals.cost_basis) : null
+  const investReturnPct = investMarketValue != null && investCostBasis != null && investCostBasis > 0
+    ? ((investMarketValue - investCostBasis) / investCostBasis) * 100
+    : null
 
   return (
-    <div className="space-y-5">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {summary_cards.map((card, index) => (
-          <StatusCard
-            key={card.label}
-            label={card.label}
-            value={card.value}
-            detail={card.detail}
-            tone={index === summary_cards.length - 1 ? 'accent' : 'primary'}
-          />
-        ))}
-      </section>
+    <div className="flex flex-col gap-4">
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <Card className="xl:col-span-2">
-          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <IconTitle
-              description="적재된 스냅샷 기준 순자산 변화를 시계열로 보여줍니다."
-              icon="presentationChartLine"
-              title="순자산 추이"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="순자산 추이 적용 기간"
-              end={netWorthEndPeriod}
-              start={netWorthStartPeriod}
-            />
-          </CardHeader>
-          <CardContent>
-            {net_worth_history.length > 0 ? (
-              <LineTrendChart data={net_worth_history} />
-            ) : (
-              <SectionPlaceholder
-                title="순자산 추이 데이터 없음"
-                description="재무현황 스냅샷이 적재되면 이 영역에 순자산 변화를 그립니다."
-              />
-            )}
-          </CardContent>
-        </Card>
+      {/* KPI */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="순자산" value={netWorth != null ? `₩ ${formatKRWCompact(netWorth)}` : '—'}
+          className="border-t-2 border-t-accent" subVariant="up" />
+        <KpiCard label="총자산" value={assetTotal != null ? `₩ ${formatKRWCompact(assetTotal)}` : '—'} />
+        <KpiCard label="총부채" value={liabilityTotal != null ? `₩ ${formatKRWCompact(liabilityTotal)}` : '—'}
+          className="border-t-2 border-t-danger" />
+        <KpiCard label="투자 평가액" value={investMarketValue != null ? `₩ ${formatKRWCompact(investMarketValue)}` : '—'}
+          sub={investReturnPct != null ? `원금 대비 ${investReturnPct > 0 ? '+' : ''}${formatPct(investReturnPct)}` : ''}
+          subVariant={investReturnPct != null && investReturnPct > 0 ? 'up' : 'down'} />
+      </div>
 
-        <Card>
-          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <IconTitle
-              description="최신 투자 스냅샷 기준 평가액과 주요 포지션입니다."
-              icon="banknotes"
-              title="투자 요약"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="투자 요약 기준일"
-              start={investments.snapshot_date ?? '기준일 없음'}
-            />
-          </CardHeader>
-          <CardContent>
-            {investments.items.length > 0 ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className={assetSummarySecondaryCardClass}>
-                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                      총 투자원금
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                      {formatMoney(investments.totals.cost_basis)}
-                    </p>
-                  </div>
-                  <div className={assetSummaryPrimaryCardClass}>
-                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                      총 평가액
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                      {formatMoney(investments.totals.market_value)}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-5">
-                  <BreakdownPieChart
-                    ariaLabel="투자 항목 비중 파이 차트"
-                    data={investments.allocation_breakdown}
-                    emptyTitle="투자 비중 데이터 없음"
-                    emptyDescription="평가액이 있는 투자 항목이 적재되면 이 영역에 비중 차트가 표시됩니다."
-                  />
-                </div>
-              </>
-            ) : (
-              <SectionPlaceholder
-                title="투자 스냅샷 없음"
-                description="새 엑셀 업로드 후 이 영역에 주요 포지션과 평가액이 표시됩니다."
-              />
-            )}
-          </CardContent>
-        </Card>
+      {/* 순자산 추이 */}
+      <SectionCard title="순자산 추이" badge="스냅샷 기준 시계열">
+        {netWorthHistory.isLoading ? <LoadingState /> :
+         netWorthHistory.error ? <ErrorState onRetry={() => netWorthHistory.refetch()} /> :
+         netWorthHistory.data ? (
+           <LineAreaChart data={netWorthHistory.data.items} />
+         ) : <EmptyState />}
+      </SectionCard>
 
-        <Card>
-          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <IconTitle
-              description="최신 대출 스냅샷 기준 잔액과 주요 대출 정보를 보여줍니다."
-              icon="buildingLibrary"
-              title="대출 요약"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="대출 요약 기준일"
-              start={loans.snapshot_date ?? '기준일 없음'}
-            />
-          </CardHeader>
-          <CardContent>
-            {loans.items.length > 0 ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className={assetSummarySecondaryCardClass}>
-                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                      총 대출원금
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                      {formatMoney(loans.totals.principal)}
-                    </p>
-                  </div>
-                  <div className={assetSummaryPrimaryCardClass}>
-                    <p className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                      총 잔액
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-[color:var(--color-text)]">
-                      {formatMoney(loans.totals.balance)}
-                    </p>
-                  </div>
-                </div>
-                <ul className="mt-5 space-y-3">
-                  {loans.items.slice(0, 4).map((item) => (
-                    <li
-                      key={`${item.lender}-${item.product_name}`}
-                      className={cn(
-                        'rounded-[var(--radius)] border p-3.5',
-                        getCardGroupSurfaceClass('secondary'),
-                      )}
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-[color:var(--color-text)]">
-                            {item.product_name}
-                          </p>
-                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                            {item.lender}
-                            {item.loan_type ? ` · ${item.loan_type}` : ''}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-left sm:text-right">
-                          <p className="font-semibold text-[color:var(--color-text)]">
-                            {formatMoney(item.balance ?? 0)}
-                          </p>
-                          <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-                            {item.interest_rate === null ? '금리 없음' : `${item.interest_rate.toFixed(2)}%`}
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <SectionPlaceholder
-                title="대출 스냅샷 없음"
-                description="대출 데이터가 적재되면 이 영역에 잔액과 금리 정보가 표시됩니다."
-              />
-            )}
-          </CardContent>
-        </Card>
-      </section>
+      {/* 투자 + 대출 */}
+      <div className="grid md:grid-cols-2 gap-4">
+
+        {/* 투자 요약 */}
+        <SectionCard title="투자 요약" badge={investments.data?.snapshot_date ?? undefined}>
+          {investments.isLoading ? <LoadingState /> :
+           investments.error ? <ErrorState onRetry={() => investments.refetch()} /> :
+           investments.data ? (
+             <>
+               <div className="grid grid-cols-3 gap-2.5 mb-4">
+                 {[
+                   { label: '총 원금', value: `₩ ${formatKRWCompact(investCostBasis ?? 0)}`, color: 'text-text-primary' },
+                   { label: '평가액', value: `₩ ${formatKRWCompact(investMarketValue ?? 0)}`, color: 'text-[#a78bfa]' },
+                   { label: '수익률', value: formatPct(investReturnPct), color: (investReturnPct ?? 0) > 0 ? 'text-accent' : 'text-danger' },
+                 ].map((s) => (
+                   <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-2.5">
+                     <div className="text-[9px] text-text-faint mb-1">{s.label}</div>
+                     <div className={`text-[12px] font-bold ${s.color}`}>{s.value}</div>
+                   </div>
+                 ))}
+               </div>
+               <div className="text-[10px] text-text-faint mb-2">포트폴리오 비중</div>
+               <HorizontalBarList
+                 items={investments.data.items.map((item) => ({
+                   label: item.broker,
+                   amount: parseFloat(item.market_value ?? '0'),
+                 }))}
+                 maxAmount={investMarketValue ?? undefined}
+               />
+             </>
+           ) : <EmptyState message="투자 데이터가 없습니다" />}
+        </SectionCard>
+
+        {/* 대출 요약 */}
+        <SectionCard title="대출 요약" badge={loans.data?.snapshot_date ?? undefined}>
+          {loans.isLoading ? <LoadingState /> :
+           loans.error ? <ErrorState onRetry={() => loans.refetch()} /> :
+           loans.data ? (
+             <>
+               <div className="grid grid-cols-2 gap-2.5 mb-4">
+                 {[
+                   { label: '총 대출 원금', value: `₩ ${formatKRWCompact(parseFloat(loans.data.totals.principal))}`, color: 'text-text-primary' },
+                   { label: '총 잔액', value: `₩ ${formatKRWCompact(parseFloat(loans.data.totals.balance))}`, color: 'text-danger' },
+                 ].map((s) => (
+                   <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-2.5">
+                     <div className="text-[9px] text-text-faint mb-1">{s.label}</div>
+                     <div className={`text-[13px] font-bold ${s.color}`}>{s.value}</div>
+                   </div>
+                 ))}
+               </div>
+               <table className="w-full text-[10px] border-collapse">
+                 <thead>
+                   <tr>
+                     {['상품', '잔액', '금리'].map((h) => (
+                       <th key={h} className="text-[9px] text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                     ))}
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {loans.data.items.slice(0, 4).map((loan, i) => (
+                     <tr key={i} className="border-b border-[#0d1117] last:border-0">
+                       <td className="py-2">
+                         <div className="text-text-primary font-medium">{loan.product_name}</div>
+                         <div className="text-[9px] text-text-faint">{loan.lender}</div>
+                         {loan.loan_type && (
+                           <span className="inline-block text-[8px] px-1.5 py-0.5 mt-0.5 bg-border-subtle text-text-ghost rounded">{loan.loan_type}</span>
+                         )}
+                       </td>
+                       <td className="py-2 text-danger font-semibold text-right">
+                         ₩ {formatKRWCompact(parseFloat(loan.balance ?? '0'))}
+                       </td>
+                       <td className="py-2 text-right">
+                         {loan.interest_rate ? (
+                           <span className="text-text-muted">{parseFloat(loan.interest_rate).toFixed(2)}%</span>
+                         ) : '—'}
+                       </td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </>
+           ) : <EmptyState message="대출 데이터가 없습니다" />}
+        </SectionCard>
+
+      </div>
     </div>
-  );
+  )
 }

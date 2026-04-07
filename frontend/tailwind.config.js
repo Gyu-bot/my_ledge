@@ -4,45 +4,45 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#EFF6FF',
-          100: '#DBEAFE',
-          200: '#BFDBFE',
-          300: '#93C5FD',
-          400: '#60A5FA',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
-          800: '#1E40AF',
-          900: '#1E3A8A',
+        surface: {
+          base:  '#060810',
+          panel: '#0b0f1a',
+          card:  '#0f1623',
+          bar:   '#080b12',
+        },
+        border: {
+          DEFAULT: '#1a2035',
+          subtle:  '#111827',
+          strong:  '#1f2937',
         },
         accent: {
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          300: '#FCD34D',
-          400: '#FBBF24',
-          500: '#F59E0B',
-          600: '#D97706',
+          DEFAULT: '#10b981',
+          dim:     '#0d2b1e',
+          muted:   '#1a3b2e',
+          bright:  '#6ee7b7',
         },
-        canvas: '#F8FAFC',
-        panel: '#FFFFFF',
-        ink: '#1E3A8A',
-        line: '#DBEAFE',
+        danger: {
+          DEFAULT: '#f87171',
+          dim:     '#2d1a1a',
+          muted:   '#3b2020',
+        },
+        warn: {
+          DEFAULT: '#f59e0b',
+          dim:     '#2a1f0a',
+          muted:   '#3b2d10',
+        },
+        text: {
+          primary:   '#d1d5db',
+          secondary: '#9ca3af',
+          muted:     '#6b7280',
+          faint:     '#4b5563',
+          ghost:     '#374151',
+        },
       },
-      boxShadow: {
-        glow: '0 24px 60px rgba(30, 64, 175, 0.12)',
-        soft: '0 12px 30px rgba(15, 23, 42, 0.06)',
-      },
-      fontFamily: {
-        sans: ['"Fira Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['"Fira Code"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-      },
-      backgroundImage: {
-        'dashboard-grid':
-          'radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 30%), radial-gradient(circle at top right, rgba(245, 158, 11, 0.10), transparent 26%), linear-gradient(180deg, rgba(255,255,255,0.78), rgba(248,250,252,0.95))',
+      borderRadius: {
+        card: '10px',
       },
     },
   },
   plugins: [],
-};
+}

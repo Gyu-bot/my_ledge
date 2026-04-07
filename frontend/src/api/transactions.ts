@@ -1,76 +1,56 @@
-import { apiRequest, getApiKeyHeaders, type QueryParams } from './client';
+import { apiFetch } from '../lib/apiClient'
 import type {
-  CategorySummaryResponse,
-  CategoryTimelineResponse,
-  TransactionBulkUpdateRequest,
-  TransactionBulkUpdateResponse,
-  PaymentMethodSummaryResponse,
-  TransactionCreateRequest,
-  TransactionFilterOptionsResponse,
   TransactionListResponse,
-  TransactionResponse,
-  TransactionSummaryResponse,
+  TransactionListParams,
+  TransactionFilterOptionsResponse,
   TransactionUpdateRequest,
-} from '../types/transactions';
+  TransactionBulkUpdateRequest,
+  CategoryTimelineItem,
+  CategoryBreakdownItem,
+} from '../types/transaction'
 
-export function getTransactions(query?: QueryParams) {
-  return apiRequest<TransactionListResponse>('/transactions', { query });
+function buildQuery(params: object): string {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '' && v !== false) q.set(k, String(v))
+  }
+  const s = q.toString()
+  return s ? `?${s}` : ''
 }
 
-export function getTransactionFilterOptions(query?: QueryParams) {
-  return apiRequest<TransactionFilterOptionsResponse>('/transactions/filter-options', { query });
-}
+export const transactionApi = {
+  list: (params: TransactionListParams = {}) =>
+    apiFetch<TransactionListResponse>(`/transactions${buildQuery(params)}`),
 
-export function getTransactionSummary(query?: QueryParams) {
-  return apiRequest<TransactionSummaryResponse>('/transactions/summary', { query });
-}
+  filterOptions: () =>
+    apiFetch<TransactionFilterOptionsResponse>('/transactions/filter-options'),
 
-export function getTransactionsByCategory(query?: QueryParams) {
-  return apiRequest<CategorySummaryResponse>('/transactions/by-category', { query });
-}
+  update: (id: number, data: TransactionUpdateRequest) =>
+    apiFetch<void>(`/transactions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
 
-export function getTransactionsByCategoryTimeline(query?: QueryParams) {
-  return apiRequest<CategoryTimelineResponse>('/transactions/by-category/timeline', { query });
-}
+  delete: (id: number) =>
+    apiFetch<void>(`/transactions/${id}`, { method: 'DELETE' }),
 
-export function getTransactionPaymentMethods(query?: QueryParams) {
-  return apiRequest<PaymentMethodSummaryResponse>('/transactions/payment-methods', { query });
-}
+  restore: (id: number) =>
+    apiFetch<void>(`/transactions/${id}/restore`, { method: 'POST' }),
 
-export function createTransaction(body: TransactionCreateRequest) {
-  return apiRequest<TransactionResponse>('/transactions', {
-    method: 'POST',
-    body,
-    headers: getApiKeyHeaders(),
-  });
-}
+  bulkUpdate: (data: TransactionBulkUpdateRequest) =>
+    apiFetch<{ updated: number }>('/transactions/bulk-update', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
 
-export function updateTransaction(transactionId: number, body: TransactionUpdateRequest) {
-  return apiRequest<TransactionResponse>(`/transactions/${transactionId}`, {
-    method: 'PATCH',
-    body,
-    headers: getApiKeyHeaders(),
-  });
-}
+  categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
+    apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/category-timeline${buildQuery(params)}`),
 
-export function bulkUpdateTransactions(body: TransactionBulkUpdateRequest) {
-  return apiRequest<TransactionBulkUpdateResponse>('/transactions/bulk-update', {
-    method: 'PATCH',
-    body,
-    headers: getApiKeyHeaders(),
-  });
-}
+  categoryBreakdown: (params: { start_month?: string; end_month?: string; include_income?: boolean } = {}) =>
+    apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery(params)}`),
 
-export function deleteTransaction(transactionId: number) {
-  return apiRequest<void>(`/transactions/${transactionId}`, {
-    method: 'DELETE',
-    headers: getApiKeyHeaders(),
-  });
-}
-
-export function restoreTransaction(transactionId: number) {
-  return apiRequest<TransactionResponse>(`/transactions/${transactionId}/restore`, {
-    method: 'POST',
-    headers: getApiKeyHeaders(),
-  });
+  dailySpend: (params: { month: string; include_income?: boolean }) =>
+    apiFetch<{ items: Array<{ date: string; amount: number }> }>(`/transactions/daily-spend${buildQuery(params)}`),
 }

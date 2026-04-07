@@ -1,811 +1,285 @@
-import { memo, useEffect, useMemo, useState } from 'react';
-import { CategoryTimelineAreaChart } from '../components/charts/CategoryTimelineAreaChart';
-import { DailySpendCalendar } from '../components/charts/DailySpendCalendar';
-import { HorizontalBarChart } from '../components/charts/HorizontalBarChart';
-import { MerchantTreemapChart } from '../components/charts/MerchantTreemapChart';
-import { CardPeriodBadgeGroup } from '../components/common/CardPeriodBadgeGroup';
-import { EmptyState } from '../components/common/EmptyState';
-import { ErrorState } from '../components/common/ErrorState';
-import { IconTitle } from '../components/common/IconTitle';
-import { SectionPlaceholder } from '../components/common/SectionPlaceholder';
-import { TimelineRangeSlider } from '../components/filters/TimelineRangeSlider';
-import {
-  TransactionFilterBar,
-  type TransactionFilterValues,
-} from '../components/filters/TransactionFilterBar';
-import { useAppChromeMeta } from '../components/layout/AppChromeContext';
-import { TransactionsTable } from '../components/tables/TransactionsTable';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
-import { Checkbox } from '../components/ui/checkbox';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from '../components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import {
-  useSpendingPageState,
-  useSpendingDailyCalendarData,
-  useSpendingPeriodData,
-  useSpendingTimelineData,
-  useSpendingTransactionsData,
-  getSystemMonth,
-  resolvePreferredMonth,
-  type SpendingPageState,
-} from '../hooks/useSpending';
-import { Separator } from '../components/ui/separator';
+import { useState, useEffect } from 'react'
+import { SectionCard } from '../components/ui/SectionCard'
+import { LoadingState } from '../components/ui/LoadingState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { ErrorState } from '../components/ui/ErrorState'
+import { Pagination } from '../components/ui/Pagination'
+import { SegmentedBar } from '../components/ui/SegmentedBar'
+import { RangeSlider } from '../components/ui/RangeSlider'
+import { DailyCalendar } from '../components/ui/DailyCalendar'
+import { StackedBarChart } from '../components/charts/StackedBarChart'
+import { HorizontalBarList } from '../components/charts/HorizontalBarList'
+import { useCategoryTimeline, useCategoryBreakdown, useTransactionList, useDailySpend } from '../hooks/useTransactions'
+import { useFixedCostSummary, useMerchantSpend } from '../hooks/useAnalytics'
+import { useChromeContext } from '../components/layout/AppLayout'
+import { monthRange, formatKRWCompact } from '../lib/utils'
 
-function InlineSectionStatus({
-  description,
-  title,
-  tone = 'muted',
-}: {
-  description: string;
-  title: string;
-  tone?: 'muted' | 'error';
-}) {
-  const toneClasses =
-    tone === 'error'
-      ? 'border-[color:var(--color-danger-soft)] bg-[color:var(--color-danger-soft)]/70 text-[color:var(--color-danger)]'
-      : 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]/18 text-[color:var(--color-text-muted)]';
+const TREEMAP_COLORS = ['#1e3a5f', '#1a3b2e', '#2d1f4a', '#3b2020', '#2a2210', '#1f2a1a', '#2a1a2e']
 
-  return (
-    <div className={`rounded-[var(--radius)] border px-5 py-12 text-center ${toneClasses}`}>
-      <p className="text-base font-semibold">{title}</p>
-      <p className="mt-2 text-sm leading-6">{description}</p>
-    </div>
-  );
-}
+export function SpendingPage() {
+  const now = new Date()
+  const endMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const startOfRange = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const allMonths = monthRange(startOfRange, endMonth)
 
-const MonthlyTimelineSection = memo(function MonthlyTimelineSection({
-  timelineData,
-  timelineError,
-  timelineFilters,
-  timelinePending,
-  setTimelineFilters,
-}: {
-  timelineData?: ReturnType<typeof useSpendingTimelineData>['data'];
-  timelineError: boolean;
-  timelineFilters: SpendingPageState['timeline_filters'];
-  timelinePending: boolean;
-  setTimelineFilters: SpendingPageState['updateTimelineFilters'];
-}) {
-  if (timelinePending) {
-    return (
-      <section className="grid gap-5">
-        <InlineSectionStatus
-          title="월별 지출 시계열을 준비 중입니다"
-          description="월별 카테고리 추이와 고정비/변동비 추이 섹션을 불러오고 있습니다."
-        />
-      </section>
-    );
-  }
+  const [timelineRange, setTimelineRange] = useState<[string, string]>([
+    allMonths[Math.max(0, allMonths.length - 6)],
+    endMonth,
+  ])
+  const [detailStart, setDetailStart] = useState(timelineRange[0])
+  const [detailEnd, setDetailEnd] = useState(timelineRange[1])
+  const [includeIncome, setIncludeIncome] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState(endMonth)
+  const [txPage, setTxPage] = useState(1)
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [accordionOpen, setAccordionOpen] = useState(true)
 
-  if (timelineError || !timelineData) {
-    return (
-      <section className="grid gap-5">
-        <InlineSectionStatus
-          title="월별 시계열을 불러올 수 없습니다"
-          description="잠시 후 다시 시도해 주세요."
-          tone="error"
-        />
-      </section>
-    );
-  }
+  const { setMetaBadge } = useChromeContext()
+  useEffect(() => {
+    setMetaBadge(
+      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+        {detailStart} ~ {detailEnd}
+      </span>
+    )
+    return () => setMetaBadge(null)
+  }, [detailStart, detailEnd])
 
-  const selectedStartMonth =
-    timelineFilters.start_month || timelineData.available_months[0] || '-';
-  const selectedEndMonth =
-    timelineFilters.end_month ||
-    timelineData.available_months[timelineData.available_months.length - 1] ||
-    '-';
+  const timeline = useCategoryTimeline({ start_month: timelineRange[0], end_month: timelineRange[1] })
+  const breakdown = useCategoryBreakdown({ start_month: detailStart, end_month: detailEnd, include_income: includeIncome })
+  const subBreakdown = useCategoryBreakdown({ start_month: detailStart, end_month: detailEnd })
+  const fixedCost = useFixedCostSummary({ start_month: detailStart, end_month: detailEnd })
+  const merchants = useMerchantSpend({ months: 3, limit: 10 })
+  const dailySpend = useDailySpend({ month: calendarMonth, include_income: includeIncome })
+  const transactions = useTransactionList({
+    page: txPage, per_page: 20,
+    start_month: detailStart, end_month: detailEnd,
+    type: includeIncome ? 'all' : '지출',
+  })
+
+  const categories = [...new Set((breakdown.data?.items ?? []).map((i) => i.category))]
 
   return (
-    <section className="space-y-5">
-      <TimelineRangeSlider
-        months={timelineData.available_months}
-        values={timelineFilters}
-        onApply={setTimelineFilters}
-        onReset={() => setTimelineFilters({ start_month: '', end_month: '' })}
-      />
+    <div className="flex flex-col gap-4">
 
-      <div className="grid gap-5">
-        <Card data-testid="monthly-category-timeline-card">
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="월별 지출을 카테고리별로 쌓아 비교합니다. 상위 카테고리 중심으로 보이고 나머지는 기타로 묶습니다."
-              icon="presentationChartLine"
-              title="월별 카테고리 추이"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="월별 카테고리 추이 적용 기간"
-              end={selectedEndMonth}
-              start={selectedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <CategoryTimelineAreaChart
-              data={timelineData.category_timeline.points}
-              categories={timelineData.category_timeline.categories}
-            />
-          </CardContent>
-        </Card>
+      {/* 1. 범위 슬라이더 */}
+      <SectionCard title="조회 범위">
+        <RangeSlider months={allMonths} value={timelineRange} onChange={setTimelineRange} />
+      </SectionCard>
 
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="고정비와 변동비 분류가 채워지면 월별 지출 시계열을 같은 기간 범위로 비교합니다."
-              icon="chartBar"
-              title="월별 고정비/변동비 추이"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="월별 고정비/변동비 추이 적용 기간"
-              end={selectedEndMonth}
-              start={selectedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <SectionPlaceholder
-              title="고정비/변동비 분류 데이터 준비 중"
-              description="현재 슬라이더 기간과 동기화되도록 자리를 먼저 잡아두었고, 거래에 cost_kind 분류가 채워지면 area chart가 여기에 표시됩니다."
-            />
-          </CardContent>
-        </Card>
-      </div>
-    </section>
-  );
-});
+      {/* 2. 월별 카테고리 추이 */}
+      <SectionCard title="월별 카테고리 추이" badge="상위 카테고리">
+        {timeline.isLoading ? <LoadingState /> :
+         timeline.error ? <ErrorState onRetry={() => timeline.refetch()} /> :
+         timeline.data && timeline.data.items.length > 0 ? (
+           <StackedBarChart items={timeline.data.items} height={180} />
+         ) : <EmptyState />}
+      </SectionCard>
 
-const DetailFilterSection = memo(function DetailFilterSection({
-  detailFilters,
-  monthOptions,
-  resetDetailFilters,
-  setDetailFilters,
-}: {
-  detailFilters: TransactionFilterValues;
-  monthOptions: string[];
-  resetDetailFilters: SpendingPageState['resetDetailFilters'];
-  setDetailFilters: SpendingPageState['updateDetailFilters'];
-}) {
-  return (
-    <>
-      <TransactionFilterBar
-        monthOptions={monthOptions}
-        values={detailFilters}
-        onApply={setDetailFilters}
-        onReset={resetDetailFilters}
-      />
-      <p className="-mt-2 px-2 text-sm text-[color:var(--color-text-muted)]">
-        월 범위는 아래 집계 카드와 거래 내역에 함께 적용됩니다.
-      </p>
-    </>
-  );
-});
-
-const BreakdownSection = memo(function BreakdownSection({
-  endMonth,
-  startMonth,
-  subcategoryMajorFilter,
-  setSubcategoryMajorFilter,
-}: {
-  startMonth: string;
-  endMonth: string;
-  subcategoryMajorFilter: string;
-  setSubcategoryMajorFilter: SpendingPageState['updateSubcategoryMajorFilter'];
-}) {
-  const breakdownQuery = useSpendingPeriodData(
-    {
-      start_month: startMonth,
-      end_month: endMonth,
-    },
-    subcategoryMajorFilter,
-  );
-
-  if (breakdownQuery.isPending) {
-    return (
-      <section className="grid gap-5">
-        <InlineSectionStatus
-          title="기간 집계 카드를 준비 중입니다"
-          description="카테고리, 하위 카테고리, 거래처 집계를 계산하고 있습니다."
-        />
-      </section>
-    );
-  }
-
-  if (breakdownQuery.isError || !breakdownQuery.data) {
-    return (
-      <section className="grid gap-5">
-        <InlineSectionStatus
-          title="기간 집계를 불러올 수 없습니다"
-          description="지출 집계 카드 데이터를 가져오지 못했습니다."
-          tone="error"
-        />
-      </section>
-    );
-  }
-
-  const appliedStartMonth = startMonth || '기간 데이터 없음';
-  const appliedEndMonth = endMonth || appliedStartMonth;
-
-  return (
-    <>
-      <section className="grid gap-5 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="선택한 기간 기준 상위 카테고리 지출 금액을 비교합니다."
-              icon="chartBar"
-              title="카테고리별 지출"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="카테고리별 지출 적용 기간"
-              end={appliedEndMonth}
-              start={appliedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <HorizontalBarChart
-              ariaLabel="카테고리별 지출 차트"
-              data={breakdownQuery.data.category_breakdown}
-              heightClassName="h-80"
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="선택한 기간 기준 소분류 지출을 그래프로 정리했습니다. 상위 카테고리를 먼저 고르면 해당 범위만 좁혀서 볼 수 있습니다."
-              icon="tag"
-              title="하위 카테고리별 지출"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="하위 카테고리별 지출 적용 기간"
-              end={appliedEndMonth}
-              start={appliedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <label className="block max-w-xs">
-              <span className="text-xs font-semibold tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-                상위 카테고리 필터
-              </span>
-              <Select
-                onValueChange={(value) => setSubcategoryMajorFilter(value === '__all__' ? '' : value)}
-                value={subcategoryMajorFilter || '__all__'}
-              >
-                <SelectTrigger aria-label="상위 카테고리 필터" className="mt-1.5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">전체</SelectItem>
-                  {breakdownQuery.data.filter_options.subcategory_major_categories.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <div className="mt-5">
-              <HorizontalBarChart
-                ariaLabel="하위 카테고리별 지출 차트"
-                data={breakdownQuery.data.subcategory_breakdown}
-                heightClassName="h-96"
-                labelWidth={160}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="고정비가 입력되면 필수/비필수 비율을 비교합니다."
-              icon="percentage"
-              title="고정비 필수/비필수 비율"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="고정비 필수/비필수 비율 적용 기간"
-              end={appliedEndMonth}
-              start={appliedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <SectionPlaceholder
-              title="고정비 세부 분류 대기 중"
-              description="fixed_cost_necessity 값이 채워지면 비율 그래프가 여기에 표시됩니다."
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="변동비 분류가 채워지면 월별 비중과 구성 변화를 확인합니다."
-              icon="percentage"
-              title="변동비 비율"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="변동비 비율 적용 기간"
-              end={appliedEndMonth}
-              start={appliedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <SectionPlaceholder
-              title="변동비 비율 데이터 준비 중"
-              description="cost_kind 분류가 채워지면 변동비 비율 그래프가 여기에 표시됩니다."
-            />
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-5">
-        <Card>
-          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between md:space-y-0">
-            <IconTitle
-              description="편집된 거래처 기준으로 지출 규모를 묶어 거래처 분포를 확인합니다."
-              icon="buildingStorefront"
-              title="거래처별 Tree Map"
-            />
-            <CardPeriodBadgeGroup
-              ariaLabel="거래처별 Tree Map 적용 기간"
-              end={appliedEndMonth}
-              start={appliedStartMonth}
-            />
-          </CardHeader>
-          <CardContent>
-            <MerchantTreemapChart
-              ariaLabel="거래처별 지출 트리맵"
-              data={breakdownQuery.data.merchant_breakdown}
-            />
-          </CardContent>
-        </Card>
-      </section>
-    </>
-  );
-});
-
-const DailySpendSection = memo(function DailySpendSection({
-  displayMode,
-  selectedMonth,
-  setDisplayMode,
-  setSelectedMonth,
-}: {
-  displayMode: 'expense' | 'net';
-  selectedMonth: string;
-  setDisplayMode: (next: 'expense' | 'net') => void;
-  setSelectedMonth: SpendingPageState['updateDailyCalendarMonth'];
-}) {
-  const includeIncome = displayMode === 'net';
-  const dailyQuery = useSpendingDailyCalendarData(includeIncome, selectedMonth);
-
-  if (dailyQuery.isPending) {
-    return (
-      <Card>
-        <CardContent className="p-5">
-          <InlineSectionStatus
-            title="일별 지출 달력을 준비 중입니다"
-            description="선택한 기간의 일자별 지출액을 집계하고 있습니다."
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (dailyQuery.isError || !dailyQuery.data) {
-    return (
-      <Card>
-        <CardContent className="p-5">
-          <InlineSectionStatus
-            title="일별 지출 달력을 불러올 수 없습니다"
-            description="일자별 지출 집계를 가져오지 못했습니다."
-            tone="error"
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between lg:space-y-0">
-        <IconTitle
-          description={
-            includeIncome
-              ? '선택한 기간 안에서 한 달을 골라 일자별 수입과 지출의 순변동을 달력으로 확인합니다.'
-              : '선택한 기간 안에서 한 달을 골라 일자별 지출 금액을 달력으로 확인합니다.'
-          }
-          icon="calendarDays"
-          title={includeIncome ? '일별 수입/지출액' : '일별 지출액'}
-        />
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="block min-w-[10rem]">
-            <span className="sr-only">일별 카드 표시 기준</span>
-            <Select
-              onValueChange={(value) => setDisplayMode(value as 'expense' | 'net')}
-              value={displayMode}
-            >
-              <SelectTrigger aria-label="일별 카드 표시 기준">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="expense">지출만</SelectItem>
-                <SelectItem value="net">수입 포함</SelectItem>
-              </SelectContent>
-            </Select>
-          </label>
-          <Badge variant="reference">{dailyQuery.data.selected_month || '기간 데이터 없음'} 기준</Badge>
-          <label className="block min-w-[10rem]">
-            <span className="sr-only">일별 지출 월 선택</span>
-            <Select
-              onValueChange={setSelectedMonth}
-              value={dailyQuery.data.selected_month || '__empty__'}
-            >
-              <SelectTrigger aria-label="일별 지출 월 선택">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {dailyQuery.data.available_months.length === 0 ? (
-                  <SelectItem disabled value="__empty__">
-                    데이터 없음
-                  </SelectItem>
-                ) : (
-                  dailyQuery.data.available_months.map((month) => (
-                    <SelectItem key={month} value={month}>
-                      {month}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {dailyQuery.data.selected_month ? (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3.5 py-3">
-              <p className="text-sm text-[color:var(--color-text-muted)]">
-                {includeIncome ? '총 일별 순변동 합계' : '총 일별 지출 합계'}
-              </p>
-              <p className="text-sm font-semibold text-[color:var(--color-text)]">
-                {new Intl.NumberFormat('ko-KR', {
-                  style: 'currency',
-                  currency: 'KRW',
-                  maximumFractionDigits: 0,
-                }).format(dailyQuery.data.total_amount)}
-              </p>
-            </div>
-            <DailySpendCalendar
-              items={dailyQuery.data.items}
-              maxAmount={dailyQuery.data.max_amount}
-              month={dailyQuery.data.selected_month}
-            />
-          </>
-        ) : (
-          <InlineSectionStatus
-            title="표시할 일별 지출 데이터가 없습니다"
-            description="기간 필터를 조정하면 월별 달력 집계를 확인할 수 있습니다."
-          />
-        )}
-      </CardContent>
-    </Card>
-  );
-});
-
-const TransactionsSection = memo(function TransactionsSection({
-  endMonth,
-  includeIncome,
-  isAccordionOpen,
-  page,
-  perPage,
-  setIncludeIncome,
-  setTransactionsAccordionOpen,
-  setTransactionsPage,
-  startMonth,
-}: {
-  startMonth: string;
-  endMonth: string;
-  includeIncome: boolean;
-  page: number;
-  perPage: number;
-  isAccordionOpen: boolean;
-  setIncludeIncome: SpendingPageState['updateIncludeIncome'];
-  setTransactionsPage: SpendingPageState['updateTransactionsPage'];
-  setTransactionsAccordionOpen: SpendingPageState['updateTransactionsAccordionOpen'];
-}) {
-  const transactionsQuery = useSpendingTransactionsData(
-    {
-      start_month: startMonth,
-      end_month: endMonth,
-    },
-    includeIncome,
-    page,
-    perPage,
-  );
-
-  if (transactionsQuery.isPending) {
-    return (
-      <Card>
-        <CardContent className="p-5">
-          <InlineSectionStatus
-            title="거래 내역을 준비 중입니다"
-            description="현재 필터 조건으로 거래 목록을 불러오고 있습니다."
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (transactionsQuery.isError || !transactionsQuery.data) {
-    return (
-      <Card>
-        <CardContent className="p-5">
-          <InlineSectionStatus
-            title="거래 내역을 불러올 수 없습니다"
-            description="현재 조건의 거래 목록을 가져오지 못했습니다."
-            tone="error"
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(transactionsQuery.data.transactions_total / transactionsQuery.data.transactions_per_page),
-  );
-
-  return (
-    <Card>
-      <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
-        <IconTitle
-          description={
-            includeIncome
-              ? '현재 조건에 맞는 수입·지출 거래를 함께 확인합니다.'
-              : '현재 조건에 맞는 최근 지출 거래를 확인합니다.'
-          }
-          icon="workbench"
-          title="거래 내역"
-        />
-        <div className="flex flex-wrap items-center gap-3">
-          <CardPeriodBadgeGroup
-            ariaLabel="거래 내역 적용 기간"
-            end={endMonth || startMonth || '기간 데이터 없음'}
-            start={startMonth || endMonth || '기간 데이터 없음'}
-          />
-          <label className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm text-[color:var(--color-text)]">
-            <Checkbox
-              aria-label="거래내역 수입 포함"
-              checked={includeIncome}
-              onCheckedChange={(checked) => setIncludeIncome(checked === true)}
+      {/* 3. 상세 필터 */}
+      <div className="bg-surface-card border border-border rounded-card px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] text-text-faint">상세 필터</span>
+          <div className="w-px h-4 bg-border-strong" />
+          <select
+            value={detailStart}
+            onChange={(e) => { setDetailStart(e.target.value); setTxPage(1) }}
+            className="text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+          >
+            {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <span className="text-[10px] text-text-ghost">~</span>
+          <select
+            value={detailEnd}
+            onChange={(e) => { setDetailEnd(e.target.value); setTxPage(1) }}
+            className="text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+          >
+            {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <div className="w-px h-4 bg-border-strong" />
+          <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-text-faint">
+            <input
+              type="checkbox" checked={includeIncome}
+              onChange={(e) => { setIncludeIncome(e.target.checked); setTxPage(1) }}
+              className="w-3 h-3 accent-accent"
             />
             수입 포함
           </label>
-          <p className="text-xs tracking-[0.16em] text-[color:var(--color-text-subtle)]">
-            {transactionsQuery.data.transactions_page} / {totalPages} 페이지
-            {transactionsQuery.isFetching ? ' · 불러오는 중' : ''}
-          </p>
         </div>
-      </CardHeader>
-      <CardContent>
-        <Accordion
-          collapsible
-          type="single"
-          value={isAccordionOpen ? 'transactions' : undefined}
-          onValueChange={(value) => setTransactionsAccordionOpen(value === 'transactions')}
-        >
-          <AccordionItem value="transactions">
-            <AccordionTrigger>{isAccordionOpen ? '거래 내역 접기' : '거래 내역 펼치기'}</AccordionTrigger>
-            <AccordionContent>
-              <TransactionsTable rows={transactionsQuery.data.transactions} />
-              <div className="mt-4 flex items-center justify-between gap-4">
-                <Button
-                  type="button"
-                  onClick={() =>
-                    setTransactionsPage(Math.max(1, transactionsQuery.data.transactions_page - 1))
-                  }
-                  disabled={transactionsQuery.data.transactions_page <= 1 || transactionsQuery.isFetching}
-                  variant="outline"
-                >
-                  이전 페이지
-                </Button>
-                <p className="text-sm text-[color:var(--color-text-muted)]">
-                  총 {transactionsQuery.data.transactions_total}건 중{' '}
-                  {(transactionsQuery.data.transactions_page - 1) *
-                    transactionsQuery.data.transactions_per_page +
-                    1}
-                  {' '}-{' '}
-                  {Math.min(
-                    transactionsQuery.data.transactions_page *
-                      transactionsQuery.data.transactions_per_page,
-                    transactionsQuery.data.transactions_total,
-                  )}
-                  건
-                </p>
-                <Button
-                  type="button"
-                  onClick={() =>
-                    setTransactionsPage(
-                      Math.min(totalPages, transactionsQuery.data.transactions_page + 1),
-                    )
-                  }
-                  disabled={transactionsQuery.data.transactions_page >= totalPages || transactionsQuery.isFetching}
-                  variant="outline"
-                >
-                  다음 페이지
-                </Button>
+      </div>
+
+      {/* 4. 카테고리 + 소분류 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="카테고리별 지출" badge={`${detailStart} ~ ${detailEnd}`}>
+          {breakdown.isLoading ? <LoadingState /> :
+           breakdown.data && breakdown.data.items.length > 0 ? (
+             <HorizontalBarList items={breakdown.data.items.map((i) => ({ label: i.category, amount: i.amount }))} />
+           ) : <EmptyState />}
+        </SectionCard>
+        <SectionCard title="소분류별 지출">
+          <div className="mb-3">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="text-[9px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+            >
+              <option value="">대분류 선택</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {selectedCategory && subBreakdown.data ? (
+            <HorizontalBarList
+              items={subBreakdown.data.items
+                .filter((i) => i.category === selectedCategory)
+                .map((i) => ({ label: i.category, amount: i.amount }))}
+            />
+          ) : <EmptyState message="대분류를 선택하세요" />}
+        </SectionCard>
+      </div>
+
+      {/* 5. 고정비/변동비 + 필수/비필수 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="고정비 / 변동비 비율" badge={`${detailStart} ~ ${detailEnd}`}>
+          {fixedCost.isLoading ? <LoadingState /> :
+           fixedCost.data ? (
+             fixedCost.data.unclassified_count > 0 && fixedCost.data.fixed_ratio == null ? (
+               <EmptyState message="cost_kind 미분류 데이터입니다. 작업대에서 분류해주세요." />
+             ) : (
+               <>
+                 <SegmentedBar
+                   segments={[
+                     { label: '고정비', value: (fixedCost.data.fixed_ratio ?? 0) * 100, color: '#1e40af' },
+                     { label: '변동비', value: (1 - (fixedCost.data.fixed_ratio ?? 0)) * 100, color: '#059669' },
+                   ]}
+                 />
+                 <div className="grid grid-cols-2 gap-3 mt-3">
+                   {[
+                     { label: '고정비', amount: fixedCost.data.fixed_total, color: 'text-blue-400' },
+                     { label: '변동비', amount: fixedCost.data.variable_total, color: 'text-accent' },
+                   ].map((s) => (
+                     <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-3">
+                       <div className={`text-[10px] ${s.color} font-semibold mb-1`}>{s.label}</div>
+                       <div className="text-[14px] font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
+                     </div>
+                   ))}
+                 </div>
+               </>
+             )
+           ) : <EmptyState />}
+        </SectionCard>
+
+        <SectionCard title="고정비 — 필수 / 비필수" badge="고정비 기준">
+          {fixedCost.isLoading ? <LoadingState /> :
+           fixedCost.data && fixedCost.data.fixed_total > 0 ? (
+             <>
+               <SegmentedBar
+                 segments={[
+                   { label: '필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.essential_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: '#047857' },
+                   { label: '비필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.discretionary_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: '#92400e' },
+                 ]}
+               />
+               <div className="grid grid-cols-2 gap-3 mt-3">
+                 {[
+                   { label: '필수 고정비', amount: fixedCost.data.essential_fixed_total, color: 'text-accent-bright' },
+                   { label: '비필수 고정비', amount: fixedCost.data.discretionary_fixed_total, color: 'text-warn' },
+                 ].map((s) => (
+                   <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-3">
+                     <div className={`text-[10px] ${s.color} font-semibold mb-1`}>{s.label}</div>
+                     <div className="text-[14px] font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
+                   </div>
+                 ))}
+               </div>
+             </>
+           ) : <EmptyState message="고정비 분류 데이터가 없습니다" />}
+        </SectionCard>
+      </div>
+
+      {/* 6. 거래처 Treemap */}
+      <SectionCard title="거래처별 지출 비중" badge="최근 3개월">
+        {merchants.isLoading ? <LoadingState /> :
+         merchants.data && merchants.data.items.length > 0 ? (
+           <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', height: 110 }}>
+             {merchants.data.items.slice(0, 8).map((m, i) => (
+               <div
+                 key={m.merchant}
+                 className="rounded-md flex flex-col items-center justify-center text-center gap-0.5 p-1"
+                 style={{ background: TREEMAP_COLORS[i % TREEMAP_COLORS.length] }}
+               >
+                 <span className="text-[9px] font-semibold text-white/80 truncate w-full text-center">{m.merchant}</span>
+                 <span className="text-[8px] text-white/50">₩{formatKRWCompact(m.amount)}</span>
+               </div>
+             ))}
+           </div>
+         ) : <EmptyState />}
+      </SectionCard>
+
+      {/* 7. 달력 + 거래내역 */}
+      <div className="grid md:grid-cols-[3fr_2fr] gap-4">
+        <SectionCard title="일별 지출 달력">
+          <div className="flex items-center gap-2 mb-3">
+            <select
+              value={calendarMonth}
+              onChange={(e) => setCalendarMonth(e.target.value)}
+              className="text-[9px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+            >
+              {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          {dailySpend.isLoading ? <LoadingState /> :
+           dailySpend.data ? (
+             <DailyCalendar month={calendarMonth} data={dailySpend.data.items} includeIncome={includeIncome} />
+           ) : <EmptyState />}
+        </SectionCard>
+
+        <div className="flex flex-col">
+          <div
+            className="flex items-center justify-between px-4 py-3 bg-surface-card border border-border rounded-t-card cursor-pointer"
+            onClick={() => setAccordionOpen((o) => !o)}
+          >
+            <div>
+              <div className="text-[11px] font-semibold text-text-secondary">거래 내역</div>
+              <div className="text-[10px] text-text-ghost mt-0.5">
+                {txPage} / {Math.ceil((transactions.data?.total ?? 0) / 20)} 페이지 · 총 {transactions.data?.total ?? 0}건
               </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </CardContent>
-    </Card>
-  );
-});
-
-export function SpendingPage() {
-  const spendingState = useSpendingPageState();
-  const detailFilters = spendingState.detail_filters;
-  const updateDetailFilters = spendingState.updateDetailFilters;
-  const [dailyCalendarMonth, setDailyCalendarMonth] = useState(() => spendingState.daily_calendar_month);
-  const [dailyCardDisplayMode, setDailyCardDisplayMode] = useState<'expense' | 'net'>('expense');
-  const detailRangeLabel =
-    detailFilters.start_month && detailFilters.end_month
-      ? detailFilters.start_month === detailFilters.end_month
-        ? `상세 범위 ${detailFilters.start_month}`
-        : `상세 범위 ${detailFilters.start_month} ~ ${detailFilters.end_month}`
-      : '상세 범위 미지정';
-  const timelineQuery = useSpendingTimelineData(spendingState.timeline_filters);
-  const periodOptionsQuery = useSpendingPeriodData(
-    {
-      start_month: detailFilters.start_month,
-      end_month: detailFilters.end_month,
-    },
-    '',
-  );
-  const chromeMeta = useMemo(
-    () => <Badge variant="reference">{detailRangeLabel}</Badge>,
-    [detailRangeLabel],
-  );
-  useAppChromeMeta(chromeMeta);
-
-  useEffect(() => {
-    if (!timelineQuery.data?.available_months.length) {
-      return;
-    }
-
-    const systemMonth = getSystemMonth();
-    const preferredMonth = resolvePreferredMonth(timelineQuery.data.available_months, systemMonth);
-
-    if (!preferredMonth) {
-      return;
-    }
-
-    const shouldRebaseDetailRange =
-      detailFilters.start_month === systemMonth &&
-      detailFilters.end_month === systemMonth &&
-      !timelineQuery.data.available_months.includes(systemMonth);
-
-    if (shouldRebaseDetailRange) {
-      updateDetailFilters({
-        ...detailFilters,
-        start_month: preferredMonth,
-        end_month: preferredMonth,
-      });
-    }
-
-    const shouldSyncDailyMonth =
-      (dailyCalendarMonth === systemMonth &&
-        !timelineQuery.data.available_months.includes(systemMonth)) ||
-      !dailyCalendarMonth;
-
-    if (shouldSyncDailyMonth && dailyCalendarMonth !== preferredMonth) {
-      setDailyCalendarMonth(preferredMonth);
-    }
-  }, [
-    dailyCalendarMonth,
-    detailFilters,
-    timelineQuery.data,
-    updateDetailFilters,
-  ]);
-
-  if (periodOptionsQuery.isError) {
-    return (
-      <ErrorState
-        title="지출 데이터를 불러올 수 없습니다"
-        description="지출 분석 화면에 필요한 집계 데이터를 가져오지 못했습니다."
-        detail={periodOptionsQuery.error instanceof Error ? periodOptionsQuery.error.message : undefined}
-      />
-    );
-  }
-
-  if (!periodOptionsQuery.data && periodOptionsQuery.isPending) {
-    return (
-      <div className="space-y-5">
-        <InlineSectionStatus
-          title="지출 분석 화면을 준비 중입니다"
-          description="기간별 집계와 거래 목록을 차례대로 불러오고 있습니다."
-        />
-      </div>
-    );
-  }
-
-  if (!periodOptionsQuery.data) {
-    return (
-      <EmptyState
-        title="표시할 지출 데이터가 없습니다"
-        description="거래가 적재되면 카테고리와 결제수단 분석 화면을 표시합니다."
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      <MonthlyTimelineSection
-        timelineData={timelineQuery.data}
-        timelineError={timelineQuery.isError}
-        timelineFilters={spendingState.timeline_filters}
-        timelinePending={timelineQuery.isPending}
-        setTimelineFilters={spendingState.updateTimelineFilters}
-      />
-
-      <div className="space-y-3" data-testid="spending-detail-scope-separator">
-        <div className="flex min-w-0 items-center gap-4 overflow-hidden">
-          <p className="shrink-0 text-xs font-semibold tracking-[0.18em] text-[color:var(--color-text-subtle)]">
-            아래 카드부터 월 필터 적용
-          </p>
-          <Separator className="min-w-0 flex-1 shrink" />
+            </div>
+            <span className="text-text-ghost text-[12px]">{accordionOpen ? '▲' : '▼'}</span>
+          </div>
+          {accordionOpen && (
+            <div className="bg-surface-card border border-border border-t-0 rounded-b-card">
+              {transactions.isLoading ? <LoadingState /> :
+               transactions.data && transactions.data.items.length > 0 ? (
+                 <>
+                   <table className="w-full border-collapse text-[10px]">
+                     <thead>
+                       <tr>
+                         {['날짜', '거래처', '카테고리', '금액'].map((h) => (
+                           <th key={h} className="text-[9px] text-text-ghost px-3 py-2 text-left border-b border-border-subtle">{h}</th>
+                         ))}
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {transactions.data.items.map((tx) => (
+                         <tr key={tx.id} className="border-b border-[#0d1117] last:border-0">
+                           <td className="px-3 py-2 text-text-ghost">{tx.date.slice(5)}</td>
+                           <td className="px-3 py-2 text-text-secondary truncate max-w-[80px]">{tx.merchant}</td>
+                           <td className="px-3 py-2 text-text-faint">{tx.effective_category_major}</td>
+                           <td className={`px-3 py-2 text-right font-semibold ${tx.amount < 0 ? 'text-danger' : 'text-accent'}`}>
+                             {tx.amount < 0 ? '-' : '+'}₩{Math.abs(tx.amount).toLocaleString()}
+                           </td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                   <Pagination
+                     page={txPage} perPage={20}
+                     total={transactions.data.total}
+                     onPageChange={setTxPage}
+                   />
+                 </>
+               ) : <EmptyState />}
+            </div>
+          )}
         </div>
-        <p className="text-sm text-[color:var(--color-text-muted)]">
-          카테고리별, 거래처별, 거래 내역은 아래 월 범위를 기준으로 함께 집계됩니다.
-        </p>
       </div>
-
-      <DetailFilterSection
-        detailFilters={detailFilters}
-        monthOptions={timelineQuery.data?.available_months ?? []}
-        resetDetailFilters={spendingState.resetDetailFilters}
-        setDetailFilters={spendingState.updateDetailFilters}
-      />
-
-      <BreakdownSection
-        startMonth={detailFilters.start_month}
-        endMonth={detailFilters.end_month}
-        subcategoryMajorFilter={spendingState.subcategory_major_filter}
-        setSubcategoryMajorFilter={spendingState.updateSubcategoryMajorFilter}
-      />
-
-      <DailySpendSection
-        displayMode={dailyCardDisplayMode}
-        selectedMonth={dailyCalendarMonth}
-        setDisplayMode={setDailyCardDisplayMode}
-        setSelectedMonth={setDailyCalendarMonth}
-      />
-
-      <TransactionsSection
-        startMonth={detailFilters.start_month}
-        endMonth={detailFilters.end_month}
-        includeIncome={spendingState.include_income}
-        page={spendingState.transactions_page}
-        perPage={spendingState.transactions_per_page}
-        isAccordionOpen={spendingState.transactions_accordion_open}
-        setIncludeIncome={spendingState.updateIncludeIncome}
-        setTransactionsAccordionOpen={spendingState.updateTransactionsAccordionOpen}
-        setTransactionsPage={spendingState.updateTransactionsPage}
-      />
     </div>
-  );
+  )
 }
