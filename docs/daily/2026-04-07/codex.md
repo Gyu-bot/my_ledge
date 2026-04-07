@@ -624,3 +624,191 @@
 
 - `.playwright-mcp/`
   - 로컬 브라우저 실행 artifact라서 `.gitignore`에 추가하고 커밋에서는 제외
+
+## PRD / Code / Data Review
+
+- 사용자 요청
+  - `PRD.md`, live 코드/문서, 현재 적재 데이터 기준으로 현행 기능을 리뷰하고 추가 기능 후보를 정리
+
+### 확인 순서
+
+- `AGENTS.md`, `docs/STATUS.md`, 최근 커밋 10개 확인
+- 제품/계약 문서 대조
+  - `PRD.md`
+  - `docs/backend-api-ssot.md`
+  - `docs/additional_feature.md`
+- backend 구현/테스트 확인
+  - `backend/app/api/v1/endpoints/*.py`
+  - `backend/app/services/{upload_service,transactions_service,analytics_service,assets_service,canonical_views}.py`
+  - `backend/tests/services/test_{upload,analytics}_service.py`
+- frontend surface 확인
+  - `frontend/src/pages/*`
+  - `frontend/src/api/*`
+- PostgreSQL 적재 상태 확인
+  - `transactions`, `asset_snapshots`, `investments`, `loans`, `upload_logs`
+
+### 점검 결과
+
+- 구현 범위
+  - core upload/read/edit flow는 live
+  - advisor analytics는 P0/P1 8종까지 live
+  - `POST /api/v1/transactions/merge` 는 여전히 `501` stub
+  - Phase 4C(`net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`)는 아직 미구현
+- 계약/문서
+  - review 기준 SSOT는 `backend code -> docs/backend-api-ssot.md -> PRD.md`
+  - 업로드 원본 recent-5 retention은 문서에 남아 있지만 live code에는 아직 없음
+- 실데이터
+  - `transactions`: 2219건, `2025-03-12 ~ 2026-03-11`
+  - `is_deleted=true`: 3건, `source='manual'`: 0건
+  - `asset_snapshots`: 45건 / `investments`: 11건 / `loans`: 5건
+  - 세 snapshot 테이블 모두 `snapshot_date=2026-03-24` 1개만 존재
+  - 지출 실데이터에서 `cost_kind`, `fixed_cost_necessity` 채워진 건수는 0
+  - merchant alias 분산 다수 확인
+    - `쿠팡(쿠페이)` / `쿠팡_쿠페이`
+    - `신세계 사우스시티` / `신세계사우스시티`
+    - `KT통신요금 납부` / `KT통신요금납부`
+
+### 검증
+
+- 통과
+  - `cd frontend && npm test -- --runInBand`
+  - `cd frontend && npm run lint && npm run typecheck`
+- 실패
+  - `cd backend && uv run pytest`
+  - 실패 상세
+    - `tests/services/test_analytics_service.py::test_get_recurring_payments_detects_monthly`
+    - `tests/services/test_analytics_service.py::test_get_recurring_payments_filters_by_min_occurrences`
+    - `tests/services/test_analytics_service.py::test_get_spending_anomalies_detects_spike`
+    - `tests/services/test_analytics_service.py::test_get_spending_anomalies_filters_by_threshold`
+  - 원인
+    - `get_recurring_payments`, `get_spending_anomalies` 서비스 함수가 `page`, `per_page` required 인자를 받도록 바뀌었지만 서비스 테스트 호출부는 그 계약을 반영하지 못함
+
+### 메모
+
+- 후속 사용자 가정 반영
+  - snapshot은 동일 기준으로 계속 적재된다고 보고, 현재 단일 snapshot 상태 자체는 우선 blocker로 보지 않음
+  - `cost_kind` / `fixed_cost_necessity` 공백은 추후 사용자가 직접 분류할 예정이므로 현재 결함 우선순위에서는 제외
+- 그 전제 이후에도 남는 핵심 리스크
+  - backend analytics regression 미복구
+  - `SpendingPage` 거래처 treemap query가 사용자가 선택한 상세 기간과 어긋남
+  - reset 이후 `upload_logs` retained 로 current state와 history가 분리될 수 있음
+  - PRD의 `이체=자산이동` separate tracking 요구는 아직 redirect-only
+
+## Advisor Analytics Plan Follow-up
+
+- 사용자 요청
+  - merchant normalization과 merchant 기반 fixed/variable classification은 deferred 항목으로 구현계획에 명시
+  - transfer tracking slice 추가 설명
+  - irregular snapshot compare의 유용성 판단
+  - liquidity/debt health 상세 로직을 `fintech-engineer` 검토 후 구현계획에 반영
+
+### fintech-engineer 검토 요약
+
+- transfer tracking
+  - `이체`를 단순 제외가 아니라 별도 자금 이동 slice로 해석
+  - domain model: `transfer_candidate`, `matched_transfer_pair`, `unmatched_transfer`, `loan_principal_movement`, `investment_funding_or_withdrawal`
+  - MVP endpoint:
+    - `GET /api/v1/transfers/summary`
+    - `GET /api/v1/transfers`
+    - `GET /api/v1/transfers/unmatched`
+- irregular snapshot compare
+  - 유효함
+  - 단, `latest_vs_previous_available` 또는 `selected_vs_previous_available` 기준으로 비교해야 하고 `comparison_days`를 반드시 노출
+  - 속도형 지표는 `daily_change_est`, `monthly_change_est` 같은 추정치로만 노출
+- liquidity health
+  - input: latest snapshot + 최근 3개월 평균 지출 + 가능하면 essential spend
+  - output: `liquid_assets`, `near_liquid_assets`, `monthly_burn_est`, `essential_monthly_burn_est`, `emergency_fund_months_est`, `total_runway_months_est`, `liquidity_ratio_est`
+  - essential 분류가 없으면 총지출 기반 fallback + `confidence=low`
+- debt health
+  - input: latest loans + 최근 평균 월수입 + latest asset snapshot
+  - output: `total_debt_balance`, `secured_debt_balance`, `unsecured_debt_balance`, `weighted_avg_interest_rate`, `debt_to_asset_ratio`, `monthly_debt_service_est`, `debt_service_to_income_est`
+  - 만기일 없으면 `interest-only floor`, loan type별 fallback term 적용
+
+### 문서 반영
+
+- 수정
+  - `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
+- 반영 내용
+  - `Transfer Tracking MVP` workstream 추가
+  - `Snapshot Compare` 로직과 guardrail 추가
+  - `liquidity-health`, `debt-health` 상세 지표/추정 규칙 추가
+  - deferred schema enrichment에 `merchant_normalized`, merchant 기반 fixed/variable classification rules 명시
+  - heuristic contract 공통 규칙에 `confidence`, `assumptions`, `*_est`, `comparison_days` 추가
+
+## Debt Principal Classification Follow-up
+
+- 사용자 질문
+  - 현재 적재 데이터에서 대출원금상환이 실제로 `이체`가 아니라 `지출`로 들어와 있는지 확인 요청
+
+### 확인 결과
+
+- 맞음
+  - 현재 live 데이터에서 대출 관련 상환 row는 raw `type='이체'`가 아니라 `type='지출'`로 적재됨
+  - 대표 분포
+    - `원금·이자 자동이체(8640)` / `원금·이자 자동이체(5070)` / `원금·이자 갚음(8640)`
+    - `category_major='금융'`, `category_minor='미분류'`
+  - 별도 `대출상환` 카테고리 row는 현재 0건
+- 보조 관찰
+  - `대출이자원가`도 동일하게 `지출`/`금융`으로 적재됨
+  - 따라서 transfer tracking은 raw `type='이체'`만 모아서는 불완전함
+
+### 계획 반영
+
+- `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
+  - transfer tracking MVP에 expense-side 재분류 레이어 추가
+  - debt movement 후보 패턴(`원금·이자 자동이체`, `원금·이자 갚음`) 탐지 메모 추가
+  - 가능하면 `estimated_principal_component` / `estimated_interest_component` 를 추정치로 분리하고, 아니면 debt-movement candidate로 남기도록 명시
+
+### 사용자 의도 반영
+
+- 사용자 의도
+  - 대출 상환금은 일부러 고정비 지출로 보려는 목적이 있음
+- 반영 원칙
+  - raw transaction의 `type='지출'` 는 유지
+  - transfer tracking은 raw type 변경이 아니라 파생 태그/파생 view로 제공
+  - 기본 지출 분석에서는 대출 상환 row를 계속 포함
+  - 추후 필요할 때만 별도 `원금 제외 보기` 같은 opt-in slice를 검토
+
+### 지표별 정책 정리
+
+- spending / fixed-cost 관점
+  - 월 지출, 고정비 합계, 카테고리 지출에는 대출 상환액을 기본 포함
+- debt-health 관점
+  - `monthly_debt_service_est` 는 상환 총액 기준
+  - 가능할 때만 `estimated_principal_component`, `estimated_interest_component` 를 별도 파생
+- transfer / debt movement 관점
+  - raw transaction 제거 없이 동일 row를 debt-movement candidate로 병행 표시
+- 향후 opt-in 가능 항목
+  - `원금 제외 소비`
+  - `이자만 금융비용`
+  - `부채 감소 속도`
+
+### 우선순위 조정
+
+- 사용자 요청
+  - 위 정책은 문서화하되, 대출상환의 expense-side 원금/이자 파생 해석 구현은 나머지 analytics가 안정화된 뒤로 우선순위를 미뤄달라고 요청
+- 반영
+  - advisor analytics plan의 transfer tracking MVP 범위를 raw `type='이체'` 중심의 안정화 범위로 축소
+  - 대출상환 파생 해석은 `Post-stabilization follow-up` 및 deferred additions로 이동
+  - rollout order를 `Transfer Tracking MVP -> P2 asset/liability health -> analytics 안정화 -> debt principal derivation 재평가` 순서로 수정
+
+## Stability-First Reprioritization
+
+- 사용자 요청
+  - 신규 기능 구현의 우선순위는 모두 뒤로 미루고, 현재 기능에서 잘못된 부분 수정과 안정적 구현을 최우선으로 둘 것
+  - 현재 API, backend, frontend 정합성을 맞추는 것이 1순위
+
+### 반영
+
+- `docs/STATUS.md`
+  - `Review follow-up triage` 를 실질적인 최우선 묶음으로 유지
+  - `Next Up` 을 안정화 순서로 재정렬:
+    - backend analytics regression fix
+    - frontend analytics date-range contract fix
+    - `upload_logs` semantics 정리
+    - backend/API 문서와 live contract 정렬
+    - 수정 후 system validation
+  - `merchant normalization`, `transfers/*`, `liquidity-health`, `debt-health`, `snapshot-compare`, 대출상환 파생 해석은 모두 후순위 보류로 명시
+- `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
+  - rollout order 최상단에 `Freeze new analytics feature work until current API/backend/frontend contract is green end-to-end` 를 추가
+  - 신규 analytics workstream 재개 조건을 `existing surfaces are stable in code, tests, and docs` 로 명시
