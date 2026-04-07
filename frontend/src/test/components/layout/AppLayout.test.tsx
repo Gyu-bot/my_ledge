@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { AppLayout } from '../../../components/layout/AppLayout'
 
@@ -21,5 +21,27 @@ describe('AppLayout', () => {
     expect(screen.getAllByText('지출 분석').length).toBeGreaterThan(0)
     expect(screen.getByText('stub page')).toBeInTheDocument()
     expect(screen.getByLabelText('메뉴 열기')).toBeInTheDocument()
+  })
+
+  it('toggles the desktop sidebar open from icon-only mode', () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/',
+          element: <AppLayout />,
+          children: [{ path: 'analysis/assets', element: <div>asset page</div> }],
+        },
+      ],
+      { initialEntries: ['/analysis/assets'] },
+    )
+
+    render(<RouterProvider router={router} />)
+
+    expect(screen.queryByText('거래 작업대')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '사이드바 펼치기' }))
+
+    expect(screen.getByText('거래 작업대')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '사이드바 접기' })).toBeInTheDocument()
   })
 })

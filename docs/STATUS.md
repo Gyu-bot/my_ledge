@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** backend 안정화 배치 진행 중, real workbook rolling-window/import parity 재검증 완료
-- **Last Worker:** Codex (2026-04-07T22:12+0900, assets snapshot compare frontend hookup + reset/upload history semantics 문구 정리 + smoke/test 재검증)
+- **Phase:** 안정화 배치 유지, shell interaction polish 진행 중
+- **Last Worker:** Codex (2026-04-08T08:31+0900, desktop sidebar icon-only collapse/toggle 구현 및 frontend 검증 완료)
 - **Branch:** main
 
 ## Completed
@@ -61,6 +61,7 @@
 - [x] 우선순위 재정렬: 신규 기능 구현보다 현재 API/백엔드/프론트엔드 정합성 수정과 안정적 구현을 최우선으로 전환
 - [x] 안정화 1차 배치 완료: analytics service pagination 기본값 복구, `merchant-spend` month-span 계약 추가, `SpendingPage` treemap query 범위 정렬, workbook fixture alias 복구
 - [x] 회귀 검증 완료: `cd backend && uv run pytest -q` → `62 passed`, `cd frontend && npm test -- --runInBand` → `38 passed`, `cd frontend && npm run lint && npm run typecheck` → 통과
+- [x] Frontend shell polish: desktop 사이드바를 기본 icon-only 상태로 접고 클릭 토글로 펼치는 interaction 추가 + layout 테스트/린트/typecheck 통과
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
@@ -130,6 +131,7 @@
 - [x] Frontend 자산 연결 완료: 기존 `AssetsPage` 에 snapshot compare query 연결 + KPI/section badge에 `comparison_label` / `comparison_days` / delta 반영 + 페이지 테스트 추가
 - [x] 운영 semantics 정리: Workbench Danger Zone에 reset 이후 `upload_logs` retained 의미를 UI copy로 명시 + SSOT 문서에 reset/upload history semantics 반영
 - [x] Backend smoke 보강: real workbook 4종 적재 상태에서 `/api/v1/assets/snapshot-compare` API smoke test 추가
+- [x] 종합 검증 완료: `backend pytest 74 passed`, `frontend vitest 39 passed`, `frontend lint/typecheck` 통과, upload/read/edit/reset/assets/source parity 관련 API·service 검증 재실행 완료
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
@@ -146,7 +148,7 @@
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. 신규 analytics 확장은 안정화 배치 완료 전까지 후순위 보류
 - [ ] Review follow-up triage
   - 현재 상태: analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적, irregular snapshot comparison contract, 자산 프론트 연결, reset/upload history semantics UI copy는 복구/정리 완료
-  - 현재 지점: 남은 backend 안정화 범위는 upload/read/edit/reset 전 플로우 system validation과 live 문서/배포 smoke 추가 확인
+  - 현재 지점: 코드/테스트 기준 검증은 완료. 남은 안정화 범위는 운영 배포본 smoke capture와 live 문서/배포 환경 정렬
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
   - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, lint/typecheck 복구는 완료했다. 현재 남은 프론트 리스크는 MagicDNS host allowlist와 운영 배포본 smoke capture다
@@ -160,7 +162,7 @@
   - [x] frontend 자산 surface가 `comparison_label`, `comparison_days`, `is_partial`, `is_stale` 를 어떻게 소비할지 정리
   - [x] real workbook 4종 적재 상태에서 `/api/v1/assets/snapshot-compare` smoke 검증 추가
 - [ ] End-to-end validation
-  - [ ] `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 주요 운영 플로우 재검증
+  - [x] `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 주요 운영 플로우 재검증
   - [ ] 운영 배포본 기준 asset compare consuming smoke 또는 screenshot 확보
 - [ ] Source verification scope 정리
   - [ ] `verify_import_parity` 가 transaction sample presence 검증에 머무르는 현재 범위를 문서화할지, overlap window extra-row 검증까지 확장할지 결정
@@ -170,7 +172,7 @@
   - [ ] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
   - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
 - [ ] 현행 기능 system validation
-  - [ ] 수정 후 `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 운영 플로우 재검증
+  - [x] 수정 후 `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 운영 플로우 재검증
 - [ ] 신규 기능은 후순위 보류
   - [ ] `merchant normalization`, `transfers/*`, `liquidity-health`, `debt-health`, `snapshot-compare`, 대출상환 원금/이자 파생 해석은 안정화 배치 이후 재개
 - [ ] Snapshot coverage 결정
@@ -191,6 +193,7 @@
   - [ ] 인사이트 `카테고리 전월 대비` 기준월 선택 UI 추가
   - [ ] dark theme 에서 가독성이 낮은 `soft` 계열 font color를 전역적으로 상향 조정
   - [ ] sidebar/topbar/card/filter hierarchy를 재정렬하는 UI polish batch를 correctness batch 직후에 착수
+  - [x] desktop sidebar 기본 icon-only collapse + click-to-expand shell interaction
 - [ ] Vite dev server의 Tailnet hostname(`moltbot.tailbe7385.ts.net`) 접근 시 403이 나오는 host allowlist 경로를 정리해 MagicDNS 기반 review URL도 안정화
 - [ ] Frontend 재설계
   - [x] 상세 wireframe 승인 반영
@@ -376,6 +379,7 @@
 - 2026-04-07: backend 재개 순서는 `irregular snapshot comparison contract -> upload_logs retained semantics -> 운영 문서/SSOT 정렬` 로 둔다. snapshot 비교 계약이 먼저 고정돼야 자산 surface와 API 메타데이터를 안전하게 확장할 수 있다.
 - 2026-04-07: live snapshot compare endpoint는 `GET /api/v1/assets/snapshot-compare` 로 둔다. historical planning의 `analytics/snapshot-compare` 대신 assets namespace에 붙여 기존 snapshot summary/history surface와 계약을 묶는다.
 - 2026-04-07: frontend는 새 asset compare 전용 화면을 만들지 않고 기존 `AssetsPage` 의 KPI subtext와 section badge에서 comparison metadata를 소비한다. compare contract는 summary surface 확장으로만 연결한다.
+- 2026-04-08: 검증 우선순위는 full build 대신 `backend 전체 pytest -> frontend 전체 vitest -> frontend lint/typecheck -> upload/read/edit/reset/source parity 관련 API/service 테스트` 로 둔다. `AGENTS.md`의 ask-before-full-build 규칙 때문에 배포 빌드는 별도 승인 없이는 돌리지 않는다.
 - 2026-04-07: 리뷰 기준 우선순위는 `backend 구현 코드 -> docs/backend-api-ssot.md -> PRD.md` 로 고정한다. PRD의 미구현 항목은 제품 계획으로 유지하되 live contract로 취급하지 않는다.
 - 2026-04-07: shared interaction spec은 page별 예외를 늘리기보다 공통 규칙으로 강하게 묶는다. 우선 고정 대상은 card header action, accordion 사용 기준, pagination 위치/크기, empty/loading/error 배치, mobile table-card fallback, destructive action 표현 규칙이다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
