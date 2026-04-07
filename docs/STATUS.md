@@ -96,12 +96,14 @@
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
-  - 현재 상태: Task 3 완료 (커밋 `17ebf96`)
+  - 현재 상태: Task 5 완료 (커밋 `91cc63e`)
   - Task 1 완료: Tailwind 토큰, utils.ts, queryClient.ts, apiClient.ts
   - Task 2 완료: TypeScript 타입 4종 + API 함수 4종 (transactions/assets/analytics/upload)
   - Task 3 완료: React Query 훅 5종 (useTransactions/useAssets/useAnalytics/useUpload/useWriteAccess) + 테스트 2건 통과
-  - 현재 지점: Task 3 커밋 완료
-  - 남은 작업: Task 4~12 순서대로 TDD 구현 (UI components → shell → charts → 5 pages → validation)
+  - Task 4 완료: 공통 UI 컴포넌트 (Button, Card, Badge, Table, Select, Input, Checkbox, Popover 등)
+  - Task 5 완료: 앱 셸 (AppSidebar, MobileDrawer, AppTopbar, AppLayout, router, App, main) + @heroicons/react + 5개 placeholder 페이지, 테스트 19건 통과
+  - 현재 지점: Task 5 커밋 완료
+  - 남은 작업: Task 6~12 순서대로 TDD 구현 (charts → 5 pages → validation)
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
 - [ ] Frontend 런타임 점검 후속
