@@ -1,9 +1,9 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend v2 설계 완료, 구현 대기 중
-- **Last Worker:** Claude Sonnet 4.6 (2026-04-07T+0900, frontend v2 디자인 스펙 + 12-task TDD 구현 계획서 작성 완료)
-- **Branch:** main (구현은 `feat/frontend-v2` 브랜치에서 시작)
+- **Phase:** Frontend v2 구현 중 — Task 3 완료 (React Query 훅 레이어)
+- **Last Worker:** Claude Sonnet 4.6 (2026-04-07 KST, Task 3 React Query 훅 5종 + useWriteAccess 테스트 완료)
+- **Branch:** feat/frontend-v2
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -96,9 +96,12 @@
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
-  - 현재 상태: 디자인 스펙(`docs/superpowers/specs/2026-04-07-frontend-v2-design.md`) + 12-task TDD 구현 계획서(`docs/superpowers/plans/2026-04-07-frontend-v2-implementation.md`) 완료
-  - 현재 지점: 계획서 작성 완료, 구현 미시작
-  - 남은 작업: Task 1~12 순서대로 TDD 구현 (Tailwind config → 타입/API → hooks → UI components → shell → charts → 5 pages → validation)
+  - 현재 상태: Task 3 완료 (커밋 `17ebf96`)
+  - Task 1 완료: Tailwind 토큰, utils.ts, queryClient.ts, apiClient.ts
+  - Task 2 완료: TypeScript 타입 4종 + API 함수 4종 (transactions/assets/analytics/upload)
+  - Task 3 완료: React Query 훅 5종 (useTransactions/useAssets/useAnalytics/useUpload/useWriteAccess) + 테스트 2건 통과
+  - 현재 지점: Task 3 커밋 완료
+  - 남은 작업: Task 4~12 순서대로 TDD 구현 (UI components → shell → charts → 5 pages → validation)
 - [ ] Advisor analytics Phase 4 후속 설계/구현
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
 - [ ] Frontend 런타임 점검 후속
