@@ -1,12 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transactionApi } from '../api/transactions'
-import type { TransactionListParams, TransactionUpdateRequest, TransactionBulkUpdateRequest } from '../types/transaction'
+import type {
+  TransactionListParams,
+  TransactionUpdateRequest,
+  TransactionBulkUpdateRequest,
+  CategoryBreakdownParams,
+  SubcategoryBreakdownParams,
+} from '../types/transaction'
 
 export const txKeys = {
   list: (params: TransactionListParams) => ['transactions', 'list', params] as const,
   filterOptions: () => ['transactions', 'filterOptions'] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
-  categoryBreakdown: (params: { start_month?: string; end_month?: string; include_income?: boolean }) => ['transactions', 'categoryBreakdown', params] as const,
+  categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
+  subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
   dailySpend: (params: { month?: string; include_income?: boolean }) => ['transactions', 'dailySpend', params] as const,
 }
 
@@ -32,10 +39,18 @@ export function useCategoryTimeline(params: { start_month?: string; end_month?: 
   })
 }
 
-export function useCategoryBreakdown(params: { start_month?: string; end_month?: string; include_income?: boolean } = {}) {
+export function useCategoryBreakdown(params: CategoryBreakdownParams = {}) {
   return useQuery({
     queryKey: txKeys.categoryBreakdown(params),
     queryFn: () => transactionApi.categoryBreakdown(params),
+  })
+}
+
+export function useSubcategoryBreakdown(params: SubcategoryBreakdownParams | null) {
+  return useQuery({
+    queryKey: txKeys.subcategoryBreakdown(params),
+    queryFn: () => transactionApi.subcategoryBreakdown(params!),
+    enabled: !!params,
   })
 }
 

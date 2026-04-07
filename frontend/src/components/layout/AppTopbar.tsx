@@ -1,14 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { cn } from '../../lib/utils'
-
-const PAGE_META: Record<string, { breadcrumb: string; title: string }> = {
-  '/': { breadcrumb: 'MyLedge', title: '개요' },
-  '/analysis/spending': { breadcrumb: '분석', title: '지출 분석' },
-  '/analysis/assets': { breadcrumb: '분석', title: '자산 현황' },
-  '/analysis/insights': { breadcrumb: '분석', title: '인사이트' },
-  '/operations/workbench': { breadcrumb: '운영', title: '거래 작업대' },
-}
+import { getNavigationItem } from '../../navigation'
 
 interface AppTopbarProps {
   onMobileMenuOpen: () => void
@@ -18,7 +11,7 @@ interface AppTopbarProps {
 
 export function AppTopbar({ onMobileMenuOpen, metaBadge, className }: AppTopbarProps) {
   const { pathname } = useLocation()
-  const meta = PAGE_META[pathname] ?? { breadcrumb: 'MyLedge', title: pathname }
+  const meta = getNavigationItem(pathname) ?? { breadcrumb: 'MyLedge', title: pathname }
 
   return (
     <header className={cn('h-12 bg-surface-bar border-b border-border flex items-center px-5 gap-2 sticky top-0 z-30', className)}>

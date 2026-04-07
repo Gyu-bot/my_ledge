@@ -1,5 +1,9 @@
 # Finance Advisor Analytics Expansion Plan
 
+> Historical planning document. Do not use this file as the current backend/API source of truth.
+> Current live contract: [docs/backend-api-ssot.md](/home/gyurin/projects/my_ledge/docs/backend-api-ssot.md)
+> Product-level requirement reference: [PRD.md](/home/gyurin/projects/my_ledge/PRD.md)
+
 ## 목적
 
 `my_ledge`를 단순 조회/대시보드 수준에서 끝내지 않고, **개인 재무 어드바이저** 역할까지 수행할 수 있도록 분석 read surface를 확장한다.

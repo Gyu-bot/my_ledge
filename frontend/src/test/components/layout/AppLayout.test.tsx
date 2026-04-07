@@ -18,7 +18,7 @@ describe('AppLayout', () => {
 
     render(<RouterProvider router={router} />)
 
-    expect(screen.getByText('지출 분석')).toBeInTheDocument()
+    expect(screen.getAllByText('지출 분석').length).toBeGreaterThan(0)
     expect(screen.getByText('stub page')).toBeInTheDocument()
     expect(screen.getByLabelText('메뉴 열기')).toBeInTheDocument()
   })

@@ -1,72 +1,63 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '../../lib/utils'
-import { Home, BarChart2, DollarSign, Lightbulb, Settings } from 'lucide-react'
-
-const NAV_ITEMS = [
-  { to: '/', label: '개요', Icon: Home, exact: true },
-] as const
-
-const ANALYSIS_ITEMS = [
-  { to: '/analysis/spending', label: '지출 분석', Icon: BarChart2 },
-  { to: '/analysis/assets', label: '자산 현황', Icon: DollarSign },
-  { to: '/analysis/insights', label: '인사이트', Icon: Lightbulb },
-] as const
-
-const OPS_ITEMS = [
-  { to: '/operations/workbench', label: '거래 작업대', Icon: Settings },
-] as const
+import { getNavigationSections } from '../../navigation'
 
 function NavBtn({ to, label, Icon, exact = false }: { to: string; label: string; Icon: React.ComponentType<{ className?: string }>; exact?: boolean }) {
   return (
     <NavLink
       to={to}
       end={exact}
-      title={label}
+      aria-label={label}
       className={({ isActive }) =>
         cn(
-          'w-10 h-10 flex items-center justify-center rounded-lg mx-auto transition-colors',
+          'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
           isActive
             ? 'bg-accent-dim text-accent'
             : 'text-text-ghost hover:bg-border-subtle hover:text-text-secondary',
         )
       }
     >
-      <Icon className="w-[18px] h-[18px]" />
+      <Icon className="h-[18px] w-[18px] shrink-0" />
+      <span className="text-label font-medium">{label}</span>
     </NavLink>
   )
 }
 
 interface AppSidebarProps {
-  onMobileOpen: () => void
   className?: string
 }
 
-export function AppSidebar({ onMobileOpen: _onMobileOpen, className }: AppSidebarProps) {
+export function AppSidebar({ className }: AppSidebarProps) {
+  const sections = getNavigationSections('desktop')
+
   return (
     <nav
       className={cn(
-        'hidden md:flex flex-col items-center w-14 shrink-0 bg-surface-bar border-r border-border h-screen sticky top-0',
+        'sticky top-0 hidden h-screen w-56 shrink-0 flex-col bg-surface-bar border-r border-border md:flex',
         className,
       )}
     >
-      <div className="w-8 h-8 mt-4 mb-6 rounded-lg bg-gradient-to-br from-accent to-[#059669] flex items-center justify-center text-white font-extrabold text-sm shrink-0">
-        M
+      <div className="flex items-center gap-3 border-b border-border px-4 py-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-strong text-sm font-extrabold text-text-inverse">
+          M
+        </div>
+        <div className="min-w-0">
+          <div className="text-body-md font-semibold text-text-primary">MyLedge</div>
+          <div className="text-micro text-text-ghost">Personal finance dashboard</div>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-0.5 w-full px-1">
-        {NAV_ITEMS.map((item) => <NavBtn key={item.to} {...item} />)}
-      </div>
-
-      <div className="w-6 h-px bg-border my-2" />
-
-      <div className="flex flex-col gap-0.5 w-full px-1">
-        {ANALYSIS_ITEMS.map((item) => <NavBtn key={item.to} {...item} />)}
-      </div>
-
-      <div className="w-6 h-px bg-border my-2" />
-
-      <div className="flex flex-col gap-0.5 w-full px-1">
-        {OPS_ITEMS.map((item) => <NavBtn key={item.to} {...item} />)}
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
+        {sections.map((section) => (
+          <div key={section.key} className="flex flex-col gap-1">
+            <div className="px-3 pb-1 text-micro uppercase tracking-[0.16em] text-text-ghost">
+              {section.label}
+            </div>
+            {section.items.map((item) => (
+              <NavBtn key={item.path} to={item.path} label={item.label} Icon={item.Icon} exact={item.exact} />
+            ))}
+          </div>
+        ))}
       </div>
     </nav>
   )

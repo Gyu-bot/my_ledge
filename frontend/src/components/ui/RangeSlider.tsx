@@ -1,5 +1,3 @@
-import { useState } from 'react'
-
 interface RangeSliderProps {
   months: string[]           // ["2025-01", "2025-02", ...]
   value: [string, string]    // [startMonth, endMonth]
@@ -7,9 +5,8 @@ interface RangeSliderProps {
 }
 
 export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
-  const [draft, setDraft] = useState(value)
-  const startIdx = months.indexOf(draft[0])
-  const endIdx = months.indexOf(draft[1])
+  const startIdx = months.indexOf(value[0])
+  const endIdx = months.indexOf(value[1])
   const safeLen = Math.max(months.length - 1, 1)
 
   return (
@@ -28,7 +25,7 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
             type="range" min={0} max={months.length - 1} value={startIdx}
             onChange={(e) => {
               const i = Number(e.target.value)
-              if (i <= endIdx) setDraft([months[i], draft[1]])
+              if (i <= endIdx) onChange([months[i], value[1]])
             }}
             className="absolute inset-0 w-full opacity-0 cursor-pointer"
             style={{ zIndex: 2 }}
@@ -37,7 +34,7 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
             type="range" min={0} max={months.length - 1} value={endIdx}
             onChange={(e) => {
               const i = Number(e.target.value)
-              if (i >= startIdx) setDraft([draft[0], months[i]])
+              if (i >= startIdx) onChange([value[0], months[i]])
             }}
             className="absolute inset-0 w-full opacity-0 cursor-pointer"
             style={{ zIndex: 3 }}
@@ -50,10 +47,10 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
         <span className="text-caption text-text-faint shrink-0">{months[months.length - 1]}</span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-caption text-accent">{draft[0]}</span>
+        <span className="text-caption text-accent">{value[0]}</span>
         <div className="flex gap-2">
           <button
-            onClick={() => onChange(draft)}
+            onClick={() => onChange(value)}
             className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md"
           >
             적용
@@ -61,7 +58,6 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
           <button
             onClick={() => {
               const reset: [string, string] = [months[0], months[months.length - 1]]
-              setDraft(reset)
               onChange(reset)
             }}
             className="text-caption px-3 py-1.5 border border-border-strong text-text-ghost rounded-md"
@@ -69,7 +65,7 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
             초기화
           </button>
         </div>
-        <span className="text-caption text-accent">{draft[1]}</span>
+        <span className="text-caption text-accent">{value[1]}</span>
       </div>
     </div>
   )

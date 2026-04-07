@@ -10,12 +10,11 @@ import { DailyCalendar } from '../components/ui/DailyCalendar'
 import { StackedBarChart } from '../components/charts/StackedBarChart'
 import { Treemap, ResponsiveContainer } from 'recharts'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
-import { useCategoryTimeline, useCategoryBreakdown, useTransactionList, useDailySpend } from '../hooks/useTransactions'
+import { useCategoryTimeline, useCategoryBreakdown, useSubcategoryBreakdown, useTransactionList, useDailySpend } from '../hooks/useTransactions'
 import { useFixedCostSummary, useMerchantSpend } from '../hooks/useAnalytics'
-import { useChromeContext } from '../components/layout/AppLayout'
+import { useChromeContext } from '../components/layout/chromeContext'
 import { monthRange, formatKRWCompact } from '../lib/utils'
-
-const TREEMAP_COLORS = ['#1e3a5f', '#1a3b2e', '#2d1f4a', '#3b2020', '#2a2210', '#1f2a1a', '#2a1a2e', '#0c2a3b']
+import { TREEMAP_COLORS } from '../lib/chartTheme'
 
 function MerchantCell(props: Record<string, unknown>) {
   const x = Number(props.x ?? 0)
@@ -35,14 +34,14 @@ function MerchantCell(props: Record<string, unknown>) {
       {width > 28 && (
         <text x={x + width / 2} y={y + height / 2 + (showAmount ? -6 : 4)}
           textAnchor="middle" dominantBaseline="middle"
-          fill="rgba(255,255,255,0.85)" fontSize={10} fontWeight="600">
+          fill="var(--chart-label-strong)" fontSize={10} fontWeight="600">
           {label}
         </text>
       )}
       {showAmount && (
         <text x={x + width / 2} y={y + height / 2 + 10}
           textAnchor="middle" dominantBaseline="middle"
-          fill="rgba(255,255,255,0.45)" fontSize={8}>
+          fill="var(--chart-label-muted)" fontSize={8}>
           ₩{formatKRWCompact(value)}
         </text>
       )}
@@ -60,13 +59,16 @@ export function SpendingPage() {
     allMonths[Math.max(0, allMonths.length - 6)],
     endMonth,
   ])
-  const [detailStart, setDetailStart] = useState(timelineRange[0])
-  const [detailEnd, setDetailEnd] = useState(timelineRange[1])
+  const [detailRange, setDetailRange] = useState<[string, string]>([
+    allMonths[Math.max(0, allMonths.length - 6)],
+    endMonth,
+  ])
   const [includeIncome, setIncludeIncome] = useState(false)
   const [calendarMonth, setCalendarMonth] = useState(endMonth)
   const [txPage, setTxPage] = useState(1)
-  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [accordionOpen, setAccordionOpen] = useState(true)
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [detailStart, detailEnd] = detailRange
 
   const { setMetaBadge } = useChromeContext()
   useEffect(() => {
@@ -76,13 +78,26 @@ export function SpendingPage() {
       </span>
     )
     return () => setMetaBadge(null)
-  }, [detailStart, detailEnd])
+  }, [detailStart, detailEnd, setMetaBadge])
 
   const timeline = useCategoryTimeline({ start_month: timelineRange[0], end_month: timelineRange[1] })
-  const breakdown = useCategoryBreakdown({ start_month: detailStart, end_month: detailEnd, include_income: includeIncome })
-  const subBreakdown = useCategoryBreakdown({ start_month: detailStart, end_month: detailEnd })
+  const breakdown = useCategoryBreakdown({
+    start_month: detailStart,
+    end_month: detailEnd,
+    include_income: includeIncome,
+    level: 'major',
+  })
+  const subcategoryBreakdown = useSubcategoryBreakdown(selectedCategory
+    ? {
+        start_month: detailStart,
+        end_month: detailEnd,
+        include_income: includeIncome,
+        category_major: selectedCategory,
+      }
+    : null)
   const fixedCost = useFixedCostSummary({ start_month: detailStart, end_month: detailEnd })
-  const merchants = useMerchantSpend({ months: 3, limit: 10 })
+  const merchantWindowMonths = Math.max(1, monthRange(detailStart, detailEnd).length)
+  const merchants = useMerchantSpend({ months: merchantWindowMonths, limit: 10 })
   const dailySpend = useDailySpend({ month: calendarMonth, include_income: includeIncome })
   const transactions = useTransactionList({
     page: txPage, per_page: 20,
@@ -90,7 +105,18 @@ export function SpendingPage() {
     type: includeIncome ? 'all' : '지출',
   })
 
-  const categories = [...new Set((breakdown.data?.items ?? []).map((i) => i.category))]
+  useEffect(() => {
+    const categories = [...new Set((breakdown.data?.items ?? []).map((item) => item.category))]
+    if (categories.length === 0) {
+      if (selectedCategory !== '') setSelectedCategory('')
+      return
+    }
+    if (!selectedCategory || !categories.includes(selectedCategory)) {
+      setSelectedCategory(categories[0])
+    }
+  }, [breakdown.data?.items, selectedCategory])
+
+  const categories = [...new Set((breakdown.data?.items ?? []).map((item) => item.category))]
 
   return (
     <div className="flex flex-col gap-4">
@@ -116,7 +142,7 @@ export function SpendingPage() {
           <div className="w-px h-4 bg-border-strong" />
           <select
             value={detailStart}
-            onChange={(e) => { setDetailStart(e.target.value); setTxPage(1) }}
+            onChange={(e) => { setDetailRange(([, end]) => [e.target.value, end]); setTxPage(1) }}
             className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
           >
             {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -124,7 +150,7 @@ export function SpendingPage() {
           <span className="text-caption text-text-ghost">~</span>
           <select
             value={detailEnd}
-            onChange={(e) => { setDetailEnd(e.target.value); setTxPage(1) }}
+            onChange={(e) => { setDetailRange(([start]) => [start, e.target.value]); setTxPage(1) }}
             className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
           >
             {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -160,13 +186,14 @@ export function SpendingPage() {
               {categories.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          {selectedCategory && subBreakdown.data ? (
-            <HorizontalBarList
-              items={subBreakdown.data.items
-                .filter((i) => i.category === selectedCategory)
-                .map((i) => ({ label: i.category, amount: i.amount }))}
-            />
-          ) : <EmptyState message="대분류를 선택하세요" />}
+          {!selectedCategory ? <EmptyState message="대분류를 선택하세요" /> :
+           subcategoryBreakdown.isLoading ? <LoadingState /> :
+           subcategoryBreakdown.error ? <ErrorState onRetry={() => subcategoryBreakdown.refetch()} /> :
+           subcategoryBreakdown.data && subcategoryBreakdown.data.items.length > 0 ? (
+             <HorizontalBarList
+               items={subcategoryBreakdown.data.items.map((item) => ({ label: item.category, amount: item.amount }))}
+             />
+           ) : <EmptyState message="선택한 대분류에 소분류 데이터가 없습니다" />}
         </SectionCard>
       </div>
 
@@ -181,8 +208,8 @@ export function SpendingPage() {
                <>
                  <SegmentedBar
                    segments={[
-                     { label: '고정비', value: (fixedCost.data.fixed_ratio ?? 0) * 100, color: '#1e40af' },
-                     { label: '변동비', value: (1 - (fixedCost.data.fixed_ratio ?? 0)) * 100, color: '#059669' },
+                     { label: '고정비', value: (fixedCost.data.fixed_ratio ?? 0) * 100, color: 'var(--chart-info-soft)' },
+                     { label: '변동비', value: (1 - (fixedCost.data.fixed_ratio ?? 0)) * 100, color: 'var(--chart-accent)' },
                    ]}
                  />
                  <div className="grid grid-cols-2 gap-3 mt-3">
@@ -207,8 +234,8 @@ export function SpendingPage() {
              <>
                <SegmentedBar
                  segments={[
-                   { label: '필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.essential_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: '#047857' },
-                   { label: '비필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.discretionary_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: '#92400e' },
+                   { label: '필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.essential_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: 'var(--chart-accent-muted)' },
+                   { label: '비필수', value: fixedCost.data.fixed_total > 0 ? (fixedCost.data.discretionary_fixed_total / fixedCost.data.fixed_total) * 100 : 0, color: 'var(--chart-warning)' },
                  ]}
                />
                <div className="grid grid-cols-2 gap-3 mt-3">
@@ -228,7 +255,7 @@ export function SpendingPage() {
       </div>
 
       {/* 6. 거래처 Treemap */}
-      <SectionCard title="거래처별 지출 비중" badge="최근 3개월">
+      <SectionCard title="거래처별 지출 비중" badge={`${detailStart} ~ ${detailEnd}`}>
         {merchants.isLoading ? <LoadingState /> :
          merchants.data && merchants.data.items.length > 0 ? (
            <ResponsiveContainer width="100%" height={130}>
@@ -288,7 +315,7 @@ export function SpendingPage() {
                      </thead>
                      <tbody>
                        {transactions.data.items.map((tx) => (
-                         <tr key={tx.id} className="border-b border-[#0d1117] last:border-0">
+                         <tr key={tx.id} className="border-b border-border-faint last:border-0">
                            <td className="px-3 py-2 text-text-ghost">{tx.date.slice(5)}</td>
                            <td className="px-3 py-2 text-text-secondary truncate max-w-[80px]">{tx.merchant}</td>
                            <td className="px-3 py-2 text-text-faint">{tx.effective_category_major}</td>

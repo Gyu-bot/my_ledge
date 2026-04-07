@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend 계약 정합화 완료, UI/IA 선결정 완료 후 구현 준비 단계
-- **Last Worker:** Codex (2026-04-07T19:41+0900, shared interaction spec까지 사용자 결정 반영 완료)
+- **Phase:** Frontend shell/spending contract batch 구현 + backend/API SSOT 정리 완료, shared interaction 확장 대기
+- **Last Worker:** Codex (2026-04-07T20:13+0900, shell/spending batch 구현 및 backend/API SSOT 문서화 완료)
 - **Branch:** main
 
 ## Completed
@@ -107,6 +107,10 @@
 - [x] Frontend contract alignment 완료: `apiClient.ts` 를 `__MY_LEDGE_RUNTIME_CONFIG__.{apiKey, apiBaseUrl}` 기준으로 정렬하고, month-based UI query를 backend `start_date`/`end_date` 계약으로 어댑트하며, 누락된 `daily-spend` endpoint는 기존 transactions list 기반 client aggregation으로 대체
 - [x] Legacy route fallback 정리 완료: `/income`, `/transfers` 를 overview(`/`) redirect로 명시하고 관련 문서/테스트/AGENTS route 설명을 현재 기준으로 갱신
 - [x] Frontend review 완료: `frontend-developer` 병렬 코드 구조 검토 + 현재 frontend `npm test`/`npm run lint`/`npm run typecheck` 재검증 + 후속 우선순위 재정렬
+- [x] Frontend UI/IA decision spec 초안 작성: shell contract, `SpendingPage` filter ownership, shared interaction spec, acceptance criteria, handoff 구현 순서를 `docs/superpowers/specs/2026-04-07-frontend-ui-ia-decision-design.md` 에 정리
+- [x] Frontend UI/IA rollout implementation plan 작성: `docs/superpowers/plans/2026-04-07-frontend-ui-ia-rollout-implementation.md`
+- [x] Frontend shell/spending contract batch 완료: route manifest 기반 shell metadata 정렬, labeled sidebar 유지, `SpendingPage` detail-range 기준 treemap sync, 실제 subcategory drill-down 집계, 관련 테스트/검증 통과
+- [x] Backend/API SSOT 문서화 완료: `docs/backend-api-ssot.md` 추가, `README.md` / `PRD.md` live contract 동기화, `docs/additional_feature.md` historical 표기 추가
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
@@ -130,22 +134,17 @@
 - 없음
 
 ## Next Up
-- [ ] Frontend UI/IA 선결정
-  - [x] shell contract 고정: desktop sidebar는 label이 보이는 standard sidebar로 전환하고, topbar는 breadcrumb + title + meta 중심으로 유지
-  - [x] page filter ownership 정의: `SpendingPage` 는 `detail range`, `income toggle` 을 page-global filter로 두고, `calendar month`, `category drill-down` 은 section-local control로 유지
-  - [x] shared interaction spec 방향 고정: card/table/state/mobile/action 규칙은 page별 예외보다 공통 규칙으로 강하게 묶는 방향 채택
-- [ ] Frontend correctness / structure batch
-  - [ ] 지출 분석 `조회 범위` 슬라이더를 controlled state로 재구성하고 시작 구간 drag 동작을 복구
-  - [ ] 지출 분석 `소분류별 지출` 을 실제 minor-category 집계로 교체
-  - [ ] `거래처별 지출 비중` TreeMap 기간을 `월별 상세필터` 와 동기화
+- [ ] Frontend shared interaction rollout
   - [ ] Spending / Insights / Workbench section에 공통 `loading / error / empty / ready` 경계 도입
-- [ ] Frontend shell/source-of-truth 정리
-  - [ ] router / sidebar / mobile drawer / topbar breadcrumb-title metadata를 단일 route manifest로 통합
-  - [ ] topbar meta badge 주입 계약을 구조화하고 route change / unmount 시 stale meta가 남지 않도록 정리
+  - [ ] `SectionCard` header slot(`title/meta/action/description/body`) 사용 규칙을 surface별로 통일
+  - [ ] Workbench filter bar / bulk panel / table / secondary accordion 경계를 spec 기준으로 재정렬
 - [ ] Frontend behavior test 보강
-  - [ ] 지출 분석 range/detail interaction 회귀 테스트 추가
+  - [x] 지출 분석 range/detail interaction 및 subcategory drill-down 회귀 테스트 추가
   - [ ] Workbench read-only gating / bulk toolbar / mutation success-error 흐름 테스트 추가
   - [ ] topbar meta lifecycle 및 canonical route metadata 테스트 추가
+- [ ] Backend/API 문서 운영 정리
+  - [ ] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
+  - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
 - [ ] Frontend UI/UX 후속 개선 묶음
   - [ ] `월별 카테고리 추이` 는 Top 5 카테고리만 개별 series로 표시하고 나머지는 `기타` 로 묶기
   - [ ] `일별 지출 달력` 에 hover/popover 금액 표시 추가
@@ -330,6 +329,8 @@
 - 2026-04-07: `/income`, `/transfers` 는 live page를 복구하지 않고 compatibility redirect만 유지한다. stale 링크는 overview(`/`)로 흡수하고 current route map은 `docs/frontend/` 와 `AGENTS.md` 에서만 관리한다.
 - 2026-04-07: frontend shell은 desktop 기준 label이 보이는 standard sidebar로 정리하고, topbar는 breadcrumb + page title + meta badge 중심으로 유지한다. page-level filter/action은 기본적으로 본문에 둔다.
 - 2026-04-07: `SpendingPage` filter ownership은 `detail range`, `income toggle` 을 page-global 로 두고, `calendar month`, `category drill-down` 은 section-local control로 유지한다. timeline range는 상단 추이 section 전용 control로 취급한다.
+- 2026-04-07: backend/API live contract의 문서상 SSOT는 `docs/backend-api-ssot.md` 로 두고, `README.md`/`PRD.md` 는 이 문서를 참조해 동기화한다.
+- 2026-04-07: snapshot import의 live behavior는 `snapshot_date` 단위 UPSERT가 아니라 기존 row delete 후 전체 re-insert 하는 date-scoped replace다.
 - 2026-04-07: shared interaction spec은 page별 예외를 늘리기보다 공통 규칙으로 강하게 묶는다. 우선 고정 대상은 card header action, accordion 사용 기준, pagination 위치/크기, empty/loading/error 배치, mobile table-card fallback, destructive action 표현 규칙이다.
 - 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
 - 2026-04-03: 카드 내부 테이블은 바깥 `Card`가 이미 외곽 경계를 제공하므로 내부 table wrapper에는 별도 border를 두지 않는다. Data Table 전환 검토 시에도 server-driven filter bar와 mobile 카드 레이아웃은 별도 구조로 유지한다.

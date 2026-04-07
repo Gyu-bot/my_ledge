@@ -18,7 +18,8 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 자산 현황
   - 데이터 관리
 
-제품 요구사항과 Phase 범위는 [PRD.md](/home/gyurin/projects/my_ledge/PRD.md), 협업 규칙은 [AGENTS.md](/home/gyurin/projects/my_ledge/AGENTS.md), 현재 작업 현황은 [STATUS.md](/home/gyurin/projects/my_ledge/STATUS.md)를 기준으로 본다.
+제품 요구사항과 Phase 범위는 [PRD.md](/home/gyurin/projects/my_ledge/PRD.md), 협업 규칙은 [AGENTS.md](/home/gyurin/projects/my_ledge/AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](/home/gyurin/projects/my_ledge/docs/STATUS.md)를 기준으로 본다.
+현재 live backend/API contract는 [docs/backend-api-ssot.md](/home/gyurin/projects/my_ledge/docs/backend-api-ssot.md)를 우선 참조한다.
 
 ## 빠른 시작
 

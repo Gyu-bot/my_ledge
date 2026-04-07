@@ -500,3 +500,109 @@
 - `docs/STATUS.md`
   - `Next Up > Frontend UI/IA 선결정` 3번 완료 처리
   - `Key Decisions` 에 shared interaction spec 방향 추가
+
+## Frontend UI/IA Spec Draft Upgrade
+
+- 사용자 요청: 현재 spec 초안이 실제 `frontend-developer` handoff 문서로 충분한지 점검 요청
+
+### 판단
+
+- 기존 초안은 방향 문서로는 충분했지만 handoff 문서로는 부족
+- 부족했던 항목
+  - 구현자가 바로 따라갈 acceptance criteria
+  - component/surface별 적용 범위
+  - 구현 순서
+  - non-goal 경계
+
+### 보강 내용
+
+- `docs/superpowers/specs/2026-04-07-frontend-ui-ia-decision-design.md` 확장
+  - shell contract handoff requirement 추가
+  - `SpendingPage` filter ownership acceptance criteria 추가
+  - shared interaction spec의 card/table/state/mobile/destructive rule을 handoff requirement로 구체화
+  - `frontend-developer` 기준 구현 순서 명시
+  - non-goals 추가
+
+### 메모
+
+- 현재 spec은 이제 “결정 메모”가 아니라 구현 handoff 초안으로 사용할 수 있는 수준
+- 아직 implementation task breakdown 자체는 별도 plan 문서가 더 적합하지만, 구현자가 이 문서만 읽고도 해석 없이 시작할 수 있게는 정리됨
+
+## Frontend Rollout + Backend/API SSOT
+
+- 사용자 요청
+  - `frontend-developer` 기준 implementation plan 작성 및 실제 구현 진행
+  - backend/API 구현 상태를 문서화해 SSOT로 만들고 PRD/기타 문서를 현재 코드 기준으로 정리
+
+### 계획/위임
+
+- 구현 계획 작성
+  - `docs/superpowers/plans/2026-04-07-frontend-ui-ia-rollout-implementation.md`
+  - `docs/superpowers/plans/2026-04-07-backend-api-ssot-documentation-implementation.md`
+- 병렬 위임
+  - `frontend-developer`: shell/Spending/shared interaction 구현 검토 및 착수
+  - `documentation-engineer` 역할 worker: backend/API 실구현 대조, SSOT 문서/PRD/README 정리 범위 조사
+
+### 서브에이전트 결과
+
+- `frontend-developer`
+  - read-only 분석까지만 진행하고 편집 없이 종료
+  - route manifest, Spending correctness, topbar meta lifecycle 테스트가 다음 작업 포인트라고 정리
+- `documentation-engineer`
+  - 편집 없이 종료했지만 중요한 불일치 목록 반환
+  - 핵심 발견
+    - PRD의 snapshot 적재 설명은 UPSERT지만 실제 구현은 `snapshot_date` 단위 delete + re-insert
+    - `merchant`, `cost_kind`, `fixed_cost_necessity`, `GET /api/v1/transactions/filter-options` 가 PRD에 충분히 반영되지 않음
+    - `assets/snapshots` query param, `snapshot_date=latest`, 업로드 파일 recent-5 retention 문구가 live code와 불일치 가능
+
+### 직접 구현한 frontend 변경
+
+- shell/source-of-truth
+  - `frontend/src/navigation.ts` 추가
+  - `frontend/src/router.tsx`, `AppSidebar.tsx`, `MobileDrawer.tsx`, `AppTopbar.tsx` 를 단일 route metadata 기준으로 정렬
+- `SpendingPage`
+  - `detail range` 기반 treemap badge 유지
+  - 누락된 accordion state 복구
+  - `category drill-down` 을 실제 selected major 기준 subcategory aggregate로 재구성
+- transaction adapter/hook
+  - `transactionApi.subcategoryBreakdown()` 추가
+  - `useSubcategoryBreakdown()` 추가
+  - range adapter를 이용해 transactions list 기반 subcategory 집계 구현
+- 테스트
+  - `AppTopbar`, `RangeSlider`, `SpendingPage`, API contract test 보강
+  - `AppLayout` 테스트를 labeled sidebar 기준으로 보정
+
+### 직접 문서화한 backend/API 변경
+
+- 신규 SSOT 문서 작성
+  - `docs/backend-api-ssot.md`
+- 참조 구조 정리
+  - `README.md` 에 `docs/STATUS.md` 와 `docs/backend-api-ssot.md` 링크 반영
+  - `PRD.md` 를 live backend/API contract 기준으로 보정
+  - `docs/additional_feature.md` 상단에 historical/non-SSOT 경고 추가
+
+### 검증
+
+- frontend focused red -> green
+  - `cd frontend && npm test -- src/test/api/contracts.test.ts src/test/components/ui/RangeSlider.test.tsx src/test/pages/SpendingPage.test.tsx`
+- frontend shell/spending regression
+  - `cd frontend && npm test -- src/test/router.test.tsx src/test/components/layout/AppSidebar.test.tsx src/test/components/layout/AppTopbar.test.tsx src/test/api/contracts.test.ts src/test/components/ui/RangeSlider.test.tsx src/test/pages/SpendingPage.test.tsx`
+- frontend full verification
+  - `cd frontend && npm test`
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run typecheck`
+
+### 결과
+
+- frontend 전체 검증 통과
+  - `15` test files, `37` tests passed
+  - lint 0
+  - typecheck 0
+- shell contract, Spending filter ownership, backend/API 문서 SSOT가 현재 코드 기준으로 맞춰짐
+
+### 남은 작업 메모
+
+- shared interaction spec의 본격 rollout은 아직 남음
+  - `SectionCard` slot model 정리
+  - `InsightsPage` / `WorkbenchPage` 상태 경계 통일
+  - Workbench bulk/read-only behavior test 확장

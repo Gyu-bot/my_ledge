@@ -54,6 +54,20 @@ export interface TransactionListParams {
   include_income?: boolean
 }
 
+export interface CategoryBreakdownParams {
+  start_month?: string
+  end_month?: string
+  include_income?: boolean
+  level?: 'major' | 'minor'
+}
+
+export interface SubcategoryBreakdownParams {
+  start_month?: string
+  end_month?: string
+  include_income?: boolean
+  category_major: string
+}
+
 export interface TransactionUpdateRequest {
   merchant?: string | null
   category_major_user?: string | null
