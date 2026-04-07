@@ -27,7 +27,7 @@ export function MoMBarList({ items }: MoMBarListProps) {
               />
             </div>
             <span className={`text-[10px] font-semibold w-16 text-right shrink-0 ${isUp ? 'text-danger' : 'text-accent'}`}>
-              {isUp ? '+' : '-'}₩{formatKRW(item.delta_amount)}
+              {item.delta_amount > 0 ? '+' : item.delta_amount < 0 ? '-' : ''}₩{formatKRW(item.delta_amount)}
             </span>
           </div>
         )
