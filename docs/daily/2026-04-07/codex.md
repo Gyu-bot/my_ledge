@@ -1080,3 +1080,136 @@
 
 - 이 내용은 아직 구현 결정이 아니라 design guidance 단계
 - 다음 안정화 묶음에서 irregular snapshot comparison contract를 별도 정리 예정
+
+## Backend Priority Check
+
+- 사용자 요청
+  - backend부터 다시 진행할 때 무엇부터 구현해야 하는지 우선순위 점검 요청
+
+### 확인한 내용
+
+- `docs/STATUS.md`
+  - 현재 backend 안정화 잔여 항목은 `upload_logs` semantics, snapshot comparison fallback, 운영 문서/live contract 정렬
+- `docs/backend-api-ssot.md`
+  - 현재 live assets 계열 endpoint는 snapshot totals/history만 제공하고 comparison metadata contract는 없다
+- `backend/app/api/v1/endpoints/assets.py`
+  - 비교형 endpoint가 아직 없고 latest/history summary만 노출 중
+- `backend/tests/api/test_data_management_api.py`
+  - reset 이후 `upload_logs_retained=True` contract는 이미 테스트로 고정되어 있음
+
+### 이번 턴 결론
+
+- backend 첫 구현은 `upload_logs` semantics 정리보다 `irregular snapshot comparison contract` 가 우선이다
+- 이유:
+  - `upload_logs` retained 동작은 이미 코드와 테스트에서 고정돼 있고 남은 일은 문서/UI copy 정렬 비중이 크다
+  - 반대로 snapshot comparison은 설계 가이드만 있고 live API/schema/test contract가 아직 없다
+  - 자산 surface를 안정적으로 확장하려면 `comparison_mode`, `comparison_days`, `is_partial`, `is_stale`, `comparison_label`, `can_compare` 같은 메타데이터를 먼저 backend에서 고정해야 한다
+
+### 다음 구현 제안
+
+- 1단계
+  - `backend/app/schemas/asset.py` 에 snapshot comparison response schema 추가
+- 2단계
+  - `backend/app/services/assets_service.py` 에 `latest_available_vs_previous_available` 기본 비교 계산 추가
+- 3단계
+  - `backend/app/api/v1/endpoints/assets.py` 에 비교 endpoint 추가
+- 4단계
+  - `backend/tests/services/test_assets_service.py`, `backend/tests/api/test_assets_api.py` 에 irregular/month-end/partial/stale 케이스 고정
+- 5단계
+  - 이후 `docs/backend-api-ssot.md`, `docs/STATUS.md`, frontend 소비 계약 정렬
+
+## Snapshot Compare Implementation
+
+- 구현 범위
+  - `backend/app/schemas/asset.py`
+    - `SnapshotComparisonMode`
+    - `AssetSnapshotComparisonResponse`
+    - `AssetSnapshotComparisonDeltaResponse`
+  - `backend/app/services/assets_service.py`
+    - snapshot totals loader 공용화
+    - `get_asset_snapshot_comparison()`
+    - latest / closed-month / selected pair 비교 규칙
+    - `comparison_label`, `is_partial`, `is_stale`, `can_compare` 계산
+  - `backend/app/api/v1/endpoints/assets.py`
+    - `GET /api/v1/assets/snapshot-compare`
+    - selected pair mode의 required query validation (`422`)
+  - `backend/tests/services/test_assets_service.py`
+    - latest available pair
+    - closed month pair
+    - stale labeling
+    - baseline missing fallback
+    - selected exact pair
+  - `backend/tests/api/test_assets_api.py`
+    - default compare contract
+    - closed month mode
+    - exact pair validation
+
+### 구현 결정
+
+- live endpoint는 `analytics` 가 아니라 `assets` namespace에 둠
+  - 이유:
+    - 현재 snapshot summary/history endpoint와 같은 도메인 surface에 붙는 편이 live contract 추적이 단순함
+    - planning 문서의 `analytics/snapshot-compare` 는 historical reference로 남기고, SSOT는 코드 기준으로 정리
+- 1차 mode는 세 가지만 열어 둠
+  - `latest_available_vs_previous_available`
+  - `last_closed_month_vs_previous_closed_month`
+  - `selected_snapshot_vs_baseline_snapshot`
+- stale threshold는 35일로 고정
+  - 코드/문서에 명시적으로 남기고 암묵적 UI 판단에 맡기지 않음
+
+### 검증
+
+- `cd backend && uv run pytest tests/services/test_assets_service.py -q`
+  - 결과: `5 passed`
+- `cd backend && uv run pytest tests/api/test_assets_api.py -q -k snapshot_compare`
+  - 결과: `3 passed`
+
+### 남은 후속
+
+- real workbook 4종 적재 상태에서 compare smoke 추가
+- frontend assets surface가 새 metadata를 어떻게 소비할지 정리
+- `upload_logs` retained semantics 정리로 안정화 배치 계속 진행
+
+## Frontend Hookup And Semantics Alignment
+
+- 구현 범위
+  - `frontend/src/types/asset.ts`
+    - snapshot compare response 타입 추가
+  - `frontend/src/api/assets.ts`
+    - `snapshotCompare()` API 추가
+  - `frontend/src/hooks/useAssets.ts`
+    - `useAssetSnapshotCompare()` query 추가
+  - `frontend/src/pages/AssetsPage.tsx`
+    - 기존 KPI 카드 subtext에 delta / pct 표시
+    - topbar meta badge와 투자/대출 section badge에 `comparison_label + comparison_days` 표시
+    - 새 route/page 없이 기존 자산 화면만 확장
+  - `frontend/src/pages/WorkbenchPage.tsx`
+    - reset 이후에도 upload history가 retained 된다는 문구 명시
+  - `frontend/src/test/pages/AssetsPage.test.tsx`
+    - compare metadata 렌더링 테스트 추가
+  - `docs/backend-api-ssot.md`
+    - reset / upload history semantics 명시
+  - `backend/tests/api/test_assets_api.py`
+    - real workbook chain 기준 compare smoke 추가
+
+### 구현 결정
+
+- frontend는 새 화면을 만들지 않고 기존 `AssetsPage` 에 compare contract를 붙였다
+- comparison metadata는 새 대시보드 section보다:
+  - topbar meta badge
+  - KPI subtext
+  - 투자/대출 summary badge
+  에 흡수하는 편이 현재 IA와 더 맞는다
+- reset semantics는 backend contract를 바꾸지 않고 UI copy를 맞췄다
+  - reset은 current state를 비우지만 `upload_logs` history는 남는다는 뜻을 작업대 Danger Zone에서 직접 명시
+
+### 검증
+
+- `cd backend && uv run pytest tests/api/test_assets_api.py -q -k "snapshot_compare"`
+  - 결과: `4 passed`
+- `cd frontend && npm test -- --runInBand src/test/pages/AssetsPage.test.tsx`
+  - 결과: `1 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과

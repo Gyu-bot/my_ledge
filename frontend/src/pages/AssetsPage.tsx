@@ -6,36 +6,70 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { LineAreaChart } from '../components/charts/LineAreaChart'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
-import { useAssetSnapshots, useNetWorthHistory, useInvestmentSummary, useLoanSummary } from '../hooks/useAssets'
+import { useAssetSnapshotCompare, useAssetSnapshots, useNetWorthHistory, useInvestmentSummary, useLoanSummary } from '../hooks/useAssets'
 import { useChromeContext } from '../components/layout/chromeContext'
 import { formatKRWCompact, formatPct } from '../lib/utils'
 
 export function AssetsPage() {
   const snapshots = useAssetSnapshots()
   const netWorthHistory = useNetWorthHistory()
+  const comparison = useAssetSnapshotCompare()
   const investments = useInvestmentSummary()
   const loans = useLoanSummary()
   const { setMetaBadge } = useChromeContext()
 
   const latest = snapshots.data?.items?.[snapshots.data.items.length - 1]
   const snapshotDate = latest?.snapshot_date
+  const comparisonData = comparison.data
+  const comparisonMeta = comparisonData?.can_compare
+    ? `${comparisonData.comparison_label}${comparisonData.comparison_days != null ? ` · ${comparisonData.comparison_days}일` : ''}`
+    : comparisonData?.comparison_label
+  const compareBadgeTone = comparisonData?.is_stale
+    ? 'text-danger border-danger-muted bg-surface-danger'
+    : comparisonData?.is_partial
+      ? 'text-accent border-border-strong bg-surface-bar'
+      : 'text-text-muted border-border bg-surface-bar'
 
   useEffect(() => {
-    if (snapshotDate) setMetaBadge(
-      <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
-        기준일 {snapshotDate}
-      </span>
+    if (!snapshotDate) return
+    setMetaBadge(
+      <div className="flex items-center gap-2">
+        <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+          기준일 {snapshotDate}
+        </span>
+        {comparisonMeta ? (
+          <span className={`text-caption px-2.5 py-0.5 rounded-full border ${compareBadgeTone}`}>
+            {comparisonMeta}
+          </span>
+        ) : null}
+      </div>,
     )
-  }, [setMetaBadge, snapshotDate])
+  }, [compareBadgeTone, comparisonMeta, setMetaBadge, snapshotDate])
 
   const netWorth = latest ? parseFloat(latest.net_worth) : null
   const assetTotal = latest ? parseFloat(latest.asset_total) : null
   const liabilityTotal = latest ? parseFloat(latest.liability_total) : null
+  const netWorthDelta = comparisonData?.delta ? parseFloat(comparisonData.delta.net_worth) : null
+  const assetDelta = comparisonData?.delta ? parseFloat(comparisonData.delta.asset_total) : null
+  const liabilityDelta = comparisonData?.delta ? parseFloat(comparisonData.delta.liability_total) : null
   const investMarketValue = investments.data ? parseFloat(investments.data.totals.market_value) : null
   const investCostBasis = investments.data ? parseFloat(investments.data.totals.cost_basis) : null
   const investReturnPct = investMarketValue != null && investCostBasis != null && investCostBasis > 0
     ? ((investMarketValue - investCostBasis) / investCostBasis) * 100
     : null
+
+  function formatDeltaSub(label: string, amount: number | null, pct: number | null | undefined) {
+    if (amount == null) return label
+    const prefix = amount > 0 ? '+' : amount < 0 ? '-' : ''
+    const pctText = pct != null ? ` · ${pct > 0 ? '+' : pct < 0 ? '' : ''}${formatPct(pct * 100)}` : ''
+    return `${label} · ${prefix}₩ ${formatKRWCompact(amount)}${pctText}`
+  }
+
+  function deltaVariant(amount: number | null, invert = false): 'up' | 'down' | 'neutral' {
+    if (amount == null || amount === 0) return 'neutral'
+    if (invert) return amount < 0 ? 'up' : 'down'
+    return amount > 0 ? 'up' : 'down'
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,10 +77,17 @@ export function AssetsPage() {
       {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="순자산" value={netWorth != null ? `₩ ${formatKRWCompact(netWorth)}` : '—'}
-          className="border-t-2 border-t-accent" subVariant="up" />
-        <KpiCard label="총자산" value={assetTotal != null ? `₩ ${formatKRWCompact(assetTotal)}` : '—'} />
+          className="border-t-2 border-t-accent"
+          sub={comparisonMeta ? formatDeltaSub(comparisonMeta, netWorthDelta, comparisonData?.delta?.net_worth_pct) : undefined}
+          subVariant={deltaVariant(netWorthDelta)} />
+        <KpiCard label="총자산"
+          value={assetTotal != null ? `₩ ${formatKRWCompact(assetTotal)}` : '—'}
+          sub={comparisonMeta ? formatDeltaSub(comparisonMeta, assetDelta, comparisonData?.delta?.asset_total_pct) : undefined}
+          subVariant={deltaVariant(assetDelta)} />
         <KpiCard label="총부채" value={liabilityTotal != null ? `₩ ${formatKRWCompact(liabilityTotal)}` : '—'}
-          className="border-t-2 border-t-danger" />
+          className="border-t-2 border-t-danger"
+          sub={comparisonMeta ? formatDeltaSub(comparisonMeta, liabilityDelta, comparisonData?.delta?.liability_total_pct) : undefined}
+          subVariant={deltaVariant(liabilityDelta, true)} />
         <KpiCard label="투자 평가액" value={investMarketValue != null ? `₩ ${formatKRWCompact(investMarketValue)}` : '—'}
           sub={investReturnPct != null ? `원금 대비 ${investReturnPct > 0 ? '+' : ''}${formatPct(investReturnPct)}` : ''}
           subVariant={investReturnPct != null && investReturnPct > 0 ? 'up' : 'down'} />
@@ -65,7 +106,14 @@ export function AssetsPage() {
       <div className="grid md:grid-cols-2 gap-4">
 
         {/* 투자 요약 */}
-        <SectionCard title="투자 요약" badge={investments.data?.snapshot_date ?? undefined}>
+        <SectionCard
+          title="투자 요약"
+          badge={comparisonMeta ? (
+            <span className={`text-micro px-2 py-0.5 rounded-full border ${compareBadgeTone}`}>
+              {comparisonMeta}
+            </span>
+          ) : investments.data?.snapshot_date ?? undefined}
+        >
           {investments.isLoading ? <LoadingState /> :
            investments.error ? <ErrorState onRetry={() => investments.refetch()} /> :
            investments.data ? (
@@ -95,7 +143,14 @@ export function AssetsPage() {
         </SectionCard>
 
         {/* 대출 요약 */}
-        <SectionCard title="대출 요약" badge={loans.data?.snapshot_date ?? undefined}>
+        <SectionCard
+          title="대출 요약"
+          badge={comparisonMeta ? (
+            <span className={`text-micro px-2 py-0.5 rounded-full border ${compareBadgeTone}`}>
+              {comparisonMeta}
+            </span>
+          ) : loans.data?.snapshot_date ?? undefined}
+        >
           {loans.isLoading ? <LoadingState /> :
            loans.error ? <ErrorState onRetry={() => loans.refetch()} /> :
            loans.data ? (

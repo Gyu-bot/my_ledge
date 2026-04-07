@@ -547,7 +547,9 @@ export function WorkbenchPage() {
         </div>
         {dangerOpen && (
           <div className="bg-surface-danger-muted border-t border-danger-muted p-4 flex flex-col gap-3">
-            <div className="text-caption text-text-faint">초기화 범위를 선택하세요. 업로드 이력은 삭제되지 않습니다.</div>
+            <div className="text-caption text-text-faint">
+              초기화 범위를 선택하세요. 업로드 이력은 삭제되지 않으며, reset 이후에도 최근 import history로 계속 남습니다.
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {(['transactions_only', 'transactions_and_snapshots'] as DataResetScope[]).map((scope) => (
                 <button
