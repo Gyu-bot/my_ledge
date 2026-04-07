@@ -4,7 +4,7 @@
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
-  html { font-size: 14px; }
+  html { font-size: 21px; }
   body {
     background-color: #060810;
     color: #d1d5db;

@@ -44,6 +44,7 @@ export function useDailySpend(params: { month: string; include_income?: boolean 
     queryKey: txKeys.dailySpend(params ?? {}),
     queryFn: () => transactionApi.dailySpend(params!),
     enabled: !!params,
+    retry: false,
   })
 }
 

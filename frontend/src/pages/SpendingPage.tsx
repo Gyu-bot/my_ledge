@@ -8,13 +8,47 @@ import { SegmentedBar } from '../components/ui/SegmentedBar'
 import { RangeSlider } from '../components/ui/RangeSlider'
 import { DailyCalendar } from '../components/ui/DailyCalendar'
 import { StackedBarChart } from '../components/charts/StackedBarChart'
+import { Treemap, ResponsiveContainer } from 'recharts'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
 import { useCategoryTimeline, useCategoryBreakdown, useTransactionList, useDailySpend } from '../hooks/useTransactions'
 import { useFixedCostSummary, useMerchantSpend } from '../hooks/useAnalytics'
 import { useChromeContext } from '../components/layout/AppLayout'
 import { monthRange, formatKRWCompact } from '../lib/utils'
 
-const TREEMAP_COLORS = ['#1e3a5f', '#1a3b2e', '#2d1f4a', '#3b2020', '#2a2210', '#1f2a1a', '#2a1a2e']
+const TREEMAP_COLORS = ['#1e3a5f', '#1a3b2e', '#2d1f4a', '#3b2020', '#2a2210', '#1f2a1a', '#2a1a2e', '#0c2a3b']
+
+function MerchantCell(props: Record<string, unknown>) {
+  const x = Number(props.x ?? 0)
+  const y = Number(props.y ?? 0)
+  const width = Number(props.width ?? 0)
+  const height = Number(props.height ?? 0)
+  const name = String(props.name ?? '')
+  const value = Number(props.value ?? 0)
+  const index = Number(props.index ?? 0)
+  if (width < 10 || height < 10) return <g />
+  const label = name.length > 6 ? name.slice(0, 5) + '…' : name
+  const showAmount = height > 38 && width > 35
+  return (
+    <g>
+      <rect x={x + 1} y={y + 1} width={width - 2} height={height - 2}
+        fill={TREEMAP_COLORS[index % TREEMAP_COLORS.length]} rx={3} />
+      {width > 28 && (
+        <text x={x + width / 2} y={y + height / 2 + (showAmount ? -6 : 4)}
+          textAnchor="middle" dominantBaseline="middle"
+          fill="rgba(255,255,255,0.85)" fontSize={10} fontWeight="600">
+          {label}
+        </text>
+      )}
+      {showAmount && (
+        <text x={x + width / 2} y={y + height / 2 + 10}
+          textAnchor="middle" dominantBaseline="middle"
+          fill="rgba(255,255,255,0.45)" fontSize={8}>
+          ₩{formatKRWCompact(value)}
+        </text>
+      )}
+    </g>
+  )
+}
 
 export function SpendingPage() {
   const now = new Date()
@@ -37,7 +71,7 @@ export function SpendingPage() {
   const { setMetaBadge } = useChromeContext()
   useEffect(() => {
     setMetaBadge(
-      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+      <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
         {detailStart} ~ {detailEnd}
       </span>
     )
@@ -78,25 +112,25 @@ export function SpendingPage() {
       {/* 3. 상세 필터 */}
       <div className="bg-surface-card border border-border rounded-card px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] text-text-faint">상세 필터</span>
+          <span className="text-caption text-text-faint">상세 필터</span>
           <div className="w-px h-4 bg-border-strong" />
           <select
             value={detailStart}
             onChange={(e) => { setDetailStart(e.target.value); setTxPage(1) }}
-            className="text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+            className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
           >
             {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <span className="text-[10px] text-text-ghost">~</span>
+          <span className="text-caption text-text-ghost">~</span>
           <select
             value={detailEnd}
             onChange={(e) => { setDetailEnd(e.target.value); setTxPage(1) }}
-            className="text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+            className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
           >
             {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
           <div className="w-px h-4 bg-border-strong" />
-          <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-text-faint">
+          <label className="flex items-center gap-1.5 cursor-pointer text-caption text-text-faint">
             <input
               type="checkbox" checked={includeIncome}
               onChange={(e) => { setIncludeIncome(e.target.checked); setTxPage(1) }}
@@ -120,7 +154,7 @@ export function SpendingPage() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="text-[9px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+              className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
             >
               <option value="">대분류 선택</option>
               {categories.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -157,8 +191,8 @@ export function SpendingPage() {
                      { label: '변동비', amount: fixedCost.data.variable_total, color: 'text-accent' },
                    ].map((s) => (
                      <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-3">
-                       <div className={`text-[10px] ${s.color} font-semibold mb-1`}>{s.label}</div>
-                       <div className="text-[14px] font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
+                       <div className={`text-caption ${s.color} font-semibold mb-1`}>{s.label}</div>
+                       <div className="text-body font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
                      </div>
                    ))}
                  </div>
@@ -183,8 +217,8 @@ export function SpendingPage() {
                    { label: '비필수 고정비', amount: fixedCost.data.discretionary_fixed_total, color: 'text-warn' },
                  ].map((s) => (
                    <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-3">
-                     <div className={`text-[10px] ${s.color} font-semibold mb-1`}>{s.label}</div>
-                     <div className="text-[14px] font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
+                     <div className={`text-caption ${s.color} font-semibold mb-1`}>{s.label}</div>
+                     <div className="text-body font-bold text-text-primary">₩ {formatKRWCompact(s.amount)}</div>
                    </div>
                  ))}
                </div>
@@ -197,18 +231,14 @@ export function SpendingPage() {
       <SectionCard title="거래처별 지출 비중" badge="최근 3개월">
         {merchants.isLoading ? <LoadingState /> :
          merchants.data && merchants.data.items.length > 0 ? (
-           <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', height: 110 }}>
-             {merchants.data.items.slice(0, 8).map((m, i) => (
-               <div
-                 key={m.merchant}
-                 className="rounded-md flex flex-col items-center justify-center text-center gap-0.5 p-1"
-                 style={{ background: TREEMAP_COLORS[i % TREEMAP_COLORS.length] }}
-               >
-                 <span className="text-[9px] font-semibold text-white/80 truncate w-full text-center">{m.merchant}</span>
-                 <span className="text-[8px] text-white/50">₩{formatKRWCompact(m.amount)}</span>
-               </div>
-             ))}
-           </div>
+           <ResponsiveContainer width="100%" height={130}>
+             <Treemap
+               data={merchants.data.items.slice(0, 10).map((m) => ({ name: m.merchant, size: Math.abs(m.amount) }))}
+               dataKey="size"
+               aspectRatio={4 / 3}
+               content={<MerchantCell />}
+             />
+           </ResponsiveContainer>
          ) : <EmptyState />}
       </SectionCard>
 
@@ -219,7 +249,7 @@ export function SpendingPage() {
             <select
               value={calendarMonth}
               onChange={(e) => setCalendarMonth(e.target.value)}
-              className="text-[9px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+              className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
             >
               {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -236,23 +266,23 @@ export function SpendingPage() {
             onClick={() => setAccordionOpen((o) => !o)}
           >
             <div>
-              <div className="text-[11px] font-semibold text-text-secondary">거래 내역</div>
-              <div className="text-[10px] text-text-ghost mt-0.5">
+              <div className="text-label font-semibold text-text-secondary">거래 내역</div>
+              <div className="text-caption text-text-ghost mt-0.5">
                 {txPage} / {Math.ceil((transactions.data?.total ?? 0) / 20)} 페이지 · 총 {transactions.data?.total ?? 0}건
               </div>
             </div>
-            <span className="text-text-ghost text-[12px]">{accordionOpen ? '▲' : '▼'}</span>
+            <span className="text-text-ghost text-body-sm">{accordionOpen ? '▲' : '▼'}</span>
           </div>
           {accordionOpen && (
             <div className="bg-surface-card border border-border border-t-0 rounded-b-card">
               {transactions.isLoading ? <LoadingState /> :
                transactions.data && transactions.data.items.length > 0 ? (
                  <>
-                   <table className="w-full border-collapse text-[10px]">
+                   <table className="w-full border-collapse text-caption">
                      <thead>
                        <tr>
                          {['날짜', '거래처', '카테고리', '금액'].map((h) => (
-                           <th key={h} className="text-[9px] text-text-ghost px-3 py-2 text-left border-b border-border-subtle">{h}</th>
+                           <th key={h} className="text-micro text-text-ghost px-3 py-2 text-left border-b border-border-subtle">{h}</th>
                          ))}
                        </tr>
                      </thead>

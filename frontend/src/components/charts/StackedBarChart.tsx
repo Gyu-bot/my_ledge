@@ -63,7 +63,7 @@ export function StackedBarChart({ items, height = 160 }: StackedBarChartProps) {
       </ResponsiveContainer>
       <div className="flex flex-wrap gap-2.5 mt-2">
         {categories.map((cat) => (
-          <span key={cat} className="flex items-center gap-1 text-[9px] text-text-muted">
+          <span key={cat} className="flex items-center gap-1 text-micro text-text-muted">
             <span className="w-2 h-2 rounded-sm" style={{ background: getColor(cat) }} />
             {cat}
           </span>

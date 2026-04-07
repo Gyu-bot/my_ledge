@@ -15,7 +15,7 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <span className="text-[10px] text-text-faint shrink-0">{months[0]}</span>
+        <span className="text-caption text-text-faint shrink-0">{months[0]}</span>
         <div className="relative flex-1 h-1 bg-border rounded">
           <div
             className="absolute h-full bg-accent/60 rounded"
@@ -47,14 +47,14 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
           <div className="absolute w-3 h-3 bg-accent rounded-full -translate-y-1/2 top-1/2 pointer-events-none"
             style={{ left: `calc(${(endIdx / safeLen) * 100}% - 6px)` }} />
         </div>
-        <span className="text-[10px] text-text-faint shrink-0">{months[months.length - 1]}</span>
+        <span className="text-caption text-text-faint shrink-0">{months[months.length - 1]}</span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-accent">{draft[0]}</span>
+        <span className="text-caption text-accent">{draft[0]}</span>
         <div className="flex gap-2">
           <button
             onClick={() => onChange(draft)}
-            className="text-[10px] px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md"
+            className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md"
           >
             적용
           </button>
@@ -64,12 +64,12 @@ export function RangeSlider({ months, value, onChange }: RangeSliderProps) {
               setDraft(reset)
               onChange(reset)
             }}
-            className="text-[10px] px-3 py-1.5 border border-border-strong text-text-ghost rounded-md"
+            className="text-caption px-3 py-1.5 border border-border-strong text-text-ghost rounded-md"
           >
             초기화
           </button>
         </div>
-        <span className="text-[10px] text-accent">{draft[1]}</span>
+        <span className="text-caption text-accent">{draft[1]}</span>
       </div>
     </div>
   )

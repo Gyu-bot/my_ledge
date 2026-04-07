@@ -67,7 +67,7 @@ export function InsightsPage() {
 
   useEffect(() => {
     setMetaBadge(
-      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+      <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
         핵심 인사이트 {insights.length}건
       </span>
     )
@@ -89,12 +89,12 @@ export function InsightsPage() {
           <div className="flex flex-col gap-2">
             {insights.map((insight, i) => (
               <div key={i} className="flex gap-3 p-3 bg-surface-bar border border-border rounded-lg">
-                <div className="w-7 h-7 rounded-md bg-border-subtle flex items-center justify-center text-[13px] shrink-0">{insight.icon}</div>
+                <div className="w-7 h-7 rounded-md bg-border-subtle flex items-center justify-center text-body-md shrink-0">{insight.icon}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-semibold text-text-primary mb-0.5">{insight.title}</div>
-                  <div className="text-[10px] text-text-faint">{insight.description}</div>
+                  <div className="text-label font-semibold text-text-primary mb-0.5">{insight.title}</div>
+                  <div className="text-caption text-text-faint">{insight.description}</div>
                 </div>
-                <span className={`text-[8px] px-1.5 py-0.5 rounded self-start shrink-0 ${VARIANT_BADGE[insight.variant]}`}>
+                <span className={`text-nano px-1.5 py-0.5 rounded self-start shrink-0 ${VARIANT_BADGE[insight.variant]}`}>
                   {VARIANT_LABEL[insight.variant]}
                 </span>
               </div>
@@ -107,27 +107,27 @@ export function InsightsPage() {
       <div className="grid md:grid-cols-2 gap-4">
 
         <SectionCard title="반복 결제"
-          badge={<button onClick={() => setShowRecurringAssumption((v) => !v)} className="text-[9px] text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
+          badge={<button onClick={() => setShowRecurringAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
         >
           {showRecurringAssumption && recurring.data && (
-            <div className="text-[9px] text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
+            <div className="text-micro text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
               {recurring.data.assumptions}
             </div>
           )}
           {recurring.isLoading ? <LoadingState /> :
            recurring.data && recurring.data.items.length > 0 ? (
              <>
-               <table className="w-full border-collapse text-[10px]">
+               <table className="w-full border-collapse text-caption">
                  <thead>
                    <tr>{['거래처', '주기', '평균금액', '횟수'].map((h) => (
-                     <th key={h} className="text-[9px] text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                     <th key={h} className="text-micro text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
                    ))}</tr>
                  </thead>
                  <tbody>
                    {recurring.data.items.map((item, i) => (
                      <tr key={i} className="border-b border-[#0d1117] last:border-0">
                        <td className="py-2 text-text-primary font-medium">{item.merchant}</td>
-                       <td className="py-2"><span className="text-[8px] bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">{item.interval_type}</span></td>
+                       <td className="py-2"><span className="text-nano bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">{item.interval_type}</span></td>
                        <td className="py-2 text-right font-semibold">₩ {formatKRW(item.avg_amount)}</td>
                        <td className="py-2 text-right text-text-muted">{item.occurrences}회</td>
                      </tr>
@@ -140,20 +140,20 @@ export function InsightsPage() {
         </SectionCard>
 
         <SectionCard title="이상 지출"
-          badge={<button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-[9px] text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
+          badge={<button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
         >
           {showAnomalyAssumption && anomalies.data && (
-            <div className="text-[9px] text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
+            <div className="text-micro text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
               {anomalies.data.assumptions}
             </div>
           )}
           {anomalies.isLoading ? <LoadingState /> :
            anomalies.data && anomalies.data.items.length > 0 ? (
              <>
-               <table className="w-full border-collapse text-[10px]">
+               <table className="w-full border-collapse text-caption">
                  <thead>
                    <tr>{['카테고리', '이번 달', '기준선', '증감'].map((h) => (
-                     <th key={h} className="text-[9px] text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                     <th key={h} className="text-micro text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
                    ))}</tr>
                  </thead>
                  <tbody>
@@ -185,11 +185,11 @@ export function InsightsPage() {
              <div className="flex flex-col divide-y divide-border-subtle">
                {merchants.data.items.map((m, i) => (
                  <div key={m.merchant} className="flex items-center gap-2.5 py-2">
-                   <span className="text-[10px] text-text-ghost w-4 shrink-0">#{i + 1}</span>
-                   <span className="text-[10px] text-text-primary font-medium flex-1 truncate">{m.merchant}</span>
-                   <span className="text-[10px] text-text-faint w-7 text-center">{m.count}건</span>
-                   <span className="text-[10px] text-text-muted w-20 text-right">평균 ₩{formatKRWCompact(m.avg_amount)}</span>
-                   <span className="text-[10px] text-danger font-semibold w-20 text-right">₩ {formatKRWCompact(m.amount)}</span>
+                   <span className="text-caption text-text-ghost w-4 shrink-0">#{i + 1}</span>
+                   <span className="text-caption text-text-primary font-medium flex-1 truncate">{m.merchant}</span>
+                   <span className="text-caption text-text-faint w-7 text-center">{m.count}건</span>
+                   <span className="text-caption text-text-muted w-20 text-right">평균 ₩{formatKRWCompact(m.avg_amount)}</span>
+                   <span className="text-caption text-danger font-semibold w-20 text-right">₩ {formatKRWCompact(m.amount)}</span>
                  </div>
                ))}
              </div>

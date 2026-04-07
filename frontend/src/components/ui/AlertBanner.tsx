@@ -18,12 +18,12 @@ interface AlertBannerProps {
 
 export function AlertBanner({ variant, title, description, timestamp, onDismiss }: AlertBannerProps) {
   return (
-    <div className={cn('flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-[11px]', styles[variant])}>
+    <div className={cn('flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-label', styles[variant])}>
       <span className="font-semibold shrink-0">{title}</span>
-      {description && <span className="text-[10px] opacity-80">{description}</span>}
-      {timestamp && <span className="text-[9px] opacity-50 ml-auto shrink-0">{timestamp}</span>}
+      {description && <span className="text-caption opacity-80">{description}</span>}
+      {timestamp && <span className="text-micro opacity-50 ml-auto shrink-0">{timestamp}</span>}
       {onDismiss && (
-        <button onClick={onDismiss} className="ml-2 opacity-50 hover:opacity-80 text-[12px]">✕</button>
+        <button onClick={onDismiss} className="ml-2 opacity-50 hover:opacity-80 text-body-sm">✕</button>
       )}
     </div>
   )

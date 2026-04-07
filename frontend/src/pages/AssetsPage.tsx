@@ -22,7 +22,7 @@ export function AssetsPage() {
 
   useEffect(() => {
     if (snapshotDate) setMetaBadge(
-      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+      <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
         기준일 {snapshotDate}
       </span>
     )
@@ -77,12 +77,12 @@ export function AssetsPage() {
                    { label: '수익률', value: formatPct(investReturnPct), color: (investReturnPct ?? 0) > 0 ? 'text-accent' : 'text-danger' },
                  ].map((s) => (
                    <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-2.5">
-                     <div className="text-[9px] text-text-faint mb-1">{s.label}</div>
-                     <div className={`text-[12px] font-bold ${s.color}`}>{s.value}</div>
+                     <div className="text-micro text-text-faint mb-1">{s.label}</div>
+                     <div className={`text-body-sm font-bold ${s.color}`}>{s.value}</div>
                    </div>
                  ))}
                </div>
-               <div className="text-[10px] text-text-faint mb-2">포트폴리오 비중</div>
+               <div className="text-caption text-text-faint mb-2">포트폴리오 비중</div>
                <HorizontalBarList
                  items={investments.data.items.map((item) => ({
                    label: item.broker,
@@ -106,16 +106,16 @@ export function AssetsPage() {
                    { label: '총 잔액', value: `₩ ${formatKRWCompact(parseFloat(loans.data.totals.balance))}`, color: 'text-danger' },
                  ].map((s) => (
                    <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-2.5">
-                     <div className="text-[9px] text-text-faint mb-1">{s.label}</div>
-                     <div className={`text-[13px] font-bold ${s.color}`}>{s.value}</div>
+                     <div className="text-micro text-text-faint mb-1">{s.label}</div>
+                     <div className={`text-body-md font-bold ${s.color}`}>{s.value}</div>
                    </div>
                  ))}
                </div>
-               <table className="w-full text-[10px] border-collapse">
+               <table className="w-full text-caption border-collapse">
                  <thead>
                    <tr>
                      {['상품', '잔액', '금리'].map((h) => (
-                       <th key={h} className="text-[9px] text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                       <th key={h} className="text-micro text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
                      ))}
                    </tr>
                  </thead>
@@ -124,9 +124,9 @@ export function AssetsPage() {
                      <tr key={i} className="border-b border-[#0d1117] last:border-0">
                        <td className="py-2">
                          <div className="text-text-primary font-medium">{loan.product_name}</div>
-                         <div className="text-[9px] text-text-faint">{loan.lender}</div>
+                         <div className="text-micro text-text-faint">{loan.lender}</div>
                          {loan.loan_type && (
-                           <span className="inline-block text-[8px] px-1.5 py-0.5 mt-0.5 bg-border-subtle text-text-ghost rounded">{loan.loan_type}</span>
+                           <span className="inline-block text-nano px-1.5 py-0.5 mt-0.5 bg-border-subtle text-text-ghost rounded">{loan.loan_type}</span>
                          )}
                        </td>
                        <td className="py-2 text-danger font-semibold text-right">

@@ -106,7 +106,7 @@ export function WorkbenchPage() {
     const total = txList.data?.total ?? 0
     const showing = txList.data?.items?.length ?? 0
     setMetaBadge(
-      <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+      <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
         {showing} / {total}건
       </span>
     )
@@ -233,8 +233,8 @@ export function WorkbenchPage() {
     }
   }
 
-  const inputCls = 'text-[10px] text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5'
-  const editInputCls = 'text-[10px] text-text-primary bg-border-subtle border border-border-strong rounded px-1.5 py-1 w-full'
+  const inputCls = 'text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5'
+  const editInputCls = 'text-caption text-text-primary bg-border-subtle border border-border-strong rounded px-1.5 py-1 w-full'
 
   return (
     <div className="flex flex-col gap-3">
@@ -287,30 +287,30 @@ export function WorkbenchPage() {
           <input type="date" className={inputCls} value={filterDraft.start_date} onChange={(e) => setFilterDraft((f) => ({ ...f, start_date: e.target.value }))} />
           <input type="date" className={inputCls} value={filterDraft.end_date} onChange={(e) => setFilterDraft((f) => ({ ...f, end_date: e.target.value }))} />
           <div className="w-px h-5 bg-border-strong" />
-          <label className="flex items-center gap-1.5 text-[10px] text-text-faint cursor-pointer">
+          <label className="flex items-center gap-1.5 text-caption text-text-faint cursor-pointer">
             <input type="checkbox" checked={filterDraft.include_deleted} onChange={(e) => setFilterDraft((f) => ({ ...f, include_deleted: e.target.checked }))} className="w-3 h-3 accent-accent" />
             삭제 포함
           </label>
-          <label className="flex items-center gap-1.5 text-[10px] cursor-pointer text-accent">
+          <label className="flex items-center gap-1.5 text-caption cursor-pointer text-accent">
             <input type="checkbox" checked={!!filterDraft.is_edited} onChange={(e) => setFilterDraft((f) => ({ ...f, is_edited: e.target.checked ? true : undefined }))} className="w-3 h-3 accent-accent" />
             수정만
           </label>
           <div className="w-px h-5 bg-border-strong" />
-          <button onClick={applyFilter} className="text-[10px] px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md">적용</button>
-          <button onClick={resetFilter} className="text-[10px] px-3 py-1.5 border border-border-strong text-text-ghost rounded-md">초기화</button>
+          <button onClick={applyFilter} className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md">적용</button>
+          <button onClick={resetFilter} className="text-caption px-3 py-1.5 border border-border-strong text-text-ghost rounded-md">초기화</button>
         </div>
       </div>
 
       {/* Bulk edit panel */}
       {selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-[#0a1520] border border-[#1e3a5f] rounded-lg">
-          <span className="text-[10px] text-blue-400 font-semibold shrink-0">{selectedIds.size}건 선택됨</span>
+          <span className="text-caption text-blue-400 font-semibold shrink-0">{selectedIds.size}건 선택됨</span>
           <div className="w-px h-5 bg-border-strong" />
           {(['거래처', '대분류', '소분류', '고정/변동', '필수여부', '메모'] as const).map((label) => {
             const key: keyof EditDraft = label === '거래처' ? 'merchant' : label === '대분류' ? 'category_major_user' : label === '소분류' ? 'category_minor_user' : label === '고정/변동' ? 'cost_kind' : label === '필수여부' ? 'fixed_cost_necessity' : 'memo'
             if (label === '고정/변동') return (
               <div key={label} className="flex items-center gap-1.5">
-                <span className="text-[10px] text-text-faint">{label}</span>
+                <span className="text-caption text-text-faint">{label}</span>
                 <select className={`${inputCls} py-1`} value={bulkDraft.cost_kind ?? ''} onChange={(e) => setBulkDraft((b) => ({ ...b, cost_kind: e.target.value as '' | 'fixed' | 'variable' }))}>
                   <option value="">— 선택 —</option><option value="fixed">고정비</option><option value="variable">변동비</option>
                 </select>
@@ -318,7 +318,7 @@ export function WorkbenchPage() {
             )
             if (label === '필수여부') return (
               <div key={label} className="flex items-center gap-1.5">
-                <span className="text-[10px] text-text-faint">{label}</span>
+                <span className="text-caption text-text-faint">{label}</span>
                 <select className={`${inputCls} py-1`} value={bulkDraft.fixed_cost_necessity ?? ''} onChange={(e) => setBulkDraft((b) => ({ ...b, fixed_cost_necessity: e.target.value as '' | 'essential' | 'discretionary' }))}>
                   <option value="">— 선택 —</option><option value="essential">필수</option><option value="discretionary">비필수</option>
                 </select>
@@ -326,14 +326,14 @@ export function WorkbenchPage() {
             )
             return (
               <div key={label} className="flex items-center gap-1.5">
-                <span className="text-[10px] text-text-faint">{label}</span>
+                <span className="text-caption text-text-faint">{label}</span>
                 <input className={`${inputCls} w-20 py-1`} value={(bulkDraft[key] as string) ?? ''} onChange={(e) => setBulkDraft((b) => ({ ...b, [key]: e.target.value }))} />
               </div>
             )
           })}
           <div className="ml-auto flex gap-2">
-            <button onClick={applyBulk} disabled={!hasWrite} className="text-[10px] px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40">일괄 적용</button>
-            <button onClick={() => { setSelectedIds(new Set()); setBulkDraft({}) }} className="text-[10px] px-3 py-1.5 border border-border-strong text-text-ghost rounded-md">선택 해제</button>
+            <button onClick={applyBulk} disabled={!hasWrite} className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40">일괄 적용</button>
+            <button onClick={() => { setSelectedIds(new Set()); setBulkDraft({}) }} className="text-caption px-3 py-1.5 border border-border-strong text-text-ghost rounded-md">선택 해제</button>
           </div>
         </div>
       )}
@@ -341,8 +341,8 @@ export function WorkbenchPage() {
       {/* 거래 테이블 */}
       <div className="bg-surface-card border border-border rounded-card overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
-          <span className="text-[11px] font-semibold text-text-secondary">거래 목록</span>
-          <span className="text-[9px] text-text-faint bg-surface-bar border border-border-strong px-2 py-0.5 rounded-full">
+          <span className="text-label font-semibold text-text-secondary">거래 목록</span>
+          <span className="text-micro text-text-faint bg-surface-bar border border-border-strong px-2 py-0.5 rounded-full">
             {page} / {Math.ceil((txList.data?.total ?? 0) / 20)} 페이지 · {txList.data?.total ?? 0}건
           </span>
         </div>
@@ -350,7 +350,7 @@ export function WorkbenchPage() {
         {txList.isLoading ? <LoadingState /> :
          txList.data && txList.data.items.length > 0 ? (
            <div className="overflow-x-auto">
-             <table className="w-full border-collapse text-[10px]" style={{ tableLayout: 'fixed' }}>
+             <table className="w-full border-collapse text-caption" style={{ tableLayout: 'fixed' }}>
                <colgroup>
                  <col style={{ width: 28 }} /><col style={{ width: 52 }} />
                  <col style={{ width: 150 }} /><col style={{ width: 100 }} />
@@ -362,7 +362,7 @@ export function WorkbenchPage() {
                <thead>
                  <tr>
                    {['', '날짜', '설명', '거래처', '카테고리', '고정/변동', '필수여부', '메모', '상태', '금액', '동작'].map((h, i) => (
-                     <th key={i} className="text-[9px] text-text-ghost px-2 py-2 text-left border-b border-border-subtle font-medium">{h}</th>
+                     <th key={i} className="text-micro text-text-ghost px-2 py-2 text-left border-b border-border-subtle font-medium">{h}</th>
                    ))}
                  </tr>
                </thead>
@@ -385,7 +385,7 @@ export function WorkbenchPage() {
                        </td>
                        <td className="px-2 py-2 text-text-ghost">{tx.date.slice(5)}</td>
                        {/* 설명: read-only, muted italic */}
-                       <td className="px-2 py-2 text-[9.5px] text-text-ghost italic overflow-hidden text-ellipsis whitespace-nowrap">{tx.description}</td>
+                       <td className="px-2 py-2 text-micro text-text-ghost italic overflow-hidden text-ellipsis whitespace-nowrap">{tx.description}</td>
                        {/* 거래처: same size, editable */}
                        <td className="px-2 py-2">
                          {isEditing
@@ -406,7 +406,7 @@ export function WorkbenchPage() {
                            ? <select className={editInputCls} value={editDraft.cost_kind ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, cost_kind: e.target.value as '' | 'fixed' | 'variable' }))}>
                                <option value="">—</option><option value="fixed">고정비</option><option value="variable">변동비</option>
                              </select>
-                           : <span className="text-[9px] text-text-ghost">{tx.cost_kind === 'fixed' ? '고정비' : tx.cost_kind === 'variable' ? '변동비' : '—'}</span>
+                           : <span className="text-micro text-text-ghost">{tx.cost_kind === 'fixed' ? '고정비' : tx.cost_kind === 'variable' ? '변동비' : '—'}</span>
                          }
                        </td>
                        <td className="px-2 py-2">
@@ -432,18 +432,18 @@ export function WorkbenchPage() {
                        <td className="px-2 py-2 text-center">
                          {tx.is_deleted ? (
                            <button onClick={() => restoreRow(tx.id)} disabled={!hasWrite}
-                             className="text-[8px] px-1.5 py-0.5 border border-border-strong text-text-ghost rounded disabled:opacity-40">복원</button>
+                             className="text-nano px-1.5 py-0.5 border border-border-strong text-text-ghost rounded disabled:opacity-40">복원</button>
                          ) : isEditing ? (
                            <div className="flex gap-0.5">
-                             <button onClick={() => saveEdit(tx.id)} className="w-5 h-5 rounded border border-accent-muted text-accent text-[10px] flex items-center justify-center">✓</button>
-                             <button onClick={() => setEditingId(null)} className="w-5 h-5 rounded border border-border-strong text-text-ghost text-[10px] flex items-center justify-center">✕</button>
+                             <button onClick={() => saveEdit(tx.id)} className="w-5 h-5 rounded border border-accent-muted text-accent text-caption flex items-center justify-center">✓</button>
+                             <button onClick={() => setEditingId(null)} className="w-5 h-5 rounded border border-border-strong text-text-ghost text-caption flex items-center justify-center">✕</button>
                            </div>
                          ) : (
                            <div className="flex gap-0.5">
                              <button onClick={() => startEdit(tx)} disabled={!hasWrite || selectedIds.size > 0}
-                               className="w-5 h-5 rounded border border-border-strong text-text-ghost text-[10px] flex items-center justify-center disabled:opacity-30">✎</button>
+                               className="w-5 h-5 rounded border border-border-strong text-text-ghost text-caption flex items-center justify-center disabled:opacity-30">✎</button>
                              <button onClick={() => deleteRow(tx.id)} disabled={!hasWrite}
-                               className="w-5 h-5 rounded border border-danger-muted text-danger-dim text-[10px] flex items-center justify-center disabled:opacity-30">🗑</button>
+                               className="w-5 h-5 rounded border border-danger-muted text-danger-dim text-caption flex items-center justify-center disabled:opacity-30">🗑</button>
                            </div>
                          )}
                        </td>
@@ -462,8 +462,8 @@ export function WorkbenchPage() {
         <div className="flex items-center justify-between px-4 py-3 bg-surface-card cursor-pointer hover:bg-border-subtle"
           onClick={() => setUploadOpen((o) => !o)}>
           <div>
-            <div className="text-[11px] font-semibold text-text-secondary">업로드</div>
-            <div className="text-[10px] text-text-ghost mt-0.5">BankSalad 엑셀 파일 업로드</div>
+            <div className="text-label font-semibold text-text-secondary">업로드</div>
+            <div className="text-caption text-text-ghost mt-0.5">BankSalad 엑셀 파일 업로드</div>
           </div>
           <span className="text-text-ghost">{uploadOpen ? '▲' : '▼'}</span>
         </div>
@@ -472,19 +472,19 @@ export function WorkbenchPage() {
             <label className="flex flex-col items-center justify-center border border-dashed border-border-strong rounded-lg py-5 cursor-pointer hover:bg-border-subtle text-center"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setUploadFile(f) }}>
-              <span className="text-[11px] text-text-muted mb-1">{uploadFile ? uploadFile.name : '파일을 드래그하거나 클릭해서 선택'}</span>
-              <span className="text-[9px] text-text-ghost">.xlsx · 최대 20MB</span>
+              <span className="text-label text-text-muted mb-1">{uploadFile ? uploadFile.name : '파일을 드래그하거나 클릭해서 선택'}</span>
+              <span className="text-micro text-text-ghost">.xlsx · 최대 20MB</span>
               <input type="file" accept=".xlsx" className="hidden" onChange={(e) => e.target.files?.[0] && setUploadFile(e.target.files[0])} />
             </label>
             <div className="flex items-end gap-3">
               <div>
-                <div className="text-[9px] text-text-faint mb-1">스냅샷 기준일</div>
+                <div className="text-micro text-text-faint mb-1">스냅샷 기준일</div>
                 <input type="date" className={`${inputCls}`} value={snapshotDate} onChange={(e) => setSnapshotDate(e.target.value)} />
               </div>
               <button
                 onClick={handleUpload}
                 disabled={!hasWrite || !uploadFile || !snapshotDate || uploadMutation.isPending}
-                className="text-[10px] px-4 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40"
+                className="text-caption px-4 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40"
               >
                 {uploadMutation.isPending ? '업로드 중...' : '업로드 실행'}
               </button>
@@ -498,8 +498,8 @@ export function WorkbenchPage() {
         <div className="flex items-center justify-between px-4 py-3 bg-surface-card cursor-pointer hover:bg-border-subtle"
           onClick={() => setHistoryOpen((o) => !o)}>
           <div>
-            <div className="text-[11px] font-semibold text-text-secondary">최근 업로드 이력</div>
-            <div className="text-[10px] text-text-ghost mt-0.5">최근 10건</div>
+            <div className="text-label font-semibold text-text-secondary">최근 업로드 이력</div>
+            <div className="text-caption text-text-ghost mt-0.5">최근 10건</div>
           </div>
           <span className="text-text-ghost">{historyOpen ? '▲' : '▼'}</span>
         </div>
@@ -507,10 +507,10 @@ export function WorkbenchPage() {
           <div className="bg-[#0c1320] border-t border-border overflow-x-auto">
             {uploadLogs.isLoading ? <LoadingState /> :
              uploadLogs.data && uploadLogs.data.items.length > 0 ? (
-               <table className="w-full border-collapse text-[10px]">
+               <table className="w-full border-collapse text-caption">
                  <thead>
                    <tr>{['파일명', '상태', '신규', '스킵', '기준일', '업로드 시각'].map((h) => (
-                     <th key={h} className="text-[9px] text-text-ghost px-4 py-2 text-left border-b border-border">{h}</th>
+                     <th key={h} className="text-micro text-text-ghost px-4 py-2 text-left border-b border-border">{h}</th>
                    ))}</tr>
                  </thead>
                  <tbody>
@@ -518,7 +518,7 @@ export function WorkbenchPage() {
                      <tr key={log.id} className="border-b border-[#0d1117] last:border-0">
                        <td className="px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
                        <td className="px-4 py-2">
-                         <span className={`text-[8px] px-1.5 py-0.5 rounded ${log.status === 'success' || log.status === 'partial' ? 'bg-accent-dim text-accent' : 'bg-danger-dim text-danger'}`}>
+                         <span className={`text-nano px-1.5 py-0.5 rounded ${log.status === 'success' || log.status === 'partial' ? 'bg-accent-dim text-accent' : 'bg-danger-dim text-danger'}`}>
                            {log.status}
                          </span>
                        </td>
@@ -540,33 +540,33 @@ export function WorkbenchPage() {
         <div className="flex items-center justify-between px-4 py-3 bg-[#120a0a] cursor-pointer"
           onClick={() => setDangerOpen((o) => !o)}>
           <div>
-            <div className="text-[11px] font-semibold text-danger">Danger Zone</div>
-            <div className="text-[10px] text-[#3b2020] mt-0.5">데이터 초기화 — 되돌릴 수 없습니다</div>
+            <div className="text-label font-semibold text-danger">Danger Zone</div>
+            <div className="text-caption text-[#3b2020] mt-0.5">데이터 초기화 — 되돌릴 수 없습니다</div>
           </div>
           <span className="text-[#3b2020]">{dangerOpen ? '▲' : '▼'}</span>
         </div>
         {dangerOpen && (
           <div className="bg-[#0c0808] border-t border-danger-muted p-4 flex flex-col gap-3">
-            <div className="text-[10px] text-text-faint">초기화 범위를 선택하세요. 업로드 이력은 삭제되지 않습니다.</div>
+            <div className="text-caption text-text-faint">초기화 범위를 선택하세요. 업로드 이력은 삭제되지 않습니다.</div>
             <div className="grid grid-cols-2 gap-2">
               {(['transactions_only', 'transactions_and_snapshots'] as DataResetScope[]).map((scope) => (
                 <button
                   key={scope}
                   onClick={() => setResetScope(scope)}
-                  className={`text-left px-3 py-2.5 rounded-lg border text-[10px] ${resetScope === scope ? 'border-danger text-danger bg-[#1a0a0a]' : 'border-border-strong text-text-ghost'}`}
+                  className={`text-left px-3 py-2.5 rounded-lg border text-caption ${resetScope === scope ? 'border-danger text-danger bg-[#1a0a0a]' : 'border-border-strong text-text-ghost'}`}
                 >
                   <div className="font-semibold mb-0.5">{RESET_LABEL[scope]}</div>
-                  <div className="text-[9px] opacity-70">
+                  <div className="text-micro opacity-70">
                     {scope === 'transactions_only' ? '거래 내역만 삭제, 자산 스냅샷 유지' : '모든 데이터 삭제'}
                   </div>
                 </button>
               ))}
             </div>
-            <div className="text-[9px] text-text-faint">
+            <div className="text-micro text-text-faint">
               "{RESET_LABEL[resetScope]}" 를 입력하여 확인
             </div>
             <input
-              className="w-full bg-[#0a0d13] border border-border-strong rounded-lg px-3 py-2 text-[10px] text-text-secondary"
+              className="w-full bg-[#0a0d13] border border-border-strong rounded-lg px-3 py-2 text-caption text-text-secondary"
               placeholder="확인 문구를 입력하세요"
               value={resetConfirm}
               onChange={(e) => setResetConfirm(e.target.value)}
@@ -574,7 +574,7 @@ export function WorkbenchPage() {
             <button
               onClick={handleReset}
               disabled={!hasWrite || resetConfirm !== RESET_LABEL[resetScope] || resetMutation.isPending}
-              className="w-full py-2 bg-danger-dim border border-danger-muted text-danger rounded-lg text-[10px] font-semibold disabled:opacity-40"
+              className="w-full py-2 bg-danger-dim border border-danger-muted text-danger rounded-lg text-caption font-semibold disabled:opacity-40"
             >
               {resetMutation.isPending ? '초기화 중...' : '초기화 실행'}
             </button>

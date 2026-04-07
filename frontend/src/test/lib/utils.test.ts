@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatKRW, formatKRWCompact, formatPct, formatDate, monthRange } from '../../lib/utils'
+import { formatKRW, formatKRWCompact, formatPct, monthRange } from '../../lib/utils'
 
 describe('formatKRW', () => {
   it('formats positive numbers with comma', () => {

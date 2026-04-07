@@ -1,9 +1,9 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend v2 구현 중 — Task 3 완료 (React Query 훅 레이어)
-- **Last Worker:** Claude Sonnet 4.6 (2026-04-07 KST, Task 3 React Query 훅 5종 + useWriteAccess 테스트 완료)
-- **Branch:** feat/frontend-v2
+- **Phase:** Frontend 폰트 시스템 토큰화 및 차트/버그 수정
+- **Last Worker:** Claude (2026-04-07T16:20+0900, 폰트 토큰 시스템 도입 + 차트 URL 수정 + Treemap + badge 수정)
+- **Branch:** main
 
 ## Completed
 - [x] PRD 작성 (`PRD.md`)
@@ -93,6 +93,11 @@
 - [x] Frontend mobile table-card overflow tightening 완료: `TableMobileCard` 와 읽기용 테이블 wrapper에 `overflow-hidden`, `min-w-0`, grid-based value rows를 적용해 인사이트 `반복 결제` 카드가 iPhone 폭에서 카드 밖으로 밀리지 않도록 보정
 - [x] Frontend insights mobile row/pagination overflow tightening 완료: `InsightsPage` 의 `거래처 소비 Top N`, `카테고리 증감 요약`, card pagination row에 `min-w-0`, `truncate`, `shrink-0`, mobile stack layout을 적용해 인사이트 모바일 카드 전반의 좌우 밀림을 추가 보정
 - [x] Frontend 재구현 handoff 문서화 완료: 기존 CSS/토큰/디자인시스템을 제외하고 현재 shell, 라우트, page wireframe, content block, 상호작용, API 의존성을 정리한 `docs/frontend-reimplementation-wireframe-functional-requirements.md` 작성
+- [x] Frontend review runtime hotfix 완료: 누락된 `@heroicons/react` 설치 상태 때문에 깨지던 layout chrome(`AppSidebar`, `AppTopbar`, `MobileDrawer`)을 `lucide-react` 기준으로 정리하고, `AppLayout` 렌더 회귀 테스트를 추가해 review용 dev server가 다시 기동되도록 수정
+- [x] 리뷰용 서버/Tailnet 접근 재검증 완료: backend `.venv/bin/uvicorn` `:8000`, frontend Vite `:4173` 을 다시 띄우고 `http://100.69.156.40:4173` / `http://100.69.156.40:8000/api/v1/health` 응답을 확인
+- [x] Frontend 폰트 시스템 토큰화 완료: `html { font-size: 21px }` (1.5× 스케일) + `tailwind.config.js` 에 `nano/micro/caption/label/body-sm/body-md/body/kpi/display` rem 기반 토큰 9종 추가, 전체 `.tsx` 에서 `text-[Npx]` 하드코딩 → 시멘틱 토큰으로 1-pass 치환
+- [x] Frontend heroicons → lucide-react 교체: `AppSidebar`, `AppTopbar`, `MobileDrawer` 의 `@heroicons/react` import 를 `lucide-react` 동등 아이콘으로 교체 (`@heroicons/react` 미설치 상태)
+- [x] Frontend 차트/버그 수정 완료: `categoryTimeline` URL 오타 수정(`/category-timeline` → `/by-category/timeline`), 거래처별 지출 비중 Recharts `Treemap` 전환, `StatusBadge` `whitespace-nowrap` 추가, `text-[9.5px]` 잔여값 토큰화, Pagination `'...'` key 충돌 수정, `useDailySpend` `retry: false` 설정
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
@@ -109,13 +114,14 @@
   - 현재 상태: P0/P1 8종 endpoint 구현 완료. P2 asset/liability health 대기
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
-  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 이번 턴에는 `output/playwright/mobile-review-20260403/` 아래 iPhone Pro 폭 재캡처를 추가 수집했고, spending 가로 overflow 원인인 separator row까지 제거했다. 이어서 insights `반복 결제` 카드에 `min-w-0/w-full/max-w-full` 제약을 추가하고 Chrome CDP로 `clientWidth === scrollWidth === 417px` 를 확인했다. 현재 수동 확인용 dev server는 backend `:8000`, frontend `:4173` 으로 다시 올라와 있다
-  - 남은 작업: 필요 시 운영 환경 또는 실제 기기 기준 추가 캡처 수집
+  - 현재 지점: 브라우저 중간의 `/api/*` 500은 frontend regression이 아니라 polling 중 종료된 dev backend 때문이었고, backend 재기동 후 최종 캡처에서는 다시 200 응답과 정상 렌더를 확인했다. 이번 턴에는 layout icon import가 실제 설치 상태와 어긋나던 문제를 `lucide-react` 로 정리했고, review용 dev server를 backend `:8000`, frontend `:4173` 으로 다시 올렸다. Tailnet IP(`100.69.156.40`) 경로에서는 frontend `/` 와 proxied `/api/v1/health` 가 모두 200이다
+  - 남은 작업: 필요 시 운영 환경 또는 실제 기기 기준 추가 캡처 수집, Vite dev server의 MagicDNS host allowlist 정리
 
 ## Blocked
 - 없음
 
 ## Next Up
+- [ ] Vite dev server의 Tailnet hostname(`moltbot.tailbe7385.ts.net`) 접근 시 403이 나오는 host allowlist 경로를 정리해 MagicDNS 기반 review URL도 안정화
 - [ ] Frontend 재설계
   - [x] 상세 wireframe 승인 반영
   - [x] `docs/superpowers/specs/` 아래 redesign spec 작성
@@ -301,6 +307,7 @@
 - 2026-04-02: 지출 페이지의 시계열 slider도 작업대 필터와 같은 draft/apply 패턴을 적용한다. slider 이동마다 즉시 query를 다시 태우는 것보다 사용자가 범위를 잡은 뒤 `적용` 버튼으로 확정하는 편이 더 안정적이다.
 - 2026-04-02: 지출 페이지 상세 필터는 `시작 월` / `종료 월`만 남기고, `카테고리`, `결제수단`, `설명 검색`은 제거한다. 현재 정보 구조에서 세부 필터가 많을수록 카드 간 기준이 흐려지고 workbench와도 역할이 겹친다.
 - 2026-04-02: 거래 편집 작업대 성능 최적화의 최우선 목표는 `frontend/src/hooks/useDataManagement.ts` 의 `loadAllTransactions()` 전체 페이지 수집을 없애는 것이다. 현재처럼 전건 fetch 후 클라이언트 필터링/페이지네이션을 하는 구조는 데이터가 늘수록 느려질 수밖에 없다.
+- 2026-04-07: review용 dev server 재기동이 우선인 상황에서는 누락 설치 상태의 `@heroicons/react` 를 다시 맞추기보다 이미 의존성에 포함된 `lucide-react` 로 layout chrome 아이콘을 통일한다. 런타임 복구 범위가 작고 추가 설치 없이 바로 검증 가능하기 때문이다.
 
 ## Known Issues
 - openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
@@ -310,6 +317,7 @@
 - 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
 - `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
 - frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
+- Vite dev server는 Tailnet IP(`100.69.156.40`) 접근은 허용하지만 MagicDNS hostname(`moltbot.tailbe7385.ts.net`)으로는 현재 host check 403을 반환한다. 리뷰는 우선 Tailnet IP 기준으로 진행해야 한다
 - 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
 - Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
 - 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다

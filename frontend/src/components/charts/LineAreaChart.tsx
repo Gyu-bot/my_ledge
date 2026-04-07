@@ -10,7 +10,7 @@ interface LineAreaChartProps {
 export function LineAreaChart({ data, height = 130 }: LineAreaChartProps) {
   if (data.length <= 1) {
     return (
-      <div className="flex items-center justify-center h-[130px] text-[11px] text-text-ghost">
+      <div className="flex items-center justify-center h-[130px] text-label text-text-ghost">
         시계열 데이터가 부족합니다 (2개 이상 스냅샷 필요)
       </div>
     )

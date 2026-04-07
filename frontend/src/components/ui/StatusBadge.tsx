@@ -16,7 +16,7 @@ const labels: Record<Status, string> = {
 
 export function StatusBadge({ status }: { status: Status }) {
   return (
-    <span className={cn('inline-block text-[8px] px-1.5 py-0.5 rounded', styles[status])}>
+    <span className={cn('inline-block text-nano px-1.5 py-0.5 rounded whitespace-nowrap', styles[status])}>
       {labels[status]}
     </span>
   )

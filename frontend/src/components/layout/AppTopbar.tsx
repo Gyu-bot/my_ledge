@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import { Bars3Icon } from '@heroicons/react/24/outline'
+import { Menu } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 const PAGE_META: Record<string, { breadcrumb: string; title: string }> = {
@@ -27,11 +27,11 @@ export function AppTopbar({ onMobileMenuOpen, metaBadge, className }: AppTopbarP
         onClick={onMobileMenuOpen}
         aria-label="메뉴 열기"
       >
-        <Bars3Icon className="w-5 h-5" />
+        <Menu className="w-5 h-5" />
       </button>
-      <span className="text-[11px] text-text-ghost hidden md:block">{meta.breadcrumb}</span>
-      <span className="text-[11px] text-text-ghost hidden md:block">›</span>
-      <span className="text-[13px] font-semibold text-text-primary">{meta.title}</span>
+      <span className="text-label text-text-ghost hidden md:block">{meta.breadcrumb}</span>
+      <span className="text-label text-text-ghost hidden md:block">›</span>
+      <span className="text-body-md font-semibold text-text-primary">{meta.title}</span>
       {metaBadge && <div className="ml-auto">{metaBadge}</div>}
     </header>
   )

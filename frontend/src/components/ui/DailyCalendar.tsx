@@ -26,7 +26,7 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
     <div>
       <div className="grid grid-cols-7 gap-0.5 mb-1">
         {DAY_NAMES.map((d) => (
-          <div key={d} className="text-center text-[8px] text-text-ghost pb-1">{d}</div>
+          <div key={d} className="text-center text-nano text-text-ghost pb-1">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-0.5">
@@ -52,7 +52,7 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
           )
         })}
       </div>
-      <div className="mt-2 text-right text-[10px] text-text-muted">
+      <div className="mt-2 text-right text-caption text-text-muted">
         합계 ₩{formatKRW(Math.abs(total))}
       </div>
     </div>

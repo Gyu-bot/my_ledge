@@ -1,22 +1,19 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '../../lib/utils'
-import {
-  HomeIcon, ChartBarIcon, CurrencyDollarIcon,
-  LightBulbIcon, CogIcon,
-} from '@heroicons/react/24/outline'
+import { Home, BarChart2, DollarSign, Lightbulb, Settings } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { to: '/', label: '개요', Icon: HomeIcon, exact: true },
+  { to: '/', label: '개요', Icon: Home, exact: true },
 ] as const
 
 const ANALYSIS_ITEMS = [
-  { to: '/analysis/spending', label: '지출 분석', Icon: ChartBarIcon },
-  { to: '/analysis/assets', label: '자산 현황', Icon: CurrencyDollarIcon },
-  { to: '/analysis/insights', label: '인사이트', Icon: LightBulbIcon },
+  { to: '/analysis/spending', label: '지출 분석', Icon: BarChart2 },
+  { to: '/analysis/assets', label: '자산 현황', Icon: DollarSign },
+  { to: '/analysis/insights', label: '인사이트', Icon: Lightbulb },
 ] as const
 
 const OPS_ITEMS = [
-  { to: '/operations/workbench', label: '거래 작업대', Icon: CogIcon },
+  { to: '/operations/workbench', label: '거래 작업대', Icon: Settings },
 ] as const
 
 function NavBtn({ to, label, Icon, exact = false }: { to: string; label: string; Icon: React.ComponentType<{ className?: string }>; exact?: boolean }) {

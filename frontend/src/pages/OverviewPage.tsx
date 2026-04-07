@@ -37,7 +37,7 @@ export function OverviewPage() {
   useEffect(() => {
     if (snapshotDate) {
       setMetaBadge(
-        <span className="text-[10px] text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
+        <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
           기준일 {snapshotDate}
         </span>
       )
@@ -82,8 +82,8 @@ export function OverviewPage() {
              <>
                <DualBarChart data={cashflow.data.items} />
                <div className="flex gap-3 mt-2">
-                 <span className="flex items-center gap-1 text-[9px] text-text-muted"><span className="w-2 h-2 rounded-sm bg-accent" />수입</span>
-                 <span className="flex items-center gap-1 text-[9px] text-text-muted"><span className="w-2 h-2 rounded-sm bg-danger" />지출</span>
+                 <span className="flex items-center gap-1 text-micro text-text-muted"><span className="w-2 h-2 rounded-sm bg-accent" />수입</span>
+                 <span className="flex items-center gap-1 text-micro text-text-muted"><span className="w-2 h-2 rounded-sm bg-danger" />지출</span>
                </div>
              </>
            ) : <EmptyState message="현금흐름 데이터가 없습니다" />}
@@ -97,8 +97,8 @@ export function OverviewPage() {
               { label: '수입 안정성', value: incomeLabel, warn: false },
             ].map((signal) => (
               <div key={signal.label} className="flex items-center justify-between px-3 py-2.5 bg-surface-bar border border-border rounded-lg">
-                <span className="text-[11px] text-text-secondary">{signal.label}</span>
-                <span className={`text-[12px] font-semibold ${signal.warn ? 'text-warn' : 'text-accent'}`}>
+                <span className="text-label text-text-secondary">{signal.label}</span>
+                <span className={`text-body-sm font-semibold ${signal.warn ? 'text-warn' : 'text-accent'}`}>
                   {signal.value == null ? '—' : typeof signal.value === 'number' ? `${signal.value}건` : signal.value}
                 </span>
               </div>
@@ -128,11 +128,11 @@ export function OverviewPage() {
                {recentTx.data.items.map((tx) => (
                  <div key={tx.id} className="flex items-center gap-3 py-2">
                    <div className="flex-1 min-w-0">
-                     <div className="text-[11px] text-text-primary truncate">{tx.merchant}</div>
-                     <div className="text-[10px] text-text-faint">{tx.effective_category_major}</div>
+                     <div className="text-label text-text-primary truncate">{tx.merchant}</div>
+                     <div className="text-caption text-text-faint">{tx.effective_category_major}</div>
                    </div>
-                   <div className="text-[9px] text-text-ghost shrink-0">{formatDate(tx.date)}</div>
-                   <div className={`text-[11px] font-semibold shrink-0 ${tx.amount < 0 ? 'text-danger' : 'text-accent'}`}>
+                   <div className="text-micro text-text-ghost shrink-0">{formatDate(tx.date)}</div>
+                   <div className={`text-label font-semibold shrink-0 ${tx.amount < 0 ? 'text-danger' : 'text-accent'}`}>
                      {tx.amount < 0 ? '-' : '+'}₩{formatKRW(tx.amount)}
                    </div>
                  </div>

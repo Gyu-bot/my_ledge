@@ -46,7 +46,7 @@ export const transactionApi = {
     }),
 
   categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
-    apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/category-timeline${buildQuery(params)}`),
+    apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery(params)}`),
 
   categoryBreakdown: (params: { start_month?: string; end_month?: string; include_income?: boolean } = {}) =>
     apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery(params)}`),

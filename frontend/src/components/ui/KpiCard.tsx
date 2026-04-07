@@ -17,10 +17,10 @@ export function KpiCard({ label, value, sub, subVariant = 'neutral', className }
 
   return (
     <div className={cn('bg-surface-card border border-border rounded-card px-4 py-3.5', className)}>
-      <div className="text-[10px] text-text-faint tracking-wide mb-2">{label}</div>
-      <div className="text-[18px] font-bold leading-tight tracking-tight mb-1">{value}</div>
+      <div className="text-caption text-text-faint tracking-wide mb-2">{label}</div>
+      <div className="text-kpi font-bold leading-tight tracking-tight mb-1">{value}</div>
       {sub && (
-        <div data-testid="kpi-sub" className={cn('text-[10px]', subColor)}>
+        <div data-testid="kpi-sub" className={cn('text-caption', subColor)}>
           {sub}
         </div>
       )}

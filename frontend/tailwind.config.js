@@ -3,6 +3,19 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      fontSize: {
+        // Semantic type scale — rem-based, scales with html { font-size }
+        // Base reference: 14px html = original sizes; 21px html = 1.5× scale
+        'nano':    ['0.571rem', { lineHeight: '1.2' }],  // ~8px  → badge labels, status tags
+        'micro':   ['0.643rem', { lineHeight: '1.3' }],  // ~9px  → table headers, timestamps
+        'caption': ['0.714rem', { lineHeight: '1.4' }],  // ~10px → secondary labels, descriptions
+        'label':   ['0.786rem', { lineHeight: '1.5' }],  // ~11px → section titles, nav items
+        'body-sm': ['0.857rem', { lineHeight: '1.5' }],  // ~12px → compact body, dropdowns
+        'body-md': ['0.929rem', { lineHeight: '1.5' }],  // ~13px → UI chrome, brand name
+        'body':    ['1rem',     { lineHeight: '1.5' }],  // ~14px → primary body content
+        'kpi':     ['1.286rem', { lineHeight: '1.3' }],  // ~18px → KPI values
+        'display': ['1.714rem', { lineHeight: '1.2' }],  // ~24px → large display text
+      },
       colors: {
         surface: {
           base:  '#060810',
