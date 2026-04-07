@@ -1,3 +1,5 @@
+> Historical document. Do not use this file as the current frontend source of truth. See `docs/frontend-design-tokens.md` and related active frontend docs instead.
+
 # 거래 작업대 일괄 수정 설계
 
 ## 목표

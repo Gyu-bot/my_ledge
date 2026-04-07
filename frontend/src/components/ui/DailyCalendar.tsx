@@ -44,9 +44,9 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
               className="aspect-square rounded flex flex-col items-center justify-center gap-0.5 bg-border-subtle"
               style={intensity > 0 ? { opacity: 0.4 + intensity * 0.6 } : undefined}
             >
-              <span className="text-[7.5px] text-text-faint">{i + 1}</span>
+              <span className="text-nano text-text-faint">{i + 1}</span>
               {amount !== undefined && (
-                <span className="w-[3px] h-[3px] rounded-full" style={{ background: amount < 0 ? '#f87171' : '#10b981' }} />
+                <span className="w-[3px] h-[3px] rounded-full" style={{ background: amount < 0 ? 'var(--chart-danger)' : 'var(--chart-accent)' }} />
               )}
             </div>
           )

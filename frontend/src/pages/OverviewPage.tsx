@@ -10,25 +10,30 @@ import { useMonthlyCashflow, useIncomeStability, useRecurringPayments, useSpendi
 import { useAssetSnapshots } from '../hooks/useAssets'
 import { useTransactionList, useCategoryBreakdown } from '../hooks/useTransactions'
 import { formatKRW, formatKRWCompact, formatPct, formatDate } from '../lib/utils'
-import { useChromeContext } from '../components/layout/AppLayout'
+import { useChromeContext } from '../components/layout/chromeContext'
 
 export function OverviewPage() {
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const cashflow = useMonthlyCashflow(6)
   const snapshots = useAssetSnapshots()
   const incomeStability = useIncomeStability()
   const recurringPayments = useRecurringPayments(1, 1)
   const spendingAnomalies = useSpendingAnomalies(1, 1)
   const recentTx = useTransactionList({ page: 1, per_page: 5, type: 'all' })
-  const categoryBreakdown = useCategoryBreakdown()
+  const categoryBreakdown = useCategoryBreakdown({
+    start_month: currentMonth,
+    end_month: currentMonth,
+  })
   const { setMetaBadge } = useChromeContext()
 
   const latestSnapshot = snapshots.data?.items?.[snapshots.data.items.length - 1]
   const snapshotDate = latestSnapshot?.snapshot_date
-  const currentMonth = cashflow.data?.items?.[cashflow.data.items.length - 1]
+  const latestCashflowMonth = cashflow.data?.items?.[cashflow.data.items.length - 1]
   const netWorth = latestSnapshot ? parseFloat(latestSnapshot.net_worth) : null
-  const monthExpense = currentMonth?.expense ?? null
-  const monthIncome = currentMonth?.income ?? null
-  const savingsRate = currentMonth?.savings_rate ?? null
+  const monthExpense = latestCashflowMonth?.expense ?? null
+  const monthIncome = latestCashflowMonth?.income ?? null
+  const savingsRate = latestCashflowMonth?.savings_rate ?? null
   const anomalyCount = spendingAnomalies.data?.total ?? null
   const recurringCount = recurringPayments.data?.total ?? null
   const incomeCV = incomeStability.data?.coefficient_of_variation ?? null
@@ -43,7 +48,7 @@ export function OverviewPage() {
       )
     }
     return () => setMetaBadge(null)
-  }, [snapshotDate])
+  }, [setMetaBadge, snapshotDate])
 
   return (
     <div className="flex flex-col gap-4">

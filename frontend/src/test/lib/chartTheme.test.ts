@@ -1,0 +1,41 @@
+import { describe, expect, it } from 'vitest'
+import {
+  AXIS_TICK_STYLE,
+  CATEGORY_COLOR_MAP,
+  CHART_ACCENT,
+  CHART_DANGER,
+  CHART_NEUTRAL,
+  CHART_TOOLTIP_STYLE,
+  TREEMAP_COLORS,
+  getCategoryColor,
+} from '../../lib/chartTheme'
+
+describe('chartTheme', () => {
+  it('exposes semantic css variable references for core chart colors', () => {
+    expect(CHART_ACCENT).toBe('var(--chart-accent)')
+    expect(CHART_DANGER).toBe('var(--chart-danger)')
+    expect(CHART_NEUTRAL).toBe('var(--chart-neutral)')
+  })
+
+  it('returns category-specific colors with a semantic fallback', () => {
+    expect(CATEGORY_COLOR_MAP.식비).toBe('var(--chart-category-food)')
+    expect(getCategoryColor('식비')).toBe('var(--chart-category-food)')
+    expect(getCategoryColor('알 수 없음')).toBe('var(--chart-category-fallback)')
+  })
+
+  it('provides stable tooltip and axis styles', () => {
+    expect(AXIS_TICK_STYLE).toEqual({ fill: 'var(--chart-axis-text)', fontSize: 9 })
+    expect(CHART_TOOLTIP_STYLE).toEqual({
+      background: 'var(--chart-tooltip-bg)',
+      border: '1px solid var(--chart-tooltip-border)',
+      borderRadius: 6,
+      fontSize: 10,
+    })
+  })
+
+  it('keeps a deterministic treemap palette', () => {
+    expect(TREEMAP_COLORS).toHaveLength(8)
+    expect(TREEMAP_COLORS[0]).toBe('var(--chart-treemap-1)')
+    expect(TREEMAP_COLORS[7]).toBe('var(--chart-treemap-8)')
+  })
+})

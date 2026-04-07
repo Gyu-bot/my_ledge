@@ -12,7 +12,7 @@ import {
 } from '../hooks/useTransactions'
 import { useUploadLogs, useUploadFile, useResetData } from '../hooks/useUpload'
 import { useWriteAccess } from '../hooks/useWriteAccess'
-import { useChromeContext } from '../components/layout/AppLayout'
+import { useChromeContext } from '../components/layout/chromeContext'
 import type { TransactionResponse } from '../types/transaction'
 import type { DataResetScope } from '../types/upload'
 import { formatKRW } from '../lib/utils'
@@ -110,7 +110,7 @@ export function WorkbenchPage() {
         {showing} / {total}건
       </span>
     )
-  }, [txList.data])
+  }, [setMetaBadge, txList.data])
 
   function applyFilter() { setAppliedFilter(filterDraft); setPage(1); setSelectedIds(new Set()) }
   function resetFilter() { setFilterDraft(DEFAULT_FILTER); setAppliedFilter(DEFAULT_FILTER); setPage(1); setSelectedIds(new Set()) }
@@ -303,8 +303,8 @@ export function WorkbenchPage() {
 
       {/* Bulk edit panel */}
       {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-[#0a1520] border border-[#1e3a5f] rounded-lg">
-          <span className="text-caption text-blue-400 font-semibold shrink-0">{selectedIds.size}건 선택됨</span>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-info-dim border border-info-muted rounded-lg">
+          <span className="text-caption text-info-default font-semibold shrink-0">{selectedIds.size}건 선택됨</span>
           <div className="w-px h-5 bg-border-strong" />
           {(['거래처', '대분류', '소분류', '고정/변동', '필수여부', '메모'] as const).map((label) => {
             const key: keyof EditDraft = label === '거래처' ? 'merchant' : label === '대분류' ? 'category_major_user' : label === '소분류' ? 'category_minor_user' : label === '고정/변동' ? 'cost_kind' : label === '필수여부' ? 'fixed_cost_necessity' : 'memo'
@@ -372,12 +372,12 @@ export function WorkbenchPage() {
                    const isSelected = selectedIds.has(tx.id)
                    const rowClass = tx.is_deleted
                      ? 'opacity-40 line-through'
-                     : isSelected ? 'bg-[#0a1a2a]'
-                     : isEditing ? 'bg-[#08180e]'
-                     : tx.is_edited ? 'bg-[#08180e]'
+                     : isSelected ? 'bg-surface-selected'
+                     : isEditing ? 'bg-surface-edited'
+                     : tx.is_edited ? 'bg-surface-edited'
                      : ''
                    return (
-                     <tr key={tx.id} className={`border-b border-[#0d1117] last:border-0 ${rowClass}`}>
+                     <tr key={tx.id} className={`border-b border-border-faint last:border-0 ${rowClass}`}>
                        <td className="px-2 py-2">
                          {!tx.is_deleted && !isEditing && (
                            <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx)} className="w-3 h-3 accent-accent" />
@@ -468,7 +468,7 @@ export function WorkbenchPage() {
           <span className="text-text-ghost">{uploadOpen ? '▲' : '▼'}</span>
         </div>
         {uploadOpen && (
-          <div className="bg-[#0c1320] border-t border-border p-4 flex flex-col gap-3">
+          <div className="bg-surface-section border-t border-border p-4 flex flex-col gap-3">
             <label className="flex flex-col items-center justify-center border border-dashed border-border-strong rounded-lg py-5 cursor-pointer hover:bg-border-subtle text-center"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setUploadFile(f) }}>
@@ -504,7 +504,7 @@ export function WorkbenchPage() {
           <span className="text-text-ghost">{historyOpen ? '▲' : '▼'}</span>
         </div>
         {historyOpen && (
-          <div className="bg-[#0c1320] border-t border-border overflow-x-auto">
+          <div className="bg-surface-section border-t border-border overflow-x-auto">
             {uploadLogs.isLoading ? <LoadingState /> :
              uploadLogs.data && uploadLogs.data.items.length > 0 ? (
                <table className="w-full border-collapse text-caption">
@@ -515,7 +515,7 @@ export function WorkbenchPage() {
                  </thead>
                  <tbody>
                    {uploadLogs.data.items.map((log) => (
-                     <tr key={log.id} className="border-b border-[#0d1117] last:border-0">
+                     <tr key={log.id} className="border-b border-border-faint last:border-0">
                        <td className="px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
                        <td className="px-4 py-2">
                          <span className={`text-nano px-1.5 py-0.5 rounded ${log.status === 'success' || log.status === 'partial' ? 'bg-accent-dim text-accent' : 'bg-danger-dim text-danger'}`}>
@@ -537,23 +537,23 @@ export function WorkbenchPage() {
 
       {/* Danger Zone 아코디언 */}
       <div className="border border-danger-muted rounded-card overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 bg-[#120a0a] cursor-pointer"
+        <div className="flex items-center justify-between px-4 py-3 bg-surface-danger cursor-pointer"
           onClick={() => setDangerOpen((o) => !o)}>
           <div>
             <div className="text-label font-semibold text-danger">Danger Zone</div>
-            <div className="text-caption text-[#3b2020] mt-0.5">데이터 초기화 — 되돌릴 수 없습니다</div>
+            <div className="text-caption text-danger-muted mt-0.5">데이터 초기화 — 되돌릴 수 없습니다</div>
           </div>
-          <span className="text-[#3b2020]">{dangerOpen ? '▲' : '▼'}</span>
+          <span className="text-danger-muted">{dangerOpen ? '▲' : '▼'}</span>
         </div>
         {dangerOpen && (
-          <div className="bg-[#0c0808] border-t border-danger-muted p-4 flex flex-col gap-3">
+          <div className="bg-surface-danger-muted border-t border-danger-muted p-4 flex flex-col gap-3">
             <div className="text-caption text-text-faint">초기화 범위를 선택하세요. 업로드 이력은 삭제되지 않습니다.</div>
             <div className="grid grid-cols-2 gap-2">
               {(['transactions_only', 'transactions_and_snapshots'] as DataResetScope[]).map((scope) => (
                 <button
                   key={scope}
                   onClick={() => setResetScope(scope)}
-                  className={`text-left px-3 py-2.5 rounded-lg border text-caption ${resetScope === scope ? 'border-danger text-danger bg-[#1a0a0a]' : 'border-border-strong text-text-ghost'}`}
+                  className={`text-left px-3 py-2.5 rounded-lg border text-caption ${resetScope === scope ? 'border-danger text-danger bg-surface-danger-strong' : 'border-border-strong text-text-ghost'}`}
                 >
                   <div className="font-semibold mb-0.5">{RESET_LABEL[scope]}</div>
                   <div className="text-micro opacity-70">
@@ -566,7 +566,7 @@ export function WorkbenchPage() {
               "{RESET_LABEL[resetScope]}" 를 입력하여 확인
             </div>
             <input
-              className="w-full bg-[#0a0d13] border border-border-strong rounded-lg px-3 py-2 text-caption text-text-secondary"
+              className="w-full bg-surface-input border border-border-strong rounded-lg px-3 py-2 text-caption text-text-secondary"
               placeholder="확인 문구를 입력하세요"
               value={resetConfirm}
               onChange={(e) => setResetConfirm(e.target.value)}

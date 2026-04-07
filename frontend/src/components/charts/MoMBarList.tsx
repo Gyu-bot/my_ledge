@@ -1,5 +1,6 @@
 import { formatKRW } from '../../lib/utils'
 import type { CategoryMoMItem } from '../../types/analytics'
+import { CHART_ACCENT, CHART_DANGER } from '../../lib/chartTheme'
 
 interface MoMBarListProps {
   items: CategoryMoMItem[]
@@ -22,7 +23,7 @@ export function MoMBarList({ items }: MoMBarListProps) {
                 className={`absolute h-full rounded ${isUp ? 'left-1/2' : 'right-1/2'}`}
                 style={{
                   width: `${pct}%`,
-                  background: isUp ? '#f87171' : '#10b981',
+                  background: isUp ? CHART_DANGER : CHART_ACCENT,
                 }}
               />
             </div>

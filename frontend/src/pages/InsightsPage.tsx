@@ -10,7 +10,7 @@ import {
   useRecurringPayments, useSpendingAnomalies,
   useMerchantSpend, useCategoryMoM,
 } from '../hooks/useAnalytics'
-import { useChromeContext } from '../components/layout/AppLayout'
+import { useChromeContext } from '../components/layout/chromeContext'
 import { formatKRW, formatKRWCompact, formatPct } from '../lib/utils'
 
 interface InsightItem {
@@ -71,7 +71,7 @@ export function InsightsPage() {
         핵심 인사이트 {insights.length}건
       </span>
     )
-  }, [insights.length])
+  }, [insights.length, setMetaBadge])
 
   return (
     <div className="flex flex-col gap-4">
@@ -125,7 +125,7 @@ export function InsightsPage() {
                  </thead>
                  <tbody>
                    {recurring.data.items.map((item, i) => (
-                     <tr key={i} className="border-b border-[#0d1117] last:border-0">
+                     <tr key={i} className="border-b border-border-faint last:border-0">
                        <td className="py-2 text-text-primary font-medium">{item.merchant}</td>
                        <td className="py-2"><span className="text-nano bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">{item.interval_type}</span></td>
                        <td className="py-2 text-right font-semibold">₩ {formatKRW(item.avg_amount)}</td>
@@ -158,7 +158,7 @@ export function InsightsPage() {
                  </thead>
                  <tbody>
                    {anomalies.data.items.map((item, i) => (
-                     <tr key={i} className="border-b border-[#0d1117] last:border-0">
+                     <tr key={i} className="border-b border-border-faint last:border-0">
                        <td className="py-2 text-text-primary font-medium">{item.category}</td>
                        <td className="py-2 text-right">₩ {formatKRWCompact(item.amount)}</td>
                        <td className="py-2 text-right text-text-faint">₩ {formatKRWCompact(item.baseline_avg)}</td>

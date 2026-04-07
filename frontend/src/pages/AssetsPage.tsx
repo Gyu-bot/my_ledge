@@ -7,7 +7,7 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { LineAreaChart } from '../components/charts/LineAreaChart'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
 import { useAssetSnapshots, useNetWorthHistory, useInvestmentSummary, useLoanSummary } from '../hooks/useAssets'
-import { useChromeContext } from '../components/layout/AppLayout'
+import { useChromeContext } from '../components/layout/chromeContext'
 import { formatKRWCompact, formatPct } from '../lib/utils'
 
 export function AssetsPage() {
@@ -26,7 +26,7 @@ export function AssetsPage() {
         기준일 {snapshotDate}
       </span>
     )
-  }, [snapshotDate])
+  }, [setMetaBadge, snapshotDate])
 
   const netWorth = latest ? parseFloat(latest.net_worth) : null
   const assetTotal = latest ? parseFloat(latest.asset_total) : null
@@ -73,7 +73,7 @@ export function AssetsPage() {
                <div className="grid grid-cols-3 gap-2.5 mb-4">
                  {[
                    { label: '총 원금', value: `₩ ${formatKRWCompact(investCostBasis ?? 0)}`, color: 'text-text-primary' },
-                   { label: '평가액', value: `₩ ${formatKRWCompact(investMarketValue ?? 0)}`, color: 'text-[#a78bfa]' },
+                   { label: '평가액', value: `₩ ${formatKRWCompact(investMarketValue ?? 0)}`, color: 'text-info-bright' },
                    { label: '수익률', value: formatPct(investReturnPct), color: (investReturnPct ?? 0) > 0 ? 'text-accent' : 'text-danger' },
                  ].map((s) => (
                    <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-2.5">
@@ -121,7 +121,7 @@ export function AssetsPage() {
                  </thead>
                  <tbody>
                    {loans.data.items.slice(0, 4).map((loan, i) => (
-                     <tr key={i} className="border-b border-[#0d1117] last:border-0">
+                     <tr key={i} className="border-b border-border-faint last:border-0">
                        <td className="py-2">
                          <div className="text-text-primary font-medium">{loan.product_name}</div>
                          <div className="text-micro text-text-faint">{loan.lender}</div>

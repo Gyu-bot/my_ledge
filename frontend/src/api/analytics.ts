@@ -1,4 +1,5 @@
 import { apiFetch } from '../lib/apiClient'
+import { monthSpanToDateRange, recentMonthsToDateRange } from '../lib/dateRange'
 import type {
   MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse,
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
@@ -16,16 +17,27 @@ function buildQuery(params: object): string {
 
 export const analyticsApi = {
   monthlyCashflow: (params: { months?: number } = {}) =>
-    apiFetch<MonthlyCashflowResponse>(`/analytics/monthly-cashflow${buildQuery(params)}`),
+    apiFetch<MonthlyCashflowResponse>(`/analytics/monthly-cashflow${buildQuery(
+      params.months ? recentMonthsToDateRange(params.months) : {},
+    )}`),
 
   categoryMoM: (params: { months?: number } = {}) =>
-    apiFetch<CategoryMoMResponse>(`/analytics/category-mom${buildQuery(params)}`),
+    apiFetch<CategoryMoMResponse>(`/analytics/category-mom${buildQuery({
+      ...(params.months ? recentMonthsToDateRange(params.months) : {}),
+      type: '지출',
+    })}`),
 
   fixedCostSummary: (params: { start_month?: string; end_month?: string } = {}) =>
-    apiFetch<FixedCostSummaryResponse>(`/analytics/fixed-cost-summary${buildQuery(params)}`),
+    apiFetch<FixedCostSummaryResponse>(`/analytics/fixed-cost-summary${buildQuery(
+      monthSpanToDateRange(params.start_month, params.end_month),
+    )}`),
 
   merchantSpend: (params: { months?: number; limit?: number } = {}) =>
-    apiFetch<MerchantSpendResponse>(`/analytics/merchant-spend${buildQuery(params)}`),
+    apiFetch<MerchantSpendResponse>(`/analytics/merchant-spend${buildQuery({
+      ...(params.months ? recentMonthsToDateRange(params.months) : {}),
+      limit: params.limit,
+      type: '지출',
+    })}`),
 
   incomeStability: () =>
     apiFetch<IncomeStabilityResponse>('/analytics/income-stability'),

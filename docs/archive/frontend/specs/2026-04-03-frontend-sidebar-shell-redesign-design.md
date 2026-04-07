@@ -1,3 +1,5 @@
+> Historical document. Do not use this file as the current frontend source of truth. See `docs/frontend-design-tokens.md` and related active frontend docs instead.
+
 # Frontend Sidebar Shell Redesign Design
 
 ## Summary

@@ -1,4 +1,5 @@
 import { formatKRW } from '../../lib/utils'
+import { CHART_ACCENT } from '../../lib/chartTheme'
 
 interface BarItem {
   label: string
@@ -23,7 +24,7 @@ export function HorizontalBarList({ items, maxAmount }: HorizontalBarListProps) 
               className="h-full rounded"
               style={{
                 width: `${(Math.abs(item.amount) / max) * 100}%`,
-                background: item.color ?? '#10b981',
+                background: item.color ?? CHART_ACCENT,
               }}
             />
           </div>

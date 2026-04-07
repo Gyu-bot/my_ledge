@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** Frontend shell/spending contract batch 구현 + backend/API SSOT 정리 완료, shared interaction 확장 대기
-- **Last Worker:** Codex (2026-04-07T20:13+0900, shell/spending batch 구현 및 backend/API SSOT 문서화 완료)
+- **Phase:** Frontend/doc archive 정리까지 포함한 repo snapshot commit 완료, shared interaction 확장 대기
+- **Last Worker:** Codex (2026-04-07T20:25+0900, 남아 있던 frontend/docs/archive 변경까지 전체 스냅샷 커밋 준비 완료)
 - **Branch:** main
 
 ## Completed

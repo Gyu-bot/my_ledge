@@ -3,21 +3,107 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --font-heading: -apple-system, 'Pretendard', 'Segoe UI', system-ui, sans-serif;
+    --font-body: -apple-system, 'Pretendard', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, monospace;
+
+    --color-surface-base: #060810;
+    --color-surface-panel: #0b0f1a;
+    --color-surface-card: #0f1623;
+    --color-surface-bar: #080b12;
+    --color-surface-section: #0c1320;
+    --color-surface-input: #0a0d13;
+    --color-surface-tint: #0a1520;
+    --color-surface-selected: #0a1a2a;
+    --color-surface-edited: #08180e;
+    --color-surface-danger: #120a0a;
+    --color-surface-danger-muted: #0c0808;
+    --color-surface-danger-strong: #1a0a0a;
+
+    --color-border-default: #1a2035;
+    --color-border-subtle: #111827;
+    --color-border-strong: #1f2937;
+    --color-border-faint: #0d1117;
+    --color-border-info: #1e3a5f;
+
+    --color-accent-default: #10b981;
+    --color-accent-strong: #059669;
+    --color-accent-dim: #0d2b1e;
+    --color-accent-muted: #1a3b2e;
+    --color-accent-bright: #6ee7b7;
+
+    --color-danger-default: #f87171;
+    --color-danger-dim: #2d1a1a;
+    --color-danger-muted: #3b2020;
+
+    --color-warn-default: #f59e0b;
+    --color-warn-dim: #2a1f0a;
+    --color-warn-muted: #3b2d10;
+
+    --color-info-default: #60a5fa;
+    --color-info-bright: #a78bfa;
+    --color-info-dim: #0a1520;
+    --color-info-soft: #1e40af;
+    --color-info-muted: #1e3a5f;
+
+    --color-text-primary: #d1d5db;
+    --color-text-secondary: #9ca3af;
+    --color-text-muted: #6b7280;
+    --color-text-faint: #4b5563;
+    --color-text-ghost: #374151;
+    --color-text-inverse: #ffffff;
+
+    --chart-accent: var(--color-accent-default);
+    --chart-accent-muted: var(--color-accent-muted);
+    --chart-accent-bright: var(--color-accent-bright);
+    --chart-danger: var(--color-danger-default);
+    --chart-danger-muted: var(--color-danger-dim);
+    --chart-neutral: var(--color-text-ghost);
+    --chart-neutral-muted: var(--color-text-secondary);
+    --chart-info: #2563a8;
+    --chart-info-soft: #1e40af;
+    --chart-warning: #92400e;
+    --chart-warning-muted: var(--color-warn-default);
+    --chart-tooltip-bg: var(--color-surface-card);
+    --chart-tooltip-border: var(--color-border-default);
+    --chart-axis-text: var(--color-text-ghost);
+    --chart-label-strong: rgba(255, 255, 255, 0.85);
+    --chart-label-muted: rgba(255, 255, 255, 0.45);
+    --chart-category-food: #2563a8;
+    --chart-category-transport: #059669;
+    --chart-category-subscription: #7c3aed;
+    --chart-category-shopping: #dc2626;
+    --chart-category-housing: #d97706;
+    --chart-category-medical: #0891b2;
+    --chart-category-insurance: #7c3aed;
+    --chart-category-other: #374151;
+    --chart-category-fallback: #4b5563;
+    --chart-treemap-1: #1e3a5f;
+    --chart-treemap-2: #1a3b2e;
+    --chart-treemap-3: #2d1f4a;
+    --chart-treemap-4: #3b2020;
+    --chart-treemap-5: #2a2210;
+    --chart-treemap-6: #1f2a1a;
+    --chart-treemap-7: #2a1a2e;
+    --chart-treemap-8: #0c2a3b;
+  }
+
   *, *::before, *::after { box-sizing: border-box; }
   html { font-size: 21px; }
   body {
-    background-color: #060810;
-    color: #d1d5db;
-    font-family: -apple-system, 'Pretendard', 'Segoe UI', system-ui, sans-serif;
+    background-color: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
   }
   input, select, textarea, button { font-family: inherit; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #0b0f1a; }
-  ::-webkit-scrollbar-thumb { background: #1a2035; border-radius: 3px; }
+  ::-webkit-scrollbar-track { background: var(--color-surface-panel); }
+  ::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 3px; }
 }
 
 @layer utilities {
-  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #1a2035 #0b0f1a; }
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--color-border-default) var(--color-surface-panel); }
   .text-balance { text-wrap: balance; }
 }

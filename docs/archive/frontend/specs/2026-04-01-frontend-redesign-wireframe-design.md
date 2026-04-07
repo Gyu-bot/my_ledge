@@ -1,3 +1,5 @@
+> Historical document. Do not use this file as the current frontend source of truth. See `docs/frontend-design-tokens.md` and related active frontend docs instead.
+
 # Frontend Redesign Wireframe Design
 
 **Goal:** 현재 backend/API surface와 기존 frontend의 기능 범위를 유지하면서, 모바일 대응이 가능한 새로운 정보구조와 화면 와이어프레임을 정의한다. 이번 문서는 구현이 아니라, 재설계할 frontend의 구조와 각 화면의 책임을 확정하는 데 목적이 있다.

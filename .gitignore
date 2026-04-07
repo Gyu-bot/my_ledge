@@ -17,3 +17,5 @@ frontend/*.tsbuildinfo
 .codex/
 output/
 .playwright-cli/
+.playwright-mcp/
+.omx/

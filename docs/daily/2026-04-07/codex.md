@@ -606,3 +606,21 @@
   - `SectionCard` slot model 정리
   - `InsightsPage` / `WorkbenchPage` 상태 경계 통일
   - Workbench bulk/read-only behavior test 확장
+
+## Repo Snapshot Commit
+
+- 사용자 요청
+  - 이번 세션에서 남아 있던 변경사항을 우선 한 번에 커밋
+
+### 포함 범위
+
+- frontend source-of-truth 문서 갱신본
+- `docs/archive/frontend/**` 로 이동한 historical spec/plan
+- chart/theme/date-range/runtime adapter 관련 frontend 코드
+- canonical route test, api client test, chart theme test 등 남아 있던 테스트 파일
+- `AGENTS.md`, `.gitignore` 후속 정리
+
+### 제외 범위
+
+- `.playwright-mcp/`
+  - 로컬 브라우저 실행 artifact라서 `.gitignore`에 추가하고 커밋에서는 제외

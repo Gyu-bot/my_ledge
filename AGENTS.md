@@ -232,12 +232,19 @@ SELECT COALESCE(category_major_user, category_major) AS category_major,
 
 | 경로 | 페이지 | 핵심 컴포넌트 |
 |---|---|---|
-| `/` | 메인 대시보드 | 요약 카드, 월별 추이 차트, 도넛 차트, 최근 거래 |
-| `/spending` | 지출 분석 | 카테고리 누적 영역, 히트맵, 결제수단 바, 필터, 거래 테이블 |
-| `/income` | 수입 분석 | 월별 수입 추이, 수입원 분포 |
-| `/transfers` | 자산이동 | 이체 타입별 추이, 이체 내역 테이블 |
-| `/assets` | 자산 현황 | 순자산 시계열, 트리맵, 투자/대출 상세 |
-| `/data` | 데이터 관리 | 파일 업로드, 거래 편집 테이블, 업로드 이력 |
+| `/` | 개요 | KPI, 월간 현금흐름, 주의 신호, 카테고리 Top 5, 최근 거래 |
+| `/analysis/spending` | 지출 분석 | 범위 슬라이더, 카테고리 추이, breakdown, 고정비 요약, 거래처 treemap, 일별 달력, 거래 테이블 |
+| `/analysis/assets` | 자산 현황 | 순자산 추이, 자산 구성, 투자/대출 요약 |
+| `/analysis/insights` | 인사이트 | 핵심 인사이트, 반복 결제, 이상 지출, 거래처 Top, 카테고리 MoM |
+| `/operations/workbench` | 거래 작업대 | 필터 바, 거래 편집 테이블, 업로드, 업로드 이력, Danger Zone |
+
+호환용 redirect만 유지:
+
+- `/spending` → `/analysis/spending`
+- `/assets` → `/analysis/assets`
+- `/income` → `/`
+- `/transfers` → `/`
+- `/data` → `/operations/workbench`
 
 ---
 

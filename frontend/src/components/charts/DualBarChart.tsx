@@ -1,6 +1,15 @@
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import type { MonthlyCashflowItem } from '../../types/analytics'
 import { formatKRWCompact } from '../../lib/utils'
+import {
+  AXIS_TICK_STYLE,
+  CHART_ACCENT,
+  CHART_ACCENT_MUTED,
+  CHART_DANGER,
+  CHART_DANGER_MUTED,
+  CHART_NEUTRAL_MUTED,
+  CHART_TOOLTIP_STYLE,
+} from '../../lib/chartTheme'
 
 interface DualBarChartProps {
   data: MonthlyCashflowItem[]
@@ -20,13 +29,13 @@ export function DualBarChart({ data, height = 110 }: DualBarChartProps) {
       <BarChart data={chartData} barGap={2} barCategoryGap="30%">
         <XAxis
           dataKey="period"
-          tick={{ fill: '#374151', fontSize: 9 }}
+          tick={AXIS_TICK_STYLE}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip
-          contentStyle={{ background: '#0f1623', border: '1px solid #1a2035', borderRadius: 6, fontSize: 10 }}
-          labelStyle={{ color: '#9ca3af' }}
+          contentStyle={CHART_TOOLTIP_STYLE}
+          labelStyle={{ color: CHART_NEUTRAL_MUTED }}
           formatter={(value, name) => [
             `₩ ${formatKRWCompact(Number(value ?? 0))}`,
             name === 'income' ? '수입' : '지출',
@@ -34,12 +43,12 @@ export function DualBarChart({ data, height = 110 }: DualBarChartProps) {
         />
         <Bar dataKey="income" radius={[3, 3, 0, 0]}>
           {chartData.map((entry, i) => (
-            <Cell key={i} fill={entry.isCurrent ? '#10b981' : '#1f3b2e'} />
+            <Cell key={i} fill={entry.isCurrent ? CHART_ACCENT : CHART_ACCENT_MUTED} />
           ))}
         </Bar>
         <Bar dataKey="expense" radius={[3, 3, 0, 0]}>
           {chartData.map((entry, i) => (
-            <Cell key={i} fill={entry.isCurrent ? '#f87171' : '#2d1a1a'} />
+            <Cell key={i} fill={entry.isCurrent ? CHART_DANGER : CHART_DANGER_MUTED} />
           ))}
         </Bar>
       </BarChart>

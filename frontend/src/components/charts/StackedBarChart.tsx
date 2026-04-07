@@ -1,16 +1,12 @@
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import type { CategoryTimelineItem } from '../../types/transaction'
 import { formatKRWCompact } from '../../lib/utils'
-
-const CATEGORY_COLORS: Record<string, string> = {
-  식비: '#2563a8', 교통: '#059669', 구독: '#7c3aed',
-  쇼핑: '#dc2626', 주거: '#d97706', 의료: '#0891b2',
-  보험: '#7c3aed', 기타: '#374151',
-}
-
-function getColor(cat: string): string {
-  return CATEGORY_COLORS[cat] ?? '#4b5563'
-}
+import {
+  CHART_ACCENT_BRIGHT,
+  CHART_NEUTRAL,
+  CHART_TOOLTIP_STYLE,
+  getCategoryColor,
+} from '../../lib/chartTheme'
 
 interface StackedBarChartProps {
   items: CategoryTimelineItem[]
@@ -44,7 +40,7 @@ export function StackedBarChart({ items, height = 160 }: StackedBarChartProps) {
               const payload = props.payload as { value: string }
               return (
                 <text x={x} y={y + 10} textAnchor="middle" fontSize={9}
-                  fill={payload.value === latestPeriod ? '#6ee7b7' : '#374151'}>
+                  fill={payload.value === latestPeriod ? CHART_ACCENT_BRIGHT : CHART_NEUTRAL}>
                   {payload.value}
                 </text>
               )
@@ -52,11 +48,11 @@ export function StackedBarChart({ items, height = 160 }: StackedBarChartProps) {
             axisLine={false} tickLine={false}
           />
           <Tooltip
-            contentStyle={{ background: '#0f1623', border: '1px solid #1a2035', borderRadius: 6, fontSize: 10 }}
+            contentStyle={CHART_TOOLTIP_STYLE}
             formatter={(value, name) => [`₩ ${formatKRWCompact(Number(value ?? 0))}`, String(name)]}
           />
           {categories.map((cat) => (
-            <Bar key={cat} dataKey={cat} stackId="a" fill={getColor(cat)}
+            <Bar key={cat} dataKey={cat} stackId="a" fill={getCategoryColor(cat)}
               radius={cat === categories[categories.length - 1] ? [2, 2, 0, 0] : undefined} />
           ))}
         </BarChart>
@@ -64,7 +60,7 @@ export function StackedBarChart({ items, height = 160 }: StackedBarChartProps) {
       <div className="flex flex-wrap gap-2.5 mt-2">
         {categories.map((cat) => (
           <span key={cat} className="flex items-center gap-1 text-micro text-text-muted">
-            <span className="w-2 h-2 rounded-sm" style={{ background: getColor(cat) }} />
+            <span className="w-2 h-2 rounded-sm" style={{ background: getCategoryColor(cat) }} />
             {cat}
           </span>
         ))}

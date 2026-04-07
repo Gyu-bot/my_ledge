@@ -1,6 +1,7 @@
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts'
 import type { NetWorthPoint } from '../../types/asset'
 import { formatKRWCompact } from '../../lib/utils'
+import { AXIS_TICK_STYLE, CHART_ACCENT, CHART_TOOLTIP_STYLE } from '../../lib/chartTheme'
 
 interface LineAreaChartProps {
   data: NetWorthPoint[]
@@ -28,27 +29,27 @@ export function LineAreaChart({ data, height = 130 }: LineAreaChartProps) {
       <AreaChart data={chartData} margin={{ top: 16, right: 4, left: 4, bottom: 0 }}>
         <defs>
           <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity={0.25} />
-            <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+            <stop offset="0%" stopColor={CHART_ACCENT} stopOpacity={0.25} />
+            <stop offset="100%" stopColor={CHART_ACCENT} stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <XAxis
           dataKey="date"
-          tick={{ fill: '#374151', fontSize: 9 }}
+          tick={AXIS_TICK_STYLE}
           axisLine={false} tickLine={false}
         />
         <Tooltip
-          contentStyle={{ background: '#0f1623', border: '1px solid #1a2035', borderRadius: 6, fontSize: 10 }}
+          contentStyle={CHART_TOOLTIP_STYLE}
           formatter={(value) => [`₩ ${formatKRWCompact(Number(value ?? 0))}`, '순자산']}
         />
         <Area
           type="monotone" dataKey="value"
-          stroke="#10b981" strokeWidth={2}
+          stroke={CHART_ACCENT} strokeWidth={2}
           fill="url(#nwGrad)"
-          dot={{ fill: '#0f1623', stroke: '#10b981', strokeWidth: 1.5, r: 3 }}
-          activeDot={{ r: 5, fill: '#10b981' }}
+          dot={{ fill: 'var(--chart-tooltip-bg)', stroke: CHART_ACCENT, strokeWidth: 1.5, r: 3 }}
+          activeDot={{ r: 5, fill: CHART_ACCENT }}
         />
-        <ReferenceDot x={last.date} y={last.value} r={5} fill="#10b981" stroke="none" />
+        <ReferenceDot x={last.date} y={last.value} r={5} fill={CHART_ACCENT} stroke="none" />
       </AreaChart>
     </ResponsiveContainer>
   )

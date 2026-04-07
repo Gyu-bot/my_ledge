@@ -1,8 +1,21 @@
-const API_BASE = '/api/v1'
+interface RuntimeConfig {
+  apiKey?: string
+  apiBaseUrl?: string
+}
+
+function getRuntimeConfig(): RuntimeConfig | undefined {
+  return (window as Window & {
+    __MY_LEDGE_RUNTIME_CONFIG__?: RuntimeConfig
+  }).__MY_LEDGE_RUNTIME_CONFIG__ ?? undefined
+}
+
+function getApiBase(): string {
+  return getRuntimeConfig()?.apiBaseUrl ?? '/api/v1'
+}
 
 function getApiKey(): string | undefined {
-  return (window as unknown as { __RUNTIME_CONFIG__?: { API_KEY?: string } })
-    .__RUNTIME_CONFIG__?.API_KEY ?? import.meta.env.VITE_API_KEY
+  const runtimeConfig = getRuntimeConfig()
+  return runtimeConfig?.apiKey ?? import.meta.env.VITE_API_KEY
 }
 
 export async function apiFetch<T>(
@@ -13,7 +26,7 @@ export async function apiFetch<T>(
   const headers = new Headers(options.headers)
   if (apiKey) headers.set('X-API-Key', apiKey)
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+  const res = await fetch(`${getApiBase()}${path}`, { ...options, headers })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(`${res.status}: ${text}`)
