@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 follow-up 유지, frontend token polish와 anomaly default-period contract 정렬 완료
-- **Last Worker:** Codex (2026-04-08T12:03+0900, anomaly detection default-period/partial-baseline policy 구현 및 backend 전체 검증 완료)
+- **Phase:** 안정화 follow-up 유지, frontend token polish와 anomaly default-period/absolute-threshold contract 정렬 완료
+- **Last Worker:** Codex (2026-04-08T12:36+0900, settings/token lab separate feature plan 문서화 완료)
 - **Branch:** main
 
 ## Completed
@@ -55,6 +55,7 @@
 - [x] Frontend 문서화 완료: `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md` 추가로 컴포넌트/토큰 인벤토리와 현재 IA wireframe 정리
 - [x] Frontend token/UI follow-up 완료: pagination/daily calendar/treemap/palette/anomaly delta 표현을 현재 실데이터와 요청한 token contract 기준으로 재정렬하고 frontend 전체 검증 통과
 - [x] Backend anomaly default-period contract 정렬 완료: `spending-anomalies` 기본값은 직전 마감월 기준으로 보고, 명시적 partial `end_date` 는 이전 월 같은 일자 cutoff baseline으로 비교하도록 조정
+- [x] Backend anomaly sensitivity 보정 완료: `spending-anomalies` 에 `min_delta_amount` 기본값 100000원을 추가해 소액 변동 카테고리를 기본 탐지에서 제외하고, query param으로 추후 조정 가능하게 정리
 - [x] 리뷰용 dev server 기동: backend `uvicorn` (`0.0.0.0:8000`) + frontend Vite (`0.0.0.0:4173`) 실행, `/api/v1/health` 와 `/` 응답 확인
 - [x] Transfer tracking 계획 보강: 현재 live 데이터에서 대출원금상환이 `type='이체'`가 아니라 `type='지출'`/`금융`으로 적재되는 점을 확인하고, expense-side 재분류 레이어를 계획 문서에 반영
 - [x] 대출상환 분류 정책 확정: raw transaction은 `지출`로 유지하고, transfer tracking은 debt-movement 파생 태그/뷰로만 추가해 지출 분석과 사용자 fixed-cost 분류를 보존
@@ -171,6 +172,9 @@
 - 없음
 
 ## Next Up
+- [ ] Settings / Token Lab feature kickoff
+  - [x] 별도 feature plan 작성 (`docs/superpowers/plans/2026-04-08-settings-and-token-lab.md`)
+  - [ ] settings page shell entry / persisted analytics settings / temporary token lab 구현 순서 확정
 - [ ] Snapshot compare consumer follow-up
   - [x] frontend 자산 surface가 `comparison_label`, `comparison_days`, `is_partial`, `is_stale` 를 어떻게 소비할지 정리
   - [x] real workbook 4종 적재 상태에서 `/api/v1/assets/snapshot-compare` smoke 검증 추가
@@ -182,6 +186,7 @@
 - [ ] Snapshot comparison fallback 정책 정리
   - 현재 상태: 정책과 pre-implementation checklist는 정리 완료. 후속은 실제 영향 범위별 적용 순서와 API/UI 계약 구체화
 - [ ] Backend/API 문서 운영 정리
+  - [ ] `spending-anomalies` 의 `min_delta_amount` query param과 기본값 100000원을 운영/API 문서에 반영
   - [ ] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
   - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
 - [ ] 현행 기능 system validation
@@ -302,6 +307,8 @@
 ## Key Decisions
 - 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 기존 `anomaly_score` cutoff 계약을 유지한다. 다만 응답 `assumptions` 에 threshold가 퍼센트가 아니라 score 기준이며, 표준편차가 있으면 `|delta|/stdev`, 없으면 `|delta|/baseline_avg` 로 계산된다는 설명을 명시한다.
 - 2026-04-08: `spending-anomalies` 기본 호출은 진행 중인 이번 달이 아니라 직전 마감월을 기준으로 본다. 사용자가 partial `end_date` 를 명시한 경우에만 해당 월을 보며, baseline도 이전 월 같은 일자까지만 잘라 비교한다.
+- 2026-04-08: backend-tunable analytics 파라미터는 Insights 카드에 흩뿌리지 않고, 좌측 사이드바 하단 `설정` 페이지에서 관리하는 별도 surface로 계획한다. v1 우선순위는 `spending-anomalies` 파라미터(`min_delta_amount`, `anomaly_threshold`, `baseline_months`)다.
+- 2026-04-08: `설정` feature는 analytics parameter control에만 묶지 않고, persisted backend settings와 temporary frontend design-token tuning lab을 함께 담는 별도 shell feature로 분리한다. token lab은 live preview/debug surface이며 v1에서는 repo/source-of-truth를 자동 변경하지 않는다.
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
 - 2026-03-23: 중복 처리는 복합 유니크 대신 시간 커서 기반 증분 적재 방식 채택
 - 2026-03-23: OpenClaw 연동은 하이브리드 (DB readonly + 업로드 API)

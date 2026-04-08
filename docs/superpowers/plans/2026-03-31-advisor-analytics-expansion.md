@@ -31,6 +31,12 @@
 - `backend/app/services/schema_service.py`
 - `backend/app/services/canonical_views.py`
 - `backend/alembic/versions/<new>_advisor_analytics_views.py`
+- `frontend/src/navigation.ts`
+- `frontend/src/router.tsx`
+- `frontend/src/components/layout/AppSidebar.tsx`
+- `frontend/src/api/analytics.ts`
+- `frontend/src/hooks/useAnalytics.ts`
+- `frontend/src/types/analytics.ts`
 - `PRD.md`
 - `STATUS.md`
 - `docs/STATUS.md`
@@ -105,6 +111,75 @@
 - Add deterministic fixtures for merchant recurrence and anomaly cases.
 - `cd backend && uv run pytest tests/services/test_analytics_service.py -k "recurring or anomaly or payment or income"`
 - `cd backend && uv run pytest tests/api/test_analytics_api.py -k "recurring or anomaly or payment or income"`
+
+## Workstream 2.5: Diagnostics Settings Surface
+
+**Goal**
+- Expose a user-facing settings surface for backend-tunable analytics parameters without forcing code changes or hidden query-string tweaks.
+- Start with `spending-anomalies` controls, but design the surface so additional advisor/analytics parameters can be added later.
+
+**Frontend scope**
+- Add a lower-sidebar navigation entry: `설정`
+- Create a settings page with an initial section such as `분석/진단 설정`
+- Show editable backend parameter controls for analytics heuristics, starting with:
+  - `spending-anomalies.min_delta_amount`
+  - later candidates: `anomaly_threshold`, `baseline_months`, recurring-payment minimum occurrences, subtype thresholds
+- Show each parameter with:
+  - current effective value
+  - default value
+  - short explanation of impact/risk
+  - save/reset actions
+
+**Backend scope**
+- Add a stable settings read/write contract instead of hardcoding overrides in the frontend.
+- Recommended v1 shape:
+  - `GET /api/v1/settings/analytics`
+  - `PATCH /api/v1/settings/analytics`
+- Persist user-adjustable analytics parameters in a dedicated settings store rather than environment variables so values survive restarts and can be audited.
+- Analytics services should resolve parameters in this order:
+  - explicit request override
+  - persisted settings value
+  - code default
+
+**Data model direction**
+- Preferred: dedicated `app_settings` or `analytics_settings` table keyed by `scope` + `key`
+- Keep values typed enough for safe validation:
+  - integer
+  - float
+  - boolean
+  - string
+- Store metadata needed for UI rendering either:
+  - in backend schema/constants returned by settings API
+  - or in a small frontend mapping if the parameter list remains short
+
+**Design constraints**
+- The left-sidebar `설정` entry is a shell-level page, not a modal hidden inside Insights.
+- Do not couple the settings page to anomaly cards only; it should become the home for future backend-tunable parameters.
+- Every adjustable parameter must have explicit server-side validation and allowed ranges.
+- The UI must distinguish:
+  - system default
+  - currently saved value
+  - per-request temporary override, if that concept is added later
+
+**Suggested v1 parameter inventory**
+- `spending_anomalies.min_delta_amount`
+  - default `100000`
+  - description: baseline 대비 절대 변동액이 이 값 미만이면 anomaly 목록에서 제외
+- `spending_anomalies.anomaly_threshold`
+  - default `0.5`
+  - description: anomaly_score cutoff
+- `spending_anomalies.baseline_months`
+  - default `3`
+  - description: 비교 기준 baseline 개월 수
+
+**Verification**
+- Backend:
+  - settings read/write API tests
+  - analytics service tests confirming persisted settings affect endpoint defaults
+- Frontend:
+  - sidebar nav rendering test
+  - settings form read/save/reset interaction tests
+  - one integration-style test showing saved `min_delta_amount` changes anomaly query defaults
 
 ## Workstream 3: P2 Asset / Liability Health
 

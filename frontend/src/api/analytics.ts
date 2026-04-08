@@ -3,7 +3,7 @@ import { monthSpanToDateRange, recentMonthsToDateRange } from '../lib/dateRange'
 import type {
   MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse,
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
-  SpendingAnomaliesResponse, CategoryMoMQuery,
+  SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery,
 } from '../types/analytics'
 
 function buildQuery(params: object): string {
@@ -66,6 +66,6 @@ export const analyticsApi = {
   recurringPayments: (params: { page?: number; per_page?: number } = {}) =>
     apiFetch<RecurringPaymentsResponse>(`/analytics/recurring-payments${buildQuery(params)}`),
 
-  spendingAnomalies: (params: { page?: number; per_page?: number } = {}) =>
+  spendingAnomalies: (params: SpendingAnomaliesQuery = {}) =>
     apiFetch<SpendingAnomaliesResponse>(`/analytics/spending-anomalies${buildQuery(params)}`),
 }

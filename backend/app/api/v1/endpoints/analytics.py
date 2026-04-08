@@ -141,6 +141,7 @@ async def get_analytics_spending_anomalies(
     end_date: date | None = Query(default=None),
     baseline_months: int = Query(default=3, ge=1, le=12),
     anomaly_threshold: float = Query(default=0.5, ge=0.0),
+    min_delta_amount: int = Query(default=100_000, ge=0),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=10, ge=1, le=100),
     db_session: AsyncSession = Depends(get_db_session),
@@ -150,6 +151,7 @@ async def get_analytics_spending_anomalies(
         end_date=end_date,
         baseline_months=baseline_months,
         anomaly_threshold=anomaly_threshold,
+        min_delta_amount=min_delta_amount,
         page=page,
         per_page=per_page,
     )

@@ -835,6 +835,7 @@ async def test_get_spending_anomalies_filters_on_anomaly_score(
         end_date=date(2026, 3, 31),
         baseline_months=2,
         anomaly_threshold=0.5,
+        min_delta_amount=10_000,
     )
 
     assert len(response.items) == 1
@@ -842,6 +843,63 @@ async def test_get_spending_anomalies_filters_on_anomaly_score(
     assert response.items[0].delta_pct == 16.6433
     assert response.items[0].anomaly_score > 0.5
     assert "anomaly_score" in response.assumptions
+
+
+async def test_get_spending_anomalies_filters_small_absolute_deltas_by_default(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300120,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-350000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    default_response = await get_spending_anomalies(
+        db_session,
+        end_date=date(2026, 3, 31),
+        baseline_months=2,
+        anomaly_threshold=0.5,
+    )
+    relaxed_response = await get_spending_anomalies(
+        db_session,
+        end_date=date(2026, 3, 31),
+        baseline_months=2,
+        anomaly_threshold=0.5,
+        min_delta_amount=10_000,
+    )
+
+    assert default_response.items == []
+    assert "min_delta_amount=100000" in default_response.assumptions
+    assert len(relaxed_response.items) == 1
+    assert relaxed_response.items[0].category == "금융"
 
 
 async def test_get_spending_anomalies_defaults_to_last_closed_month(
@@ -928,7 +986,8 @@ async def test_get_spending_anomalies_defaults_to_last_closed_month(
 
     assert response.items
     assert response.items[0].period == "2026-03"
-    assert {item.category for item in response.items} == {"금융", "식비"}
+    assert {item.category for item in response.items} == {"식비"}
+    assert "min_delta_amount=100000" in response.assumptions
     assert "직전 마감월 기준" in response.assumptions
 
 

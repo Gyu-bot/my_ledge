@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
-import type { CategoryMoMQuery } from '../types/analytics'
+import type { CategoryMoMQuery, SpendingAnomaliesQuery } from '../types/analytics'
 
 export function useMonthlyCashflow(months = 6) {
   return useQuery({
@@ -46,9 +46,9 @@ export function useRecurringPayments(page = 1, perPage = 10) {
   })
 }
 
-export function useSpendingAnomalies(page = 1, perPage = 10) {
+export function useSpendingAnomalies(params: SpendingAnomaliesQuery = {}) {
   return useQuery({
-    queryKey: ['analytics', 'spendingAnomalies', page, perPage],
-    queryFn: () => analyticsApi.spendingAnomalies({ page, per_page: perPage }),
+    queryKey: ['analytics', 'spendingAnomalies', params],
+    queryFn: () => analyticsApi.spendingAnomalies(params),
   })
 }

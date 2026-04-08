@@ -99,3 +99,9 @@ export interface SpendingAnomaliesResponse {
   items: SpendingAnomalyItem[]
   assumptions: string
 }
+
+export interface SpendingAnomaliesQuery {
+  page?: number
+  per_page?: number
+  end_date?: string
+}

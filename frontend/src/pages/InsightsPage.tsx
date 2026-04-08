@@ -43,14 +43,25 @@ export function InsightsPage() {
   const [categoryBaseMonth, setCategoryBaseMonth] = useState(allMonths[allMonths.length - 1])
   const [showRecurringAssumption, setShowRecurringAssumption] = useState(false)
   const [showAnomalyAssumption, setShowAnomalyAssumption] = useState(false)
+  const [anomalyMode, setAnomalyMode] = useState<'closed' | 'partial'>('closed')
+  const partialEndDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const recurring = useRecurringPayments(recurringPage, 10)
-  const anomalies = useSpendingAnomalies(anomalyPage, 10)
+  const anomalies = useSpendingAnomalies(
+    anomalyMode === 'partial'
+      ? { page: anomalyPage, per_page: 10, end_date: partialEndDate }
+      : { page: anomalyPage, per_page: 10 },
+  )
   const merchants = useMerchantSpend({ months: merchantMonths, limit: 5 })
   const categoryMoM = useCategoryMoM({
     start_month: allMonths[Math.max(0, allMonths.indexOf(categoryBaseMonth) - 1)],
     end_month: categoryBaseMonth,
   })
   const { setMetaBadge } = useChromeContext()
+  const anomalyModeLabel = anomalyMode === 'closed' ? '직전 마감월' : '부분 기간'
+  const anomalyGuidance =
+    anomalyMode === 'closed'
+      ? '기본값은 직전 마감월 전체 지출을 기준으로 이상지출을 탐지합니다.'
+      : `부분 기간은 ${partialEndDate}까지 누적 지출을 이전 월의 같은 일자 cutoff와 비교합니다.`
 
   // 요약 지표 계산
   const latestCashflow = cashflow.data?.items?.[cashflow.data.items.length - 1]
@@ -150,12 +161,36 @@ export function InsightsPage() {
            ) : <EmptyState />}
         </SectionCard>
 
-        <SectionCard title="이상 지출"
-          action={<button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-2 py-1">진단 기준</button>}
+        <SectionCard
+          title="이상 지출"
+          meta={anomalyModeLabel}
+          description={anomalyGuidance}
+          action={
+            <div className="flex items-center gap-2">
+              <label htmlFor="anomaly-mode" className="sr-only">이상 지출 기준</label>
+              <select
+                id="anomaly-mode"
+                aria-label="이상 지출 기준"
+                value={anomalyMode}
+                onChange={(event) => {
+                  setAnomalyPage(1)
+                  setAnomalyMode(event.target.value as 'closed' | 'partial')
+                }}
+                className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+              >
+                <option value="closed">직전 마감월</option>
+                <option value="partial">부분 기간</option>
+              </select>
+              <button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-2 py-1">
+                진단 기준
+              </button>
+            </div>
+          }
         >
           {showAnomalyAssumption && anomalies.data && (
             <div className="text-micro text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
-              {anomalies.data.assumptions}
+              <div className="text-text-secondary">{anomalyGuidance}</div>
+              <div className="mt-1">{anomalies.data.assumptions}</div>
             </div>
           )}
           {anomalies.isLoading ? <LoadingState /> :

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { InsightsPage } from '../../pages/InsightsPage'
@@ -41,9 +41,15 @@ function wrap(ui: React.ReactNode) {
 
 describe('InsightsPage', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-08T09:00:00+09:00'))
     useMerchantSpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useCategoryMoMMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useSpendingAnomaliesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('requests merchant spend with the selected period option', () => {
@@ -57,6 +63,38 @@ describe('InsightsPage', () => {
 
     expect(screen.getByLabelText('거래처 소비 기간')).toBeInTheDocument()
     expect(screen.getByLabelText('카테고리 기준월')).toBeInTheDocument()
+    expect(screen.getByLabelText('이상 지출 기준')).toBeInTheDocument()
+  })
+
+  it('uses the last closed month by default and allows switching to partial mode', () => {
+    wrap(<InsightsPage />)
+
+    expect(useSpendingAnomaliesMock).toHaveBeenCalledWith({ page: 1, per_page: 10 })
+    expect(screen.getAllByText('직전 마감월')).not.toHaveLength(0)
+
+    fireEvent.change(screen.getByLabelText('이상 지출 기준'), { target: { value: 'partial' } })
+
+    expect(useSpendingAnomaliesMock).toHaveBeenLastCalledWith({
+      page: 1,
+      per_page: 10,
+      end_date: '2026-04-08',
+    })
+    expect(screen.getAllByText('부분 기간')).not.toHaveLength(0)
+  })
+
+  it('shows anomaly guidance text that matches the selected mode', () => {
+    useSpendingAnomaliesMock.mockImplementation(() => ({
+      data: { total: 0, items: [], assumptions: 'threshold는 anomaly_score 기준입니다.' },
+      isLoading: false,
+    }))
+
+    wrap(<InsightsPage />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '진단 기준' })[1])
+    expect(screen.getAllByText('기본값은 직전 마감월 전체 지출을 기준으로 이상지출을 탐지합니다.')).not.toHaveLength(0)
+
+    fireEvent.change(screen.getByLabelText('이상 지출 기준'), { target: { value: 'partial' } })
+    expect(screen.getAllByText('부분 기간은 2026-04-08까지 누적 지출을 이전 월의 같은 일자 cutoff와 비교합니다.')).not.toHaveLength(0)
   })
 
   it('renders anomaly deltas with a directional sign only once', () => {

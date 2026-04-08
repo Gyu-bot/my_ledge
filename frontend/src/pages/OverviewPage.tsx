@@ -19,7 +19,7 @@ export function OverviewPage() {
   const snapshots = useAssetSnapshots()
   const incomeStability = useIncomeStability()
   const recurringPayments = useRecurringPayments(1, 1)
-  const spendingAnomalies = useSpendingAnomalies(1, 1)
+  const spendingAnomalies = useSpendingAnomalies({ page: 1, per_page: 1 })
   const recentTx = useTransactionList({ page: 1, per_page: 5, type: 'all' })
   const categoryBreakdown = useCategoryBreakdown({
     start_month: currentMonth,

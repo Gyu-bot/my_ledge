@@ -375,6 +375,7 @@ async def get_spending_anomalies(
     end_date: date | None,
     baseline_months: int,
     anomaly_threshold: float,
+    min_delta_amount: int = 100_000,
     page: int = 1,
     per_page: int = 10,
 ) -> SpendingAnomaliesResponse:
@@ -440,14 +441,17 @@ async def get_spending_anomalies(
 
         delta = target_amount - baseline_avg
         delta_pct = _safe_ratio(delta * 100, baseline_avg)
+        abs_delta = abs(delta)
 
         if b_stdev > 0:
-            anomaly_score = round(abs(delta) / b_stdev, 4)
+            anomaly_score = round(abs_delta / b_stdev, 4)
         elif baseline_avg > 0:
-            anomaly_score = round(abs(delta) / baseline_avg, 4)
+            anomaly_score = round(abs_delta / baseline_avg, 4)
         else:
             anomaly_score = 0.0
 
+        if abs_delta < min_delta_amount:
+            continue
         if anomaly_score < anomaly_threshold:
             continue
 
@@ -479,6 +483,7 @@ async def get_spending_anomalies(
             target_period=target_period,
             baseline_months=baseline_months,
             anomaly_threshold=anomaly_threshold,
+            min_delta_amount=min_delta_amount,
             used_last_closed_month=used_last_closed_month,
             partial_cutoff_day=partial_cutoff_day,
             ref_date=ref_date,
@@ -559,6 +564,7 @@ def _build_spending_anomalies_assumptions(
     target_period: str,
     baseline_months: int,
     anomaly_threshold: float,
+    min_delta_amount: int,
     used_last_closed_month: bool,
     partial_cutoff_day: int | None,
     ref_date: date,
@@ -574,6 +580,7 @@ def _build_spending_anomalies_assumptions(
     parts.append(
         f"threshold={anomaly_threshold} anomaly_score 기준 (표준편차가 있으면 |delta|/stdev, 없으면 |delta|/baseline_avg)"
     )
+    parts.append(f"min_delta_amount={min_delta_amount} (baseline 대비 절대 변동액 하한)")
     return ", ".join(parts)
 
 

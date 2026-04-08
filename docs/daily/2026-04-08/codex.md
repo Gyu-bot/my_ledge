@@ -627,3 +627,93 @@
 - `spending-anomalies` 기본 호출은 직전 마감월 기준으로 동작한다
 - partial `end_date` 를 넘기면 이전 월 전체가 아니라 같은 일자 cutoff baseline으로 비교한다
 - `assumptions` 에 현재 어떤 비교 모드가 적용됐는지 드러난다
+
+## Spending Anomalies Absolute Delta Floor
+
+- 사용자 피드백
+  - 현재 `anomaly_score` 기준만으로는 수천원~수만원대 편차도 거의 모두 이상지출 후보로 잡힌다
+  - 기본값으로 `baseline 대비 절대 변동액 10만원 미만` 은 제외하고, 이후 조정 가능해야 한다
+
+### 판단
+
+- score 기반 판정은 유지하되, 절대 변동액 하한을 추가하는 게 맞다.
+- 작은 분모에서 score가 과도하게 커지는 카테고리를 기본 탐지에서 걷어내려면 `abs(delta)` 기준 하한이 필요하다.
+- 추후 조정 가능성을 위해 서비스 내부 상수가 아니라 query param 계약으로 두고, 기본값만 `100000` 으로 둔다.
+
+### TDD
+
+- red:
+  - `backend/tests/services/test_analytics_service.py`
+    - `test_get_spending_anomalies_filters_small_absolute_deltas_by_default`
+  - `backend/tests/api/test_analytics_api.py`
+    - `test_spending_anomalies_endpoint_filters_small_absolute_deltas_by_default`
+  - `금융` 카테고리처럼 score는 높지만 `delta < 100000` 인 케이스가 기본값에서는 제외되고, `min_delta_amount=10000` 으로 낮추면 다시 포함되어야 함을 실패로 고정
+- green:
+  - `backend/app/services/analytics_service.py`
+    - `get_spending_anomalies(..., min_delta_amount: int = 100_000)` 추가
+    - `abs(delta) < min_delta_amount` 이면 `anomaly_score` 판정 전에 제외
+    - `assumptions` 에 `min_delta_amount=100000` 문구 추가
+  - `backend/app/api/v1/endpoints/analytics.py`
+    - `min_delta_amount` query param 추가 (`default=100000`)
+  - 기존 anomaly 테스트 중 새 기본값과 충돌하던 기대치를 보정
+
+### 실행한 명령
+
+- `cd backend && uv run pytest tests/services/test_analytics_service.py::test_get_spending_anomalies_filters_small_absolute_deltas_by_default tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_filters_small_absolute_deltas_by_default -q`
+  - 결과: red 확인 후 green `2 passed`
+- `cd backend && uv run ruff check .`
+  - 결과: 통과
+- `cd backend && uv run pytest -q`
+  - 결과: `82 passed`
+- live runtime 확인
+  - 기존 8000 backend가 stale 상태였던 점을 다시 정리하고, `setsid ... uvicorn app.main:app --host 0.0.0.0 --port 8000` 로 재기동
+  - `curl http://127.0.0.1:4173/api/v1/analytics/spending-anomalies?...` 응답에서 `min_delta_amount=100000` assumptions 와 축소된 anomaly 결과를 확인
+
+### 결과
+
+- `spending-anomalies` 는 이제 `anomaly_score` 와 `abs(delta) >= min_delta_amount` 를 모두 만족해야 노출된다
+- 기본값은 `100000` 원이며, query param으로 조정 가능하다
+- live 8000 backend runtime도 새 계약 기준으로 재기동되었다
+
+## Settings Surface Planning Follow-up
+
+- 사용자 요청
+  - 좌측 사이드바 하단에 `설정` 메뉴를 추가하고
+  - anomaly threshold 같은 backend 관련 파라미터를 수정할 수 있는 관리 메뉴를 구현 계획에만 추가
+
+### 판단
+
+- 이 요구는 Insights 카드 내부의 임시 control이 아니라 shell-level settings surface로 계획하는 게 맞다.
+- 파라미터 관리 범위도 anomaly 하나에 고정하지 말고, 향후 advisor/analytics heuristic parameter를 수용할 수 있는 공통 `analytics settings` surface로 잡는 편이 확장성 면에서 안전하다.
+
+### 문서화
+
+- `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
+  - `Workstream 2.5: Diagnostics Settings Surface` 추가
+  - `설정` 사이드바 entry, settings page, analytics settings read/write API 방향, persistence model, v1 parameter inventory(`min_delta_amount`, `anomaly_threshold`, `baseline_months`)를 계획에 반영
+- `docs/STATUS.md`
+  - shell-level settings surface 결정 사항을 `Key Decisions` 에 기록
+
+## Separate Settings / Token Lab Feature Plan
+
+- 사용자 정정
+  - `설정` feature는 backend parameter 조정만이 아니라
+  - 프론트엔드 디자인 토큰(폰트 색상, 컬러 팔레트)을 직접 보고 임시로 바꿔볼 수 있는 기능도 함께 포함해야 함
+  - 기존 analytics follow-up의 일부가 아니라 별도 feature plan으로 분리 요청
+
+### 판단
+
+- 이 요구는 기존 analytics 확장 문서의 하위 항목으로 두기엔 범위가 넓다.
+- persisted backend settings와 temporary frontend token tuning은 성격이 다르므로, 하나의 `설정` shell page 아래 두 개의 domain panel로 나누는 별도 feature 계획이 더 적절하다.
+- token tuning은 v1에서 live preview/debug surface로 제한하고, repo/source-of-truth를 자동 변경하는 흐름은 포함하지 않는다.
+
+### 문서화
+
+- 새 계획 문서 추가:
+  - `docs/superpowers/plans/2026-04-08-settings-and-token-lab.md`
+- 포함 범위:
+  - 좌측 사이드바 하단 `설정` entry
+  - persisted analytics settings API + settings page panel
+  - temporary design token lab (폰트 색상, chart/category palette, reset/export/import)
+- `docs/STATUS.md`
+  - 별도 feature kickoff 항목과 key decision 추가

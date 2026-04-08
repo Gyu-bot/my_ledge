@@ -540,7 +540,12 @@ async def test_spending_anomalies_endpoint_detects_spike(
 
     response = await async_client.get(
         "/api/v1/analytics/spending-anomalies",
-        params={"end_date": "2026-03-31", "baseline_months": 2, "anomaly_threshold": 0.5},
+        params={
+            "end_date": "2026-03-31",
+            "baseline_months": 2,
+            "anomaly_threshold": 0.5,
+            "min_delta_amount": 10000,
+        },
     )
 
     assert response.status_code == 200
@@ -649,7 +654,12 @@ async def test_spending_anomalies_endpoint_documents_anomaly_score_threshold(
 
     response = await async_client.get(
         "/api/v1/analytics/spending-anomalies",
-        params={"end_date": "2026-03-31", "baseline_months": 2, "anomaly_threshold": 0.5},
+        params={
+            "end_date": "2026-03-31",
+            "baseline_months": 2,
+            "anomaly_threshold": 0.5,
+            "min_delta_amount": 10000,
+        },
     )
 
     assert response.status_code == 200
@@ -657,6 +667,68 @@ async def test_spending_anomalies_endpoint_documents_anomaly_score_threshold(
     assert len(payload["items"]) == 1
     assert payload["items"][0]["category"] == "금융"
     assert "anomaly_score" in payload["assumptions"]
+
+
+async def test_spending_anomalies_endpoint_filters_small_absolute_deltas_by_default(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300120,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-350000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    default_response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={"end_date": "2026-03-31", "baseline_months": 2, "anomaly_threshold": 0.5},
+    )
+    relaxed_response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={
+            "end_date": "2026-03-31",
+            "baseline_months": 2,
+            "anomaly_threshold": 0.5,
+            "min_delta_amount": 10000,
+        },
+    )
+
+    assert default_response.status_code == 200
+    assert relaxed_response.status_code == 200
+    default_payload = default_response.json()
+    relaxed_payload = relaxed_response.json()
+    assert default_payload["items"] == []
+    assert "min_delta_amount=100000" in default_payload["assumptions"]
+    assert len(relaxed_payload["items"]) == 1
+    assert relaxed_payload["items"][0]["category"] == "금융"
 
 
 async def test_spending_anomalies_endpoint_defaults_to_last_closed_month(
@@ -742,7 +814,8 @@ async def test_spending_anomalies_endpoint_defaults_to_last_closed_month(
 
     assert response.status_code == 200
     payload = response.json()
-    assert {item["category"] for item in payload["items"]} == {"금융", "식비"}
+    assert {item["category"] for item in payload["items"]} == {"식비"}
+    assert "min_delta_amount=100000" in payload["assumptions"]
     assert all(item["period"] == "2026-03" for item in payload["items"])
     assert "직전 마감월 기준" in payload["assumptions"]
 
