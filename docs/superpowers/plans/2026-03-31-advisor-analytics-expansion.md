@@ -88,7 +88,17 @@
 - `recurring-payments` should start with rule-based intervals:
   - 25-35 day gap => `monthly`
   - 6-8 day gap => `weekly`
+- `recurring-payments` follow-up should classify each recurring merchant into one of:
+  - `subscription`
+  - `installment`
+  - `general_recurring`
+  - Keep the first release rule-based and explain the evidence in `assumptions`/`reason` instead of pretending the subtype is exact.
 - `spending-anomalies` should start with baseline comparison over recent N months and return `reason` plus `anomaly_score`.
+- `spending-anomalies` follow-up should add a second-layer diagnostic payload per category that explains whether the spike came from:
+  - average transaction amount expansion
+  - transaction count expansion
+  - one or more merchant outliers dominating the month
+  - This should stay additive to the current response rather than replacing the baseline comparison.
 - All heuristic endpoints must expose at least one of `confidence`, `reason`, `assumptions`.
 
 **Verification**

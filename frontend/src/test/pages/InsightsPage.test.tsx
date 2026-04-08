@@ -19,10 +19,12 @@ vi.mock('../../hooks/useAnalytics', () => ({
     isLoading: false,
   }),
   useRecurringPayments: () => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }),
-  useSpendingAnomalies: () => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }),
+  useSpendingAnomalies: (...args: unknown[]) => useSpendingAnomaliesMock(...args),
   useMerchantSpend: (params: unknown) => useMerchantSpendMock(params),
   useCategoryMoM: (params: unknown) => useCategoryMoMMock(params),
 }))
+
+const useSpendingAnomaliesMock = vi.fn()
 
 vi.mock('../../components/layout/chromeContext', () => ({
   useChromeContext: () => ({ setMetaBadge: vi.fn() }),
@@ -41,6 +43,7 @@ describe('InsightsPage', () => {
   beforeEach(() => {
     useMerchantSpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useCategoryMoMMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
+    useSpendingAnomaliesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
   })
 
   it('requests merchant spend with the selected period option', () => {
@@ -54,5 +57,31 @@ describe('InsightsPage', () => {
 
     expect(screen.getByLabelText('거래처 소비 기간')).toBeInTheDocument()
     expect(screen.getByLabelText('카테고리 기준월')).toBeInTheDocument()
+  })
+
+  it('renders anomaly deltas with a directional sign only once', () => {
+    useSpendingAnomaliesMock.mockImplementation(() => ({
+      data: {
+        total: 1,
+        items: [
+          {
+            period: '2026-03',
+            category: '금융',
+            amount: 350000,
+            baseline_avg: 300000,
+            delta_pct: 16.6,
+            anomaly_score: 0.16,
+            reason: '전월 대비 증가',
+          },
+        ],
+        assumptions: '',
+      },
+      isLoading: false,
+    }))
+
+    wrap(<InsightsPage />)
+
+    expect(screen.getByText('+16.6%')).toBeInTheDocument()
+    expect(screen.queryByText('++16.6%')).not.toBeInTheDocument()
   })
 })

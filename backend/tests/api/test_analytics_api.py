@@ -606,3 +606,50 @@ async def test_spending_anomalies_endpoint_paginates_results(
     assert len(data["items"]) == 2
     assert data["items"][0]["category"] == "카테고리-11"
     assert data["items"][1]["category"] == "카테고리-12"
+
+
+async def test_spending_anomalies_endpoint_applies_threshold_to_percent_change(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300120,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-350000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={"end_date": "2026-03-31", "baseline_months": 2, "anomaly_threshold": 0.5},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []

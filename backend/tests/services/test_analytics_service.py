@@ -790,3 +790,50 @@ async def test_get_spending_anomalies_filters_by_threshold(
     )
 
     assert response.items == []
+
+
+async def test_get_spending_anomalies_uses_threshold_as_delta_ratio_floor(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-300120,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-350000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_spending_anomalies(
+        db_session,
+        end_date=date(2026, 3, 31),
+        baseline_months=2,
+        anomaly_threshold=0.5,
+    )
+
+    assert response.items == []

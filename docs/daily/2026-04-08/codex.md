@@ -458,3 +458,89 @@
   - route별 block/token 연결은 `docs/frontend/page-wireframes.md`
   - component-level inventory는 `docs/frontend/components-and-design-token-inventory.md`
   를 기준으로 보면 된다
+
+## Frontend/Backend Follow-up Split Execution
+
+- 사용자 요청
+  - 프론트엔드와 백엔드를 각각 서브에이전트로 나눠 검토/구현
+  - 프론트엔드:
+    - `Pagination` 을 `text-nano` 크기로 축소하고 border 제거
+    - `DailyCalendar` tooltip contract/dot 크기 재점검
+    - chart axis label 크기를 `text-body-sm` 로 정렬
+    - `text-muted`, `text-faint` 일원화
+    - `거래처별 지출 비중` 을 `카테고리별/거래처별` selector 구조로 정리
+    - 실데이터 상위 8개 카테고리 기준 palette 재매핑
+    - `이상 지출` 증감 표기를 단일 방향 부호 규칙으로 수정
+  - 백엔드:
+    - `spending-anomalies` threshold 의미 확인/수정
+    - 이상지출 추가 분석, 반복결제 subtype은 계획 문서에만 추가
+
+### 서브에이전트 분리
+
+- frontend subagent:
+  - scope: pagination / daily calendar / treemap / palette / anomaly UI / frontend tests
+- backend subagent:
+  - scope: anomaly threshold bug / backend tests / analytics plan 문서 보강
+
+### root cause
+
+- `spending-anomalies` 는 `delta_pct` 를 계산해 응답에 실어주고 있었지만, 실제 필터는 `anomaly_threshold` 를 `anomaly_score` cutoff로 적용하고 있었다.
+- baseline 평균이 거의 일정한 카테고리는 표준편차가 매우 작아서, 실제 증감률이 16.6% 수준이어도 `anomaly_score` 가 과도하게 커져 threshold `0.5` 를 통과할 수 있었다.
+- 사용자 기대와 endpoint 계약상 `0.5` 는 50% 증감률로 해석하는 것이 맞으므로, threshold 비교 대상을 `abs(delta) / baseline_avg` 로 분리해 고정했다.
+
+### TDD
+
+- red:
+  - `backend/tests/services/test_analytics_service.py`
+    - `test_get_spending_anomalies_uses_threshold_as_delta_ratio_floor`
+  - `backend/tests/api/test_analytics_api.py`
+    - `test_spending_anomalies_endpoint_applies_threshold_to_percent_change`
+  - baseline 표준편차를 작게 만든 16.6% 증가 케이스를 넣고 threshold `0.5` 에서 제외돼야 함을 실패로 고정
+- green:
+  - `backend/app/services/analytics_service.py`
+    - threshold 비교를 `delta_ratio` 기준으로 분리
+    - `baseline_avg == 0 and target_amount > 0` 인 경우 신규 지출 발생으로 reason 분기
+    - assumptions 문구에 threshold의 퍼센트 의미를 명시
+  - `frontend/src/test/pages/InsightsPage.test.tsx`
+    - 이상지출 증감 표기가 `++16.6%` 처럼 중복 부호를 내지 않는지 회귀 테스트 추가
+
+### 데이터 검증
+
+- 실DB 상위 지출 카테고리 확인:
+  - `금융`, `데이트`, `식비`, `자동차`, `미분류`, `여행/숙박`, `주거/통신`, `문화/여가`
+- 확인 명령:
+  - `docker compose exec -T db psql -U my_ledge -d my_ledge -c "SELECT effective_category_major AS category, SUM(ABS(amount)) AS total FROM vw_transactions_effective WHERE type='지출' GROUP BY effective_category_major ORDER BY total DESC NULLS LAST LIMIT 12;"`
+
+### 문서 반영
+
+- `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`
+  - `recurring-payments` 후속 subtype 분류(`subscription`, `installment`, `general_recurring`) 추가
+  - `spending-anomalies` 후속 2차 진단 축(`평균 거래금액`, `거래 횟수`, `merchant outlier`) 추가
+- `docs/STATUS.md`
+  - frontend follow-up 완료 상태와 backend threshold contract 정렬 반영
+  - `anomaly_threshold=0.5` 는 50% 증감률 의미라는 의사결정 추가
+
+### 실행한 명령
+
+- `cd frontend && npm test -- --runInBand src/test/components/ui/Pagination.test.tsx src/test/components/DailyCalendar.test.tsx src/test/components/NestedTreemapChart.test.tsx src/test/lib/chartTheme.test.ts src/test/pages/InsightsPage.test.tsx src/test/pages/SpendingPage.test.tsx`
+  - 결과: `6 files passed`, `24 tests passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `21 files passed`, `62 tests passed`
+- `cd backend && uv run pytest tests/services/test_analytics_service.py::test_get_spending_anomalies_uses_threshold_as_delta_ratio_floor tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_applies_threshold_to_percent_change tests/services/test_analytics_service.py::test_get_spending_anomalies_detects_spike tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_detects_spike -q`
+  - 결과: `4 passed`
+- `cd backend && uv run pytest tests/services/test_analytics_service.py tests/api/test_analytics_api.py -q`
+  - 결과: `24 passed`
+- `cd backend && uv run ruff check .`
+  - 결과: 통과
+- `cd backend && uv run pytest -q`
+  - 결과: `76 passed`
+
+### 결과
+
+- frontend는 요청한 follow-up 항목 기준으로 현재 코드/테스트가 모두 정렬됨
+- backend `spending-anomalies` 는 threshold를 사용자 기대대로 “기준선 대비 증감률”로 해석하도록 계약이 정리됨
+- anomaly drill-down과 recurring subtype은 live contract를 흔들지 않고 계획 문서에 후속으로만 추가함
