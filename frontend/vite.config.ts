@@ -28,7 +28,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      host: '127.0.0.1',
+      host: process.env.VITE_HOST ?? '0.0.0.0',
+      allowedHosts: ['localhost', '127.0.0.1', '.tailbe7385.ts.net', '.ts.net'],
       proxy: {
         '/api': {
           target: apiProxyTarget,

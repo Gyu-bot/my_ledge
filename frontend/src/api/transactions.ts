@@ -10,6 +10,7 @@ import type {
   CategoryBreakdownItem,
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
+  MerchantTreemapNode,
 } from '../types/transaction'
 
 function buildQuery(params: object): string {
@@ -135,5 +136,46 @@ export const transactionApi = {
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([date, amount]) => ({ date, amount })),
     }
+  },
+
+  merchantTreemap: async (params: {
+    start_month?: string
+    end_month?: string
+    include_income?: boolean
+  }) => {
+    const items = await loadTransactionsForDateRange({
+      ...monthSpanToDateRange(params.start_month, params.end_month),
+      include_income: params.include_income,
+    })
+
+    const grouped = new Map<string, Map<string, number>>()
+    for (const item of items) {
+      const category = item.effective_category_major || '기타'
+      const merchant = item.merchant || item.description || '기타'
+      const merchants = grouped.get(category) ?? new Map<string, number>()
+      merchants.set(merchant, (merchants.get(merchant) ?? 0) + item.amount)
+      grouped.set(category, merchants)
+    }
+
+    const tree: MerchantTreemapNode[] = Array.from(grouped.entries())
+      .map(([category, merchants]) => {
+        const children = Array.from(merchants.entries())
+          .map(([merchant, amount]) => ({
+            name: merchant,
+            value: Math.abs(amount),
+          }))
+          .filter((node) => node.value > 0)
+          .sort((left, right) => right.value - left.value)
+
+        return {
+          name: category,
+          value: children.reduce((sum, node) => sum + node.value, 0),
+          children,
+        }
+      })
+      .filter((node) => node.value > 0)
+      .sort((left, right) => right.value - left.value)
+
+    return { items: tree }
   },
 }

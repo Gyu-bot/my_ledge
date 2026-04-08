@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 배치 유지, frontend UI polish batch 구현 계획 작성 완료 및 구현 진행 중
-- **Last Worker:** Codex (2026-04-08T08:53+0900, UI polish batch implementation plan 작성 후 frontend 구현 위임 준비)
+- **Phase:** 안정화 배치 유지, frontend UI polish batch 구현 및 frontend 검증 완료
+- **Last Worker:** Codex (2026-04-08T09:16+0900, frontend UI polish batch 구현/검증 및 문서 갱신)
 - **Branch:** main
 
 ## Completed
@@ -65,6 +65,9 @@
 - [x] Frontend UI polish batch 설계 문서 작성: shell hierarchy, shared interaction, Spending/Insights/Workbench polish, Tailnet review 안정화 범위를 spec 으로 고정 (`docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md`)
 - [x] Frontend UI polish spec 확장: divider contrast, chart hover/tooltip tone, Spending stacked area / 조회기간 picker / nested treemap 요구 반영
 - [x] Frontend UI polish 구현 계획 작성: 공통 shell/token, chart hover contract, Spending/Insights/Workbench, Tailnet review 검증 순서로 실행 계획 고정 (`docs/superpowers/plans/2026-04-08-frontend-ui-polish-batch.md`)
+- [x] Frontend UI polish batch 구현 완료: 공통 `SectionCard`/`Pagination`/dark theme divider·text token 정리, chart hover/tooltip contract 정규화, `SpendingPage` stacked area + 조회 기간 month picker + nested treemap + `DailyCalendar` popover, `InsightsPage` 기간/기준월 control, `WorkbenchPage` hierarchy/read-only/bulk feedback 보정, Vite Tailnet hostname allowlist 정리
+- [x] Frontend UI polish batch 검증 완료: `cd frontend && npm test -- --runInBand` → `48 passed`, `npm run lint` 통과, `npm run typecheck` 통과
+- [x] Frontend UI polish batch 구현 완료: divider contrast 완화, chart hover/tooltip semantic token 정리, Spending stacked area + 조회기간 picker + 소분류 기간 badge + nested treemap + calendar popover, Insights 기간/기준월 selector, Workbench hierarchy/read-only polish, Vite MagicDNS allowlist 반영, 관련 테스트 보강
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
@@ -154,8 +157,8 @@
   - 현재 지점: 코드/테스트 기준 검증은 완료. 남은 안정화 범위는 운영 배포본 smoke capture와 live 문서/배포 환경 정렬
 - [ ] Frontend 런타임 점검 후속
   - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
-  - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, lint/typecheck 복구는 완료했다. 현재 남은 프론트 리스크는 MagicDNS host allowlist와 운영 배포본 smoke capture다
-  - 남은 작업: 운영 배포본 기준 smoke capture, 실제 기기 기준 추가 캡처 수집, Vite dev server의 MagicDNS host allowlist 정리
+  - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, MagicDNS host allowlist 정리는 완료했다. 현재 남은 프론트 리스크는 운영 배포본 smoke capture다
+  - 남은 작업: 운영 배포본 기준 smoke capture, 실제 기기 기준 추가 캡처 수집
 
 ## Blocked
 - 없음
@@ -181,24 +184,32 @@
 - [ ] Snapshot coverage 결정
   - [ ] 자산/투자/대출 snapshot 시계열 확보 운영 방식을 정하고 PRD tracking 기대치와 현재 단일 snapshot 상태를 맞출지 결정
 - [ ] Frontend shared interaction rollout
-  - [ ] Spending / Insights / Workbench section에 공통 `loading / error / empty / ready` 경계 도입
-  - [ ] `SectionCard` header slot(`title/meta/action/description/body`) 사용 규칙을 surface별로 통일
-  - [ ] Workbench filter bar / bulk panel / table / secondary accordion 경계를 spec 기준으로 재정렬
+  - [x] Spending / Insights / Workbench section에 공통 `loading / error / empty / ready` 경계 도입
+  - [x] `SectionCard` header slot(`title/meta/action/description/body`) 사용 규칙을 surface별로 통일
+  - [x] Workbench filter bar / bulk panel / table / secondary accordion 경계를 spec 기준으로 재정렬
 - [ ] Frontend behavior test 보강
   - [x] 지출 분석 range/detail interaction 및 subcategory drill-down 회귀 테스트 추가
-  - [ ] Workbench read-only gating / bulk toolbar / mutation success-error 흐름 테스트 추가
+  - [x] Workbench read-only gating 회귀 테스트 추가
+  - [ ] bulk toolbar / mutation success-error 흐름 테스트 추가
   - [ ] topbar meta lifecycle 및 canonical route metadata 테스트 추가
 - [ ] Frontend UI/UX 후속 개선 묶음
-  - 현재 상태: 전체 묶음을 한 배치로 처리하는 spec 작성 완료. 구현은 spec review 이후 착수
-  - [ ] `월별 카테고리 추이` 는 Top 5 카테고리만 개별 series로 표시하고 나머지는 `기타` 로 묶기
-  - [ ] `일별 지출 달력` 에 hover/popover 금액 표시 추가
-  - [ ] 프로젝트 전체 pagination 폰트 크기를 토큰화하고 토큰 값을 한 단계 축소
-  - [ ] 인사이트 `거래처 소비 Top 5` 기간 선택지 추가: 최근 1개월 / 3개월 / 6개월 / 1년
-  - [ ] 인사이트 `카테고리 전월 대비` 기준월 선택 UI 추가
-  - [ ] dark theme 에서 가독성이 낮은 `soft` 계열 font color를 전역적으로 상향 조정
-  - [ ] sidebar/topbar/card/filter hierarchy를 재정렬하는 UI polish batch를 correctness batch 직후에 착수
+  - 현재 상태: spec/plan 기준 1차 구현과 frontend 검증은 완료. 남은 후속은 운영 배포본 smoke와 추가 behavior coverage다
+  - [x] 카드 섹션 내 divider contrast 완화
+  - [x] chart hover highlight / tooltip font color를 공통 semantic token으로 정리
+  - [x] `월별 카테고리 추이` 는 Top 5 카테고리만 개별 series로 표시하고 나머지는 `기타` 로 묶기
+  - [x] `월별 카테고리 추이` 기간 필터를 조회기간 month picker로 정리
+  - [x] `소분류별 지출` 기준 기간 badge 추가
+  - [x] `거래처별 지출 비중` 을 category -> merchant nested treemap 으로 전환
+  - [x] `일별 지출 달력` 에 hover/popover 금액 표시 추가
+  - [x] 프로젝트 전체 pagination 폰트 크기를 한 단계 축소
+  - [x] 인사이트 `거래처 소비 Top 5` 기간 선택지 추가: 최근 1개월 / 3개월 / 6개월 / 1년
+  - [x] 인사이트 `카테고리 전월 대비` 기준월 선택 UI 추가
+  - [x] dark theme 에서 가독성이 낮은 `soft` 계열 font color를 전역적으로 상향 조정
+  - [x] sidebar/topbar/card/filter hierarchy 재정렬
   - [x] desktop sidebar 기본 icon-only collapse + click-to-expand shell interaction
 - [ ] Vite dev server의 Tailnet hostname(`moltbot.tailbe7385.ts.net`) 접근 시 403이 나오는 host allowlist 경로를 정리해 MagicDNS 기반 review URL도 안정화
+  - [x] Vite config `allowedHosts` 에 MagicDNS hostname 허용 추가
+  - [ ] live Vite dev server 기준 hostname smoke 재확인
 - [ ] Frontend 재설계
   - [x] 상세 wireframe 승인 반영
   - [x] `docs/superpowers/specs/` 아래 redesign spec 작성

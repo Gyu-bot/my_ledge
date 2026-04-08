@@ -98,6 +98,12 @@ export interface CategoryBreakdownItem {
   amount: number
 }
 
+export interface MerchantTreemapNode {
+  name: string
+  value: number
+  children?: MerchantTreemapNode[]
+}
+
 export interface MonthlySummaryItem {
   period: string
   amount: number

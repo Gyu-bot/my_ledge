@@ -34,12 +34,22 @@ export function InsightsPage() {
   const incomeStability = useIncomeStability()
   const [recurringPage, setRecurringPage] = useState(1)
   const [anomalyPage, setAnomalyPage] = useState(1)
+  const [merchantMonths, setMerchantMonths] = useState(3)
+  const now = new Date()
+  const allMonths = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - index, 1)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  }).reverse()
+  const [categoryBaseMonth, setCategoryBaseMonth] = useState(allMonths[allMonths.length - 1])
   const [showRecurringAssumption, setShowRecurringAssumption] = useState(false)
   const [showAnomalyAssumption, setShowAnomalyAssumption] = useState(false)
   const recurring = useRecurringPayments(recurringPage, 10)
   const anomalies = useSpendingAnomalies(anomalyPage, 10)
-  const merchants = useMerchantSpend({ months: 3, limit: 5 })
-  const categoryMoM = useCategoryMoM(2)
+  const merchants = useMerchantSpend({ months: merchantMonths, limit: 5 })
+  const categoryMoM = useCategoryMoM({
+    start_month: allMonths[Math.max(0, allMonths.indexOf(categoryBaseMonth) - 1)],
+    end_month: categoryBaseMonth,
+  })
   const { setMetaBadge } = useChromeContext()
 
   // 요약 지표 계산
@@ -71,6 +81,7 @@ export function InsightsPage() {
         핵심 인사이트 {insights.length}건
       </span>
     )
+    return () => setMetaBadge(null)
   }, [insights.length, setMetaBadge])
 
   return (
@@ -84,7 +95,7 @@ export function InsightsPage() {
       </div>
 
       {/* 핵심 인사이트 */}
-      <SectionCard title="핵심 인사이트" badge={`${insights.length}건`}>
+      <SectionCard title="핵심 인사이트" meta={`${insights.length}건`}>
         {insights.length === 0 ? <EmptyState message="분석할 데이터가 부족합니다" /> : (
           <div className="flex flex-col gap-2">
             {insights.map((insight, i) => (
@@ -107,7 +118,7 @@ export function InsightsPage() {
       <div className="grid md:grid-cols-2 gap-4">
 
         <SectionCard title="반복 결제"
-          badge={<button onClick={() => setShowRecurringAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
+          action={<button onClick={() => setShowRecurringAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-2 py-1">진단 기준</button>}
         >
           {showRecurringAssumption && recurring.data && (
             <div className="text-micro text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
@@ -140,7 +151,7 @@ export function InsightsPage() {
         </SectionCard>
 
         <SectionCard title="이상 지출"
-          badge={<button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-1.5 py-0.5">진단 기준</button>}
+          action={<button onClick={() => setShowAnomalyAssumption((v) => !v)} className="text-micro text-text-ghost border border-border-strong rounded px-2 py-1">진단 기준</button>}
         >
           {showAnomalyAssumption && anomalies.data && (
             <div className="text-micro text-text-faint bg-surface-bar border border-border rounded p-2 mb-3 leading-relaxed">
@@ -179,7 +190,27 @@ export function InsightsPage() {
       {/* 거래처 Top 5 + 카테고리 MoM */}
       <div className="grid md:grid-cols-2 gap-4">
 
-        <SectionCard title="거래처 소비 Top 5" badge="최근 3개월">
+        <SectionCard
+          title="거래처 소비 Top 5"
+          meta={`최근 ${merchantMonths}개월`}
+          action={
+            <>
+              <label htmlFor="merchant-period" className="sr-only">거래처 소비 기간</label>
+              <select
+                id="merchant-period"
+                aria-label="거래처 소비 기간"
+                value={merchantMonths}
+                onChange={(event) => setMerchantMonths(Number(event.target.value))}
+                className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+              >
+                <option value={1}>최근 1개월</option>
+                <option value={3}>최근 3개월</option>
+                <option value={6}>최근 6개월</option>
+                <option value={12}>최근 1년</option>
+              </select>
+            </>
+          }
+        >
           {merchants.isLoading ? <LoadingState /> :
            merchants.data && merchants.data.items.length > 0 ? (
              <div className="flex flex-col divide-y divide-border-subtle">
@@ -196,7 +227,24 @@ export function InsightsPage() {
            ) : <EmptyState />}
         </SectionCard>
 
-        <SectionCard title="카테고리 전월 대비">
+        <SectionCard
+          title="카테고리 전월 대비"
+          meta={categoryBaseMonth}
+          action={
+            <>
+              <label htmlFor="category-base-month" className="sr-only">카테고리 기준월</label>
+              <select
+                id="category-base-month"
+                aria-label="카테고리 기준월"
+                value={categoryBaseMonth}
+                onChange={(event) => setCategoryBaseMonth(event.target.value)}
+                className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2 py-1.5"
+              >
+                {allMonths.slice(1).map((month) => <option key={month} value={month}>{month}</option>)}
+              </select>
+            </>
+          }
+        >
           {categoryMoM.isLoading ? <LoadingState /> :
            categoryMoM.data && categoryMoM.data.items.length > 0 ? (
              <MoMBarList items={categoryMoM.data.items} />

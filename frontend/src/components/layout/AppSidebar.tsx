@@ -75,17 +75,17 @@ export function AppSidebar({ className, collapsed, onToggle }: AppSidebarProps) 
           onClick={onToggle}
           aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
           title={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-ghost transition-colors hover:bg-border-subtle hover:text-text-secondary"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-ghost transition-colors hover:bg-surface-section hover:text-text-secondary"
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
       </div>
 
-      <div className={cn('flex flex-1 flex-col overflow-y-auto py-4', collapsed ? 'gap-3 px-2' : 'gap-4 px-3')}>
+      <div className={cn('flex flex-1 flex-col overflow-y-auto py-4', collapsed ? 'gap-3 px-2.5' : 'gap-4 px-3')}>
         {sections.map((section) => (
           <div key={section.key} className="flex flex-col gap-1">
             {!collapsed && (
-              <div className="px-3 pb-1 text-micro uppercase tracking-[0.16em] text-text-ghost">
+              <div className="px-3 pb-1 text-micro uppercase tracking-[0.16em] text-text-muted">
                 {section.label}
               </div>
             )}

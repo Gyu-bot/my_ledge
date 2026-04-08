@@ -108,3 +108,89 @@
 - Insights 기간/기준월 control
 - Workbench hierarchy/read-only/bulk state polish
 - Tailnet hostname Vite allowlist 정리와 frontend verification
+
+## Frontend UI Polish Batch Execution
+
+- 사용자 요청
+  - 승인된 `docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md` 와 `docs/superpowers/plans/2026-04-08-frontend-ui-polish-batch.md` 기준으로 현재 workspace에서 frontend polish batch를 구현하고, frontend 검증 후 `docs/STATUS.md` 와 daily log를 갱신해 달라는 요청
+
+### 구현 범위
+
+- 공통
+  - `SectionCard`, `Pagination`, dark theme divider/text token contrast 정리
+  - chart hover tint / tooltip text color를 semantic token 기반으로 통일
+  - `DailyCalendar` hover/focus popover 추가
+- Spending
+  - `월별 카테고리 추이` 를 Top 5 + `기타` stacked area 차트로 전환
+  - timeline/detail 범위를 month picker 기반 `조회 기간` 흐름으로 정리하고 month range 무결성 보정
+  - `소분류별 지출` 기간 meta, category -> merchant nested treemap 연결
+- Insights
+  - `거래처 소비 Top 5` 기간 선택 (`1/3/6/12개월`)
+  - `카테고리 전월 대비` 기준월 선택
+- Workbench
+  - filter / bulk / table / accordion hierarchy 재정렬
+  - read-only / bulk apply 문구와 상태 hierarchy 보정
+- Tooling
+  - Vite dev server host를 `0.0.0.0` 기준으로 열고 MagicDNS host allowlist 추가
+
+### TDD
+
+- red baseline
+  - `frontend/src/test/pages/SpendingPage.test.tsx`
+  - `frontend/src/test/pages/InsightsPage.test.tsx`
+  - 기존 range slider 제거, month picker 노출, Spending/Insights query contract 변경 기준으로 실패 확인
+- 추가 red
+  - `frontend/src/test/components/DailyCalendar.test.tsx`
+  - hover/focus 시 day detail popover가 떠야 한다는 요구를 테스트로 먼저 고정
+- green
+  - Spending/Insights/DailyCalendar 구현 반영 후 위 테스트와 `chartTheme` 테스트 기대값 갱신
+
+### 실행한 명령
+
+- `cd frontend && npm test -- --runInBand src/test/components/DailyCalendar.test.tsx src/test/pages/SpendingPage.test.tsx src/test/pages/InsightsPage.test.tsx src/test/lib/chartTheme.test.ts`
+  - 결과: `4 files passed`, `12 tests passed`
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `20 files passed`, `48 tests passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 승인된 UI polish batch 범위의 frontend 구현과 검증을 완료
+- 남은 후속은 운영 배포본 smoke capture와 일부 behavior coverage 보강
+
+## Frontend UI Polish Batch Implementation
+
+- 구현 범위
+  - `SectionCard` 에 `meta/action/description` slot을 추가하고 Spending, Insights, Workbench header 패턴을 통일
+  - 차트 hover background와 tooltip text/label 색을 semantic chart token으로 정리
+  - `SpendingPage` 를 stacked area + 조회기간 month picker + 소분류 기간 badge + category→merchant nested treemap + 일별 달력 hover tooltip 구조로 전환
+  - `InsightsPage` 에 거래처 소비 기간 selector와 카테고리 기준월 selector를 추가
+  - `WorkbenchPage` filter/table/bulk/read-only 경계의 border contrast를 낮추고 위계를 완만하게 정리
+  - `vite.config.ts` 에 Tailnet MagicDNS hostname allowlist를 추가
+
+### 구현 메모
+
+- `frontend-developer` 위임 흔적이 남아 있는 working tree를 기준으로 실제 파일 상태를 재검토하고, 타입/API 연결과 테스트를 메인 세션에서 최종 정리
+- `DailyCalendar` tooltip state의 nullable narrowing 오류를 수정해 typecheck를 복구
+- chart theme 테스트는 확장된 tooltip style 계약(`color`, `boxShadow`) 기준으로 재확인
+- 추가 read-only 회귀 테스트, calendar hover 테스트, `SectionCard` slot 테스트, Spending/Insights selector 테스트를 포함해 전체 frontend 회귀를 재실행
+- `frontend-developer` 최종 audit 응답: `No additional findings.`
+
+### 실행한 명령
+
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm test -- --runInBand src/test/lib/chartTheme.test.ts src/test/components/DailyCalendar.test.tsx`
+  - 결과: `2 passed`, `6 passed`
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `20 passed`, `48 passed`
+
+### 결과
+
+- 기존 UI polish TODO와 추가 요청 범위는 frontend 코드와 테스트 기준으로 반영 완료
+- 현재 남은 후속 범위는 운영 배포본 기준 MagicDNS smoke 확인과 일부 behavior coverage 확장이다

@@ -1,53 +1,25 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { SectionCard } from '../components/ui/SectionCard'
 import { LoadingState } from '../components/ui/LoadingState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { Pagination } from '../components/ui/Pagination'
 import { SegmentedBar } from '../components/ui/SegmentedBar'
-import { RangeSlider } from '../components/ui/RangeSlider'
 import { DailyCalendar } from '../components/ui/DailyCalendar'
-import { StackedBarChart } from '../components/charts/StackedBarChart'
-import { Treemap, ResponsiveContainer } from 'recharts'
+import { StackedAreaChart } from '../components/charts/StackedAreaChart'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
-import { useCategoryTimeline, useCategoryBreakdown, useSubcategoryBreakdown, useTransactionList, useDailySpend } from '../hooks/useTransactions'
-import { useFixedCostSummary, useMerchantSpend } from '../hooks/useAnalytics'
+import {
+  useCategoryTimeline,
+  useCategoryBreakdown,
+  useSubcategoryBreakdown,
+  useTransactionList,
+  useDailySpend,
+  useMerchantTreemap,
+} from '../hooks/useTransactions'
+import { useFixedCostSummary } from '../hooks/useAnalytics'
 import { useChromeContext } from '../components/layout/chromeContext'
 import { monthRange, formatKRWCompact } from '../lib/utils'
-import { TREEMAP_COLORS } from '../lib/chartTheme'
-
-function MerchantCell(props: Record<string, unknown>) {
-  const x = Number(props.x ?? 0)
-  const y = Number(props.y ?? 0)
-  const width = Number(props.width ?? 0)
-  const height = Number(props.height ?? 0)
-  const name = String(props.name ?? '')
-  const value = Number(props.value ?? 0)
-  const index = Number(props.index ?? 0)
-  if (width < 10 || height < 10) return <g />
-  const label = name.length > 6 ? name.slice(0, 5) + '…' : name
-  const showAmount = height > 38 && width > 35
-  return (
-    <g>
-      <rect x={x + 1} y={y + 1} width={width - 2} height={height - 2}
-        fill={TREEMAP_COLORS[index % TREEMAP_COLORS.length]} rx={3} />
-      {width > 28 && (
-        <text x={x + width / 2} y={y + height / 2 + (showAmount ? -6 : 4)}
-          textAnchor="middle" dominantBaseline="middle"
-          fill="var(--chart-label-strong)" fontSize={10} fontWeight="600">
-          {label}
-        </text>
-      )}
-      {showAmount && (
-        <text x={x + width / 2} y={y + height / 2 + 10}
-          textAnchor="middle" dominantBaseline="middle"
-          fill="var(--chart-label-muted)" fontSize={8}>
-          ₩{formatKRWCompact(value)}
-        </text>
-      )}
-    </g>
-  )
-}
+import { NestedTreemapChart } from '../components/charts/NestedTreemapChart'
 
 export function SpendingPage() {
   const now = new Date()
@@ -69,6 +41,7 @@ export function SpendingPage() {
   const [accordionOpen, setAccordionOpen] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [detailStart, detailEnd] = detailRange
+  const monthIndex = new Map(allMonths.map((month, index) => [month, index]))
 
   const { setMetaBadge } = useChromeContext()
   useEffect(() => {
@@ -96,10 +69,10 @@ export function SpendingPage() {
       }
     : null)
   const fixedCost = useFixedCostSummary({ start_month: detailStart, end_month: detailEnd })
-  const merchants = useMerchantSpend({
+  const merchantTreemap = useMerchantTreemap({
     start_month: detailStart,
     end_month: detailEnd,
-    limit: 10,
+    include_income: includeIncome,
   })
   const dailySpend = useDailySpend({ month: calendarMonth, include_income: includeIncome })
   const transactions = useTransactionList({
@@ -120,21 +93,92 @@ export function SpendingPage() {
   }, [breakdown.data?.items, selectedCategory])
 
   const categories = [...new Set((breakdown.data?.items ?? []).map((item) => item.category))]
+  const breakdownMeta = `조회 기간 ${detailStart} ~ ${detailEnd}`
+  const updateTimelineStart = (nextStart: string) => {
+    setTimelineRange(([, currentEnd]) => {
+      if ((monthIndex.get(nextStart) ?? 0) > (monthIndex.get(currentEnd) ?? 0)) {
+        return [nextStart, nextStart]
+      }
+      return [nextStart, currentEnd]
+    })
+  }
+  const updateTimelineEnd = (nextEnd: string) => {
+    setTimelineRange(([currentStart]) => {
+      if ((monthIndex.get(nextEnd) ?? 0) < (monthIndex.get(currentStart) ?? 0)) {
+        return [nextEnd, nextEnd]
+      }
+      return [currentStart, nextEnd]
+    })
+  }
+  const updateDetailStart = (nextStart: string) => {
+    setDetailRange(([, currentEnd]) => {
+      if ((monthIndex.get(nextStart) ?? 0) > (monthIndex.get(currentEnd) ?? 0)) {
+        return [nextStart, nextStart]
+      }
+      return [nextStart, currentEnd]
+    })
+    setTxPage(1)
+  }
+  const updateDetailEnd = (nextEnd: string) => {
+    setDetailRange(([currentStart]) => {
+      if ((monthIndex.get(nextEnd) ?? 0) < (monthIndex.get(currentStart) ?? 0)) {
+        return [nextEnd, nextEnd]
+      }
+      return [currentStart, nextEnd]
+    })
+    setTxPage(1)
+  }
+  const timelineAction = (
+    <div className="flex items-center gap-2">
+      <label className="sr-only" htmlFor="timeline-start-month">조회 기간 시작 월</label>
+      <select
+        id="timeline-start-month"
+        value={timelineRange[0]}
+        onChange={(event) => updateTimelineStart(event.target.value)}
+        className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+      >
+        {allMonths.map((month) => <option key={month} value={month}>{month}</option>)}
+      </select>
+      <span className="text-caption text-text-ghost">~</span>
+      <label className="sr-only" htmlFor="timeline-end-month">조회 기간 종료 월</label>
+      <select
+        id="timeline-end-month"
+        value={timelineRange[1]}
+        onChange={(event) => updateTimelineEnd(event.target.value)}
+        className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
+      >
+        {allMonths.map((month) => <option key={month} value={month}>{month}</option>)}
+      </select>
+    </div>
+  )
+
+  const treemapData = useMemo(
+    () =>
+      (merchantTreemap.data?.items ?? []).map((node) => ({
+        name: node.name,
+        children: (node.children ?? []).slice(0, 6).map((child) => ({
+          name: child.name,
+          size: child.value,
+          category: node.name,
+        })),
+      })),
+    [merchantTreemap.data?.items],
+  )
 
   return (
     <div className="flex flex-col gap-4">
 
-      {/* 1. 범위 슬라이더 */}
-      <SectionCard title="조회 범위">
-        <RangeSlider months={allMonths} value={timelineRange} onChange={setTimelineRange} />
-      </SectionCard>
-
       {/* 2. 월별 카테고리 추이 */}
-      <SectionCard title="월별 카테고리 추이" badge="상위 카테고리">
+      <SectionCard
+        title="월별 카테고리 추이"
+        meta={`조회 기간 ${timelineRange[0]} ~ ${timelineRange[1]}`}
+        description="Top 5 카테고리만 개별 series로 표시하고 나머지는 기타로 묶습니다."
+        action={timelineAction}
+      >
         {timeline.isLoading ? <LoadingState /> :
          timeline.error ? <ErrorState onRetry={() => timeline.refetch()} /> :
          timeline.data && timeline.data.items.length > 0 ? (
-           <StackedBarChart items={timeline.data.items} height={180} />
+           <StackedAreaChart items={timeline.data.items} height={220} />
          ) : <EmptyState />}
       </SectionCard>
 
@@ -145,7 +189,7 @@ export function SpendingPage() {
           <div className="w-px h-4 bg-border-strong" />
           <select
             value={detailStart}
-            onChange={(e) => { setDetailRange(([, end]) => [e.target.value, end]); setTxPage(1) }}
+            onChange={(e) => updateDetailStart(e.target.value)}
             className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
           >
             {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -153,7 +197,7 @@ export function SpendingPage() {
           <span className="text-caption text-text-ghost">~</span>
           <select
             value={detailEnd}
-            onChange={(e) => { setDetailRange(([start]) => [start, e.target.value]); setTxPage(1) }}
+            onChange={(e) => updateDetailEnd(e.target.value)}
             className="text-caption text-text-secondary bg-surface-bar border border-border-strong rounded-md px-2.5 py-1.5"
           >
             {allMonths.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -172,13 +216,13 @@ export function SpendingPage() {
 
       {/* 4. 카테고리 + 소분류 */}
       <div className="grid md:grid-cols-2 gap-4">
-        <SectionCard title="카테고리별 지출" badge={`${detailStart} ~ ${detailEnd}`}>
+        <SectionCard title="카테고리별 지출" meta={breakdownMeta}>
           {breakdown.isLoading ? <LoadingState /> :
            breakdown.data && breakdown.data.items.length > 0 ? (
              <HorizontalBarList items={breakdown.data.items.map((i) => ({ label: i.category, amount: i.amount }))} />
            ) : <EmptyState />}
         </SectionCard>
-        <SectionCard title="소분류별 지출">
+        <SectionCard title="소분류별 지출" meta={breakdownMeta}>
           <div className="mb-3">
             <select
               value={selectedCategory}
@@ -202,7 +246,7 @@ export function SpendingPage() {
 
       {/* 5. 고정비/변동비 + 필수/비필수 */}
       <div className="grid md:grid-cols-2 gap-4">
-        <SectionCard title="고정비 / 변동비 비율" badge={`${detailStart} ~ ${detailEnd}`}>
+        <SectionCard title="고정비 / 변동비 비율" meta={breakdownMeta}>
           {fixedCost.isLoading ? <LoadingState /> :
            fixedCost.data ? (
              fixedCost.data.unclassified_count > 0 && fixedCost.data.fixed_ratio == null ? (
@@ -231,7 +275,7 @@ export function SpendingPage() {
            ) : <EmptyState />}
         </SectionCard>
 
-        <SectionCard title="고정비 — 필수 / 비필수" badge="고정비 기준">
+        <SectionCard title="고정비 — 필수 / 비필수" meta="고정비 기준">
           {fixedCost.isLoading ? <LoadingState /> :
            fixedCost.data && fixedCost.data.fixed_total > 0 ? (
              <>
@@ -258,23 +302,20 @@ export function SpendingPage() {
       </div>
 
       {/* 6. 거래처 Treemap */}
-      <SectionCard title="거래처별 지출 비중" badge={`${detailStart} ~ ${detailEnd}`}>
-        {merchants.isLoading ? <LoadingState /> :
-         merchants.data && merchants.data.items.length > 0 ? (
-           <ResponsiveContainer width="100%" height={130}>
-             <Treemap
-               data={merchants.data.items.slice(0, 10).map((m) => ({ name: m.merchant, size: Math.abs(m.amount) }))}
-               dataKey="size"
-               aspectRatio={4 / 3}
-               content={<MerchantCell />}
-             />
-           </ResponsiveContainer>
+      <SectionCard
+        title="거래처별 지출 비중"
+        meta={breakdownMeta}
+        description="카테고리 비중과 각 카테고리 안의 거래처 비중을 함께 보여줍니다."
+      >
+        {merchantTreemap.isLoading ? <LoadingState /> :
+         treemapData.length > 0 ? (
+           <NestedTreemapChart items={treemapData} height={200} />
          ) : <EmptyState />}
       </SectionCard>
 
       {/* 7. 달력 + 거래내역 */}
       <div className="grid md:grid-cols-[3fr_2fr] gap-4">
-        <SectionCard title="일별 지출 달력">
+        <SectionCard title="일별 지출 달력" meta={calendarMonth}>
           <div className="flex items-center gap-2 mb-3">
             <select
               value={calendarMonth}

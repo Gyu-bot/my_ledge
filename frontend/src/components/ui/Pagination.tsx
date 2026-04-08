@@ -15,7 +15,7 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
 
   const btnClass = (active = false, disabled = false) =>
     cn(
-      'text-micro px-2 py-1 rounded border',
+      'text-nano px-1.5 py-0.5 rounded border leading-none min-w-6 h-6 inline-flex items-center justify-center',
       active
         ? 'border-accent text-accent bg-accent-dim'
         : 'border-border-strong text-text-ghost bg-transparent',
@@ -25,8 +25,8 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
   const pages = buildPages(page, totalPages)
 
   return (
-    <div className={cn('flex items-center justify-between px-2.5 py-2.5 border-t border-border-subtle', className)}>
-      <span className="text-caption text-text-faint">
+    <div className={cn('flex items-center justify-between px-2.5 py-2 border-t border-border-faint', className)}>
+      <span className="text-micro text-text-muted">
         {start}–{end} / {total}건
       </span>
       <div className="flex gap-1 items-center">
@@ -38,7 +38,7 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
         >‹</button>
         {pages.map((p, i) =>
           p === '...' ? (
-            <span key={`dots-${i}`} className="text-caption text-text-ghost px-1">…</span>
+            <span key={`dots-${i}`} className="text-micro text-text-ghost px-1">…</span>
           ) : (
             <button key={p} className={btnClass(p === page)} onClick={() => onPageChange(p as number)}>
               {p}

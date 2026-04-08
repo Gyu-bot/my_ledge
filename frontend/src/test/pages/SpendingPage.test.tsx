@@ -6,14 +6,18 @@ import { SpendingPage } from '../../pages/SpendingPage'
 
 const useCategoryBreakdownMock = vi.fn()
 const useSubcategoryBreakdownMock = vi.fn()
-const useMerchantSpendMock = vi.fn()
+const useCategoryTimelineMock = vi.fn()
+const useTransactionListMock = vi.fn()
+const useDailySpendMock = vi.fn()
+const useMerchantTreemapMock = vi.fn()
 
 vi.mock('../../hooks/useTransactions', () => ({
-  useCategoryTimeline: () => ({ data: { items: [] }, isLoading: false, error: null, refetch: vi.fn() }),
+  useCategoryTimeline: (params: unknown) => useCategoryTimelineMock(params),
   useCategoryBreakdown: (params: unknown) => useCategoryBreakdownMock(params),
   useSubcategoryBreakdown: (params: unknown) => useSubcategoryBreakdownMock(params),
-  useTransactionList: () => ({ data: { total: 0, page: 1, per_page: 20, items: [] }, isLoading: false }),
-  useDailySpend: () => ({ data: { items: [] }, isLoading: false }),
+  useTransactionList: (params: unknown) => useTransactionListMock(params),
+  useDailySpend: (params: unknown) => useDailySpendMock(params),
+  useMerchantTreemap: (params: unknown) => useMerchantTreemapMock(params),
 }))
 
 vi.mock('../../hooks/useAnalytics', () => ({
@@ -28,7 +32,6 @@ vi.mock('../../hooks/useAnalytics', () => ({
     },
     isLoading: false,
   }),
-  useMerchantSpend: (params: unknown) => useMerchantSpendMock(params),
 }))
 
 vi.mock('../../components/layout/chromeContext', () => ({
@@ -48,7 +51,17 @@ describe('SpendingPage', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-15T12:00:00Z'))
-    useMerchantSpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
+    useCategoryTimelineMock.mockImplementation(() => ({
+      data: {
+        items: [
+          { period: '2025-10', category: '식비', amount: -120000 },
+          { period: '2025-10', category: '교통', amount: -40000 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }))
     useCategoryBreakdownMock.mockImplementation(() => ({
       data: {
         items: [
@@ -59,6 +72,12 @@ describe('SpendingPage', () => {
       isLoading: false,
     }))
     useSubcategoryBreakdownMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
+    useTransactionListMock.mockImplementation(() => ({
+      data: { total: 0, page: 1, per_page: 20, items: [] },
+      isLoading: false,
+    }))
+    useDailySpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
+    useMerchantTreemapMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
   })
 
   afterEach(() => {
@@ -82,12 +101,18 @@ describe('SpendingPage', () => {
   it('requests merchant spend using the selected detail month span', () => {
     wrap(<SpendingPage />)
 
-    expect(useMerchantSpendMock).toHaveBeenCalledWith(
+    expect(useMerchantTreemapMock).toHaveBeenCalledWith(
       expect.objectContaining({
         start_month: '2025-10',
         end_month: '2026-03',
-        limit: 10,
       }),
     )
+  })
+
+  it('renders query period controls instead of the old range slider card', () => {
+    wrap(<SpendingPage />)
+
+    expect(screen.queryByText('조회 범위')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/조회 기간/).length).toBeGreaterThan(0)
   })
 })

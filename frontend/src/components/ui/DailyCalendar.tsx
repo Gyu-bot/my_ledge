@@ -1,4 +1,5 @@
 import { formatKRW } from '../../lib/utils'
+import { useMemo, useState } from 'react'
 
 interface DayData {
   date: string   // "YYYY-MM-DD"
@@ -14,6 +15,7 @@ interface DailyCalendarProps {
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
 
 export function DailyCalendar({ month, data, includeIncome = false }: DailyCalendarProps) {
+  const [activeDay, setActiveDay] = useState<{ day: number; amount: number } | null>(null)
   const [year, mon] = month.split('-').map(Number)
   const firstDay = new Date(year, mon - 1, 1).getDay()
   const daysInMonth = new Date(year, mon, 0).getDate()
@@ -21,9 +23,37 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
   const dayMap = new Map(data.map((d) => [d.date.slice(-2), d.amount]))
   const total = data.reduce((sum, d) => sum + (includeIncome ? d.amount : Math.min(d.amount, 0)), 0)
   const maxAbs = Math.max(...data.map((d) => Math.abs(d.amount)), 1)
+  const activeSummary = useMemo(() => {
+    if (!activeDay) return null
+    return `${activeDay.day}일 · ₩${formatKRW(activeDay.amount)}`
+  }, [activeDay])
+  const activeTooltip = useMemo(() => {
+    if (!activeDay) return null
+    const isNegative = activeDay.amount < 0
+    const prefix = isNegative ? '-' : ''
+    return {
+      title: `${mon}월 ${activeDay.day}일`,
+      amount: `${prefix}₩${formatKRW(Math.abs(activeDay.amount))}`,
+      isNegative,
+    }
+  }, [activeDay, mon])
 
   return (
-    <div>
+    <div className="relative">
+      <div className="mb-2 min-h-5 text-right text-micro text-text-muted">
+        {activeSummary ?? '날짜를 올리거나 눌러 상세 금액을 확인'}
+      </div>
+      {activeTooltip ? (
+        <div
+          role="tooltip"
+          className="absolute right-0 top-6 z-10 min-w-28 rounded-lg border border-border-subtle bg-surface-card px-3 py-2 shadow-lg"
+        >
+          <div className="text-micro text-text-secondary">{activeTooltip.title}</div>
+          <div className={`mt-1 text-caption font-semibold ${activeTooltip.isNegative ? 'text-danger' : 'text-accent'}`}>
+            {activeTooltip.amount}
+          </div>
+        </div>
+      ) : null}
       <div className="grid grid-cols-7 gap-0.5 mb-1">
         {DAY_NAMES.map((d) => (
           <div key={d} className="text-center text-nano text-text-ghost pb-1">{d}</div>
@@ -38,9 +68,15 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
           const amount = dayMap.get(day)
           const intensity = amount ? Math.min(Math.abs(amount) / maxAbs, 1) : 0
           return (
-            <div
+            <button
+              type="button"
               key={day}
-              title={amount != null ? `${i + 1}일: ₩${formatKRW(amount)}` : undefined}
+              aria-label={amount != null ? `${i + 1}일: ₩${formatKRW(amount)}` : `${i + 1}일`}
+              onMouseEnter={() => amount != null && setActiveDay({ day: i + 1, amount })}
+              onFocus={() => amount != null && setActiveDay({ day: i + 1, amount })}
+              onMouseLeave={() => setActiveDay((current) => (current?.day === i + 1 ? null : current))}
+              onBlur={() => setActiveDay((current) => (current?.day === i + 1 ? null : current))}
+              onClick={() => amount != null && setActiveDay({ day: i + 1, amount })}
               className="aspect-square rounded flex flex-col items-center justify-center gap-0.5 bg-border-subtle"
               style={intensity > 0 ? { opacity: 0.4 + intensity * 0.6 } : undefined}
             >
@@ -48,7 +84,7 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
               {amount !== undefined && (
                 <span className="w-[3px] h-[3px] rounded-full" style={{ background: amount < 0 ? 'var(--chart-danger)' : 'var(--chart-accent)' }} />
               )}
-            </div>
+            </button>
           )
         })}
       </div>

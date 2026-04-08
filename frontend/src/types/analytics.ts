@@ -25,6 +25,13 @@ export interface CategoryMoMResponse {
   items: CategoryMoMItem[]
 }
 
+export interface CategoryMoMQuery {
+  months?: number
+  start_month?: string
+  end_month?: string
+  base_month?: string
+}
+
 export interface FixedCostSummaryResponse {
   expense_total: number
   fixed_total: number

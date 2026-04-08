@@ -15,6 +15,14 @@ export const CHART_TOOLTIP_STYLE = {
   border: '1px solid var(--chart-tooltip-border)',
   borderRadius: 6,
   fontSize: 10,
+  color: 'var(--chart-tooltip-text)',
+  boxShadow: '0 14px 30px rgba(4, 8, 18, 0.45)',
+} as const
+export const CHART_TOOLTIP_LABEL_STYLE = {
+  color: 'var(--chart-tooltip-label)',
+} as const
+export const CHART_TOOLTIP_ITEM_STYLE = {
+  color: 'var(--chart-tooltip-text)',
 } as const
 
 export const AXIS_TICK_STYLE = {
@@ -46,4 +54,14 @@ export const TREEMAP_COLORS = [
 
 export function getCategoryColor(category: string): string {
   return CATEGORY_COLOR_MAP[category] ?? 'var(--chart-category-fallback)'
+}
+
+export function getChartHoverFill(color: string): string {
+  if (color === CHART_ACCENT || color === CHART_ACCENT_MUTED || color === CHART_ACCENT_BRIGHT) {
+    return 'var(--chart-hover-accent)'
+  }
+  if (color === CHART_DANGER || color === CHART_DANGER_MUTED) {
+    return 'var(--chart-hover-danger)'
+  }
+  return 'var(--chart-hover-default)'
 }

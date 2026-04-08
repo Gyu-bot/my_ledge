@@ -5,8 +5,11 @@ import {
   CHART_ACCENT,
   CHART_DANGER,
   CHART_NEUTRAL,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_ITEM_STYLE,
   CHART_TOOLTIP_STYLE,
   TREEMAP_COLORS,
+  getChartHoverFill,
   getCategoryColor,
 } from '../../lib/chartTheme'
 
@@ -30,7 +33,17 @@ describe('chartTheme', () => {
       border: '1px solid var(--chart-tooltip-border)',
       borderRadius: 6,
       fontSize: 10,
+      color: 'var(--chart-tooltip-text)',
+      boxShadow: '0 14px 30px rgba(4, 8, 18, 0.45)',
     })
+    expect(CHART_TOOLTIP_LABEL_STYLE).toEqual({ color: 'var(--chart-tooltip-label)' })
+    expect(CHART_TOOLTIP_ITEM_STYLE).toEqual({ color: 'var(--chart-tooltip-text)' })
+  })
+
+  it('derives semantic hover fills for chart active states', () => {
+    expect(getChartHoverFill(CHART_ACCENT)).toBe('var(--chart-hover-accent)')
+    expect(getChartHoverFill(CHART_DANGER)).toBe('var(--chart-hover-danger)')
+    expect(getChartHoverFill('var(--custom-token)')).toBe('var(--chart-hover-default)')
   })
 
   it('keeps a deterministic treemap palette', () => {

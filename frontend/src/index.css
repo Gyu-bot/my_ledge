@@ -22,9 +22,9 @@
     --color-surface-danger-strong: #1a0a0a;
 
     --color-border-default: #1a2035;
-    --color-border-subtle: #111827;
-    --color-border-strong: #1f2937;
-    --color-border-faint: #0d1117;
+    --color-border-subtle: #131a28;
+    --color-border-strong: #20293a;
+    --color-border-faint: #101622;
     --color-border-info: #1e3a5f;
 
     --color-accent-default: #10b981;
@@ -49,9 +49,9 @@
 
     --color-text-primary: #d1d5db;
     --color-text-secondary: #9ca3af;
-    --color-text-muted: #6b7280;
-    --color-text-faint: #4b5563;
-    --color-text-ghost: #374151;
+    --color-text-muted: #7b8494;
+    --color-text-faint: #646f82;
+    --color-text-ghost: #4e596d;
     --color-text-inverse: #ffffff;
 
     --chart-accent: var(--color-accent-default);
@@ -67,9 +67,14 @@
     --chart-warning-muted: var(--color-warn-default);
     --chart-tooltip-bg: var(--color-surface-card);
     --chart-tooltip-border: var(--color-border-default);
+    --chart-tooltip-text: var(--color-text-primary);
+    --chart-tooltip-label: var(--color-text-secondary);
     --chart-axis-text: var(--color-text-ghost);
     --chart-label-strong: rgba(255, 255, 255, 0.85);
     --chart-label-muted: rgba(255, 255, 255, 0.45);
+    --chart-hover-accent: color-mix(in srgb, var(--color-accent-default) 18%, var(--color-surface-section));
+    --chart-hover-danger: color-mix(in srgb, var(--color-danger-default) 18%, var(--color-surface-section));
+    --chart-hover-default: color-mix(in srgb, var(--color-info-default) 14%, var(--color-surface-section));
     --chart-category-food: #2563a8;
     --chart-category-transport: #059669;
     --chart-category-subscription: #7c3aed;

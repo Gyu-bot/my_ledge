@@ -1,7 +1,14 @@
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts'
 import type { NetWorthPoint } from '../../types/asset'
 import { formatKRWCompact } from '../../lib/utils'
-import { AXIS_TICK_STYLE, CHART_ACCENT, CHART_TOOLTIP_STYLE } from '../../lib/chartTheme'
+import {
+  AXIS_TICK_STYLE,
+  CHART_ACCENT,
+  CHART_TOOLTIP_ITEM_STYLE,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_STYLE,
+  getChartHoverFill,
+} from '../../lib/chartTheme'
 
 interface LineAreaChartProps {
   data: NetWorthPoint[]
@@ -40,6 +47,9 @@ export function LineAreaChart({ data, height = 130 }: LineAreaChartProps) {
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}
+          labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+          itemStyle={CHART_TOOLTIP_ITEM_STYLE}
+          cursor={{ fill: getChartHoverFill(CHART_ACCENT) }}
           formatter={(value) => [`₩ ${formatKRWCompact(Number(value ?? 0))}`, '순자산']}
         />
         <Area

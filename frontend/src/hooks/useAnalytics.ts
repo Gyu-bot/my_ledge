@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
+import type { CategoryMoMQuery } from '../types/analytics'
 
 export function useMonthlyCashflow(months = 6) {
   return useQuery({
@@ -8,10 +9,10 @@ export function useMonthlyCashflow(months = 6) {
   })
 }
 
-export function useCategoryMoM(months = 2) {
+export function useCategoryMoM(params: CategoryMoMQuery = { months: 2 }) {
   return useQuery({
-    queryKey: ['analytics', 'categoryMoM', months],
-    queryFn: () => analyticsApi.categoryMoM({ months }),
+    queryKey: ['analytics', 'categoryMoM', params],
+    queryFn: () => analyticsApi.categoryMoM(params),
   })
 }
 

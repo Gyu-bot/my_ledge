@@ -6,6 +6,7 @@ import type {
   TransactionBulkUpdateRequest,
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
+  MerchantTreemapNode,
 } from '../types/transaction'
 
 export const txKeys = {
@@ -15,6 +16,8 @@ export const txKeys = {
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
   dailySpend: (params: { month?: string; include_income?: boolean }) => ['transactions', 'dailySpend', params] as const,
+  merchantTreemap: (params: { start_month?: string; end_month?: string; include_income?: boolean } | null) =>
+    ['transactions', 'merchantTreemap', params] as const,
 }
 
 export function useTransactionList(params: TransactionListParams = {}) {
@@ -60,6 +63,16 @@ export function useDailySpend(params: { month: string; include_income?: boolean 
     queryFn: () => transactionApi.dailySpend(params!),
     enabled: !!params,
     retry: false,
+  })
+}
+
+export function useMerchantTreemap(
+  params: { start_month?: string; end_month?: string; include_income?: boolean } | null,
+) {
+  return useQuery<{ items: MerchantTreemapNode[] }>({
+    queryKey: txKeys.merchantTreemap(params),
+    queryFn: () => transactionApi.merchantTreemap(params!),
+    enabled: !!params,
   })
 }
 
