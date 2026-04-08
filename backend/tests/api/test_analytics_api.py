@@ -4,6 +4,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
+from app.services import analytics_service as analytics_service_module
 
 
 def _transaction(
@@ -656,3 +657,140 @@ async def test_spending_anomalies_endpoint_documents_anomaly_score_threshold(
     assert len(payload["items"]) == 1
     assert payload["items"][0]["category"] == "금융"
     assert "anomaly_score" in payload["assumptions"]
+
+
+async def test_spending_anomalies_endpoint_defaults_to_last_closed_month(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    class FrozenDate(date):
+        @classmethod
+        def today(cls) -> "FrozenDate":
+            return cls(2026, 4, 8)
+
+    monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
+
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 15),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-200000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 5),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 5),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 4, 7),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="금융",
+            category_minor=None,
+            description="카드값",
+            amount=-400000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={"baseline_months": 2, "anomaly_threshold": 0.5},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert {item["category"] for item in payload["items"]} == {"금융", "식비"}
+    assert all(item["period"] == "2026-03" for item in payload["items"])
+    assert "직전 마감월 기준" in payload["assumptions"]
+
+
+async def test_spending_anomalies_endpoint_partial_period_uses_same_day_cutoff(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 3, 5),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="식당",
+            amount=-100000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 20),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="회식",
+            amount=-900000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 4, 6),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor=None,
+            description="점심",
+            amount=-110000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={"end_date": "2026-04-07", "baseline_months": 1, "anomaly_threshold": 0.5},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"] == []
+    assert "부분 기간 비교" in payload["assumptions"]

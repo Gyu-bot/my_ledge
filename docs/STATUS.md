@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 follow-up 유지, frontend token polish와 backend anomaly threshold contract 정렬 완료
-- **Last Worker:** Codex (2026-04-08T11:22+0900, frontend follow-up polish 검증 + backend anomaly threshold fix + advisor analytics 계획 보강)
+- **Phase:** 안정화 follow-up 유지, frontend token polish와 anomaly default-period contract 정렬 완료
+- **Last Worker:** Codex (2026-04-08T12:03+0900, anomaly detection default-period/partial-baseline policy 구현 및 backend 전체 검증 완료)
 - **Branch:** main
 
 ## Completed
@@ -54,7 +54,7 @@
 - [x] Frontend 재설계 operations slice 완료: `OperationsWorkbenchPage` 추가, `거래 작업대`를 본문 랜딩으로 승격, `업로드`/`최근 업로드 이력`/`Danger Zone`을 accordion으로 재구성, `/data`를 legacy alias wrapper로 유지
 - [x] Frontend 문서화 완료: `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md` 추가로 컴포넌트/토큰 인벤토리와 현재 IA wireframe 정리
 - [x] Frontend token/UI follow-up 완료: pagination/daily calendar/treemap/palette/anomaly delta 표현을 현재 실데이터와 요청한 token contract 기준으로 재정렬하고 frontend 전체 검증 통과
-- [x] Backend anomaly threshold semantics 정렬 완료: `spending-anomalies` 는 `anomaly_score` 를 유지하되 필터 threshold 는 baseline 대비 증감률 비율로 적용하고, 후속 anomaly drill-down/recurring subtype 분류는 advisor analytics 계획 문서에 추가
+- [x] Backend anomaly default-period contract 정렬 완료: `spending-anomalies` 기본값은 직전 마감월 기준으로 보고, 명시적 partial `end_date` 는 이전 월 같은 일자 cutoff baseline으로 비교하도록 조정
 - [x] 리뷰용 dev server 기동: backend `uvicorn` (`0.0.0.0:8000`) + frontend Vite (`0.0.0.0:4173`) 실행, `/api/v1/health` 와 `/` 응답 확인
 - [x] Transfer tracking 계획 보강: 현재 live 데이터에서 대출원금상환이 `type='이체'`가 아니라 `type='지출'`/`금융`으로 적재되는 점을 확인하고, expense-side 재분류 레이어를 계획 문서에 반영
 - [x] 대출상환 분류 정책 확정: raw transaction은 `지출`로 유지하고, transfer tracking은 debt-movement 파생 태그/뷰로만 추가해 지출 분석과 사용자 fixed-cost 분류를 보존
@@ -301,6 +301,7 @@
 
 ## Key Decisions
 - 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 기존 `anomaly_score` cutoff 계약을 유지한다. 다만 응답 `assumptions` 에 threshold가 퍼센트가 아니라 score 기준이며, 표준편차가 있으면 `|delta|/stdev`, 없으면 `|delta|/baseline_avg` 로 계산된다는 설명을 명시한다.
+- 2026-04-08: `spending-anomalies` 기본 호출은 진행 중인 이번 달이 아니라 직전 마감월을 기준으로 본다. 사용자가 partial `end_date` 를 명시한 경우에만 해당 월을 보며, baseline도 이전 월 같은 일자까지만 잘라 비교한다.
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
 - 2026-03-23: 중복 처리는 복합 유니크 대신 시간 커서 기반 증분 적재 방식 채택
 - 2026-03-23: OpenClaw 연동은 하이브리드 (DB readonly + 업로드 API)

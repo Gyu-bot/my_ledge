@@ -580,3 +580,50 @@
 
 - `spending-anomalies` 는 다시 `anomaly_score` cutoff 기반으로 판정한다
 - `assumptions` 는 `threshold` 가 퍼센트가 아니라 score이며, `|delta|/stdev` 또는 `|delta|/baseline_avg` 계산이라는 점을 직접 설명한다
+
+## Spending Anomalies Closed-Month Default
+
+- 사용자 피드백
+  - 진행 중인 월을 그대로 anomaly 대상에 넣으면 월초/월중에는 대부분 왜곡될 수 있음
+  - 기본값은 직전 마감월이어야 하고, partial 비교가 필요하면 이전 월 같은 일자까지 잘라 보는 방식을 제안
+
+### 판단
+
+- 이 피드백이 맞다.
+- anomaly는 월합계 비교 성격이 강해서, 기본값을 partial current month로 두면 false positive/false negative가 모두 커진다.
+- 따라서 기본 호출은 `last closed month` 로 보고, 사용자가 `end_date` 를 명시한 경우에만 partial month를 허용하는 쪽이 안전하다.
+- partial 비교는 이전 월 전체가 아니라 `같은 일자 cutoff` 를 적용해야 의미가 맞는다.
+
+### TDD
+
+- red:
+  - `backend/tests/services/test_analytics_service.py`
+    - `test_get_spending_anomalies_defaults_to_last_closed_month`
+    - `test_get_spending_anomalies_partial_period_uses_same_day_baseline_cutoff`
+  - `backend/tests/api/test_analytics_api.py`
+    - `test_spending_anomalies_endpoint_defaults_to_last_closed_month`
+    - `test_spending_anomalies_endpoint_partial_period_uses_same_day_cutoff`
+  - 현재 로직이 `today` 기준 current month 전체/직전월 전체를 비교하고 있어서 실패하는 것부터 확인
+- green:
+  - `backend/app/services/analytics_service.py`
+    - `end_date is None` 이면 `date.today()` 가 아니라 `직전 마감월 말일`을 reference date로 사용
+    - 명시적 `end_date` 가 월말이 아니면 `partial_cutoff_day` 를 계산
+    - baseline month rows는 `row["date"].day <= partial_cutoff_day` 일 때만 집계
+    - assumptions 문구에 `직전 마감월 기준` 또는 `부분 기간 비교(기준일=..., 이전 월도 N일까지만 집계)` 를 명시
+
+### 실행한 명령
+
+- `cd backend && uv run pytest tests/services/test_analytics_service.py::test_get_spending_anomalies_defaults_to_last_closed_month tests/services/test_analytics_service.py::test_get_spending_anomalies_partial_period_uses_same_day_baseline_cutoff tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_defaults_to_last_closed_month tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_partial_period_uses_same_day_cutoff -q`
+  - 결과: red 확인 후 green `4 passed`
+- `cd backend && uv run pytest tests/services/test_analytics_service.py tests/api/test_analytics_api.py -q`
+  - 결과: `28 passed`
+- `cd backend && uv run ruff check .`
+  - 결과: 통과
+- `cd backend && uv run pytest -q`
+  - 결과: `80 passed`
+
+### 결과
+
+- `spending-anomalies` 기본 호출은 직전 마감월 기준으로 동작한다
+- partial `end_date` 를 넘기면 이전 월 전체가 아니라 같은 일자 cutoff baseline으로 비교한다
+- `assumptions` 에 현재 어떤 비교 모드가 적용됐는지 드러난다

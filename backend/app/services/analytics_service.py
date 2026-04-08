@@ -1,6 +1,6 @@
 import math
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import Select, select
 from sqlalchemy.engine import RowMapping
@@ -378,8 +378,11 @@ async def get_spending_anomalies(
     page: int = 1,
     per_page: int = 10,
 ) -> SpendingAnomaliesResponse:
-    ref_date = end_date or date.today()
+    used_last_closed_month = end_date is None
+    ref_date = _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    assert ref_date is not None
     target_period = _month_key(ref_date)
+    partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
 
     # baseline: baseline_months개월 이전부터 target 전달까지
     year_int = int(target_period[:4])
@@ -393,6 +396,17 @@ async def get_spending_anomalies(
     load_start = date(baseline_start_year, baseline_start_month, 1)
     load_end = ref_date
 
+    # baseline periods
+    baseline_periods: list[str] = []
+    y, m = baseline_start_year, baseline_start_month
+    while _month_key(date(y, m, 1)) < target_period:
+        baseline_periods.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    baseline_period_set = set(baseline_periods)
+
     rows = await _load_analytics_transactions(
         db_session,
         start_date=load_start,
@@ -404,18 +418,10 @@ async def get_spending_anomalies(
     grouped: dict[tuple[str, str], int] = defaultdict(int)
     for row in rows:
         period = _month_key(row["date"])
+        if partial_cutoff_day is not None and period in baseline_period_set and row["date"].day > partial_cutoff_day:
+            continue
         category = row["effective_category_major"] or "미분류"
         grouped[(period, category)] += -row["amount"]
-
-    # baseline periods
-    baseline_periods: list[str] = []
-    y, m = baseline_start_year, baseline_start_month
-    while _month_key(date(y, m, 1)) < target_period:
-        baseline_periods.append(f"{y:04d}-{m:02d}")
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
 
     # 카테고리별 baseline 통계
     all_categories = {cat for (_, cat) in grouped.keys()}
@@ -469,7 +475,14 @@ async def get_spending_anomalies(
         page=resolved_page,
         per_page=per_page,
         items=paged_items,
-        assumptions=f"기준월={target_period}, baseline={baseline_months}개월 평균 대비, threshold={anomaly_threshold} anomaly_score 기준 (표준편차가 있으면 |delta|/stdev, 없으면 |delta|/baseline_avg)",
+        assumptions=_build_spending_anomalies_assumptions(
+            target_period=target_period,
+            baseline_months=baseline_months,
+            anomaly_threshold=anomaly_threshold,
+            used_last_closed_month=used_last_closed_month,
+            partial_cutoff_day=partial_cutoff_day,
+            ref_date=ref_date,
+        ),
     )
 
 
@@ -524,6 +537,44 @@ def _category_value(row: RowMapping, level: TransactionCategoryLevel) -> str:
 
 def _month_key(value: date) -> str:
     return value.strftime("%Y-%m")
+
+
+def _is_month_end(value: date) -> bool:
+    return value.day == _last_day_of_month(value).day
+
+
+def _last_day_of_month(value: date) -> date:
+    if value.month == 12:
+        return date(value.year, 12, 31)
+    return date(value.year, value.month + 1, 1) - timedelta(days=1)
+
+
+def _last_closed_month_end(value: date) -> date:
+    first_day_of_month = date(value.year, value.month, 1)
+    return first_day_of_month - timedelta(days=1)
+
+
+def _build_spending_anomalies_assumptions(
+    *,
+    target_period: str,
+    baseline_months: int,
+    anomaly_threshold: float,
+    used_last_closed_month: bool,
+    partial_cutoff_day: int | None,
+    ref_date: date,
+) -> str:
+    parts = [
+        f"기준월={target_period}",
+        f"baseline={baseline_months}개월 평균 대비",
+    ]
+    if used_last_closed_month:
+        parts.append(f"직전 마감월 기준(as_of={ref_date.isoformat()})")
+    elif partial_cutoff_day is not None:
+        parts.append(f"부분 기간 비교(기준일={ref_date.isoformat()}, 이전 월도 매월 {partial_cutoff_day}일까지만 집계)")
+    parts.append(
+        f"threshold={anomaly_threshold} anomaly_score 기준 (표준편차가 있으면 |delta|/stdev, 없으면 |delta|/baseline_avg)"
+    )
+    return ", ".join(parts)
 
 
 def _previous_period(period: str) -> str:
