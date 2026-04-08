@@ -260,16 +260,28 @@ async def get_income_stability(
     start_date: date | None,
     end_date: date | None,
 ) -> IncomeStabilityResponse:
+    used_last_closed_month = end_date is None
+    ref_date = _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    assert ref_date is not None
+    partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
+
     rows = await _load_analytics_transactions(
         db_session,
         start_date=start_date,
-        end_date=end_date,
+        end_date=ref_date,
         tx_type="수입",
     )
 
     monthly: dict[str, int] = defaultdict(int)
     for row in rows:
-        monthly[_month_key(row["date"])] += row["amount"]
+        row_date = row["date"]
+        if (
+            partial_cutoff_day is not None
+            and row_date < date(ref_date.year, ref_date.month, 1)
+            and row_date.day > partial_cutoff_day
+        ):
+            continue
+        monthly[_month_key(row_date)] += row["amount"]
 
     items = [IncomeMonthlyItem(period=p, income=monthly[p]) for p in sorted(monthly)]
     values = [item.income for item in items]
@@ -280,7 +292,14 @@ async def get_income_stability(
             avg=0,
             stdev=None,
             coefficient_of_variation=None,
-            assumptions="월별 수입 기준, 이체 제외",
+            comparison_mode="partial" if partial_cutoff_day is not None else "closed",
+            reference_date=ref_date,
+            is_partial_period=partial_cutoff_day is not None,
+            assumptions=_build_income_stability_assumptions(
+                used_last_closed_month=used_last_closed_month,
+                partial_cutoff_day=partial_cutoff_day,
+                ref_date=ref_date,
+            ),
         )
 
     avg = round(sum(values) / len(values))
@@ -292,7 +311,14 @@ async def get_income_stability(
         avg=avg,
         stdev=stdev,
         coefficient_of_variation=cv,
-        assumptions="월별 수입 기준, 이체 제외",
+        comparison_mode="partial" if partial_cutoff_day is not None else "closed",
+        reference_date=ref_date,
+        is_partial_period=partial_cutoff_day is not None,
+        assumptions=_build_income_stability_assumptions(
+            used_last_closed_month=used_last_closed_month,
+            partial_cutoff_day=partial_cutoff_day,
+            ref_date=ref_date,
+        ),
     )
 
 
@@ -479,6 +505,9 @@ async def get_spending_anomalies(
         page=resolved_page,
         per_page=per_page,
         items=paged_items,
+        comparison_mode="partial" if partial_cutoff_day is not None else "closed",
+        reference_date=ref_date,
+        is_partial_period=partial_cutoff_day is not None,
         assumptions=_build_spending_anomalies_assumptions(
             target_period=target_period,
             baseline_months=baseline_months,
@@ -581,6 +610,22 @@ def _build_spending_anomalies_assumptions(
         f"threshold={anomaly_threshold} anomaly_score 기준 (표준편차가 있으면 |delta|/stdev, 없으면 |delta|/baseline_avg)"
     )
     parts.append(f"min_delta_amount={min_delta_amount} (baseline 대비 절대 변동액 하한)")
+    return ", ".join(parts)
+
+
+def _build_income_stability_assumptions(
+    *,
+    used_last_closed_month: bool,
+    partial_cutoff_day: int | None,
+    ref_date: date,
+) -> str:
+    parts = ["월별 수입 기준, 이체 제외"]
+    if used_last_closed_month:
+        parts.append(f"직전 마감월 기준(as_of={ref_date.isoformat()})")
+    elif partial_cutoff_day is not None:
+        parts.append(
+            f"부분 기간 비교(기준일={ref_date.isoformat()}, 이전 월도 매월 {partial_cutoff_day}일까지만 집계)"
+        )
     return ", ".join(parts)
 
 

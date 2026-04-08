@@ -39,6 +39,8 @@ class TransactionListResponse(PaginatedResponse):
 
 class TransactionFilterOptionsResponse(BaseModel):
     category_options: list[str]
+    category_minor_options: list[str]
+    category_minor_options_by_major: dict[str, list[str]]
     payment_method_options: list[str]
 
 

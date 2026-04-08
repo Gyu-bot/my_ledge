@@ -21,14 +21,17 @@ export function AssetsPage() {
   const latest = snapshots.data?.items?.[snapshots.data.items.length - 1]
   const snapshotDate = latest?.snapshot_date
   const comparisonData = comparison.data
-  const comparisonMeta = comparisonData?.can_compare
-    ? `${comparisonData.comparison_label}${comparisonData.comparison_days != null ? ` · ${comparisonData.comparison_days}일` : ''}`
-    : comparisonData?.comparison_label
+  const comparisonReference = comparisonData?.baseline?.snapshot_date
+    ? `${comparisonData.baseline.snapshot_date} 대비`
+    : comparisonData?.can_compare
+      ? '이전 스냅샷 대비'
+      : comparisonData?.comparison_label
+  const comparisonMeta = comparisonReference
+    ? `${comparisonReference}${comparisonData?.comparison_days != null ? ` · ${comparisonData.comparison_days}일` : ''}`
+    : undefined
   const compareBadgeTone = comparisonData?.is_stale
     ? 'text-danger border-danger-muted bg-surface-danger'
-    : comparisonData?.is_partial
-      ? 'text-accent border-border-strong bg-surface-bar'
-      : 'text-text-muted border-border bg-surface-bar'
+    : 'text-text-muted border-border bg-surface-bar'
 
   useEffect(() => {
     if (!snapshotDate) return
@@ -49,27 +52,11 @@ export function AssetsPage() {
   const netWorth = latest ? parseFloat(latest.net_worth) : null
   const assetTotal = latest ? parseFloat(latest.asset_total) : null
   const liabilityTotal = latest ? parseFloat(latest.liability_total) : null
-  const netWorthDelta = comparisonData?.delta ? parseFloat(comparisonData.delta.net_worth) : null
-  const assetDelta = comparisonData?.delta ? parseFloat(comparisonData.delta.asset_total) : null
-  const liabilityDelta = comparisonData?.delta ? parseFloat(comparisonData.delta.liability_total) : null
   const investMarketValue = investments.data ? parseFloat(investments.data.totals.market_value) : null
   const investCostBasis = investments.data ? parseFloat(investments.data.totals.cost_basis) : null
   const investReturnPct = investMarketValue != null && investCostBasis != null && investCostBasis > 0
     ? ((investMarketValue - investCostBasis) / investCostBasis) * 100
     : null
-
-  function formatDeltaSub(label: string, amount: number | null, pct: number | null | undefined) {
-    if (amount == null) return label
-    const prefix = amount > 0 ? '+' : amount < 0 ? '-' : ''
-    const pctText = pct != null ? ` · ${pct > 0 ? '+' : pct < 0 ? '' : ''}${formatPct(pct * 100)}` : ''
-    return `${label} · ${prefix}₩ ${formatKRWCompact(amount)}${pctText}`
-  }
-
-  function deltaVariant(amount: number | null, invert = false): 'up' | 'down' | 'neutral' {
-    if (amount == null || amount === 0) return 'neutral'
-    if (invert) return amount < 0 ? 'up' : 'down'
-    return amount > 0 ? 'up' : 'down'
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -78,16 +65,13 @@ export function AssetsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="순자산" value={netWorth != null ? `₩ ${formatKRWCompact(netWorth)}` : '—'}
           className="border-t-2 border-t-accent"
-          sub={comparisonMeta ? formatDeltaSub(comparisonMeta, netWorthDelta, comparisonData?.delta?.net_worth_pct) : undefined}
-          subVariant={deltaVariant(netWorthDelta)} />
+          />
         <KpiCard label="총자산"
           value={assetTotal != null ? `₩ ${formatKRWCompact(assetTotal)}` : '—'}
-          sub={comparisonMeta ? formatDeltaSub(comparisonMeta, assetDelta, comparisonData?.delta?.asset_total_pct) : undefined}
-          subVariant={deltaVariant(assetDelta)} />
+          />
         <KpiCard label="총부채" value={liabilityTotal != null ? `₩ ${formatKRWCompact(liabilityTotal)}` : '—'}
           className="border-t-2 border-t-danger"
-          sub={comparisonMeta ? formatDeltaSub(comparisonMeta, liabilityDelta, comparisonData?.delta?.liability_total_pct) : undefined}
-          subVariant={deltaVariant(liabilityDelta, true)} />
+          />
         <KpiCard label="투자 평가액" value={investMarketValue != null ? `₩ ${formatKRWCompact(investMarketValue)}` : '—'}
           sub={investReturnPct != null ? `원금 대비 ${investReturnPct > 0 ? '+' : ''}${formatPct(investReturnPct)}` : ''}
           subVariant={investReturnPct != null && investReturnPct > 0 ? 'up' : 'down'} />

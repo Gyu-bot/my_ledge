@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { KpiCard } from '../components/ui/KpiCard'
 import { SectionCard } from '../components/ui/SectionCard'
 import { LoadingState } from '../components/ui/LoadingState'
@@ -15,11 +15,19 @@ import { useChromeContext } from '../components/layout/chromeContext'
 export function OverviewPage() {
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const defaultSignalDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const [signalMode, setSignalMode] = useState<'closed' | 'partial'>('closed')
+  const [signalReferenceDate, setSignalReferenceDate] = useState(defaultSignalDate)
   const cashflow = useMonthlyCashflow(6)
   const snapshots = useAssetSnapshots()
-  const incomeStability = useIncomeStability()
+  const signalQuery = signalMode === 'partial' ? { end_date: signalReferenceDate } : {}
+  const incomeStability = useIncomeStability(signalQuery)
   const recurringPayments = useRecurringPayments(1, 1)
-  const spendingAnomalies = useSpendingAnomalies({ page: 1, per_page: 1 })
+  const spendingAnomalies = useSpendingAnomalies(
+    signalMode === 'partial'
+      ? { page: 1, per_page: 1, end_date: signalReferenceDate }
+      : { page: 1, per_page: 1 },
+  )
   const recentTx = useTransactionList({ page: 1, per_page: 5, type: 'all' })
   const categoryBreakdown = useCategoryBreakdown({
     start_month: currentMonth,
@@ -38,6 +46,7 @@ export function OverviewPage() {
   const recurringCount = recurringPayments.data?.total ?? null
   const incomeCV = incomeStability.data?.coefficient_of_variation ?? null
   const incomeLabel = incomeCV == null ? '—' : incomeCV < 0.1 ? '안정' : incomeCV < 0.25 ? '보통' : '불안정'
+  const signalModeLabel = signalMode === 'closed' ? '직전 마감월' : '부분 기간'
 
   useEffect(() => {
     if (snapshotDate) {
@@ -94,7 +103,34 @@ export function OverviewPage() {
            ) : <EmptyState message="현금흐름 데이터가 없습니다" />}
         </SectionCard>
 
-        <SectionCard title="주의 신호">
+        <SectionCard
+          title="주의 신호"
+          meta={signalModeLabel}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="overview-signal-mode" className="sr-only">주의 신호 기준</label>
+              <select
+                id="overview-signal-mode"
+                aria-label="주의 신호 기준"
+                className="text-micro text-text-secondary bg-surface-bar border border-border-subtle rounded-md px-2 py-1"
+                value={signalMode}
+                onChange={(event) => setSignalMode(event.target.value as 'closed' | 'partial')}
+              >
+                <option value="closed">직전 마감월</option>
+                <option value="partial">부분 기간</option>
+              </select>
+              {signalMode === 'partial' ? (
+                <input
+                  aria-label="주의 신호 기준일"
+                  type="date"
+                  className="text-micro text-text-secondary bg-surface-bar border border-border-subtle rounded-md px-2 py-1"
+                  value={signalReferenceDate}
+                  onChange={(event) => setSignalReferenceDate(event.target.value)}
+                />
+              ) : null}
+            </div>
+          }
+        >
           <div className="flex flex-col gap-2">
             {[
               { label: '이상 지출 카테고리', value: anomalyCount, warn: (anomalyCount ?? 0) > 0 },

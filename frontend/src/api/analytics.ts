@@ -3,7 +3,7 @@ import { monthSpanToDateRange, recentMonthsToDateRange } from '../lib/dateRange'
 import type {
   MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse,
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
-  SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery,
+  SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
 } from '../types/analytics'
 
 function buildQuery(params: object): string {
@@ -60,8 +60,8 @@ export const analyticsApi = {
       type: '지출',
     })}`),
 
-  incomeStability: () =>
-    apiFetch<IncomeStabilityResponse>('/analytics/income-stability'),
+  incomeStability: (params: IncomeStabilityQuery = {}) =>
+    apiFetch<IncomeStabilityResponse>(`/analytics/income-stability${buildQuery(params)}`),
 
   recurringPayments: (params: { page?: number; per_page?: number } = {}) =>
     apiFetch<RecurringPaymentsResponse>(`/analytics/recurring-payments${buildQuery(params)}`),

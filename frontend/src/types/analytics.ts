@@ -60,6 +60,9 @@ export interface IncomeStabilityResponse {
   avg: number
   stdev: number | null
   coefficient_of_variation: number | null
+  comparison_mode: 'closed' | 'partial'
+  reference_date: string
+  is_partial_period: boolean
   assumptions: string
 }
 
@@ -97,7 +100,14 @@ export interface SpendingAnomaliesResponse {
   page: number
   per_page: number
   items: SpendingAnomalyItem[]
+  comparison_mode: 'closed' | 'partial'
+  reference_date: string
+  is_partial_period: boolean
   assumptions: string
+}
+
+export interface IncomeStabilityQuery {
+  end_date?: string
 }
 
 export interface SpendingAnomaliesQuery {

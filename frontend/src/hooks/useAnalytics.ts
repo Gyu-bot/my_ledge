@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
-import type { CategoryMoMQuery, SpendingAnomaliesQuery } from '../types/analytics'
+import type { CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery } from '../types/analytics'
 
 export function useMonthlyCashflow(months = 6) {
   return useQuery({
@@ -32,10 +32,10 @@ export function useMerchantSpend(
   })
 }
 
-export function useIncomeStability() {
+export function useIncomeStability(params: IncomeStabilityQuery = {}) {
   return useQuery({
-    queryKey: ['analytics', 'incomeStability'],
-    queryFn: analyticsApi.incomeStability,
+    queryKey: ['analytics', 'incomeStability', params],
+    queryFn: () => analyticsApi.incomeStability(params),
   })
 }
 

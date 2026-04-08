@@ -233,7 +233,7 @@ async def test_list_transaction_filter_options_returns_distinct_visible_values(
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="식비",
-                category_minor=None,
+                category_minor="외식",
                 description="점심",
                 amount=-15000,
                 payment_method="카드 A",
@@ -243,7 +243,7 @@ async def test_list_transaction_filter_options_returns_distinct_visible_values(
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="교통",
-                category_minor=None,
+                category_minor="택시",
                 description="택시",
                 amount=-22000,
                 payment_method="카드 B",
@@ -268,6 +268,11 @@ async def test_list_transaction_filter_options_returns_distinct_visible_values(
     assert response.status_code == 200
     payload = response.json()
     assert payload["category_options"] == ["교통", "식비"]
+    assert payload["category_minor_options"] == ["택시", "외식"]
+    assert payload["category_minor_options_by_major"] == {
+        "교통": ["택시"],
+        "식비": ["외식"],
+    }
     assert payload["payment_method_options"] == ["카드 A", "카드 B"]
 
 

@@ -90,6 +90,13 @@ async def list_transaction_filter_options(
         .distinct()
         .order_by(canonical.c.effective_category_major.asc())
     )
+    category_minor_rows = await db_session.execute(
+        select(canonical.c.effective_category_major, canonical.c.effective_category_minor)
+        .where(canonical.c.effective_category_major.is_not(None))
+        .where(canonical.c.effective_category_minor.is_not(None))
+        .distinct()
+        .order_by(canonical.c.effective_category_major.asc(), canonical.c.effective_category_minor.asc())
+    )
     payment_method_rows = await db_session.execute(
         select(canonical.c.payment_method)
         .where(canonical.c.payment_method.is_not(None))
@@ -97,8 +104,21 @@ async def list_transaction_filter_options(
         .order_by(canonical.c.payment_method.asc())
     )
 
+    category_minor_options_by_major: dict[str, list[str]] = defaultdict(list)
+    category_minor_options: list[str] = []
+    seen_minor_options: set[str] = set()
+    for major, minor in category_minor_rows.all():
+        if not major or not minor:
+            continue
+        category_minor_options_by_major[major].append(minor)
+        if minor not in seen_minor_options:
+            seen_minor_options.add(minor)
+            category_minor_options.append(minor)
+
     return TransactionFilterOptionsResponse(
         category_options=[row[0] for row in category_rows.all() if row[0]],
+        category_minor_options=category_minor_options,
+        category_minor_options_by_major=dict(category_minor_options_by_major),
         payment_method_options=[row[0] for row in payment_method_rows.all() if row[0]],
     )
 

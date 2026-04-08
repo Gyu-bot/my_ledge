@@ -77,6 +77,9 @@ class IncomeStabilityResponse(BaseModel):
     avg: int
     stdev: float | None
     coefficient_of_variation: float | None
+    comparison_mode: str
+    reference_date: date
+    is_partial_period: bool
     assumptions: str
 
 
@@ -116,4 +119,7 @@ class SpendingAnomaliesResponse(BaseModel):
     page: int
     per_page: int
     items: list[SpendingAnomalyItem]
+    comparison_mode: str
+    reference_date: date
+    is_partial_period: bool
     assumptions: str

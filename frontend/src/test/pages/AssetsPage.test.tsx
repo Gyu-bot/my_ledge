@@ -103,11 +103,12 @@ function wrap(ui: React.ReactNode) {
 }
 
 describe('AssetsPage', () => {
-  it('renders snapshot comparison metadata on KPI cards', () => {
-    wrap(<AssetsPage />)
+  it('keeps snapshot comparison copy on summary badges but not on KPI subtext', () => {
+    const { container } = wrap(<AssetsPage />)
 
-    expect(screen.getAllByText('부분 기간 · 7일')).toHaveLength(2)
-    expect(screen.getByText('부분 기간 · 7일 · +₩ 250 · +31.3%')).toBeInTheDocument()
-    expect(screen.getByText('부분 기간 · 7일 · +₩ 300 · +30.0%')).toBeInTheDocument()
+    expect(screen.getAllByText('2026-03-31 대비 · 7일')).toHaveLength(2)
+    const kpiSubs = container.querySelectorAll('[data-testid="kpi-sub"]')
+    expect(kpiSubs).toHaveLength(1)
+    expect(kpiSubs[0]?.textContent).toBe('원금 대비 +20.0%')
   })
 })

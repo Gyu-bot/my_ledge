@@ -2,10 +2,19 @@
 
 ## Current State
 - **Phase:** 안정화 follow-up 유지, frontend token polish와 anomaly default-period/absolute-threshold contract 정렬 완료
-- **Last Worker:** Codex (2026-04-08T12:36+0900, settings/token lab separate feature plan 문서화 완료)
+- **Last Worker:** Codex (2026-04-08T14:51+0900, income stability threshold 설명 보강 완료)
 - **Branch:** main
 
 ## Completed
+- [x] Income stability threshold 설명 보강 완료: backend metrics reference 문서에 `coefficient_of_variation` 의 backend 산출 범위와 frontend label threshold(`안정/보통/불안정`, `낮음/보통/높음`)를 명시
+- [x] Backend API and metrics reference 문서화 완료: 현재 구현된 backend endpoint 전체, 인증 규칙, 주요 response contract, canonical view, upload/snapshot reconcile, analytics 지표 산출 로직을 코드 기준으로 별도 문서에 정리 (`docs/backend-api-and-metrics-reference.md`)
+- [x] Assets KPI sub cleanup 완료: 자산 현황 KPI 카드에서는 `투자 평가액`만 `원금 대비` sub를 유지하고, 순자산/총자산/총부채의 snapshot compare sub는 제거, frontend 전체 검증 재실행
+- [x] Assets snapshot copy cleanup 완료: 자산 현황 KPI/요약 카드에서 `부분 기간` 같은 기간 진단 문구를 제거하고 baseline snapshot date 중심 비교 문구로 정렬, frontend 전체 검증 재실행
+- [x] Overview signal control 완료: 개요 `주의 신호` 카드에 `직전 마감월/부분 기간` 공통 기준 selector 추가, `income-stability`/`spending-anomalies` 응답에 `comparison_mode`, `reference_date`, `is_partial_period` 메타데이터를 포함하도록 확장, backend/frontend 전체 검증 재실행
+- [x] Income stability period-alignment hotfix 완료: `income-stability` 도 `spending-anomalies` 와 같은 규칙으로 직전 마감월 기본값과 partial same-day cutoff 를 적용하도록 정렬, service/API 회귀와 backend 전체 테스트 재검증
+- [x] Workbench 소분류 옵션 fallback hotfix 완료: 실제 구버전 `filter-options` 응답에 소분류 메타데이터가 없을 때도 현재 로드된 거래의 effective category 값으로 소분류 콤보박스를 구성하도록 프론트 fallback 추가, frontend 전체 검증 재실행
+- [x] Workbench 카테고리 세부 UX hotfix 완료: 설명 열 폭 축소, 소분류 열 추가, edit/bulk category 입력을 대분류-소분류 콤보박스로 전환, backend `filter-options` 에 소분류 목록과 대분류별 매핑 추가, backend/frontend 전체 검증 재실행
+- [x] Workbench 거래목록 usability hotfix 완료: 페이지당 40건으로 확대, 현재 페이지 기준 전체 선택 체크박스 추가, 검색 입력 placeholder를 포함 검색 의미에 맞게 정렬, frontend 테스트/린트/typecheck 재검증
 - [x] PRD 작성 (`PRD.md`)
 - [x] AGENTS.md 작성
 - [x] STATUS.md 초기화

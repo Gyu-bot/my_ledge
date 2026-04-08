@@ -392,6 +392,131 @@ async def test_income_stability_endpoint_returns_stats(
     assert "assumptions" in data
 
 
+async def test_income_stability_endpoint_defaults_to_last_closed_month(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    class FrozenDate(date):
+        @classmethod
+        def today(cls) -> "FrozenDate":
+            return cls(2026, 4, 8)
+
+    monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
+
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 4, 5),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="보너스",
+            amount=9000000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get("/api/v1/analytics/income-stability")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [item["period"] for item in data["items"]] == ["2026-01", "2026-02", "2026-03"]
+    assert data["avg"] == 3000000
+    assert data["comparison_mode"] == "closed"
+    assert data["reference_date"] == "2026-03-31"
+    assert data["is_partial_period"] is False
+    assert "직전 마감월 기준" in data["assumptions"]
+
+
+async def test_income_stability_endpoint_partial_period_uses_same_day_cutoff(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 3, 5),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="급여",
+            amount=1000000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 20),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="인센티브",
+            amount=9000000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 4, 6),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="급여",
+            amount=1100000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/income-stability",
+        params={"start_date": "2026-03-01", "end_date": "2026-04-07"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"] == [
+        {"period": "2026-03", "income": 1000000},
+        {"period": "2026-04", "income": 1100000},
+    ]
+    assert data["avg"] == 1050000
+    assert data["coefficient_of_variation"] == 0.0476
+    assert data["comparison_mode"] == "partial"
+    assert data["reference_date"] == "2026-04-07"
+    assert data["is_partial_period"] is True
+    assert "부분 기간 비교" in data["assumptions"]
+
+
 # ── P1: recurring-payments ────────────────────────────────────────────────────
 
 async def test_recurring_payments_endpoint_detects_monthly(
@@ -815,6 +940,9 @@ async def test_spending_anomalies_endpoint_defaults_to_last_closed_month(
     assert response.status_code == 200
     payload = response.json()
     assert {item["category"] for item in payload["items"]} == {"식비"}
+    assert payload["comparison_mode"] == "closed"
+    assert payload["reference_date"] == "2026-03-31"
+    assert payload["is_partial_period"] is False
     assert "min_delta_amount=100000" in payload["assumptions"]
     assert all(item["period"] == "2026-03" for item in payload["items"])
     assert "직전 마감월 기준" in payload["assumptions"]
@@ -866,4 +994,7 @@ async def test_spending_anomalies_endpoint_partial_period_uses_same_day_cutoff(
     assert response.status_code == 200
     payload = response.json()
     assert payload["items"] == []
+    assert payload["comparison_mode"] == "partial"
+    assert payload["reference_date"] == "2026-04-07"
+    assert payload["is_partial_period"] is True
     assert "부분 기간 비교" in payload["assumptions"]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertBanner } from '../components/ui/AlertBanner'
 import { Pagination } from '../components/ui/Pagination'
 import { LoadingState } from '../components/ui/LoadingState'
@@ -45,8 +45,10 @@ interface EditDraft {
 }
 
 export function WorkbenchPage() {
+  const PAGE_SIZE = 40
   const hasWrite = useWriteAccess()
   const { setMetaBadge } = useChromeContext()
+  const selectPageCheckboxRef = useRef<HTMLInputElement | null>(null)
 
   // Filter
   const [filterDraft, setFilterDraft] = useState<FilterState>(DEFAULT_FILTER)
@@ -79,7 +81,7 @@ export function WorkbenchPage() {
 
   // Queries
   const filterParams = {
-    page, per_page: 20,
+    page, per_page: PAGE_SIZE,
     search: appliedFilter.search || undefined,
     type: appliedFilter.type || undefined,
     source: appliedFilter.source || undefined,
@@ -132,7 +134,7 @@ export function WorkbenchPage() {
     setEditDraft({
       merchant: tx.merchant,
       category_major_user: tx.category_major_user ?? tx.effective_category_major,
-      category_minor_user: tx.category_minor_user ?? '',
+      category_minor_user: tx.category_minor_user ?? tx.effective_category_minor ?? '',
       cost_kind: tx.cost_kind ?? '',
       fixed_cost_necessity: tx.fixed_cost_necessity ?? '',
       memo: tx.memo ?? '',
@@ -223,6 +225,18 @@ export function WorkbenchPage() {
   }
   const isReadOnly = !hasWrite
   const hasSelection = selectedIds.size > 0
+  const visibleSelectableIds = txList.data?.items
+    .filter((tx) => !tx.is_deleted)
+    .map((tx) => tx.id) ?? []
+  const allVisibleSelected = visibleSelectableIds.length > 0
+    && visibleSelectableIds.every((id) => selectedIds.has(id))
+  const someVisibleSelected = visibleSelectableIds.some((id) => selectedIds.has(id))
+
+  useEffect(() => {
+    if (selectPageCheckboxRef.current) {
+      selectPageCheckboxRef.current.indeterminate = someVisibleSelected && !allVisibleSelected
+    }
+  }, [allVisibleSelected, someVisibleSelected])
 
   async function handleReset() {
     if (resetConfirm !== RESET_LABEL[resetScope]) return
@@ -238,6 +252,50 @@ export function WorkbenchPage() {
 
   const inputCls = 'text-caption text-text-secondary bg-surface-bar border border-border-subtle rounded-md px-2.5 py-1.5'
   const editInputCls = 'text-caption text-text-primary bg-border-subtle border border-border-strong rounded px-1.5 py-1 w-full'
+  const fallbackMinorOptionsByMajor: Record<string, string[]> = {}
+  const fallbackMinorOptions: string[] = []
+  const seenFallbackMinorOptions = new Set<string>()
+
+  for (const tx of txList.data?.items ?? []) {
+    const major = tx.effective_category_major
+    const minor = tx.effective_category_minor
+    if (!major || !minor) continue
+
+    if (!fallbackMinorOptionsByMajor[major]) fallbackMinorOptionsByMajor[major] = []
+    if (!fallbackMinorOptionsByMajor[major].includes(minor)) {
+      fallbackMinorOptionsByMajor[major].push(minor)
+    }
+    if (!seenFallbackMinorOptions.has(minor)) {
+      seenFallbackMinorOptions.add(minor)
+      fallbackMinorOptions.push(minor)
+    }
+  }
+
+  const categoryMinorOptionsByMajor = Object.keys(filterOptions.data?.category_minor_options_by_major ?? {}).length > 0
+    ? (filterOptions.data?.category_minor_options_by_major ?? {})
+    : fallbackMinorOptionsByMajor
+  const allCategoryMinorOptions = (filterOptions.data?.category_minor_options?.length ?? 0) > 0
+    ? (filterOptions.data?.category_minor_options ?? [])
+    : fallbackMinorOptions
+
+  function getMinorOptions(major: string | undefined) {
+    if (!major) return allCategoryMinorOptions
+    return categoryMinorOptionsByMajor[major] ?? []
+  }
+
+  function toggleSelectVisible() {
+    if (editingId !== null || visibleSelectableIds.length === 0) return
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        visibleSelectableIds.forEach((id) => next.delete(id))
+      } else {
+        visibleSelectableIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -276,7 +334,7 @@ export function WorkbenchPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className={`${inputCls} w-36`}
-            placeholder="🔍  거래처·설명 검색"
+            placeholder="🔍  거래처·설명 포함 검색"
             value={filterDraft.search}
             onChange={(e) => setFilterDraft((f) => ({ ...f, search: e.target.value }))}
           />
@@ -330,6 +388,36 @@ export function WorkbenchPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
           {(['거래처', '대분류', '소분류', '고정/변동', '필수여부', '메모'] as const).map((label) => {
             const key: keyof EditDraft = label === '거래처' ? 'merchant' : label === '대분류' ? 'category_major_user' : label === '소분류' ? 'category_minor_user' : label === '고정/변동' ? 'cost_kind' : label === '필수여부' ? 'fixed_cost_necessity' : 'memo'
+            if (label === '대분류') return (
+              <div key={label} className="flex items-center gap-1.5">
+                <span className="text-caption text-text-faint">{label}</span>
+                <select
+                  className={`${inputCls} py-1`}
+                  value={bulkDraft.category_major_user ?? ''}
+                  onChange={(e) => setBulkDraft((b) => ({
+                    ...b,
+                    category_major_user: e.target.value,
+                    category_minor_user: '',
+                  }))}
+                >
+                  <option value="">— 선택 —</option>
+                  {filterOptions.data?.category_options.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )
+            if (label === '소분류') return (
+              <div key={label} className="flex items-center gap-1.5">
+                <span className="text-caption text-text-faint">{label}</span>
+                <select
+                  className={`${inputCls} py-1`}
+                  value={bulkDraft.category_minor_user ?? ''}
+                  onChange={(e) => setBulkDraft((b) => ({ ...b, category_minor_user: e.target.value }))}
+                >
+                  <option value="">— 선택 —</option>
+                  {getMinorOptions(bulkDraft.category_major_user).map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )
             if (label === '고정/변동') return (
               <div key={label} className="flex items-center gap-1.5">
                 <span className="text-caption text-text-faint">{label}</span>
@@ -371,7 +459,7 @@ export function WorkbenchPage() {
               <span className="text-micro text-warn border border-warn-muted bg-warn-dim px-2 py-0.5 rounded-full">read-only</span>
             ) : null}
             <span className="text-micro text-text-muted bg-surface-bar border border-border-subtle px-2 py-0.5 rounded-full">
-              {page} / {Math.ceil((txList.data?.total ?? 0) / 20)} 페이지 · {txList.data?.total ?? 0}건
+              {page} / {Math.ceil((txList.data?.total ?? 0) / PAGE_SIZE)} 페이지 · {txList.data?.total ?? 0}건
             </span>
           </div>
         </div>
@@ -382,16 +470,28 @@ export function WorkbenchPage() {
              <table className="w-full border-collapse text-caption" style={{ tableLayout: 'fixed' }}>
                <colgroup>
                  <col style={{ width: 28 }} /><col style={{ width: 52 }} />
-                 <col style={{ width: 150 }} /><col style={{ width: 100 }} />
-                 <col style={{ width: 88 }} /><col style={{ width: 56 }} />
+                 <col style={{ width: 128 }} /><col style={{ width: 100 }} />
+                 <col style={{ width: 80 }} /><col style={{ width: 76 }} />
+                 <col style={{ width: 56 }} />
                  <col style={{ width: 58 }} /><col style={{ width: 72 }} />
                  <col style={{ width: 60 }} /><col style={{ width: 80 }} />
                  <col style={{ width: 60 }} />
                </colgroup>
                <thead>
                  <tr>
-                   {['', '날짜', '설명', '거래처', '카테고리', '고정/변동', '필수여부', '메모', '상태', '금액', '동작'].map((h, i) => (
-                     <th key={i} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{h}</th>
+                   <th className="text-micro text-text-ghost px-2 py-2 text-left font-medium">
+                     <input
+                       ref={selectPageCheckboxRef}
+                       type="checkbox"
+                       aria-label="현재 페이지 전체 선택"
+                       checked={allVisibleSelected}
+                       disabled={editingId !== null || visibleSelectableIds.length === 0}
+                       onChange={toggleSelectVisible}
+                       className="w-3 h-3 accent-accent disabled:opacity-40"
+                     />
+                   </th>
+                   {['날짜', '설명', '거래처', '대분류', '소분류', '고정/변동', '필수여부', '메모', '상태', '금액', '동작'].map((h) => (
+                     <th key={h} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{h}</th>
                    ))}
                  </tr>
                </thead>
@@ -424,10 +524,20 @@ export function WorkbenchPage() {
                        </td>
                        <td className="px-2 py-2">
                          {isEditing
-                           ? <select className={editInputCls} value={editDraft.category_major_user ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, category_major_user: e.target.value }))}>
+                           ? <select className={editInputCls} value={editDraft.category_major_user ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, category_major_user: e.target.value, category_minor_user: '' }))}>
+                               <option value="">—</option>
                                {filterOptions.data?.category_options.map((c) => <option key={c} value={c}>{c}</option>)}
                              </select>
                            : <span className="text-text-faint">{tx.effective_category_major}</span>
+                         }
+                       </td>
+                       <td className="px-2 py-2">
+                         {isEditing
+                           ? <select className={editInputCls} value={editDraft.category_minor_user ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, category_minor_user: e.target.value }))}>
+                               <option value="">—</option>
+                               {getMinorOptions(editDraft.category_major_user).map((c) => <option key={c} value={c}>{c}</option>)}
+                             </select>
+                           : <span className="text-text-faint">{tx.effective_category_minor ?? '—'}</span>
                          }
                        </td>
                        <td className="px-2 py-2">
@@ -481,7 +591,7 @@ export function WorkbenchPage() {
                  })}
                </tbody>
              </table>
-             <Pagination page={page} perPage={20} total={txList.data.total} onPageChange={setPage} />
+             <Pagination page={page} perPage={PAGE_SIZE} total={txList.data.total} onPageChange={setPage} />
            </div>
          ) : <EmptyState message="조건에 맞는 거래가 없습니다" />}
       </div>

@@ -601,6 +601,135 @@ async def test_get_income_stability_empty_returns_defaults(
     assert response.items == []
 
 
+async def test_get_income_stability_defaults_to_last_closed_month(
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    class FrozenDate(date):
+        @classmethod
+        def today(cls) -> "FrozenDate":
+            return cls(2026, 4, 8)
+
+    monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
+
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 25),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="월급",
+            amount=3000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 4, 5),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="보너스",
+            amount=9000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_income_stability(
+        db_session,
+        start_date=None,
+        end_date=None,
+    )
+
+    assert [item.model_dump() for item in response.items] == [
+        {"period": "2026-01", "income": 3000},
+        {"period": "2026-02", "income": 3000},
+        {"period": "2026-03", "income": 3000},
+    ]
+    assert response.avg == 3000
+    assert response.coefficient_of_variation == 0.0
+    assert response.comparison_mode == "closed"
+    assert response.reference_date == date(2026, 3, 31)
+    assert response.is_partial_period is False
+    assert "직전 마감월 기준" in response.assumptions
+
+
+async def test_get_income_stability_partial_period_uses_same_day_baseline_cutoff(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 3, 5),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="급여",
+            amount=1000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 20),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="인센티브",
+            amount=9000,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 4, 6),
+            tx_time=time(9, 0),
+            tx_type="수입",
+            category_major="급여",
+            category_minor=None,
+            description="급여",
+            amount=1100,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_income_stability(
+        db_session,
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 4, 7),
+    )
+
+    assert [item.model_dump() for item in response.items] == [
+        {"period": "2026-03", "income": 1000},
+        {"period": "2026-04", "income": 1100},
+    ]
+    assert response.avg == 1050
+    assert response.coefficient_of_variation == 0.0476
+    assert response.comparison_mode == "partial"
+    assert response.reference_date == date(2026, 4, 7)
+    assert response.is_partial_period is True
+    assert "부분 기간 비교" in response.assumptions
+
+
 # ── P1: recurring-payments ────────────────────────────────────────────────────
 
 async def test_get_recurring_payments_detects_monthly(
@@ -987,6 +1116,9 @@ async def test_get_spending_anomalies_defaults_to_last_closed_month(
     assert response.items
     assert response.items[0].period == "2026-03"
     assert {item.category for item in response.items} == {"식비"}
+    assert response.comparison_mode == "closed"
+    assert response.reference_date == date(2026, 3, 31)
+    assert response.is_partial_period is False
     assert "min_delta_amount=100000" in response.assumptions
     assert "직전 마감월 기준" in response.assumptions
 
@@ -1036,4 +1168,7 @@ async def test_get_spending_anomalies_partial_period_uses_same_day_baseline_cuto
     )
 
     assert response.items == []
+    assert response.comparison_mode == "partial"
+    assert response.reference_date == date(2026, 4, 7)
+    assert response.is_partial_period is True
     assert "부분 기간 비교" in response.assumptions

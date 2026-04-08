@@ -34,6 +34,8 @@ export interface TransactionListResponse {
 
 export interface TransactionFilterOptionsResponse {
   category_options: string[]
+  category_minor_options: string[]
+  category_minor_options_by_major: Record<string, string[]>
   payment_method_options: string[]
 }
 

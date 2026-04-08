@@ -1,5 +1,363 @@
 # 2026-04-08 Codex
 
+## Income Stability Threshold Documentation Follow-up
+
+- 사용자 요청
+  - `income stability` 로직 문서에 `불안정` 판단 기준값 설명이 없다는 피드백
+
+### 확인 결과
+
+- backend `income-stability` endpoint는 `coefficient_of_variation` 숫자만 계산해 반환
+- `안정/보통/불안정`, `낮음/보통/높음` 해석은 현재 frontend page logic에 있음
+  - `OverviewPage`: `< 0.1`, `< 0.25`, 그 이상
+  - `InsightsPage`: `< 0.1`, `< 0.25`, 그 이상
+- 즉 누락된 건 계산식이 아니라 **threshold 해석 위치와 값 설명**이었음
+
+### 대응
+
+- `docs/backend-api-and-metrics-reference.md`
+  - `Income Stability` 섹션에
+    - backend는 CV만 계산한다는 점
+    - 현재 frontend label threshold 값
+    - threshold 변경 포인트가 frontend라는 점
+    를 명시
+
+## Backend API And Metrics Reference Documentation
+
+- 사용자 요청
+  - `documentation-engineer` 를 써서 현재 backend에 구현된 모든 API 설명/응답과 canonical view 및 주요 지표 산출 로직을 별도 문서로 저장해 달라는 요청
+
+### 진행 메모
+
+- `documentation-engineer` subagent를 두 차례 시도했지만 둘 다 context window 한도로 종료됨
+- 문서 자체는 메인 세션에서 코드 기준으로 직접 정리
+- 기존 `docs/backend-api-ssot.md` 는 live contract 요약에 가깝고, 이번 문서는 엔지니어용 구현 설명서로 분리
+
+### 작성 범위
+
+- `/api/v1` 전체 endpoint 목록
+- 인증 요구사항
+- request/query/body와 response model의 핵심 필드
+- `vw_transactions_effective`, `vw_category_monthly_spend` canonical view
+- 주요 서비스 로직:
+  - transaction read/filter/search/effective category
+  - upload reconcile / snapshot replace
+  - asset snapshot compare
+  - monthly cashflow / category mom / fixed cost / merchant spend
+  - payment method patterns / income stability / recurring payments / spending anomalies
+
+### 결과
+
+- 새 문서 저장:
+  - `docs/backend-api-and-metrics-reference.md`
+
+## Assets KPI Sub Cleanup
+
+- 사용자 요청
+  - 자산 현황 페이지에서 KPI 카드 중 `투자 평가액`만 `원금 대비` 텍스트를 남기고, 나머지 KPI 카드의 스냅샷 대비 sub는 제거해 달라는 요청
+
+### 판단
+
+- 이전 턴에서 KPI와 요약 카드의 snapshot compare 문구를 함께 정리했지만, 실제 요구는 KPI 카드의 보조 문구 제거가 더 강했음
+- KPI는 한눈에 현재 값만 보여주는 역할이므로 `순자산`, `총자산`, `총부채`는 value-only가 더 맞고, `투자 평가액`만 원금 대비 해석을 유지하는 편이 적절
+
+### TDD
+
+- red
+  - `frontend/src/test/pages/AssetsPage.test.tsx`
+  - 요약 카드 badge에는 snapshot compare 문구가 남아도 되지만, KPI sub는 `투자 평가액` 카드 1개만 남아야 한다는 테스트로 조정
+  - 실행 결과: KPI 4장 모두 `data-testid="kpi-sub"` 를 렌더링하고 있어 실패 확인
+- green
+  - `frontend/src/pages/AssetsPage.tsx`
+  - `순자산`, `총자산`, `총부채` 의 `sub`, `subVariant` 제거
+  - `투자 평가액` 만 `원금 대비` sub 유지
+
+### 실행한 명령
+
+- `cd frontend && npm test -- src/test/pages/AssetsPage.test.tsx`
+  - 결과: `1 passed`
+- `cd frontend && npm test`
+  - 결과: `69 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 자산 현황 KPI 카드에서 `투자 평가액`만 보조 텍스트 유지
+- `순자산`, `총자산`, `총부채`는 현재 값만 표시
+
+## Assets Snapshot Copy Cleanup
+
+- 사용자 요청
+  - 자산 현황 페이지는 기간 누적 비교가 아니라 스냅샷 비교인데 KPI 카드와 요약 카드에 `부분 기간` 텍스트가 보이는 건 어색하니 정리해 달라는 요청
+
+### 판단
+
+- `frontend/src/pages/AssetsPage.tsx` 는 `comparison_label` 을 그대로 KPI sub와 투자/대출 badge에 재사용하고 있었고, 이 값이 `부분 기간 · 7일`처럼 보이게 만들고 있었음
+- 자산 화면은 기간 진단이 아니라 baseline snapshot 대비 변화 해석이 핵심이므로, 표현도 `이전 스냅샷/기준 스냅샷 대비` 중심으로 바꾸는 것이 맞음
+
+### TDD
+
+- red
+  - `frontend/src/test/pages/AssetsPage.test.tsx`
+  - 자산 페이지에서는 `부분 기간` 문구가 보이지 않고, baseline snapshot date 기준 비교 문구가 보여야 한다는 테스트로 변경
+  - 실행 결과: 기존 `부분 기간 · 7일` 문자열이 그대로 노출되어 실패 확인
+- green
+  - `frontend/src/pages/AssetsPage.tsx`
+  - `comparison_label` 대신 baseline snapshot date 기반 `YYYY-MM-DD 대비 · N일` 문구를 사용하도록 정리
+  - non-stale badge tone도 일반 snapshot compare 톤으로 단순화
+
+### 실행한 명령
+
+- `cd frontend && npm test -- src/test/pages/AssetsPage.test.tsx`
+  - 결과: `1 passed`
+- `cd frontend && npm test`
+  - 결과: `69 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 자산 현황 KPI/투자/대출 카드에서 `부분 기간` 문구 제거
+- baseline snapshot date 중심의 비교 문구만 남겨 자산 화면 의미와 맞도록 정리
+
+## Overview Signal Control And Analytics Metadata
+
+- 사용자 요청
+  - 개요 페이지 `주의 신호` 카드에도 `이상 지출` 카드처럼 `직전 마감월 / 부분 기간` 선택 UI를 넣고, API 응답에도 마감월/부분기간 여부 메타데이터를 포함해 달라는 요청
+  - 공통 기준 1개를 카드 전체에 적용하는 1번 방식으로 확정
+
+### 판단
+
+- `주의 신호` 카드의 `이상 지출`과 `수입 안정성`은 같은 시간 기준으로 읽히는 것이 맞아서, 지표별 개별 control보다 카드 공통 control이 더 적절
+- API 응답도 assumptions 문자열 파싱이 아니라 구조화된 메타데이터를 내려야 프론트가 안정적으로 소비 가능
+
+### TDD
+
+- red
+  - `backend/tests/services/test_analytics_service.py`
+  - `backend/tests/api/test_analytics_api.py`
+  - `income-stability`, `spending-anomalies` 응답에 `comparison_mode`, `reference_date`, `is_partial_period` 이 포함되어야 한다는 테스트 추가
+  - `frontend/src/test/pages/OverviewPage.test.tsx`
+  - 개요 `주의 신호` 카드에 공통 기준 selector가 있어야 하고, partial 전환 시 `useIncomeStability` 와 `useSpendingAnomalies` 가 같은 기준일로 다시 호출되어야 한다는 테스트 추가
+  - 실행 결과: 응답 메타데이터/selector 모두 없어 실패 확인
+- green
+  - `backend/app/schemas/analytics.py`
+  - `backend/app/services/analytics_service.py`
+  - `frontend/src/types/analytics.ts`
+  - `frontend/src/api/analytics.ts`
+  - `frontend/src/hooks/useAnalytics.ts`
+  - `frontend/src/pages/OverviewPage.tsx`
+  - analytics 응답 메타데이터 추가, `useIncomeStability(params)` 확장, Overview 공통 기준 selector + partial date input 구현
+
+### 실행한 명령
+
+- `cd backend && uv run pytest tests/services/test_analytics_service.py tests/api/test_analytics_api.py -q`
+  - 결과: `34 passed`
+- `cd frontend && npm test -- src/test/pages/OverviewPage.test.tsx`
+  - 결과: `3 passed`
+- `cd backend && uv run pytest -q`
+  - 결과: `86 passed`
+- `cd frontend && npm test`
+  - 결과: `69 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 개요 `주의 신호` 카드에서 `직전 마감월 / 부분 기간` 공통 기준을 선택 가능
+- partial 선택 시 `수입 안정성`과 `이상 지출`이 같은 기준일을 공유
+- 두 analytics 응답 모두 구조화된 기간 메타데이터를 포함해 프론트가 assumptions 문자열에 의존하지 않게 됨
+
+## Income Stability Period Alignment Hotfix
+
+- 사용자 요청
+  - 개요 페이지 `주의 신호` 카드에서 `수입 안정성`도 `이상 지출`과 같은 기준월/부분기간 규칙을 써야 하지 않느냐는 질의
+  - endpoint 레벨에서 맞추는 1번 방식으로 정렬 요청
+
+### 원인 조사
+
+- `backend/app/services/analytics_service.py`
+  - `get_spending_anomalies()` 는 이미
+    - `end_date=None` 이면 직전 마감월 기준
+    - partial `end_date` 이면 이전 월도 같은 일자 cutoff
+    를 적용하고 있었음
+  - 반면 `get_income_stability()` 는 단순히 전달받은 기간의 월별 수입 합계만 계산하고, default closed-month / partial cutoff 로직이 전혀 없었음
+- `frontend/src/pages/OverviewPage.tsx`
+  - 개요 페이지는 `useIncomeStability()` 와 `useSpendingAnomalies({ page: 1, per_page: 1 })` 를 함께 쓰고 있어, 같은 `주의 신호` 카드 안에서 시간 기준이 서로 달랐음
+
+### TDD
+
+- red
+  - `backend/tests/services/test_analytics_service.py`
+  - `backend/tests/api/test_analytics_api.py`
+  - `income-stability` 도
+    - 기본: 직전 마감월만 포함
+    - partial `end_date`: 이전 월 same-day cutoff 적용
+    해야 한다는 테스트 추가
+  - 실행 결과: 현재 월이 포함되고 이전 월 cutoff도 적용되지 않아 실패 확인
+- green
+  - `backend/app/services/analytics_service.py`
+  - `get_income_stability()` 에 `ref_date`, `used_last_closed_month`, `partial_cutoff_day` 로직 추가
+  - anomaly와 동일한 helper 패턴으로 assumptions 문구까지 정렬
+
+### 실행한 명령
+
+- `cd backend && uv run pytest tests/services/test_analytics_service.py -q`
+  - 결과: `18 passed`
+- `cd backend && uv run pytest tests/api/test_analytics_api.py -q`
+  - 결과: `16 passed`
+- `cd backend && uv run pytest -q`
+  - 결과: `86 passed`
+
+### 결과
+
+- `income-stability` 는 이제 `spending-anomalies` 와 같은 기준으로 계산됨
+- 개요 페이지 `수입 안정성`도 별도 프론트 수정 없이 직전 마감월 기준/partial same-day cutoff 규칙을 자동으로 따름
+
+## Workbench Subcategory Fallback Hotfix
+
+- 사용자 요청
+  - 소분류 콤보박스에 실제 선택값이 비어 있고, 현재 데이터의 카테고리 소분류값으로 옵션을 만들어야 할 것 같다는 피드백
+
+### 원인 조사
+
+- 실제 실행 중인 API 응답을 확인:
+  - `curl -s http://127.0.0.1:8000/api/v1/transactions/filter-options`
+  - 결과: `category_minor_options`, `category_minor_options_by_major` 필드가 없는 구버전 응답
+- 즉 저장소 코드는 최신이지만, 현재 떠 있는 backend 인스턴스는 이전 계약을 그대로 내리고 있었음
+- 프론트는 새 필드가 있다고 가정하고 있었기 때문에, 구버전 응답을 받으면 소분류 옵션이 비어 버렸음
+
+### 대응
+
+- `frontend/src/pages/WorkbenchPage.tsx`
+  - `filter-options` 응답에 소분류 메타데이터가 없거나 비어 있으면 `txList.data.items` 의 `effective_category_major`, `effective_category_minor` 를 사용해 fallback 옵션 생성
+  - 대분류별 fallback map과 전역 소분류 fallback list를 모두 구성
+- 이 보강으로 backend가 구버전 응답을 주더라도 현재 화면에 로드된 거래 기준으로 소분류 콤보박스가 채워짐
+
+### TDD
+
+- red
+  - `frontend/src/test/pages/WorkbenchPage.test.tsx`
+  - `filter-options` 응답에 소분류 메타데이터가 비어 있을 때도 현재 transaction list 데이터에서 소분류 옵션이 보여야 한다는 테스트 추가
+  - 실행 결과: 소분류 option 없음으로 실패 확인
+- green
+  - `frontend/src/pages/WorkbenchPage.tsx`
+  - fallback 옵션 생성 로직 추가
+
+### 실행한 명령
+
+- `cd frontend && npm test -- src/test/pages/WorkbenchPage.test.tsx`
+  - 결과: `6 passed`
+- `cd frontend && npm test`
+  - 결과: `68 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 구버전 backend `filter-options` 응답에서도 소분류 콤보박스가 현재 로드된 거래 기준으로 채워짐
+- backend를 재기동하면 서버 제공 옵션을 우선 사용하고, 그렇지 않으면 fallback이 동작
+
+## Workbench Subcategory Column And Select Hotfix
+
+- 사용자 요청
+  - 거래 작업대에서 설명 열 폭을 조금 줄이고, 카테고리 소분류 열을 추가해 달라는 요청
+  - 일괄수정 폼에서도 대분류/소분류를 자유입력 대신 콤보박스로 바꿔 달라는 요청
+
+### 판단
+
+- 프론트만 수정하면 소분류 콤보박스를 제대로 채울 수 없어서 backend `/api/v1/transactions/filter-options` 계약 확장이 필요했음
+- 소분류는 전역 목록보다 대분류에 따라 좁혀지는 것이 맞아서 `category_minor_options` 와 `category_minor_options_by_major` 를 함께 추가
+- edit row와 bulk form 모두 같은 옵션 소스를 쓰도록 맞추고, 대분류 변경 시 소분류 선택은 초기화
+
+### TDD
+
+- red
+  - `backend/tests/api/test_transactions_api.py`
+  - filter-options 응답에 소분류 목록/대분류별 소분류 매핑이 포함되어야 한다는 테스트 추가
+  - `frontend/src/test/pages/WorkbenchPage.test.tsx`
+  - 거래 테이블에 effective 소분류가 보여야 하고, bulk panel category 입력이 select 기반이어야 한다는 테스트 추가
+- green
+  - `backend/app/schemas/transaction.py`
+  - `backend/app/services/transactions_service.py`
+  - `frontend/src/types/transaction.ts`
+  - `frontend/src/pages/WorkbenchPage.tsx`
+  - filter-options 응답 확장, 설명 열 폭 축소, 소분류 열 추가, row edit/bulk edit category select 연결
+
+### 실행한 명령
+
+- `cd backend && uv run pytest tests/api/test_transactions_api.py -q`
+  - 결과: `8 passed`
+- `cd frontend && npm test -- src/test/pages/WorkbenchPage.test.tsx`
+  - 결과: `5 passed`
+- `cd backend && uv run pytest -q`
+  - 결과: `82 passed`
+- `cd frontend && npm test`
+  - 결과: `67 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 거래 작업대 테이블에 소분류 열이 추가되고 설명 열 폭은 더 compact 해짐
+- 단건 수정과 일괄수정 모두 대분류/소분류를 콤보박스로 선택 가능
+- 소분류 옵션은 대분류에 따라 좁혀져 잘못된 조합 입력을 줄임
+- backend/frontend 전체 검증까지 green
+
+## Workbench Transaction Table Usability Hotfix
+
+- 사용자 요청
+  - 거래 작업대에서 한 페이지에 보이는 거래 수를 늘리고, 현재 필터/페이지에 보이는 거래를 한 번에 선택할 수 있게 해 달라는 요청
+  - 검색은 완전일치가 아니라 포함 검색으로 동작하게 해 달라는 요청
+
+### 판단
+
+- backend `/api/v1/transactions` 검색은 이미 `ILIKE %keyword%` 기반 포함 검색이라 검색 엔진 로직을 바꿀 필요는 없었음
+- 실제 수정 포인트는 frontend `WorkbenchPage` 의 page size 고정값과 row-by-row 선택 UX였음
+- 선택 범위는 사용자 확인에 따라 "필터 결과 전체"가 아니라 "현재 페이지에 보이는 40건" 기준으로 제한
+
+### TDD
+
+- red
+  - `frontend/src/test/pages/WorkbenchPage.test.tsx`
+  - `per_page=40` 으로 조회해야 한다는 테스트와, header checkbox 클릭 시 현재 페이지의 visible row 전체가 선택되어야 한다는 테스트를 먼저 추가
+  - 실행 결과: `per_page=20` 고정과 header select-all 부재로 실패 확인
+- green
+  - `frontend/src/pages/WorkbenchPage.tsx`
+  - `PAGE_SIZE=40` 상수화
+  - header checkbox 추가, 현재 페이지 visible row 기준 전체 선택/해제 로직 추가
+  - 부분 선택 시 indeterminate 상태 반영
+  - 검색 placeholder를 `거래처·설명 포함 검색` 으로 조정
+
+### 실행한 명령
+
+- `cd frontend && npm test -- src/test/pages/WorkbenchPage.test.tsx`
+  - 결과: red 확인 후 green 적용 뒤 `4 passed`
+- `cd frontend && npm test`
+  - 결과: `66 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+
+### 결과
+
+- 거래 작업대는 한 페이지에 40건씩 표시
+- 현재 페이지에 보이는 삭제되지 않은 거래를 header checkbox 하나로 일괄 선택/해제 가능
+- 검색 UI 문구는 실제 포함 검색 계약과 일치하도록 정렬
+- frontend 회귀, lint, typecheck 모두 green
+
 ## Desktop Sidebar Collapse
 
 - 사용자 요청
