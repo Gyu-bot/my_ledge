@@ -314,7 +314,6 @@ export function SpendingPage() {
       <SectionCard
         title="거래처별 지출 비중"
         meta={breakdownMeta}
-        description="카테고리 비중을 먼저 보고, 카테고리를 눌러 거래처 단위로 드릴다운합니다."
       >
         {merchantTreemap.isLoading ? <LoadingState /> :
          treemapData.length > 0 ? (

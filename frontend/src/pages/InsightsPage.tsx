@@ -174,7 +174,7 @@ export function InsightsPage() {
                        <td className="py-2 text-right">₩ {formatKRWCompact(item.amount)}</td>
                        <td className="py-2 text-right text-text-faint">₩ {formatKRWCompact(item.baseline_avg)}</td>
                        <td className={`py-2 text-right font-semibold ${(item.delta_pct ?? 0) > 0 ? 'text-danger' : 'text-accent'}`}>
-                         {item.delta_pct != null ? `+${formatPct(item.delta_pct)}` : '—'}
+                         {item.delta_pct != null ? `${item.delta_pct > 0 ? '+' : item.delta_pct < 0 ? '-' : ''}${formatPct(Math.abs(item.delta_pct))}` : '—'}
                        </td>
                      </tr>
                    ))}

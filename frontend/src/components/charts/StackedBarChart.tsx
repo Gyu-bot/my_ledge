@@ -75,7 +75,7 @@ export function StackedBarChart({ items, height = 180 }: StackedBarChartProps) {
                   x={x}
                   y={y + 10}
                   textAnchor="middle"
-                  fontSize={9}
+                  fontSize={12}
                   fill={payload.value === latestPeriod ? CHART_ACCENT_BRIGHT : CHART_NEUTRAL}
                 >
                   {payload.value}

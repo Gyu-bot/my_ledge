@@ -25,6 +25,8 @@ interface NestedTreemapChartProps {
   height?: number
 }
 
+type TreemapViewMode = 'category' | 'merchant'
+
 interface CustomCellProps extends Record<string, unknown> {
   drilldown?: boolean
 }
@@ -75,6 +77,7 @@ function CustomCell({ drilldown, ...props }: CustomCellProps) {
 
 export function NestedTreemapChart({ items, height = 440 }: NestedTreemapChartProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<TreemapViewMode>('category')
 
   const topLevelItems = useMemo(
     () =>
@@ -93,25 +96,72 @@ export function NestedTreemapChart({ items, height = 440 }: NestedTreemapChartPr
     [activeCategory, items],
   )
 
-  const chartItems = activeNode ? activeNode.children : topLevelItems
+  const merchantItems = useMemo(() => {
+    const grouped = new Map<string, { size: number; category: string }>()
+
+    for (const node of items) {
+      for (const child of node.children ?? []) {
+        const current = grouped.get(child.name)
+        const nextSize = Number(child.size ?? 0)
+
+        if (!current) {
+          grouped.set(child.name, { size: nextSize, category: child.category })
+          continue
+        }
+
+        grouped.set(child.name, {
+          size: current.size + nextSize,
+          category: nextSize >= current.size ? child.category : current.category,
+        })
+      }
+    }
+
+    return Array.from(grouped.entries())
+      .map(([name, item]) => ({ name, size: item.size, category: item.category }))
+      .sort((left, right) => right.size - left.size)
+  }, [items])
+
+  const chartItems = viewMode === 'merchant'
+    ? merchantItems
+    : activeNode
+      ? activeNode.children
+      : topLevelItems
 
   const handleCategorySelect = (category: string) => {
     if (!items.some((item) => item.name === category)) return
     setActiveCategory(category)
   }
 
+  const handleViewModeChange = (nextMode: TreemapViewMode) => {
+    setViewMode(nextMode)
+    if (nextMode === 'merchant') {
+      setActiveCategory(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-caption font-semibold text-text-secondary">
-            {activeNode ? `${activeNode.name} 거래처` : '카테고리 기준'}
-          </div>
-          <div className="text-micro text-text-muted">
-            {activeNode ? '선택한 카테고리 안에서 거래처별 비중을 확인합니다.' : '카테고리 타일이나 버튼을 눌러 거래처 단위로 drilldown 합니다.'}
-          </div>
+        <div className="inline-flex rounded-full bg-surface-bar p-0.5">
+          {([
+            ['category', '카테고리별'],
+            ['merchant', '거래처별'],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={viewMode === mode}
+              onClick={() => handleViewModeChange(mode)}
+              className={[
+                'text-micro rounded-full px-3 py-1 transition-colors',
+                viewMode === mode ? 'bg-surface-popover text-text-primary' : 'text-text-muted',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        {activeNode ? (
+        {viewMode === 'category' && activeNode ? (
           <button
             type="button"
             onClick={() => setActiveCategory(null)}
@@ -122,20 +172,8 @@ export function NestedTreemapChart({ items, height = 440 }: NestedTreemapChartPr
         ) : null}
       </div>
 
-      {!activeNode ? (
-        <div className="flex flex-wrap gap-2">
-          {topLevelItems.map((item) => (
-            <button
-              key={item.name}
-              type="button"
-              onClick={() => handleCategorySelect(item.name)}
-              aria-label={`${item.name} 드릴다운`}
-              className="text-micro text-text-secondary bg-surface-bar border border-border-subtle rounded-full px-2.5 py-1"
-            >
-              {item.name}
-            </button>
-          ))}
-        </div>
+      {viewMode === 'category' && activeNode ? (
+        <div className="text-caption text-text-secondary">{activeNode.name} 거래처</div>
       ) : null}
 
       <ResponsiveContainer width="100%" height={height}>
@@ -146,7 +184,7 @@ export function NestedTreemapChart({ items, height = 440 }: NestedTreemapChartPr
           content={<CustomCell drilldown={!!activeNode} />}
           aspectRatio={4 / 3}
           onClick={(node) => {
-            if (activeNode) return
+            if (viewMode !== 'category' || activeNode) return
             const category = String(node?.category ?? node?.name ?? '')
             handleCategorySelect(category)
           }}
@@ -159,7 +197,11 @@ export function NestedTreemapChart({ items, height = 440 }: NestedTreemapChartPr
               const category = String(payload?.payload?.category ?? payload?.payload?.name ?? '')
               return [
                 `₩ ${formatKRWCompact(Number(value ?? 0))}`,
-                activeNode ? `${category} · 거래처` : '카테고리',
+                viewMode === 'merchant'
+                  ? `${category} · 거래처`
+                  : activeNode
+                    ? `${category} · 거래처`
+                    : '카테고리',
               ]
             }}
           />

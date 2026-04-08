@@ -27,4 +27,16 @@ describe('Pagination', () => {
     expect(screen.getByRole('button', { name: '‹' }).className).toContain('text-pagination')
     expect(screen.getByRole('button', { name: '2' }).className).toContain('text-pagination')
   })
+
+  it('renders pagination without visible border treatments', () => {
+    render(<Pagination page={2} perPage={20} total={347} onPageChange={vi.fn()} />)
+
+    const summary = screen.getByText(/21–40 \/ 347건/)
+    const root = summary.parentElement
+
+    expect(root?.className).not.toContain('border-t')
+    expect(screen.getByRole('button', { name: '‹' }).className).not.toContain('border')
+    expect(screen.getByRole('button', { name: '2' }).className).not.toContain('border')
+    expect(screen.getByRole('button', { name: '›' }).className).not.toContain('border')
+  })
 })

@@ -73,13 +73,13 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
                     'pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 z-10 min-w-28 -translate-x-1/2 px-3 py-2 text-left',
                   )}
                 >
-                  <div className={cn(CHART_TOOLTIP_LABEL_CLASSNAME, 'text-body-sm')}>
+                  <div className={CHART_TOOLTIP_LABEL_CLASSNAME}>
                     {activeTooltip.title}
                   </div>
                   <div
                     className={[
                       CHART_TOOLTIP_VALUE_CLASSNAME,
-                      'mt-1 text-body-md font-semibold',
+                      'mt-1',
                       activeTooltip.isNegative ? 'text-danger' : 'text-accent',
                     ].join(' ')}
                   >
@@ -100,7 +100,7 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
               >
                 <span className="text-nano text-text-faint">{i + 1}</span>
                 {amount !== undefined && (
-                  <span className="w-[3px] h-[3px] rounded-full" style={{ background: amount < 0 ? 'var(--chart-danger)' : 'var(--chart-accent)' }} />
+                  <span className="w-[6px] h-[6px] rounded-full" style={{ background: amount < 0 ? 'var(--chart-danger)' : 'var(--chart-accent)' }} />
                 )}
               </button>
             </div>

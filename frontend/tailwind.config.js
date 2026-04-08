@@ -8,7 +8,7 @@ export default {
         // Base reference: 14px html = original sizes; 21px html = 1.5× scale
         'nano':    ['0.571rem', { lineHeight: '1.2' }],  // ~8px  → badge labels, status tags
         'micro':   ['0.643rem', { lineHeight: '1.3' }],  // ~9px  → table headers, timestamps
-        'pagination': ['0.595rem', { lineHeight: '1.2' }], // compact pagination controls + counters
+        'pagination': ['0.571rem', { lineHeight: '1.2' }], // compact pagination controls + counters
         'caption': ['0.714rem', { lineHeight: '1.4' }],  // ~10px → secondary labels, descriptions
         'label':   ['0.786rem', { lineHeight: '1.5' }],  // ~11px → section titles, nav items
         'body-sm': ['0.857rem', { lineHeight: '1.5' }],  // ~12px → compact body, dropdowns

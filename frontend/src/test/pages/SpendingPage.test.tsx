@@ -157,6 +157,12 @@ describe('SpendingPage', () => {
     expect(screen.getByText('아래 섹션은 상세 필터 기준')).toBeInTheDocument()
   })
 
+  it('does not render the legacy merchant treemap helper description copy', () => {
+    wrap(<SpendingPage />)
+
+    expect(screen.queryByText(/카테고리 비중을 먼저 보고/)).not.toBeInTheDocument()
+  })
+
   it('uses a compact chevron size on the transaction accordion trigger', () => {
     wrap(<SpendingPage />)
 

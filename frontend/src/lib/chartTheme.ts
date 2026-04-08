@@ -30,17 +30,19 @@ export const CHART_TOOLTIP_ITEM_STYLE = {
 
 export const AXIS_TICK_STYLE = {
   fill: 'var(--chart-axis-text)',
-  fontSize: 9,
+  fontSize: 12,
 } as const
 
 export const CATEGORY_COLOR_MAP: Record<string, string> = {
+  금융: 'var(--chart-category-finance)',
+  데이트: 'var(--chart-category-dating)',
   식비: 'var(--chart-category-food)',
-  교통: 'var(--chart-category-transport)',
-  구독: 'var(--chart-category-subscription)',
-  쇼핑: 'var(--chart-category-shopping)',
+  미분류: 'var(--chart-category-uncategorized)',
   주거: 'var(--chart-category-housing)',
-  의료: 'var(--chart-category-medical)',
-  보험: 'var(--chart-category-insurance)',
+  '주거/통신': 'var(--chart-category-housing)',
+  '여행/숙박': 'var(--chart-category-travel)',
+  자동차: 'var(--chart-category-auto)',
+  '문화/여가': 'var(--chart-category-culture)',
   기타: 'var(--chart-category-other)',
 }
 

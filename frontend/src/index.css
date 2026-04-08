@@ -50,8 +50,8 @@
 
     --color-text-primary: #dde5ef;
     --color-text-secondary: #c2cddd;
-    --color-text-muted: #a5b2c4;
-    --color-text-faint: #8896aa;
+    --color-text-muted: #b2becf;
+    --color-text-faint: #b2becf;
     --color-text-ghost: #718198;
     --color-text-inverse: #ffffff;
 
@@ -77,23 +77,24 @@
     --chart-hover-accent: color-mix(in srgb, var(--color-accent-default) 18%, var(--color-surface-section));
     --chart-hover-danger: color-mix(in srgb, var(--color-danger-default) 18%, var(--color-surface-section));
     --chart-hover-default: color-mix(in srgb, var(--color-info-default) 14%, var(--color-surface-section));
-    --chart-category-food: #5d93ff;
-    --chart-category-transport: #2fd47c;
-    --chart-category-subscription: #b271ff;
-    --chart-category-shopping: #ff7a7a;
+    --chart-category-finance: #5d93ff;
+    --chart-category-dating: #ff7a7a;
+    --chart-category-food: #2fd47c;
+    --chart-category-uncategorized: #98a8c5;
     --chart-category-housing: #f4bf5a;
-    --chart-category-medical: #35d6ff;
-    --chart-category-insurance: #ff8fd6;
-    --chart-category-other: #98a8c5;
+    --chart-category-travel: #35d6ff;
+    --chart-category-auto: #ff8fd6;
+    --chart-category-culture: #b271ff;
+    --chart-category-other: #7e90ae;
     --chart-category-fallback: #7e90ae;
-    --chart-treemap-1: var(--chart-category-food);
-    --chart-treemap-2: var(--chart-category-transport);
-    --chart-treemap-3: var(--chart-category-subscription);
-    --chart-treemap-4: var(--chart-category-shopping);
+    --chart-treemap-1: var(--chart-category-finance);
+    --chart-treemap-2: var(--chart-category-dating);
+    --chart-treemap-3: var(--chart-category-food);
+    --chart-treemap-4: var(--chart-category-uncategorized);
     --chart-treemap-5: var(--chart-category-housing);
-    --chart-treemap-6: var(--chart-category-medical);
-    --chart-treemap-7: var(--chart-category-insurance);
-    --chart-treemap-8: var(--chart-category-other);
+    --chart-treemap-6: var(--chart-category-travel);
+    --chart-treemap-7: var(--chart-category-auto);
+    --chart-treemap-8: var(--chart-category-culture);
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -117,14 +118,21 @@
     border-radius: 0.375rem;
     color: var(--chart-tooltip-text);
     box-shadow: var(--chart-tooltip-shadow);
+    font-size: 0.857rem;
+    line-height: 1.5;
   }
 
   .chart-tooltip-label {
     color: var(--chart-tooltip-label);
+    font-size: 0.857rem;
+    line-height: 1.5;
   }
 
   .chart-tooltip-value {
     color: var(--chart-tooltip-text);
+    font-size: 0.857rem;
+    line-height: 1.5;
+    font-weight: 600;
   }
 
   .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--color-border-default) var(--color-surface-panel); }

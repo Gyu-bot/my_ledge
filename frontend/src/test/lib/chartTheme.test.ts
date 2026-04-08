@@ -24,13 +24,15 @@ describe('chartTheme', () => {
   })
 
   it('returns category-specific colors with a semantic fallback', () => {
-    expect(CATEGORY_COLOR_MAP.식비).toBe('var(--chart-category-food)')
-    expect(getCategoryColor('식비')).toBe('var(--chart-category-food)')
+    expect(CATEGORY_COLOR_MAP.금융).toBe('var(--chart-category-finance)')
+    expect(CATEGORY_COLOR_MAP['문화/여가']).toBe('var(--chart-category-culture)')
+    expect(getCategoryColor('금융')).toBe('var(--chart-category-finance)')
+    expect(getCategoryColor('문화/여가')).toBe('var(--chart-category-culture)')
     expect(getCategoryColor('알 수 없음')).toBe('var(--chart-category-fallback)')
   })
 
   it('provides stable tooltip and axis styles', () => {
-    expect(AXIS_TICK_STYLE).toEqual({ fill: 'var(--chart-axis-text)', fontSize: 9 })
+    expect(AXIS_TICK_STYLE).toEqual({ fill: 'var(--chart-axis-text)', fontSize: 12 })
     expect(CHART_TOOLTIP_CLASSNAME).toBe('chart-tooltip-shell')
     expect(CHART_TOOLTIP_LABEL_CLASSNAME).toBe('chart-tooltip-label')
     expect(CHART_TOOLTIP_VALUE_CLASSNAME).toBe('chart-tooltip-value')

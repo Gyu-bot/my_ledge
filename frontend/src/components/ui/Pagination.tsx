@@ -14,17 +14,17 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
   const start = Math.min((page - 1) * perPage + 1, total)
   const end = Math.min(page * perPage, total)
   const paginationVars = {
-    '--pagination-control-size': '1.375rem',
-    '--pagination-control-padding': '0.375rem',
+    '--pagination-control-size': '1.125rem',
+    '--pagination-control-padding': '0.25rem',
     '--pagination-inline-gap': '0.25rem',
   } as CSSProperties
 
   const btnClass = (active = false, disabled = false) =>
     [
-      'text-pagination rounded-full border leading-none inline-flex items-center justify-center min-w-[var(--pagination-control-size)] h-[var(--pagination-control-size)] px-[var(--pagination-control-padding)]',
+      'text-pagination rounded-full leading-none inline-flex items-center justify-center min-w-[var(--pagination-control-size)] h-[var(--pagination-control-size)] px-[var(--pagination-control-padding)]',
       active
-        ? 'border-accent text-accent bg-accent-dim'
-        : 'border-border-strong text-text-ghost bg-transparent',
+        ? 'text-accent bg-accent-dim'
+        : 'text-text-ghost bg-transparent',
       disabled ? 'opacity-30 cursor-not-allowed pointer-events-none' : '',
     ]
       .filter(Boolean)
@@ -33,7 +33,7 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
   const pages = buildPages(page, totalPages)
 
   return (
-    <div style={paginationVars} className={cn('flex items-center justify-between px-2.5 py-2 border-t border-border-faint', className)}>
+    <div style={paginationVars} className={cn('flex items-center justify-between px-2.5 py-2', className)}>
       <span className="text-pagination text-text-muted">
         {start}–{end} / {total}건
       </span>
