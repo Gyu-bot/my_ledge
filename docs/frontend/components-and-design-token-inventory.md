@@ -48,6 +48,8 @@
 - 주요 token:
   - `bg-surface-bar`
   - `border-border`
+  - `text-text-primary`
+  - `text-text-secondary`
   - `bg-accent-dim`
   - `to-accent-strong`
 
@@ -69,11 +71,11 @@
   - page title
   - meta badge slot
 - route metadata source:
-  - component 내부 `PAGE_META`
+  - `frontend/src/navigation.ts`
 - 주요 token:
   - `bg-surface-bar`
-  - `border-border`
-  - `text-text-ghost`
+  - `border-border-subtle`
+  - `text-text-secondary`
   - `text-text-primary`
 
 ## UI Components
@@ -130,6 +132,12 @@
 
 - 책임:
   - current/prev/next 기반 pagination
+- 주요 token:
+  - `text-pagination`
+  - `border-border-strong`
+  - `border-border-faint`
+  - `bg-accent-dim`
+  - `rounded-full`
 
 ### `StatusBadge`
 
@@ -172,6 +180,9 @@
   - `bg-border-subtle`
   - `var(--chart-danger)`
   - `var(--chart-accent)`
+  - `.chart-tooltip-shell`
+  - `.chart-tooltip-label`
+  - `.chart-tooltip-value`
 
 ## Chart Components
 
@@ -182,13 +193,13 @@
 - token source:
   - `chartTheme.ts`
 
-### `StackedBarChart`
+### `StackedAreaChart`
 
 - usage:
   - Spending 월별 카테고리 추이
 - token source:
   - `chartTheme.ts`
-  - category palette
+  - category palette `--chart-category-*`
 
 ### `LineAreaChart`
 
@@ -214,6 +225,15 @@
   - `CHART_DANGER`
   - `CHART_ACCENT`
 
+### `NestedTreemapChart`
+
+- usage:
+  - Spending 거래처별 지출 비중
+- token source:
+  - `chartTheme.ts`
+  - category palette alias `--chart-treemap-*`
+  - shared tooltip contract
+
 ## Page Inventory
 
 ### `OverviewPage`
@@ -230,8 +250,8 @@
 ### `SpendingPage`
 
 - blocks:
-  - timeline range slider
   - 월별 카테고리 추이
+  - timeline/detail scope separator
   - detail filter
   - 카테고리/소분류 지출
   - 고정비/변동비 ratio
@@ -284,5 +304,10 @@
 - class 기반 색상은 Tailwind semantic alias 사용
 - chart/inline style는 `chartTheme.ts` 또는 `var(--token)` 사용
 - raw hex는 `index.css` token definition 내부에만 존재
+
+## Documentation Usage Guide
+
+- route/section 기준 wireframe과 block 토큰 연결은 `docs/frontend/page-wireframes.md`를 본다
+- 값 자체와 palette source of truth는 `docs/frontend-design-tokens.md`를 본다
 
 추가 컴포넌트가 생기면 이 문서를 먼저 갱신한다.

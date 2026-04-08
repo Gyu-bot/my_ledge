@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 배치 유지, frontend UI polish extra follow-up 구현 및 frontend 전체 검증 완료
-- **Last Worker:** Codex (2026-04-08T10:22+0900, workbench badge/sidebar/spending separator/popover typography follow-up 구현, frontend 58-test/lint/typecheck 재검증)
+- **Phase:** 안정화 배치 유지, frontend token/wireframe source-of-truth 문서 갱신 완료
+- **Last Worker:** Codex (2026-04-08T10:26+0900, wireframe별 component-token/font-color/palette 문서 정리 및 frontend 문서 SSOT 동기화)
 - **Branch:** main
 
 ## Completed
@@ -72,6 +72,7 @@
 - [x] Frontend UI polish follow-up 완료: topbar breadcrumb spacing 및 `MyLedge` 가독성 상향, 그래프 month axis year-month formatter 공통화, popover/background 분리 강화, secondary font/border contrast 재조정, Spending treemap category-first drilldown + 높이 확장, frontend `npm test -- --runInBand` → `53 passed`, `npm run lint`, `npm run typecheck` 재통과, Tailnet host smoke `HTTP/1.1 200 OK` 재확인
 - [x] Frontend UI polish checklist follow-up 완료: breadcrumb 상단 title treatment 전역 밝기 상향, table row/header separator 제거, pagination 전용 token/compact sizing 추가, Spending stacked area + treemap palette 대비 재구성, `DailyCalendar` tooltip 셀 기준 anchor + shared tooltip token contract 적용, frontend `npm test -- --runInBand` → `54 passed`, `npm run lint`, `npm run typecheck` 통과
 - [x] Frontend UI polish extra follow-up 완료: Workbench 거래 목록 페이지/건수 badge를 shared badge token으로 정렬, desktop sidebar inactive/section text 가독성 상향, `SpendingPage` timeline/detail scope separator 추가, accordion chevron 크기 축소, shared popover typography를 1.5x 수준으로 통일, frontend `npm test -- --runInBand` → `58 passed`, `npm run lint`, `npm run typecheck` 통과
+- [x] Frontend token/wireframe 문서 갱신 완료: `docs/frontend-design-tokens.md`, `docs/frontend/page-wireframes.md`, `docs/frontend/components-and-design-token-inventory.md` 를 현재 구현 기준으로 동기화하고, wireframe별 component token / font color / palette mapping을 문서화
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가

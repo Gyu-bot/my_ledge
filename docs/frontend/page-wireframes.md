@@ -54,6 +54,15 @@
 - topbar가 page title과 meta badge를 담당한다
 - sidebar는 desktop only, mobile은 drawer
 
+### Shell token map
+
+| Shell component | Primary tokens |
+| --- | --- |
+| `AppSidebar` | `bg-surface-bar`, `border-border`, `text-text-primary`, `text-text-secondary`, `bg-accent-dim`, `text-accent` |
+| `AppTopbar` | `bg-surface-bar`, `border-border-subtle`, `text-text-secondary`, `text-text-primary`, shared meta badge token |
+| topbar meta badge | `text-caption`, `text-text-muted`, `bg-surface-bar`, `border-border-subtle`, `rounded-full` |
+| mobile drawer | `bg-surface-bar`, `border-border`, `text-text-primary`, `bg-black/60` |
+
 ## Overview `/`
 
 ```text
@@ -83,9 +92,9 @@
 ## Spending `/analysis/spending`
 
 ```text
-[timeline range slider]
-
 [월별 카테고리 추이]
+
+---------------- separator: 아래 섹션은 상세 필터 기준 ----------------
 
 [detail filter bar]
 
@@ -102,8 +111,8 @@
 
 ### Blocks
 
-- timeline range slider
 - 월별 카테고리 추이
+- timeline/detail scope separator
 - detail filter
 - 카테고리별 지출
 - 소분류별 지출
@@ -116,6 +125,19 @@
 ### Topbar meta
 
 - `YYYY-MM ~ YYYY-MM`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| timeline section | `SectionCard` + `StackedAreaChart` | `bg-surface-card`, `border-border`, `text-text-secondary`, `text-micro`, category palette `--chart-category-*` |
+| section separator | inline separator row | `bg-border-strong`, `text-caption`, `text-text-faint` |
+| detail filter | inline filter panel | `bg-surface-card`, `border-border`, `border-border-strong`, `text-text-secondary`, `text-text-faint` |
+| category/subcategory cards | `SectionCard` + `HorizontalBarList` | `bg-surface-card`, `border-border`, `text-text-secondary`, `CHART_ACCENT` |
+| ratio cards | `SectionCard` + `SegmentedBar` | `bg-surface-card`, `border-border`, `var(--chart-info-soft)`, `var(--chart-accent)` |
+| merchant treemap | `SectionCard` + `NestedTreemapChart` | `bg-surface-card`, `border-border`, category palette alias `--chart-treemap-*`, shared tooltip contract |
+| daily calendar | `SectionCard` + `DailyCalendar` | `bg-surface-card`, `bg-border-subtle`, `var(--chart-danger)`, `var(--chart-accent)`, `.chart-tooltip-*` |
+| transaction accordion | card shell + table + `Pagination` | `bg-surface-card`, `border-border`, `text-nano` chevron, `text-pagination`, table text tokens without row separators |
 
 ## Assets `/analysis/assets`
 
@@ -141,6 +163,15 @@
 ### Topbar meta
 
 - `기준일 YYYY-MM-DD`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| KPI row | `KpiCard` x4 | `bg-surface-card`, `border-border`, `text-kpi`, `text-text-secondary`, delta accent/danger |
+| net-worth chart | `SectionCard` + `LineAreaChart` | `bg-surface-card`, `border-border`, `CHART_ACCENT`, shared tooltip contract |
+| investment summary | `SectionCard` + `HorizontalBarList` | `bg-surface-card`, `border-border`, `text-text-secondary`, accent/info tones |
+| loan summary | `SectionCard` + summary cards + compact table | `bg-surface-card`, `border-border`, `text-text-primary`, `text-danger`, table text tokens without separators |
 
 ## Insights `/analysis/insights`
 
@@ -169,6 +200,16 @@
 ### Topbar meta
 
 - `핵심 인사이트 N건`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| KPI row | `KpiCard` x3 | `bg-surface-card`, `border-border`, `text-kpi`, accent/danger |
+| insight list | `SectionCard` + variant badge | `bg-surface-card`, `border-border`, `text-text-primary`, `text-nano`, accent/danger/warn surfaces |
+| recurring / anomaly tables | `SectionCard` + table + `Pagination` | `bg-surface-card`, `border-border`, `text-text-primary`, `text-text-muted`, `text-pagination`, no row separators |
+| merchant top 5 | `SectionCard` + control + `HorizontalBarList` | `bg-surface-card`, `border-border`, `text-text-secondary`, `border-border-strong` |
+| category mom | `SectionCard` + control + `MoMBarList` | `bg-surface-card`, `border-border`, `CHART_DANGER`, `CHART_ACCENT` |
 
 ## Workbench `/operations/workbench`
 
@@ -199,6 +240,17 @@
 ### Topbar meta
 
 - `현재 page item count / total count`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| write access alert | `AlertBanner` | warn/danger/accent state surfaces and text tokens |
+| filter bar | inline filter shell | `bg-surface-card`, `border-border`, `border-border-subtle`, `text-text-secondary`, `text-text-ghost` |
+| bulk edit panel | inline edit panel | `bg-surface-card`, `border-border-subtle`, `text-text-faint`, `border-border-strong` |
+| transaction table | table + shared badge + `Pagination` | `bg-surface-card`, `text-text-primary`, `text-text-ghost`, `text-pagination`, shared rounded badge token, no row separators |
+| upload / history accordion | accordion shell + compact chevron | `bg-surface-card`, `bg-surface-section`, `border-border-subtle`, `text-nano` chevron |
+| danger zone | destructive accordion | `bg-surface-danger`, `bg-surface-danger-muted`, `border-danger-muted`, `text-danger` |
 
 ## Notes
 

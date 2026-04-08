@@ -45,6 +45,7 @@ Tailwind semantic font token:
 | --- | --- | --- |
 | `text-nano` | 8px | badge, dense tag |
 | `text-micro` | 9px | table header, timestamp |
+| `text-pagination` | 8.3px | pagination counter, page control |
 | `text-caption` | 10px | helper text, meta |
 | `text-label` | 11px | section title, nav label |
 | `text-body-sm` | 12px | compact body |
@@ -58,6 +59,7 @@ Tailwind semantic font token:
 - 임의 `text-[Npx]` 사용 금지
 - 본문은 `text-body` 또는 `text-body-sm`
 - dense table/meta는 `text-caption`, `text-micro`, `text-nano`
+- pagination row는 `text-pagination`
 
 ## Surface Tokens
 
@@ -80,10 +82,10 @@ Tailwind semantic font token:
 
 | CSS var | Value | Tailwind alias | Usage |
 | --- | --- | --- | --- |
-| `--color-border-default` | `#1a2035` | `border-border` | default border |
-| `--color-border-subtle` | `#111827` | `border-border-subtle` | card header divider |
-| `--color-border-strong` | `#1f2937` | `border-border-strong` | input outline, inline panel |
-| `--color-border-faint` | `#0d1117` | `border-border-faint` | dense table row divider |
+| `--color-border-default` | `#161f2e` | `border-border` | default border |
+| `--color-border-subtle` | `#0d141f` | `border-border-subtle` | card header divider, inline badge outline |
+| `--color-border-strong` | `#202d40` | `border-border-strong` | input outline, tooltip border, inline panel |
+| `--color-border-faint` | `#091019` | `border-border-faint` | pagination top divider, low-emphasis separator |
 | `--color-border-info` | `#1e3a5f` | `border-info-muted` | info selection panel |
 
 ## Accent / State Tokens
@@ -128,12 +130,22 @@ Tailwind semantic font token:
 
 | CSS var | Value | Tailwind alias |
 | --- | --- | --- |
-| `--color-text-primary` | `#d1d5db` | `text-text-primary` |
-| `--color-text-secondary` | `#9ca3af` | `text-text-secondary` |
-| `--color-text-muted` | `#6b7280` | `text-text-muted` |
-| `--color-text-faint` | `#4b5563` | `text-text-faint` |
-| `--color-text-ghost` | `#374151` | `text-text-ghost` |
+| `--color-text-primary` | `#dde5ef` | `text-text-primary` |
+| `--color-text-secondary` | `#c2cddd` | `text-text-secondary` |
+| `--color-text-muted` | `#a5b2c4` | `text-text-muted` |
+| `--color-text-faint` | `#8896aa` | `text-text-faint` |
+| `--color-text-ghost` | `#718198` | `text-text-ghost` |
 | `--color-text-inverse` | `#ffffff` | `text-text-inverse` |
+
+### Text usage guidance
+
+| Token | Current role |
+| --- | --- |
+| `text-text-primary` | page title, sidebar nav label, main metric, primary table cell |
+| `text-text-secondary` | breadcrumb, section title, inline control label, secondary row text |
+| `text-text-muted` | badge/meta text, tooltip label, helper paragraph |
+| `text-text-faint` | separator caption, tertiary annotation, low emphasis copy |
+| `text-text-ghost` | timestamp, table/date utility text, collapsed chrome affordance |
 
 ## Chart Tokens
 
@@ -151,25 +163,42 @@ Tailwind semantic font token:
 - `--chart-warning`
 - `--chart-tooltip-bg`
 - `--chart-tooltip-border`
+- `--chart-tooltip-shadow`
+- `--chart-tooltip-text`
+- `--chart-tooltip-label`
 - `--chart-axis-text`
 - `--chart-label-strong`
 - `--chart-label-muted`
 
 ### Category palette
 
-- `--chart-category-food`
-- `--chart-category-transport`
-- `--chart-category-subscription`
-- `--chart-category-shopping`
-- `--chart-category-housing`
-- `--chart-category-medical`
-- `--chart-category-insurance`
-- `--chart-category-other`
-- `--chart-category-fallback`
+| Token | Value | Usage |
+| --- | --- | --- |
+| `--chart-category-food` | `#5d93ff` | 식비 series / treemap root |
+| `--chart-category-transport` | `#2fd47c` | 교통 series / treemap root |
+| `--chart-category-subscription` | `#b271ff` | 구독 series / treemap root |
+| `--chart-category-shopping` | `#ff7a7a` | 쇼핑 series / treemap root |
+| `--chart-category-housing` | `#f4bf5a` | 주거 series / treemap root |
+| `--chart-category-medical` | `#35d6ff` | 의료 series / treemap root |
+| `--chart-category-insurance` | `#ff8fd6` | 보험 series / treemap root |
+| `--chart-category-other` | `#98a8c5` | 기타 series / treemap root |
+| `--chart-category-fallback` | `#7e90ae` | unknown category fallback |
 
 ### Treemap palette
 
 - `--chart-treemap-1` ... `--chart-treemap-8`
+- 현재 값은 category palette alias다. treemap은 category-first drilldown 기준으로 stacked area와 같은 hue set을 공유한다.
+
+### Tooltip / popover contract
+
+| Token or class | Current meaning |
+| --- | --- |
+| `CHART_TOOLTIP_STYLE.fontSize` | `15` |
+| `.chart-tooltip-shell` | tooltip/popover surface, border, shadow 공통 shell |
+| `.chart-tooltip-label` | tooltip secondary label color |
+| `.chart-tooltip-value` | tooltip primary value color |
+| `DailyCalendar` label text | `text-body-sm` |
+| `DailyCalendar` value text | `text-body-md` |
 
 ## Usage Rules
 
@@ -186,3 +215,8 @@ Tailwind semantic font token:
 - CSS variable 값 정의 자체에 들어가는 hex
 - chart opacity를 위한 `rgba(255, 255, 255, ...)` label token
 - 브라우저 기본 black overlay (`bg-black/60`) 같은 non-brand utility
+
+## Documentation Cross Reference
+
+- page-level block composition: `docs/frontend/page-wireframes.md`
+- component inventory: `docs/frontend/components-and-design-token-inventory.md`

@@ -416,3 +416,45 @@
 - `SpendingPage` 는 월별 카테고리 추이와 나머지 상세 섹션 사이를 separator로 분리해 필터 적용범위가 더 명확해짐
 - Spending/Workbench accordion chevron은 `text-nano` 기준으로 축소
 - shared chart tooltip font size를 15로 올리고, `DailyCalendar` tooltip도 `text-body-sm` / `text-body-md` typography로 맞춰 project-wide popover 스타일을 통일
+
+## Frontend Token And Wireframe Documentation Refresh
+
+- 사용자 요청
+  - 현재 wireframe별 컴포넌트에 어떤 디자인 토큰이 들어가는지, 특히 폰트 색상과 색상 팔레트를 문서로 정리해 달라는 요청
+
+### 판단
+
+- 기존 active 문서가 이미 `docs/frontend-design-tokens.md`, `docs/frontend/page-wireframes.md`, `docs/frontend/components-and-design-token-inventory.md` 로 분리돼 있었기 때문에 새 문서를 늘리기보다 이 세 문서를 현재 구현 기준으로 다시 맞추는 편이 적절하다고 판단
+- 토큰 값 source of truth는 `frontend/src/index.css`, semantic alias는 `frontend/tailwind.config.js`, chart token contract는 `frontend/src/lib/chartTheme.ts` 이므로 문서도 같은 레이어 구조를 유지
+
+### 문서 반영
+
+- `docs/frontend-design-tokens.md`
+  - `text-pagination` 추가
+  - current border/text token value를 실제 코드값으로 갱신
+  - text usage guidance 추가
+  - category palette value table 추가
+  - tooltip/popover typography contract 추가
+- `docs/frontend/page-wireframes.md`
+  - shell token map 추가
+  - Overview/Spending/Assets/Insights/Workbench 각 wireframe에 component token map 추가
+  - Spending wireframe을 현재 구현 기준으로 timeline/detail separator 포함 구조로 갱신
+- `docs/frontend/components-and-design-token-inventory.md`
+  - `AppTopbar`, `Pagination`, `DailyCalendar`, `StackedAreaChart`, `NestedTreemapChart` 최신 token source 반영
+  - page inventory를 current wireframe 기준으로 정리
+
+### 검증
+
+- `git diff -- docs/frontend-design-tokens.md docs/frontend/page-wireframes.md docs/frontend/components-and-design-token-inventory.md`
+  - 결과: 현재 구현 기준 변경만 포함됨 확인
+- `rg -n "text-pagination|chart-tooltip-shadow|#dde5ef|#5d93ff|timeline/detail scope separator|NestedTreemapChart|navigation.ts" docs/frontend-design-tokens.md docs/frontend/page-wireframes.md docs/frontend/components-and-design-token-inventory.md`
+  - 결과: 핵심 token / palette / component mapping entry 반영 확인
+
+### 결과
+
+- 현재 frontend wireframe별 component-token mapping, font color usage, chart/category palette가 active 문서 세트에 정리됨
+- 이후 디자인 질의에는
+  - 값 자체는 `docs/frontend-design-tokens.md`
+  - route별 block/token 연결은 `docs/frontend/page-wireframes.md`
+  - component-level inventory는 `docs/frontend/components-and-design-token-inventory.md`
+  를 기준으로 보면 된다
