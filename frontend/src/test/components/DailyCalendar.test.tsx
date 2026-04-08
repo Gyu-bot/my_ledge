@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { DailyCalendar } from '../../components/ui/DailyCalendar'
 
@@ -19,8 +19,11 @@ describe('DailyCalendar', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
 
     fireEvent.mouseEnter(targetDay)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('3월 4일')
-    expect(screen.getByRole('tooltip')).toHaveTextContent('-₩12,000')
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveTextContent('3월 4일')
+    expect(tooltip).toHaveTextContent('-₩12,000')
+    expect(within(screen.getByTestId('day-cell-04')).getByRole('tooltip')).toBeInTheDocument()
+    expect(tooltip.className).toContain('chart-tooltip-shell')
 
     fireEvent.mouseLeave(targetDay)
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()

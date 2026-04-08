@@ -354,13 +354,13 @@ export function SpendingPage() {
                      <thead>
                        <tr>
                          {['날짜', '거래처', '카테고리', '금액'].map((h) => (
-                           <th key={h} className="text-micro text-text-ghost px-3 py-2 text-left border-b border-border-subtle">{h}</th>
+                           <th key={h} className="text-micro text-text-ghost px-3 py-2 text-left">{h}</th>
                          ))}
                        </tr>
                      </thead>
                      <tbody>
                        {transactions.data.items.map((tx) => (
-                         <tr key={tx.id} className="border-b border-border-faint last:border-0">
+                         <tr key={tx.id}>
                            <td className="px-3 py-2 text-text-ghost">{tx.date.slice(5)}</td>
                            <td className="px-3 py-2 text-text-secondary truncate max-w-[80px]">{tx.merchant}</td>
                            <td className="px-3 py-2 text-text-faint">{tx.effective_category_major}</td>

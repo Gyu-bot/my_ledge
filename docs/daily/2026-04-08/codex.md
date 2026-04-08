@@ -301,3 +301,66 @@
 - chart tooltip / calendar popover는 surface 분리와 stronger border로 배경 대비를 보강
 - secondary text와 table divider token을 전역 상향/완화 조정
 - Spending treemap은 category-first view에서 merchant drilldown 가능한 taller chart로 전환
+
+## Frontend UI Polish Checklist Follow-up
+
+- 사용자 요청
+  - breadcrumb 상단 title 전체를 더 밝게 적용
+  - table 구분선은 제거
+  - pagination 을 전용 token 기준으로 더 작게 정리
+  - stacked area / treemap palette 를 더 대비 있는 dark-theme 친화 색으로 재구성
+  - `DailyCalendar` popover 를 날짜 셀 바로 위로 옮기고 chart tooltip 과 같은 스타일 contract로 통일
+
+### 체크리스트
+
+- [x] breadcrumb 상단 title treatment 전역 밝기 상향
+- [x] table header/row separator 제거
+- [x] pagination 전용 token + compact size 적용
+- [x] Spending stacked area / treemap 고대비 palette 재구성
+- [x] `DailyCalendar` tooltip 셀 기준 anchor 적용
+- [x] `DailyCalendar` tooltip shared chart token contract 적용
+
+### TDD
+
+- red:
+  - `frontend/src/test/components/layout/AppTopbar.test.tsx`
+  - `frontend/src/test/components/ui/Pagination.test.tsx`
+  - `frontend/src/test/components/DailyCalendar.test.tsx`
+  - breadcrumb brightness, pagination token, calendar tooltip anchoring 요구를 먼저 실패로 고정
+- green:
+  - `frontend/src/components/layout/AppTopbar.tsx`
+  - `frontend/src/components/ui/Pagination.tsx`
+  - `frontend/src/components/ui/DailyCalendar.tsx`
+  - `frontend/src/index.css`
+  - `frontend/src/lib/chartTheme.ts`
+  - `frontend/src/pages/{SpendingPage,InsightsPage,WorkbenchPage,AssetsPage}.tsx`
+  - `frontend/tailwind.config.js`
+
+### frontend-developer 위임
+
+- Spending visualization follow-up 을 `frontend-developer` 에 위임
+  - palette 재구성
+  - `NestedTreemapChart` 의 drilldown 유지
+  - `DailyCalendar` tooltip anchoring / shared tooltip token contract
+- 메인 세션에서는 topbar, pagination, table separator 제거, 테스트/문서 갱신을 맡아 최종 병합
+
+### 실행한 명령
+
+- `cd frontend && npx vitest run src/test/components/layout/AppTopbar.test.tsx src/test/components/ui/Pagination.test.tsx src/test/components/DailyCalendar.test.tsx`
+  - 결과: red 확인
+- `cd frontend && npx vitest run src/test/components/layout/AppTopbar.test.tsx src/test/components/ui/Pagination.test.tsx src/test/components/DailyCalendar.test.tsx src/test/lib/chartTheme.test.ts src/test/components/NestedTreemapChart.test.tsx`
+  - 결과: `5 files passed`, `13 tests passed`
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `21 files passed`, `54 tests passed`
+
+### 결과
+
+- breadcrumb 상단 breadcrumb/title 영역은 route 전반에서 더 밝은 chrome 으로 정리
+- table row/header separator 는 제거돼 텍스트 주의력이 더 강하게 유지되도록 조정
+- pagination 은 `text-pagination` token 과 compact control sizing 을 사용하도록 통일
+- Spending stacked area 와 treemap 은 같은 high-contrast palette 를 공유
+- `DailyCalendar` tooltip 은 날짜 셀 wrapper 안에 렌더링돼 hover/focus 한 날짜 바로 위에 뜨고, `chart-tooltip-*` token/class contract 를 공유한다

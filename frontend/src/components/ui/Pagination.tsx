@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { cn } from '../../lib/utils'
 
 interface PaginationProps {
@@ -12,24 +13,31 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
   const totalPages = Math.max(1, Math.ceil(total / perPage))
   const start = Math.min((page - 1) * perPage + 1, total)
   const end = Math.min(page * perPage, total)
+  const paginationVars = {
+    '--pagination-control-size': '1.375rem',
+    '--pagination-control-padding': '0.375rem',
+    '--pagination-inline-gap': '0.25rem',
+  } as CSSProperties
 
   const btnClass = (active = false, disabled = false) =>
-    cn(
-      'text-nano px-1.5 py-0.5 rounded border leading-none min-w-6 h-6 inline-flex items-center justify-center',
+    [
+      'text-pagination rounded-full border leading-none inline-flex items-center justify-center min-w-[var(--pagination-control-size)] h-[var(--pagination-control-size)] px-[var(--pagination-control-padding)]',
       active
         ? 'border-accent text-accent bg-accent-dim'
         : 'border-border-strong text-text-ghost bg-transparent',
-      disabled && 'opacity-30 cursor-not-allowed pointer-events-none',
-    )
+      disabled ? 'opacity-30 cursor-not-allowed pointer-events-none' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
 
   const pages = buildPages(page, totalPages)
 
   return (
-    <div className={cn('flex items-center justify-between px-2.5 py-2 border-t border-border-faint', className)}>
-      <span className="text-micro text-text-muted">
+    <div style={paginationVars} className={cn('flex items-center justify-between px-2.5 py-2 border-t border-border-faint', className)}>
+      <span className="text-pagination text-text-muted">
         {start}–{end} / {total}건
       </span>
-      <div className="flex gap-1 items-center">
+      <div className="flex items-center gap-[var(--pagination-inline-gap)]">
         <button
           className={btnClass(false, page === 1)}
           onClick={() => onPageChange(page - 1)}
@@ -38,7 +46,7 @@ export function Pagination({ page, perPage, total, onPageChange, className }: Pa
         >‹</button>
         {pages.map((p, i) =>
           p === '...' ? (
-            <span key={`dots-${i}`} className="text-micro text-text-ghost px-1">…</span>
+            <span key={`dots-${i}`} className="text-pagination text-text-ghost px-1">…</span>
           ) : (
             <button key={p} className={btnClass(p === page)} onClick={() => onPageChange(p as number)}>
               {p}

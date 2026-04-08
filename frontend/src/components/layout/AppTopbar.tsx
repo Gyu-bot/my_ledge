@@ -12,7 +12,6 @@ interface AppTopbarProps {
 export function AppTopbar({ onMobileMenuOpen, metaBadge, className }: AppTopbarProps) {
   const { pathname } = useLocation()
   const meta = getNavigationItem(pathname) ?? { breadcrumb: 'MyLedge', title: pathname }
-  const isOverviewChrome = meta.breadcrumb === 'MyLedge'
 
   return (
     <header className={cn('h-16 bg-surface-bar border-b border-border-subtle flex items-center px-4 md:px-5 py-3 gap-2 sticky top-0 z-30', className)}>
@@ -23,16 +22,11 @@ export function AppTopbar({ onMobileMenuOpen, metaBadge, className }: AppTopbarP
       >
         <Menu className="w-5 h-5" />
       </button>
-      <div className="min-w-0 flex items-center gap-2 py-0.5">
-        <span
-          className={cn(
-            'text-label hidden md:block',
-            isOverviewChrome ? 'font-semibold tracking-[0.02em] text-text-secondary' : 'text-text-muted',
-          )}
-        >
+      <div className="min-w-0 flex items-center gap-2.5 py-1">
+        <span className="text-label hidden md:block font-semibold tracking-[0.02em] text-text-secondary">
           {meta.breadcrumb}
         </span>
-        <span className="text-label text-text-muted hidden md:block">›</span>
+        <span className="text-label text-text-faint hidden md:block">›</span>
         <span className="text-body-md font-semibold text-text-primary truncate">{meta.title}</span>
       </div>
       {metaBadge && <div className="ml-auto shrink-0 flex items-center">{metaBadge}</div>}

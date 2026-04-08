@@ -1,4 +1,9 @@
-import { formatKRW } from '../../lib/utils'
+import {
+  CHART_TOOLTIP_CLASSNAME,
+  CHART_TOOLTIP_LABEL_CLASSNAME,
+  CHART_TOOLTIP_VALUE_CLASSNAME,
+} from '../../lib/chartTheme'
+import { cn, formatKRW } from '../../lib/utils'
 import { useMemo, useState } from 'react'
 
 interface DayData {
@@ -43,17 +48,6 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
       <div className="mb-2 min-h-5 text-right text-micro text-text-muted">
         {activeSummary ?? '날짜를 올리거나 눌러 상세 금액을 확인'}
       </div>
-      {activeTooltip ? (
-        <div
-          role="tooltip"
-          className="absolute right-0 top-6 z-10 min-w-28 rounded-lg border border-border-strong bg-surface-popover px-3 py-2 shadow-[0_18px_44px_rgba(2,6,16,0.55)]"
-        >
-          <div className="text-micro text-text-secondary">{activeTooltip.title}</div>
-          <div className={`mt-1 text-caption font-semibold ${activeTooltip.isNegative ? 'text-danger' : 'text-accent'}`}>
-            {activeTooltip.amount}
-          </div>
-        </div>
-      ) : null}
       <div className="grid grid-cols-7 gap-0.5 mb-1">
         {DAY_NAMES.map((d) => (
           <div key={d} className="text-center text-nano text-text-ghost pb-1">{d}</div>
@@ -67,24 +61,49 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
           const day = String(i + 1).padStart(2, '0')
           const amount = dayMap.get(day)
           const intensity = amount ? Math.min(Math.abs(amount) / maxAbs, 1) : 0
+          const isActive = activeDay?.day === i + 1 && amount != null
+
           return (
-            <button
-              type="button"
-              key={day}
-              aria-label={amount != null ? `${i + 1}일: ₩${formatKRW(amount)}` : `${i + 1}일`}
-              onMouseEnter={() => amount != null && setActiveDay({ day: i + 1, amount })}
-              onFocus={() => amount != null && setActiveDay({ day: i + 1, amount })}
-              onMouseLeave={() => setActiveDay((current) => (current?.day === i + 1 ? null : current))}
-              onBlur={() => setActiveDay((current) => (current?.day === i + 1 ? null : current))}
-              onClick={() => amount != null && setActiveDay({ day: i + 1, amount })}
-              className="aspect-square rounded flex flex-col items-center justify-center gap-0.5 bg-border-subtle"
-              style={intensity > 0 ? { opacity: 0.4 + intensity * 0.6 } : undefined}
-            >
-              <span className="text-nano text-text-faint">{i + 1}</span>
-              {amount !== undefined && (
-                <span className="w-[3px] h-[3px] rounded-full" style={{ background: amount < 0 ? 'var(--chart-danger)' : 'var(--chart-accent)' }} />
-              )}
-            </button>
+            <div key={day} className="relative" data-testid={`day-cell-${day}`}>
+              {isActive && activeTooltip ? (
+                <div
+                  role="tooltip"
+                  className={cn(
+                    CHART_TOOLTIP_CLASSNAME,
+                    'pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 z-10 min-w-28 -translate-x-1/2 px-3 py-2 text-left',
+                  )}
+                >
+                  <div className={cn(CHART_TOOLTIP_LABEL_CLASSNAME, 'text-micro')}>
+                    {activeTooltip.title}
+                  </div>
+                  <div
+                    className={cn(
+                      CHART_TOOLTIP_VALUE_CLASSNAME,
+                      'mt-1 text-caption font-semibold',
+                      activeTooltip.isNegative ? 'text-danger' : 'text-accent',
+                    )}
+                  >
+                    {activeTooltip.amount}
+                  </div>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                aria-label={amount != null ? `${i + 1}일: ₩${formatKRW(amount)}` : `${i + 1}일`}
+                onMouseEnter={() => amount != null && setActiveDay({ day: i + 1, amount })}
+                onFocus={() => amount != null && setActiveDay({ day: i + 1, amount })}
+                onMouseLeave={() => setActiveDay((current) => (current?.day === i + 1 ? null : current))}
+                onBlur={() => setActiveDay((current) => (current?.day === i + 1 ? null : current))}
+                onClick={() => amount != null && setActiveDay({ day: i + 1, amount })}
+                className="aspect-square w-full rounded flex flex-col items-center justify-center gap-0.5 bg-border-subtle"
+                style={intensity > 0 ? { opacity: 0.4 + intensity * 0.6 } : undefined}
+              >
+                <span className="text-nano text-text-faint">{i + 1}</span>
+                {amount !== undefined && (
+                  <span className="w-[3px] h-[3px] rounded-full" style={{ background: amount < 0 ? 'var(--chart-danger)' : 'var(--chart-accent)' }} />
+                )}
+              </button>
+            </div>
           )
         })}
       </div>

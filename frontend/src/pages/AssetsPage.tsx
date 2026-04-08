@@ -170,13 +170,13 @@ export function AssetsPage() {
                  <thead>
                    <tr>
                      {['상품', '잔액', '금리'].map((h) => (
-                       <th key={h} className="text-micro text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                       <th key={h} className="text-micro text-text-ghost pb-1.5 text-left">{h}</th>
                      ))}
                    </tr>
                  </thead>
                  <tbody>
                    {loans.data.items.slice(0, 4).map((loan, i) => (
-                     <tr key={i} className="border-b border-border-faint last:border-0">
+                     <tr key={i}>
                        <td className="py-2">
                          <div className="text-text-primary font-medium">{loan.product_name}</div>
                          <div className="text-micro text-text-faint">{loan.lender}</div>

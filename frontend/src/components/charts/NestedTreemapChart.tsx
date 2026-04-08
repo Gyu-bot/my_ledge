@@ -41,7 +41,7 @@ function CustomCell({ drilldown, ...props }: CustomCellProps) {
 
   const baseColor = getCategoryColor(category)
   const fill = drilldown
-    ? `color-mix(in srgb, ${baseColor} 82%, var(--color-surface-popover))`
+    ? `color-mix(in srgb, ${baseColor} 76%, var(--color-surface-popover))`
     : baseColor
   const label = width > 52 && height > 24 ? name : ''
 
@@ -55,6 +55,8 @@ function CustomCell({ drilldown, ...props }: CustomCellProps) {
         rx={6}
         fill={fill}
         opacity={drilldown ? 0.96 : 0.9}
+        stroke={`color-mix(in srgb, ${baseColor} 44%, var(--color-surface-card))`}
+        strokeWidth={1}
       />
       {label ? (
         <text

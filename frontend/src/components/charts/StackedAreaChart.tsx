@@ -64,9 +64,9 @@ export function StackedAreaChart({ items, height = 220 }: StackedAreaChartProps)
               stackId="spending"
               stroke={getCategoryColor(category)}
               fill={getCategoryColor(category)}
-              fillOpacity={category === '기타' ? 0.18 : 0.28}
-              strokeWidth={1.5}
-              activeDot={{ r: 4, fill: getCategoryColor(category) }}
+              fillOpacity={category === '기타' ? 0.2 : 0.34}
+              strokeWidth={1.8}
+              activeDot={{ r: 4, fill: getCategoryColor(category), stroke: 'var(--chart-tooltip-bg)', strokeWidth: 1 }}
             />
           ))}
         </AreaChart>

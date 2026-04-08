@@ -391,7 +391,7 @@ export function WorkbenchPage() {
                <thead>
                  <tr>
                    {['', '날짜', '설명', '거래처', '카테고리', '고정/변동', '필수여부', '메모', '상태', '금액', '동작'].map((h, i) => (
-                     <th key={i} className="text-micro text-text-ghost px-2 py-2 text-left border-b border-border-subtle font-medium">{h}</th>
+                     <th key={i} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{h}</th>
                    ))}
                  </tr>
                </thead>
@@ -406,7 +406,7 @@ export function WorkbenchPage() {
                      : tx.is_edited ? 'bg-surface-edited'
                      : ''
                    return (
-                     <tr key={tx.id} className={`border-b border-border-faint last:border-0 ${rowClass}`}>
+                    <tr key={tx.id} className={rowClass}>
                        <td className="px-2 py-2">
                          {!tx.is_deleted && !isEditing && (
                            <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx)} className="w-3 h-3 accent-accent" />
@@ -537,14 +537,14 @@ export function WorkbenchPage() {
             {uploadLogs.isLoading ? <LoadingState /> :
              uploadLogs.data && uploadLogs.data.items.length > 0 ? (
                <table className="w-full border-collapse text-caption">
-                 <thead>
-                   <tr>{['파일명', '상태', '신규', '스킵', '기준일', '업로드 시각'].map((h) => (
-                    <th key={h} className="text-micro text-text-ghost px-4 py-2 text-left border-b border-border-subtle">{h}</th>
-                   ))}</tr>
-                 </thead>
-                 <tbody>
-                   {uploadLogs.data.items.map((log) => (
-                     <tr key={log.id} className="border-b border-border-faint last:border-0">
+               <thead>
+                 <tr>{['파일명', '상태', '신규', '스킵', '기준일', '업로드 시각'].map((h) => (
+                    <th key={h} className="text-micro text-text-ghost px-4 py-2 text-left">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  {uploadLogs.data.items.map((log) => (
+                    <tr key={log.id}>
                        <td className="px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
                        <td className="px-4 py-2">
                          <span className={`text-nano px-1.5 py-0.5 rounded ${log.status === 'success' || log.status === 'partial' ? 'bg-accent-dim text-accent' : 'bg-danger-dim text-danger'}`}>

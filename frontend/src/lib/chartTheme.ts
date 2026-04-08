@@ -16,8 +16,11 @@ export const CHART_TOOLTIP_STYLE = {
   borderRadius: 6,
   fontSize: 10,
   color: 'var(--chart-tooltip-text)',
-  boxShadow: '0 14px 30px rgba(4, 8, 18, 0.45)',
+  boxShadow: 'var(--chart-tooltip-shadow)',
 } as const
+export const CHART_TOOLTIP_CLASSNAME = 'chart-tooltip-shell'
+export const CHART_TOOLTIP_LABEL_CLASSNAME = 'chart-tooltip-label'
+export const CHART_TOOLTIP_VALUE_CLASSNAME = 'chart-tooltip-value'
 export const CHART_TOOLTIP_LABEL_STYLE = {
   color: 'var(--chart-tooltip-label)',
 } as const

@@ -5,9 +5,12 @@ import {
   CHART_ACCENT,
   CHART_DANGER,
   CHART_NEUTRAL,
+  CHART_TOOLTIP_CLASSNAME,
   CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_LABEL_CLASSNAME,
   CHART_TOOLTIP_ITEM_STYLE,
   CHART_TOOLTIP_STYLE,
+  CHART_TOOLTIP_VALUE_CLASSNAME,
   TREEMAP_COLORS,
   getChartHoverFill,
   getCategoryColor,
@@ -28,13 +31,16 @@ describe('chartTheme', () => {
 
   it('provides stable tooltip and axis styles', () => {
     expect(AXIS_TICK_STYLE).toEqual({ fill: 'var(--chart-axis-text)', fontSize: 9 })
+    expect(CHART_TOOLTIP_CLASSNAME).toBe('chart-tooltip-shell')
+    expect(CHART_TOOLTIP_LABEL_CLASSNAME).toBe('chart-tooltip-label')
+    expect(CHART_TOOLTIP_VALUE_CLASSNAME).toBe('chart-tooltip-value')
     expect(CHART_TOOLTIP_STYLE).toEqual({
       background: 'var(--chart-tooltip-bg)',
       border: '1px solid var(--chart-tooltip-border)',
       borderRadius: 6,
       fontSize: 10,
       color: 'var(--chart-tooltip-text)',
-      boxShadow: '0 14px 30px rgba(4, 8, 18, 0.45)',
+      boxShadow: 'var(--chart-tooltip-shadow)',
     })
     expect(CHART_TOOLTIP_LABEL_STYLE).toEqual({ color: 'var(--chart-tooltip-label)' })
     expect(CHART_TOOLTIP_ITEM_STYLE).toEqual({ color: 'var(--chart-tooltip-text)' })

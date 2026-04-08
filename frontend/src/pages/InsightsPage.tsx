@@ -131,12 +131,12 @@ export function InsightsPage() {
                <table className="w-full border-collapse text-caption">
                  <thead>
                    <tr>{['거래처', '주기', '평균금액', '횟수'].map((h) => (
-                     <th key={h} className="text-micro text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                     <th key={h} className="text-micro text-text-ghost pb-1.5 text-left">{h}</th>
                    ))}</tr>
                  </thead>
                  <tbody>
                    {recurring.data.items.map((item, i) => (
-                     <tr key={i} className="border-b border-border-faint last:border-0">
+                     <tr key={i}>
                        <td className="py-2 text-text-primary font-medium">{item.merchant}</td>
                        <td className="py-2"><span className="text-nano bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">{item.interval_type}</span></td>
                        <td className="py-2 text-right font-semibold">₩ {formatKRW(item.avg_amount)}</td>
@@ -164,12 +164,12 @@ export function InsightsPage() {
                <table className="w-full border-collapse text-caption">
                  <thead>
                    <tr>{['카테고리', '이번 달', '기준선', '증감'].map((h) => (
-                     <th key={h} className="text-micro text-text-ghost pb-1.5 text-left border-b border-border-subtle">{h}</th>
+                     <th key={h} className="text-micro text-text-ghost pb-1.5 text-left">{h}</th>
                    ))}</tr>
                  </thead>
                  <tbody>
                    {anomalies.data.items.map((item, i) => (
-                     <tr key={i} className="border-b border-border-faint last:border-0">
+                     <tr key={i}>
                        <td className="py-2 text-text-primary font-medium">{item.category}</td>
                        <td className="py-2 text-right">₩ {formatKRWCompact(item.amount)}</td>
                        <td className="py-2 text-right text-text-faint">₩ {formatKRWCompact(item.baseline_avg)}</td>

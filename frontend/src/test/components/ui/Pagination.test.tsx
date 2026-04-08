@@ -19,4 +19,12 @@ describe('Pagination', () => {
     render(<Pagination page={1} perPage={20} total={40} onPageChange={vi.fn()} />)
     expect(screen.getByRole('button', { name: '‹' })).toBeDisabled()
   })
+
+  it('uses the dedicated pagination token size for summary and controls', () => {
+    render(<Pagination page={2} perPage={20} total={347} onPageChange={vi.fn()} />)
+
+    expect(screen.getByText(/21–40 \/ 347건/).className).toContain('text-pagination')
+    expect(screen.getByRole('button', { name: '‹' }).className).toContain('text-pagination')
+    expect(screen.getByRole('button', { name: '2' }).className).toContain('text-pagination')
+  })
 })

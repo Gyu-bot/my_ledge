@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 배치 유지, frontend UI polish follow-up 구현 및 Tailnet smoke 검증 완료
-- **Last Worker:** Codex (2026-04-08T09:42+0900, frontend-developer 병행으로 readability/treemap follow-up 구현, frontend 검증 및 Tailnet smoke 재확인)
+- **Phase:** 안정화 배치 유지, frontend UI polish checklist follow-up 구현 및 frontend 전체 검증 완료
+- **Last Worker:** Codex (2026-04-08T10:16+0900, frontend-developer 병행으로 breadcrumb/pagination/table/Spending tooltip·palette follow-up 구현, frontend 54-test/lint/typecheck 재검증)
 - **Branch:** main
 
 ## Completed
@@ -70,6 +70,7 @@
 - [x] Frontend UI polish batch 검증 완료: `cd frontend && npm test -- --runInBand` → `48 passed`, `npm run lint` 통과, `npm run typecheck` 통과
 - [x] Frontend UI polish batch 구현 완료: divider contrast 완화, chart hover/tooltip semantic token 정리, Spending stacked area + 조회기간 picker + 소분류 기간 badge + nested treemap + calendar popover, Insights 기간/기준월 selector, Workbench hierarchy/read-only polish, Vite MagicDNS allowlist 반영, 관련 테스트 보강
 - [x] Frontend UI polish follow-up 완료: topbar breadcrumb spacing 및 `MyLedge` 가독성 상향, 그래프 month axis year-month formatter 공통화, popover/background 분리 강화, secondary font/border contrast 재조정, Spending treemap category-first drilldown + 높이 확장, frontend `npm test -- --runInBand` → `53 passed`, `npm run lint`, `npm run typecheck` 재통과, Tailnet host smoke `HTTP/1.1 200 OK` 재확인
+- [x] Frontend UI polish checklist follow-up 완료: breadcrumb 상단 title treatment 전역 밝기 상향, table row/header separator 제거, pagination 전용 token/compact sizing 추가, Spending stacked area + treemap palette 대비 재구성, `DailyCalendar` tooltip 셀 기준 anchor + shared tooltip token contract 적용, frontend `npm test -- --runInBand` → `54 passed`, `npm run lint`, `npm run typecheck` 통과
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
@@ -204,6 +205,11 @@
   - [x] `거래처별 지출 비중` 을 category -> merchant nested treemap 으로 전환
   - [x] `일별 지출 달력` 에 hover/popover 금액 표시 추가
   - [x] 프로젝트 전체 pagination 폰트 크기를 한 단계 축소
+  - [x] breadcrumb 상단 title treatment 을 전역적으로 밝게 정리
+  - [x] table header/row separator 를 제거해 시선 분산을 줄임
+  - [x] pagination 전용 font token과 compact control sizing을 추가
+  - [x] Spending stacked area / treemap palette 를 dark theme 기준 고대비 색으로 재구성
+  - [x] `일별 지출 달력` tooltip 을 날짜 셀 기준 상대 위치로 고정하고 chart tooltip token을 공유
   - [x] 인사이트 `거래처 소비 Top 5` 기간 선택지 추가: 최근 1개월 / 3개월 / 6개월 / 1년
   - [x] 인사이트 `카테고리 전월 대비` 기준월 선택 UI 추가
   - [x] dark theme 에서 가독성이 낮은 `soft` 계열 font color를 전역적으로 상향 조정
