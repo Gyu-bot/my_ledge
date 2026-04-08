@@ -65,6 +65,7 @@
 - [x] Frontend UI polish batch 설계 문서 작성: shell hierarchy, shared interaction, Spending/Insights/Workbench polish, Tailnet review 안정화 범위를 spec 으로 고정 (`docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md`)
 - [x] Frontend UI polish spec 확장: divider contrast, chart hover/tooltip tone, Spending stacked area / 조회기간 picker / nested treemap 요구 반영
 - [x] Frontend UI polish 구현 계획 작성: 공통 shell/token, chart hover contract, Spending/Insights/Workbench, Tailnet review 검증 순서로 실행 계획 고정 (`docs/superpowers/plans/2026-04-08-frontend-ui-polish-batch.md`)
+- [x] Frontend UI polish batch 구현/검증 완료: `SectionCard` header contract 확장, divider/soft-text/chart tooltip token 조정, Spending stacked area + 조회기간 picker + nested treemap + daily calendar popover, Insights 기간/기준월 control, Workbench hierarchy polish, frontend `npm test -- --runInBand` / `npm run lint` / `npm run typecheck` 통과
 - [x] Frontend UI polish batch 구현 완료: 공통 `SectionCard`/`Pagination`/dark theme divider·text token 정리, chart hover/tooltip contract 정규화, `SpendingPage` stacked area + 조회 기간 month picker + nested treemap + `DailyCalendar` popover, `InsightsPage` 기간/기준월 control, `WorkbenchPage` hierarchy/read-only/bulk feedback 보정, Vite Tailnet hostname allowlist 정리
 - [x] Frontend UI polish batch 검증 완료: `cd frontend && npm test -- --runInBand` → `48 passed`, `npm run lint` 통과, `npm run typecheck` 통과
 - [x] Frontend UI polish batch 구현 완료: divider contrast 완화, chart hover/tooltip semantic token 정리, Spending stacked area + 조회기간 picker + 소분류 기간 badge + nested treemap + calendar popover, Insights 기간/기준월 selector, Workbench hierarchy/read-only polish, Vite MagicDNS allowlist 반영, 관련 테스트 보강
@@ -209,7 +210,7 @@
   - [x] desktop sidebar 기본 icon-only collapse + click-to-expand shell interaction
 - [ ] Vite dev server의 Tailnet hostname(`moltbot.tailbe7385.ts.net`) 접근 시 403이 나오는 host allowlist 경로를 정리해 MagicDNS 기반 review URL도 안정화
   - [x] Vite config `allowedHosts` 에 MagicDNS hostname 허용 추가
-  - [ ] live Vite dev server 기준 hostname smoke 재확인
+  - [x] `curl -I -H 'Host: moltbot.tailbe7385.ts.net' http://127.0.0.1:4174` 기준 `HTTP/1.1 200 OK` 확인
 - [ ] Frontend 재설계
   - [x] 상세 wireframe 승인 반영
   - [x] `docs/superpowers/specs/` 아래 redesign spec 작성

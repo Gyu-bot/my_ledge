@@ -109,6 +109,51 @@
 - Workbench hierarchy/read-only/bulk state polish
 - Tailnet hostname Vite allowlist 정리와 frontend verification
 
+## Frontend UI Polish Batch Implementation
+
+- 사용자 요청
+  - 승인된 UI polish spec과 implementation plan 기준으로 실제 frontend 변경을 진행하고 최종 검토까지 마무리해 달라는 요청
+
+### 구현 범위
+
+- 공통
+  - `SectionCard` header contract를 `title/meta/action/description/body` 구조로 확장하고 Spending/Insights/Workbench에 적용
+  - divider contrast, `soft` 계열 텍스트, chart hover/tooltip semantic token을 전역 CSS와 chart util에 반영
+  - pagination density를 한 단계 줄이고 topbar/sidebar/card/filter hierarchy를 재정렬
+- Spending
+  - `월별 카테고리 추이` 를 stacked area chart로 교체하고 Top 5 + `기타` 집계 적용
+  - 기존 range slider 카드 제거 후 조회 기간 select control + `조회 기간` meta badge로 정렬
+  - `소분류별 지출` period meta 추가
+  - `거래처별 지출 비중` 을 category > merchant nested treemap으로 교체
+  - `일별 지출 달력` 에 hover/focus popover와 active summary를 추가
+- Insights
+  - `거래처 소비 Top 5` 에 최근 1/3/6/12개월 selector 추가
+  - `카테고리 전월 대비` 에 기준월 selector 추가
+- Workbench
+  - filter bar / bulk panel / secondary accordion hierarchy를 약한 border와 compact spacing 기준으로 재정렬
+  - read-only warning path를 테스트로 고정
+- Runtime
+  - `vite.config.ts` 에 Tailnet hostname allowlist 추가
+
+### 실행한 명령
+
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `20 passed`, `48 passed`
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+- `cd frontend && npm run dev -- --host 127.0.0.1 --port 4174`
+  - 결과: 임시 Vite server 기동 후 smoke 용도로만 사용하고 즉시 종료
+- `curl -I -H 'Host: moltbot.tailbe7385.ts.net' http://127.0.0.1:4174`
+  - 결과: `HTTP/1.1 200 OK`
+
+### 결과
+
+- 승인된 1차 UI polish batch는 실제 화면 코드와 테스트까지 반영 완료
+- frontend regression, lint, typecheck, Tailnet host allowlist smoke가 모두 green
+- 남은 후속은 운영 배포본 capture와 Workbench bulk mutation / topbar meta lifecycle test 보강이다
+
 ## Frontend UI Polish Batch Execution
 
 - 사용자 요청
