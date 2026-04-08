@@ -82,3 +82,29 @@
 
 - `docs/STATUS.md`
   - Last Worker / 검증 완료 상태 / 남은 TODO 정리
+
+## Frontend UI Polish Batch Planning
+
+- 사용자 요청
+  - 기존 `docs/STATUS.md` 의 frontend polish TODO를 우선으로 하되, divider contrast, chart hover/tooltip tone, Spending stacked area, 조회 기간 picker, nested treemap 요구도 함께 구현해 달라는 요청
+  - 상세 구현 계획과 구현 모두 `frontend-developer` 흐름으로 진행하고, 최종 검토 후 보고해 달라는 요청
+
+### 판단
+
+- 기존 TODO와 추가 요구가 서로 강하게 연결돼 있어서 shell/readability와 interaction을 분리하지 않고 한 batch로 묶는 것이 맞다고 판단
+- plan 문서는 현재 저장소의 기존 implementation plan 밀도에 맞춰 practical checklist 형태로 두고, 실제 코드 변경은 frontend subagent에 위임하는 방식으로 진행하기로 결정
+- mockup/visual companion은 Tailnet URL만 안정화하고, 실제 앱 smoke는 현재 떠 있는 backend/frontend dev server를 그대로 쓰는 방향으로 유지
+
+### 문서화
+
+- `docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md`
+- `docs/superpowers/plans/2026-04-08-frontend-ui-polish-batch.md`
+
+### 계획 범위
+
+- shared shell/token/section contract
+- chart hover/tooltip semantic styling
+- Spending stacked area + 조회 기간 picker + nested treemap + calendar popover
+- Insights 기간/기준월 control
+- Workbench hierarchy/read-only/bulk state polish
+- Tailnet hostname Vite allowlist 정리와 frontend verification

@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 배치 유지, frontend UI polish batch spec 수정 반영 및 구현 대기
-- **Last Worker:** Codex (2026-04-08T08:53+0900, chart hover/tooltip, stacked area, nested treemap 요구를 UI polish spec에 추가)
+- **Phase:** 안정화 배치 유지, frontend UI polish batch 구현 계획 작성 완료 및 구현 진행 중
+- **Last Worker:** Codex (2026-04-08T08:53+0900, UI polish batch implementation plan 작성 후 frontend 구현 위임 준비)
 - **Branch:** main
 
 ## Completed
@@ -64,6 +64,7 @@
 - [x] Frontend shell polish: desktop 사이드바를 기본 icon-only 상태로 접고 클릭 토글로 펼치는 interaction 추가 + layout 테스트/린트/typecheck 통과
 - [x] Frontend UI polish batch 설계 문서 작성: shell hierarchy, shared interaction, Spending/Insights/Workbench polish, Tailnet review 안정화 범위를 spec 으로 고정 (`docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md`)
 - [x] Frontend UI polish spec 확장: divider contrast, chart hover/tooltip tone, Spending stacked area / 조회기간 picker / nested treemap 요구 반영
+- [x] Frontend UI polish 구현 계획 작성: 공통 shell/token, chart hover contract, Spending/Insights/Workbench, Tailnet review 검증 순서로 실행 계획 고정 (`docs/superpowers/plans/2026-04-08-frontend-ui-polish-batch.md`)
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
