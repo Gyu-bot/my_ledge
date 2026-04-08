@@ -1,6 +1,6 @@
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts'
 import type { NetWorthPoint } from '../../types/asset'
-import { formatKRWCompact } from '../../lib/utils'
+import { formatKRWCompact, formatMonthAxisLabel } from '../../lib/utils'
 import {
   AXIS_TICK_STYLE,
   CHART_ACCENT,
@@ -25,7 +25,7 @@ export function LineAreaChart({ data, height = 130 }: LineAreaChartProps) {
   }
 
   const chartData = data.map((d) => ({
-    date: d.snapshot_date.slice(5),
+    date: formatMonthAxisLabel(d.snapshot_date),
     value: parseFloat(d.net_worth),
   }))
 

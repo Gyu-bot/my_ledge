@@ -38,6 +38,16 @@ vi.mock('../../components/layout/chromeContext', () => ({
   useChromeContext: () => ({ setMetaBadge: vi.fn() }),
 }))
 
+vi.mock('../../components/charts/NestedTreemapChart', () => ({
+  NestedTreemapChart: ({ items, height }: { items: unknown; height: number }) => (
+    <div
+      data-testid="nested-treemap"
+      data-height={String(height)}
+      data-items={JSON.stringify(items)}
+    />
+  ),
+}))
+
 function wrap(ui: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -114,5 +124,30 @@ describe('SpendingPage', () => {
 
     expect(screen.queryByText('조회 범위')).not.toBeInTheDocument()
     expect(screen.getAllByText(/조회 기간/).length).toBeGreaterThan(0)
+  })
+
+  it('passes category-first treemap data and the taller chart height to the merchant spend section', () => {
+    useMerchantTreemapMock.mockImplementation(() => ({
+      data: {
+        items: [
+          {
+            name: '식비',
+            value: 150000,
+            children: [
+              { name: '스타벅스', value: 80000 },
+              { name: '마켓컬리', value: 70000 },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<SpendingPage />)
+
+    const treemap = screen.getByTestId('nested-treemap')
+    expect(treemap).toHaveAttribute('data-height', '440')
+    expect(treemap.getAttribute('data-items')).toContain('식비')
+    expect(treemap.getAttribute('data-items')).toContain('스타벅스')
   })
 })

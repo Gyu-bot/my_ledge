@@ -539,7 +539,7 @@ export function WorkbenchPage() {
                <table className="w-full border-collapse text-caption">
                  <thead>
                    <tr>{['파일명', '상태', '신규', '스킵', '기준일', '업로드 시각'].map((h) => (
-                     <th key={h} className="text-micro text-text-ghost px-4 py-2 text-left border-b border-border">{h}</th>
+                    <th key={h} className="text-micro text-text-ghost px-4 py-2 text-left border-b border-border-subtle">{h}</th>
                    ))}</tr>
                  </thead>
                  <tbody>

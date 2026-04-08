@@ -1,8 +1,8 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 배치 유지, frontend UI polish batch 구현 및 frontend 검증 완료
-- **Last Worker:** Codex (2026-04-08T09:16+0900, frontend UI polish batch 구현/검증 및 문서 갱신)
+- **Phase:** 안정화 배치 유지, frontend UI polish follow-up 구현 및 frontend 검증 완료
+- **Last Worker:** Codex (2026-04-08T09:41+0900, frontend-developer 병행으로 readability/treemap follow-up 구현 및 frontend 검증 재실행)
 - **Branch:** main
 
 ## Completed
@@ -69,6 +69,7 @@
 - [x] Frontend UI polish batch 구현 완료: 공통 `SectionCard`/`Pagination`/dark theme divider·text token 정리, chart hover/tooltip contract 정규화, `SpendingPage` stacked area + 조회 기간 month picker + nested treemap + `DailyCalendar` popover, `InsightsPage` 기간/기준월 control, `WorkbenchPage` hierarchy/read-only/bulk feedback 보정, Vite Tailnet hostname allowlist 정리
 - [x] Frontend UI polish batch 검증 완료: `cd frontend && npm test -- --runInBand` → `48 passed`, `npm run lint` 통과, `npm run typecheck` 통과
 - [x] Frontend UI polish batch 구현 완료: divider contrast 완화, chart hover/tooltip semantic token 정리, Spending stacked area + 조회기간 picker + 소분류 기간 badge + nested treemap + calendar popover, Insights 기간/기준월 selector, Workbench hierarchy/read-only polish, Vite MagicDNS allowlist 반영, 관련 테스트 보강
+- [x] Frontend UI polish follow-up 완료: topbar breadcrumb spacing 및 `MyLedge` 가독성 상향, 그래프 month axis year-month formatter 공통화, popover/background 분리 강화, secondary font/border contrast 재조정, Spending treemap category-first drilldown + 높이 확장, frontend `npm test -- --runInBand` / `npm run lint` / `npm run typecheck` 재통과
 - [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
 - [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
 - [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가

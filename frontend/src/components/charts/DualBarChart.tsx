@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import type { MonthlyCashflowItem } from '../../types/analytics'
-import { formatKRWCompact } from '../../lib/utils'
+import { formatKRWCompact, formatMonthAxisLabel } from '../../lib/utils'
 import {
   AXIS_TICK_STYLE,
   CHART_ACCENT,
@@ -20,7 +20,7 @@ interface DualBarChartProps {
 
 export function DualBarChart({ data, height = 110 }: DualBarChartProps) {
   const chartData = data.map((d) => ({
-    period: d.period.slice(5),
+    period: formatMonthAxisLabel(d.period),
     income: d.income,
     expense: Math.abs(d.expense),
     isCurrent: d === data[data.length - 1],

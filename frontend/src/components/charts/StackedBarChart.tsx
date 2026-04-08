@@ -1,6 +1,6 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import type { CategoryTimelineItem } from '../../types/transaction'
-import { formatKRWCompact } from '../../lib/utils'
+import { formatKRWCompact, formatMonthAxisLabel } from '../../lib/utils'
 import {
   CHART_ACCENT_BRIGHT,
   CHART_NEUTRAL,
@@ -30,7 +30,7 @@ function buildChartData(items: CategoryTimelineItem[]) {
   const categories = topCategories.includes('기타') ? topCategories : [...topCategories, '기타']
 
   const data = periods.map((period) => {
-    const row: Record<string, unknown> = { period: period.slice(5) }
+    const row: Record<string, unknown> = { period: formatMonthAxisLabel(period) }
     const grouped = new Map<string, number>()
     for (const item of items.filter((entry) => entry.period === period)) {
       const category = topCategories.includes(item.category) ? item.category : '기타'
@@ -45,7 +45,7 @@ function buildChartData(items: CategoryTimelineItem[]) {
   return {
     data,
     categories,
-    latestPeriod: periods[periods.length - 1]?.slice(5),
+    latestPeriod: periods[periods.length - 1] ? formatMonthAxisLabel(periods[periods.length - 1]!) : undefined,
   }
 }
 

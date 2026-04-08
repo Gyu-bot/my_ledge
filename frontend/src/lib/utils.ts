@@ -29,6 +29,13 @@ export function formatYearMonth(dateStr: string): string {
   return dateStr.slice(0, 7)
 }
 
+export function formatMonthAxisLabel(value: string): string {
+  const normalized = value.slice(0, 7)
+  const [year, month] = normalized.split('-')
+  if (!year || !month) return value
+  return `${year.slice(-2)}.${month}`
+}
+
 export function monthRange(start: string, end: string): string[] {
   const result: string[] = []
   const [sy, sm] = start.split('-').map(Number)

@@ -239,3 +239,56 @@
 
 - 기존 UI polish TODO와 추가 요청 범위는 frontend 코드와 테스트 기준으로 반영 완료
 - 현재 남은 후속 범위는 운영 배포본 기준 MagicDNS smoke 확인과 일부 behavior coverage 확장이다
+
+## Frontend UI Polish Follow-up
+
+- 사용자 요청
+  - breadcrumb 상하 여백과 `MyLedge` 가독성 보강
+  - month axis에 연도 포함
+  - popover 배경 분리 강화
+  - table divider contrast 완화
+  - secondary font color 전역 상향
+  - Spending stacked area / treemap palette 대비 상향
+  - 거래처 treemap category-first drilldown과 높이 확대
+
+### 판단
+
+- shell/readability 성격의 토큰 수정과 Spending treemap interaction 수정이 함께 필요했기 때문에, `frontend-developer` 에게는 treemap drilldown만 분리 위임하고 메인 세션에서는 공통 토큰/formatter/topbar를 정리했다
+- month axis 표기는 개별 chart마다 문자열 slice를 반복하던 상태라 `formatMonthAxisLabel` helper로 공통화하는 편이 안전하다고 판단
+- table divider와 서브 텍스트 가독성 이슈는 개별 페이지 클래스보다 토큰 재조정으로 푸는 것이 맞다고 판단
+
+### TDD
+
+- red:
+  - `frontend/src/test/components/layout/AppTopbar.test.tsx`
+  - `frontend/src/test/lib/utils.test.ts`
+  - `frontend/src/test/components/NestedTreemapChart.test.tsx`
+  - 실행 결과: breadcrumb spacing/brand readability, month-axis formatter, treemap drilldown 관련 실패 확인
+- green:
+  - `frontend/src/components/layout/AppTopbar.tsx`
+  - `frontend/src/lib/utils.ts`
+  - `frontend/src/components/charts/{DualBarChart,LineAreaChart,StackedAreaChart,StackedBarChart,NestedTreemapChart}.tsx`
+  - `frontend/src/components/ui/DailyCalendar.tsx`
+  - `frontend/src/index.css`
+  - `frontend/tailwind.config.js`
+  - `frontend/src/pages/SpendingPage.tsx`
+  - `frontend/src/pages/WorkbenchPage.tsx`
+
+### 실행한 명령
+
+- `cd frontend && npm test -- --runInBand src/test/components/layout/AppTopbar.test.tsx src/test/lib/utils.test.ts src/test/components/NestedTreemapChart.test.tsx`
+  - 결과: red 확인 후 green `3 files passed`, `13 tests passed`
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `21 files passed`, `53 tests passed`
+
+### 결과
+
+- topbar breadcrumb는 더 여유 있는 vertical spacing과 brighter brand token으로 정리
+- chart month axis는 year-month(`YYYY.MM`) 형식으로 통일
+- chart tooltip / calendar popover는 surface 분리와 stronger border로 배경 대비를 보강
+- secondary text와 table divider token을 전역 상향/완화 조정
+- Spending treemap은 category-first view에서 merchant drilldown 가능한 taller chart로 전환

@@ -46,7 +46,7 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
       {activeTooltip ? (
         <div
           role="tooltip"
-          className="absolute right-0 top-6 z-10 min-w-28 rounded-lg border border-border-subtle bg-surface-card px-3 py-2 shadow-lg"
+          className="absolute right-0 top-6 z-10 min-w-28 rounded-lg border border-border-strong bg-surface-popover px-3 py-2 shadow-[0_18px_44px_rgba(2,6,16,0.55)]"
         >
           <div className="text-micro text-text-secondary">{activeTooltip.title}</div>
           <div className={`mt-1 text-caption font-semibold ${activeTooltip.isNegative ? 'text-danger' : 'text-accent'}`}>

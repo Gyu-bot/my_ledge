@@ -11,6 +11,7 @@
     --color-surface-base: #060810;
     --color-surface-panel: #0b0f1a;
     --color-surface-card: #0f1623;
+    --color-surface-popover: #152033;
     --color-surface-bar: #080b12;
     --color-surface-section: #0c1320;
     --color-surface-input: #0a0d13;
@@ -21,10 +22,10 @@
     --color-surface-danger-muted: #0c0808;
     --color-surface-danger-strong: #1a0a0a;
 
-    --color-border-default: #1a2035;
-    --color-border-subtle: #131a28;
-    --color-border-strong: #20293a;
-    --color-border-faint: #101622;
+    --color-border-default: #161f2e;
+    --color-border-subtle: #0d141f;
+    --color-border-strong: #202d40;
+    --color-border-faint: #091019;
     --color-border-info: #1e3a5f;
 
     --color-accent-default: #10b981;
@@ -47,11 +48,11 @@
     --color-info-soft: #1e40af;
     --color-info-muted: #1e3a5f;
 
-    --color-text-primary: #d1d5db;
-    --color-text-secondary: #9ca3af;
-    --color-text-muted: #7b8494;
-    --color-text-faint: #646f82;
-    --color-text-ghost: #4e596d;
+    --color-text-primary: #dde5ef;
+    --color-text-secondary: #c2cddd;
+    --color-text-muted: #a5b2c4;
+    --color-text-faint: #8896aa;
+    --color-text-ghost: #718198;
     --color-text-inverse: #ffffff;
 
     --chart-accent: var(--color-accent-default);
@@ -65,25 +66,25 @@
     --chart-info-soft: #1e40af;
     --chart-warning: #92400e;
     --chart-warning-muted: var(--color-warn-default);
-    --chart-tooltip-bg: var(--color-surface-card);
-    --chart-tooltip-border: var(--color-border-default);
+    --chart-tooltip-bg: var(--color-surface-popover);
+    --chart-tooltip-border: var(--color-border-strong);
     --chart-tooltip-text: var(--color-text-primary);
-    --chart-tooltip-label: var(--color-text-secondary);
-    --chart-axis-text: var(--color-text-ghost);
+    --chart-tooltip-label: var(--color-text-muted);
+    --chart-axis-text: var(--color-text-muted);
     --chart-label-strong: rgba(255, 255, 255, 0.85);
     --chart-label-muted: rgba(255, 255, 255, 0.45);
     --chart-hover-accent: color-mix(in srgb, var(--color-accent-default) 18%, var(--color-surface-section));
     --chart-hover-danger: color-mix(in srgb, var(--color-danger-default) 18%, var(--color-surface-section));
     --chart-hover-default: color-mix(in srgb, var(--color-info-default) 14%, var(--color-surface-section));
-    --chart-category-food: #2563a8;
-    --chart-category-transport: #059669;
-    --chart-category-subscription: #7c3aed;
-    --chart-category-shopping: #dc2626;
-    --chart-category-housing: #d97706;
-    --chart-category-medical: #0891b2;
-    --chart-category-insurance: #7c3aed;
-    --chart-category-other: #374151;
-    --chart-category-fallback: #4b5563;
+    --chart-category-food: #4f8df7;
+    --chart-category-transport: #31c48d;
+    --chart-category-subscription: #9b6bff;
+    --chart-category-shopping: #f87171;
+    --chart-category-housing: #f3b45b;
+    --chart-category-medical: #48c8e7;
+    --chart-category-insurance: #d182ff;
+    --chart-category-other: #7b8aa4;
+    --chart-category-fallback: #6c7890;
     --chart-treemap-1: #1e3a5f;
     --chart-treemap-2: #1a3b2e;
     --chart-treemap-3: #2d1f4a;

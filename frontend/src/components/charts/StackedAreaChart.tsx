@@ -1,6 +1,6 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import type { CategoryTimelineItem } from '../../types/transaction'
-import { formatKRWCompact } from '../../lib/utils'
+import { formatKRWCompact, formatMonthAxisLabel } from '../../lib/utils'
 import {
   AXIS_TICK_STYLE,
   CHART_TOOLTIP_ITEM_STYLE,
@@ -30,7 +30,7 @@ export function StackedAreaChart({ items, height = 220 }: StackedAreaChartProps)
 
   const categories = [...topCategories, '기타']
   const data = periods.map((period) => {
-    const row: Record<string, number | string> = { period: period.slice(5), fullPeriod: period }
+    const row: Record<string, number | string> = { period: formatMonthAxisLabel(period), fullPeriod: period }
 
     for (const category of categories) {
       row[category] = 0

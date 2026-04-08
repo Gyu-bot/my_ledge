@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatKRW, formatKRWCompact, formatPct, monthRange } from '../../lib/utils'
+import { formatKRW, formatKRWCompact, formatMonthAxisLabel, formatPct, monthRange } from '../../lib/utils'
 
 describe('formatKRW', () => {
   it('formats positive numbers with comma', () => {
@@ -34,5 +34,15 @@ describe('monthRange', () => {
   })
   it('returns single month when start equals end', () => {
     expect(monthRange('2026-03', '2026-03')).toEqual(['2026-03'])
+  })
+})
+
+describe('formatMonthAxisLabel', () => {
+  it('keeps the year when formatting a YYYY-MM month', () => {
+    expect(formatMonthAxisLabel('2026-03')).toBe('26.03')
+  })
+
+  it('keeps the year when formatting a YYYY-MM-DD date', () => {
+    expect(formatMonthAxisLabel('2026-03-01')).toBe('26.03')
   })
 })

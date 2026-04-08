@@ -21,6 +21,7 @@ export default {
           base: 'var(--color-surface-base)',
           panel: 'var(--color-surface-panel)',
           card: 'var(--color-surface-card)',
+          popover: 'var(--color-surface-popover)',
           bar: 'var(--color-surface-bar)',
           section: 'var(--color-surface-section)',
           input: 'var(--color-surface-input)',
