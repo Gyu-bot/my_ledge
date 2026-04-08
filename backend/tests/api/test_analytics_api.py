@@ -608,7 +608,7 @@ async def test_spending_anomalies_endpoint_paginates_results(
     assert data["items"][1]["category"] == "카테고리-12"
 
 
-async def test_spending_anomalies_endpoint_applies_threshold_to_percent_change(
+async def test_spending_anomalies_endpoint_documents_anomaly_score_threshold(
     async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -652,4 +652,7 @@ async def test_spending_anomalies_endpoint_applies_threshold_to_percent_change(
     )
 
     assert response.status_code == 200
-    assert response.json()["items"] == []
+    payload = response.json()
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["category"] == "금융"
+    assert "anomaly_score" in payload["assumptions"]

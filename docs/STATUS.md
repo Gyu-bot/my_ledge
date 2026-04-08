@@ -300,7 +300,7 @@
   - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
 
 ## Key Decisions
-- 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 `anomaly_score` cutoff가 아니라 baseline 평균 대비 증감률 비율 cutoff로 해석한다. `anomaly_score` 는 정렬/설명용으로 유지하고, threshold `0.5` 는 50% 증감률을 뜻하도록 계약을 고정한다.
+- 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 기존 `anomaly_score` cutoff 계약을 유지한다. 다만 응답 `assumptions` 에 threshold가 퍼센트가 아니라 score 기준이며, 표준편차가 있으면 `|delta|/stdev`, 없으면 `|delta|/baseline_avg` 로 계산된다는 설명을 명시한다.
 - 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
 - 2026-03-23: 중복 처리는 복합 유니크 대신 시간 커서 기반 증분 적재 방식 채택
 - 2026-03-23: OpenClaw 연동은 하이브리드 (DB readonly + 업로드 API)

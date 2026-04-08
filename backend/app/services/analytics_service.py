@@ -434,24 +434,18 @@ async def get_spending_anomalies(
 
         delta = target_amount - baseline_avg
         delta_pct = _safe_ratio(delta * 100, baseline_avg)
-        delta_ratio = _safe_ratio(abs(delta), baseline_avg)
 
         if b_stdev > 0:
             anomaly_score = round(abs(delta) / b_stdev, 4)
         elif baseline_avg > 0:
             anomaly_score = round(abs(delta) / baseline_avg, 4)
-        elif target_amount > 0:
-            anomaly_score = round(float(target_amount), 4)
         else:
             anomaly_score = 0.0
 
-        threshold_ratio = float("inf") if baseline_avg == 0 and target_amount > 0 else (delta_ratio or 0.0)
-        if threshold_ratio < anomaly_threshold:
+        if anomaly_score < anomaly_threshold:
             continue
 
-        if baseline_avg == 0 and target_amount > 0:
-            reason = "지출 신규 발생"
-        elif delta > 0:
+        if delta > 0:
             reason = f"지출 급증 (+{round(delta_pct or 0):.0f}%)"
         else:
             reason = f"지출 급감 ({round(delta_pct or 0):.0f}%)"
@@ -475,7 +469,7 @@ async def get_spending_anomalies(
         page=resolved_page,
         per_page=per_page,
         items=paged_items,
-        assumptions=f"기준월={target_period}, baseline={baseline_months}개월 평균 대비, threshold={anomaly_threshold} ({round(anomaly_threshold * 100):.0f}% 증감률 기준)",
+        assumptions=f"기준월={target_period}, baseline={baseline_months}개월 평균 대비, threshold={anomaly_threshold} anomaly_score 기준 (표준편차가 있으면 |delta|/stdev, 없으면 |delta|/baseline_avg)",
     )
 
 

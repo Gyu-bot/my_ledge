@@ -792,7 +792,7 @@ async def test_get_spending_anomalies_filters_by_threshold(
     assert response.items == []
 
 
-async def test_get_spending_anomalies_uses_threshold_as_delta_ratio_floor(
+async def test_get_spending_anomalies_filters_on_anomaly_score(
     db_session: AsyncSession,
 ) -> None:
     db_session.add_all([
@@ -836,4 +836,8 @@ async def test_get_spending_anomalies_uses_threshold_as_delta_ratio_floor(
         anomaly_threshold=0.5,
     )
 
-    assert response.items == []
+    assert len(response.items) == 1
+    assert response.items[0].category == "금융"
+    assert response.items[0].delta_pct == 16.6433
+    assert response.items[0].anomaly_score > 0.5
+    assert "anomaly_score" in response.assumptions

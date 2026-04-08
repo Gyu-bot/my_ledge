@@ -544,3 +544,39 @@
 - frontend는 요청한 follow-up 항목 기준으로 현재 코드/테스트가 모두 정렬됨
 - backend `spending-anomalies` 는 threshold를 사용자 기대대로 “기준선 대비 증감률”로 해석하도록 계약이 정리됨
 - anomaly drill-down과 recurring subtype은 live contract를 흔들지 않고 계획 문서에 후속으로만 추가함
+
+## Spending Anomalies Threshold Rollback
+
+- 사용자 피드백
+  - 이상지출 로직은 수정 전 방식이 더 맞다고 판단
+  - 기존 판정 로직으로 롤백하고, `assumptions` 설명만 더 자세히 남기길 요청
+
+### 판단
+
+- 직전 수정은 사용자 기대(`0.5 = 50%`)에는 맞았지만, 실제 live contract는 이미 `anomaly_score` cutoff 기반으로 소비되고 있었다.
+- 따라서 score 기반 판정은 유지하고, 응답에서 threshold 의미를 숨기지 않는 쪽이 더 안전하다.
+
+### TDD
+
+- red:
+  - `backend/tests/services/test_analytics_service.py`
+    - `test_get_spending_anomalies_filters_on_anomaly_score`
+  - `backend/tests/api/test_analytics_api.py`
+    - `test_spending_anomalies_endpoint_documents_anomaly_score_threshold`
+  - `16.6%` 증가지만 `anomaly_score > 0.5` 인 금융 케이스가 계속 노출되고, assumptions 에 `anomaly_score` 기준이라는 문구가 포함돼야 함을 실패로 고정
+- green:
+  - `backend/app/services/analytics_service.py`
+    - threshold 비교를 다시 `if anomaly_score < anomaly_threshold: continue` 로 롤백
+    - `assumptions` 에 `threshold` 가 `anomaly_score` 기준이며, 표준편차 유무에 따라 계산식이 달라진다는 설명 추가
+
+### 실행한 명령
+
+- `cd backend && uv run pytest tests/services/test_analytics_service.py::test_get_spending_anomalies_filters_on_anomaly_score tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_documents_anomaly_score_threshold -q`
+  - 결과: red 확인 후 green `2 passed`
+- `cd backend && uv run pytest tests/services/test_analytics_service.py::test_get_spending_anomalies_filters_on_anomaly_score tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_documents_anomaly_score_threshold tests/services/test_analytics_service.py::test_get_spending_anomalies_detects_spike tests/api/test_analytics_api.py::test_spending_anomalies_endpoint_detects_spike -q`
+  - 결과: `4 passed`
+
+### 결과
+
+- `spending-anomalies` 는 다시 `anomaly_score` cutoff 기반으로 판정한다
+- `assumptions` 는 `threshold` 가 퍼센트가 아니라 score이며, `|delta|/stdev` 또는 `|delta|/baseline_avg` 계산이라는 점을 직접 설명한다
