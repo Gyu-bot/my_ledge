@@ -285,10 +285,19 @@
 - `cd frontend && npm test -- --runInBand`
   - 결과: `21 files passed`, `53 tests passed`
 
+### 추가 검증
+
+- `cd frontend && npm run dev -- --host 127.0.0.1 --port 4174`
+  - 임시 Vite server 기동
+- `curl -I -H 'Host: moltbot.tailbe7385.ts.net' http://127.0.0.1:4174`
+  - 결과: `HTTP/1.1 200 OK`
+- `lsof -ti:4174 | xargs -r kill`
+  - 임시 server 종료
+
 ### 결과
 
 - topbar breadcrumb는 더 여유 있는 vertical spacing과 brighter brand token으로 정리
-- chart month axis는 year-month(`YYYY.MM`) 형식으로 통일
+- chart month axis는 year-month(`YY.MM`) 형식으로 통일
 - chart tooltip / calendar popover는 surface 분리와 stronger border로 배경 대비를 보강
 - secondary text와 table divider token을 전역 상향/완화 조정
 - Spending treemap은 category-first view에서 merchant drilldown 가능한 taller chart로 전환
