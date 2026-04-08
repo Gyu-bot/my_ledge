@@ -14,7 +14,7 @@ export const CHART_TOOLTIP_STYLE = {
   background: 'var(--chart-tooltip-bg)',
   border: '1px solid var(--chart-tooltip-border)',
   borderRadius: 6,
-  fontSize: 10,
+  fontSize: 15,
   color: 'var(--chart-tooltip-text)',
   boxShadow: 'var(--chart-tooltip-shadow)',
 } as const

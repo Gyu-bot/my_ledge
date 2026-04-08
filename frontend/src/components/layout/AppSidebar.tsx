@@ -28,7 +28,7 @@ function NavBtn({
           collapsed ? 'justify-center px-2' : 'gap-3 px-3',
           isActive
             ? 'bg-accent-dim text-accent'
-            : 'text-text-ghost hover:bg-border-subtle hover:text-text-secondary',
+            : 'text-text-primary hover:bg-border-subtle hover:text-text-primary',
         )
       }
     >
@@ -67,7 +67,7 @@ export function AppSidebar({ className, collapsed, onToggle }: AppSidebarProps) 
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <div className="text-body-md font-semibold text-text-primary">MyLedge</div>
-            <div className="text-micro text-text-ghost">Personal finance dashboard</div>
+            <div className="text-micro text-text-secondary">Personal finance dashboard</div>
           </div>
         )}
         <button
@@ -85,7 +85,7 @@ export function AppSidebar({ className, collapsed, onToggle }: AppSidebarProps) 
         {sections.map((section) => (
           <div key={section.key} className="flex flex-col gap-1">
             {!collapsed && (
-              <div className="px-3 pb-1 text-micro uppercase tracking-[0.16em] text-text-muted">
+              <div className="px-3 pb-1 text-micro uppercase tracking-[0.16em] text-text-primary">
                 {section.label}
               </div>
             )}

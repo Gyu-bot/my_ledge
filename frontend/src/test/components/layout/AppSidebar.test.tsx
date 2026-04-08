@@ -22,6 +22,13 @@ describe('AppSidebar', () => {
     expect(link?.className).toContain('bg-accent-dim')
   })
 
+  it('uses the primary text color for inactive sidebar labels to improve legibility', () => {
+    wrap(<AppSidebar collapsed={false} onToggle={() => {}} />, '/')
+
+    expect(screen.getByRole('link', { name: '지출 분석' }).className).toContain('text-text-primary')
+    expect(screen.getByText('분석').className).toContain('text-text-primary')
+  })
+
   it('starts in icon-only mode when collapsed', () => {
     wrap(<AppSidebar collapsed onToggle={() => {}} />)
 

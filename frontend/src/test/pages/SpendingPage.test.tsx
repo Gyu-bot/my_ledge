@@ -150,4 +150,16 @@ describe('SpendingPage', () => {
     expect(treemap.getAttribute('data-items')).toContain('식비')
     expect(treemap.getAttribute('data-items')).toContain('스타벅스')
   })
+
+  it('renders a separator that clarifies the filter scope below the timeline section', () => {
+    wrap(<SpendingPage />)
+
+    expect(screen.getByText('아래 섹션은 상세 필터 기준')).toBeInTheDocument()
+  })
+
+  it('uses a compact chevron size on the transaction accordion trigger', () => {
+    wrap(<SpendingPage />)
+
+    expect(screen.getByText('▲').className).toContain('text-nano')
+  })
 })

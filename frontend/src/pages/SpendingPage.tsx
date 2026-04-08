@@ -183,6 +183,14 @@ export function SpendingPage() {
          ) : <EmptyState />}
       </SectionCard>
 
+      <div className="flex items-center gap-3 px-1" aria-label="지출 분석 섹션 구분선">
+        <div className="h-px flex-1 bg-border-strong" />
+        <span className="text-caption text-text-faint uppercase tracking-[0.14em]">
+          아래 섹션은 상세 필터 기준
+        </span>
+        <div className="h-px flex-1 bg-border-strong" />
+      </div>
+
       {/* 3. 상세 필터 */}
       <div className="bg-surface-card border border-border rounded-card px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -343,7 +351,7 @@ export function SpendingPage() {
                 {txPage} / {Math.ceil((transactions.data?.total ?? 0) / 20)} 페이지 · 총 {transactions.data?.total ?? 0}건
               </div>
             </div>
-            <span className="text-text-ghost text-body-sm">{accordionOpen ? '▲' : '▼'}</span>
+            <span className="text-nano text-text-ghost">{accordionOpen ? '▲' : '▼'}</span>
           </div>
           {accordionOpen && (
             <div className="bg-surface-card border border-border border-t-0 rounded-b-card">

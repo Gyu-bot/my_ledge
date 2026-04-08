@@ -364,3 +364,55 @@
 - pagination 은 `text-pagination` token 과 compact control sizing 을 사용하도록 통일
 - Spending stacked area 와 treemap 은 같은 high-contrast palette 를 공유
 - `DailyCalendar` tooltip 은 날짜 셀 wrapper 안에 렌더링돼 hover/focus 한 날짜 바로 위에 뜨고, `chart-tooltip-*` token/class contract 를 공유한다
+
+## Frontend UI Polish Extra Follow-up
+
+- 사용자 요청
+  - 거래 작업대의 거래 목록 페이지/건수 badge를 프로젝트 공통 badge 스타일로 정리
+  - desktop sidebar font color를 main font color 쪽으로 올려 가독성 개선
+  - `SpendingPage` 에 timeline section 과 나머지 section 사이 separator 추가
+  - accordion chevron 크기를 현재의 절반 수준으로 축소
+  - 프로젝트 전체 popover typography 통일 및 font size 1.5x 상향
+
+### 체크리스트
+
+- [x] Workbench 거래 목록 page/count badge shared token 정렬
+- [x] desktop sidebar inactive/section text tone 상향
+- [x] `SpendingPage` timeline/detail scope separator 추가
+- [x] accordion chevron compact size 적용
+- [x] shared popover typography 확대 및 `DailyCalendar`/chart tooltip 통일
+
+### TDD
+
+- red:
+  - `frontend/src/test/components/layout/AppSidebar.test.tsx`
+  - `frontend/src/test/pages/WorkbenchPage.test.tsx`
+  - `frontend/src/test/pages/SpendingPage.test.tsx`
+  - `frontend/src/test/components/DailyCalendar.test.tsx`
+  - `frontend/src/test/lib/chartTheme.test.ts`
+  - badge token, sidebar tone, separator, chevron size, popover typography 요구를 먼저 실패로 고정
+- green:
+  - `frontend/src/components/layout/AppSidebar.tsx`
+  - `frontend/src/pages/WorkbenchPage.tsx`
+  - `frontend/src/pages/SpendingPage.tsx`
+  - `frontend/src/components/ui/DailyCalendar.tsx`
+  - `frontend/src/lib/chartTheme.ts`
+
+### 실행한 명령
+
+- `cd frontend && npx vitest run src/test/components/layout/AppSidebar.test.tsx src/test/pages/WorkbenchPage.test.tsx src/test/pages/SpendingPage.test.tsx src/test/components/DailyCalendar.test.tsx src/test/lib/chartTheme.test.ts`
+  - 결과: red 확인 후 green `5 files passed`, `19 tests passed`
+- `cd frontend && npm run typecheck`
+  - 결과: 통과
+- `cd frontend && npm run lint`
+  - 결과: 통과
+- `cd frontend && npm test -- --runInBand`
+  - 결과: `21 files passed`, `58 tests passed`
+
+### 결과
+
+- Workbench 거래 목록의 page/count badge는 shared badge token 기준으로 정리
+- desktop sidebar inactive nav/section label은 `text-text-primary` 계열로 상향
+- `SpendingPage` 는 월별 카테고리 추이와 나머지 상세 섹션 사이를 separator로 분리해 필터 적용범위가 더 명확해짐
+- Spending/Workbench accordion chevron은 `text-nano` 기준으로 축소
+- shared chart tooltip font size를 15로 올리고, `DailyCalendar` tooltip도 `text-body-sm` / `text-body-md` typography로 맞춰 project-wide popover 스타일을 통일

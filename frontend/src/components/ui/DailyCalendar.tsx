@@ -73,15 +73,15 @@ export function DailyCalendar({ month, data, includeIncome = false }: DailyCalen
                     'pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 z-10 min-w-28 -translate-x-1/2 px-3 py-2 text-left',
                   )}
                 >
-                  <div className={cn(CHART_TOOLTIP_LABEL_CLASSNAME, 'text-micro')}>
+                  <div className={cn(CHART_TOOLTIP_LABEL_CLASSNAME, 'text-body-sm')}>
                     {activeTooltip.title}
                   </div>
                   <div
-                    className={cn(
+                    className={[
                       CHART_TOOLTIP_VALUE_CLASSNAME,
-                      'mt-1 text-caption font-semibold',
+                      'mt-1 text-body-md font-semibold',
                       activeTooltip.isNegative ? 'text-danger' : 'text-accent',
-                    )}
+                    ].join(' ')}
                   >
                     {activeTooltip.amount}
                   </div>

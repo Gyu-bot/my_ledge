@@ -48,4 +48,12 @@ describe('WorkbenchPage', () => {
     expect(screen.getByText('읽기 전용 모드')).toBeInTheDocument()
     expect(screen.getByText(/API 키가 없어 업로드·수정·삭제·초기화가 비활성화됩니다/)).toBeInTheDocument()
   })
+
+  it('uses the shared badge style for the transaction page/count indicator', () => {
+    wrap(<WorkbenchPage />)
+
+    expect(screen.getByText('1 / 1 페이지 · 1건').className).toContain('border-border-subtle')
+    expect(screen.getByText('1 / 1 페이지 · 1건').className).toContain('rounded-full')
+    expect(screen.getByText('1 / 1 페이지 · 1건').className).toContain('text-text-muted')
+  })
 })

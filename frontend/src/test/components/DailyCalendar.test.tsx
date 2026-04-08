@@ -24,6 +24,8 @@ describe('DailyCalendar', () => {
     expect(tooltip).toHaveTextContent('-₩12,000')
     expect(within(screen.getByTestId('day-cell-04')).getByRole('tooltip')).toBeInTheDocument()
     expect(tooltip.className).toContain('chart-tooltip-shell')
+    expect(within(tooltip).getByText('3월 4일').className).toContain('text-body-sm')
+    expect(within(tooltip).getByText('-₩12,000').className).toContain('text-body-md')
 
     fireEvent.mouseLeave(targetDay)
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()

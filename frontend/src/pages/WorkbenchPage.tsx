@@ -370,7 +370,7 @@ export function WorkbenchPage() {
             {isReadOnly ? (
               <span className="text-micro text-warn border border-warn-muted bg-warn-dim px-2 py-0.5 rounded-full">read-only</span>
             ) : null}
-            <span className="text-micro text-text-faint bg-surface-bar border border-border-faint px-2 py-0.5 rounded-full">
+            <span className="text-micro text-text-muted bg-surface-bar border border-border-subtle px-2 py-0.5 rounded-full">
               {page} / {Math.ceil((txList.data?.total ?? 0) / 20)} 페이지 · {txList.data?.total ?? 0}건
             </span>
           </div>
@@ -494,7 +494,7 @@ export function WorkbenchPage() {
             <div className="text-label font-semibold text-text-secondary">업로드</div>
             <div className="text-caption text-text-ghost mt-0.5">BankSalad 엑셀 파일 업로드</div>
           </div>
-          <span className="text-text-ghost">{uploadOpen ? '▲' : '▼'}</span>
+          <span className="text-nano text-text-ghost">{uploadOpen ? '▲' : '▼'}</span>
         </div>
         {uploadOpen && (
           <div className="bg-surface-section border-t border-border-faint p-4 flex flex-col gap-3">
@@ -530,7 +530,7 @@ export function WorkbenchPage() {
             <div className="text-label font-semibold text-text-secondary">최근 업로드 이력</div>
             <div className="text-caption text-text-ghost mt-0.5">최근 10건</div>
           </div>
-          <span className="text-text-ghost">{historyOpen ? '▲' : '▼'}</span>
+          <span className="text-nano text-text-ghost">{historyOpen ? '▲' : '▼'}</span>
         </div>
         {historyOpen && (
           <div className="bg-surface-section border-t border-border-faint overflow-x-auto">
@@ -572,7 +572,7 @@ export function WorkbenchPage() {
             <div className="text-label font-semibold text-danger">Danger Zone</div>
             <div className="text-caption text-danger-muted mt-0.5">데이터 초기화 — 되돌릴 수 없습니다</div>
           </div>
-          <span className="text-danger-muted">{dangerOpen ? '▲' : '▼'}</span>
+          <span className="text-nano text-danger-muted">{dangerOpen ? '▲' : '▼'}</span>
         </div>
         {dangerOpen && (
           <div className="bg-surface-danger-muted border-t border-danger-muted p-4 flex flex-col gap-3">
