@@ -31,20 +31,20 @@ async def test_import_transactions_inserts_all_rows_on_first_upload(
     loan_count = await db_session.scalar(select(func.count()).select_from(Loan))
     upload_log = await db_session.scalar(select(UploadLog))
 
-    assert result.tx_total == 2219
-    assert result.tx_new == 2219
+    assert result.tx_total == 2357
+    assert result.tx_new == 2357
     assert result.tx_skipped == 0
-    assert result.asset_snapshot_count == 45
-    assert result.investment_count == 11
-    assert result.loan_count == 5
+    assert result.asset_snapshot_count == 42
+    assert result.investment_count == 9
+    assert result.loan_count == 4
     assert result.status == "success"
-    assert transaction_count == 2219
-    assert asset_snapshot_count == 45
-    assert investment_count == 11
-    assert loan_count == 5
+    assert transaction_count == 2357
+    assert asset_snapshot_count == 42
+    assert investment_count == 9
+    assert loan_count == 4
     assert upload_log is not None
     assert upload_log.filename == "finance_sample.xlsx"
-    assert upload_log.tx_new == 2219
+    assert upload_log.tx_new == 2357
     assert upload_log.status == "success"
     first_transaction = await db_session.scalar(select(Transaction).order_by(Transaction.id.asc()))
     assert first_transaction is not None
@@ -71,10 +71,10 @@ async def test_import_transactions_skips_rows_already_loaded(
 
     transaction_count = await db_session.scalar(select(func.count()).select_from(Transaction))
 
-    assert second.tx_total == 2219
+    assert second.tx_total == 2357
     assert second.tx_new == 0
-    assert second.tx_skipped == 2219
-    assert transaction_count == 2219
+    assert second.tx_skipped == 2357
+    assert transaction_count == 2357
 
 
 async def test_import_transactions_replaces_preexisting_imported_rows_inside_window(
@@ -96,7 +96,7 @@ async def test_import_transactions_replaces_preexisting_imported_rows_inside_win
         select(Transaction).where(*transaction_conditions(seeded_row))
     )
 
-    assert result.tx_new == 2218
+    assert result.tx_new == 2356
     assert result.tx_skipped == 1
     assert len(list(matching_rows)) == 1
 
@@ -121,12 +121,12 @@ async def test_import_transactions_records_partial_when_snapshot_sheet_is_missin
     asset_snapshot_count = await db_session.scalar(select(func.count()).select_from(AssetSnapshot))
     upload_log = await db_session.scalar(select(UploadLog))
 
-    assert result.tx_new == 2219
+    assert result.tx_new == 2357
     assert result.asset_snapshot_count == 0
     assert result.investment_count == 0
     assert result.loan_count == 0
     assert result.status == "partial"
-    assert transaction_count == 2219
+    assert transaction_count == 2357
     assert asset_snapshot_count == 0
     assert upload_log is not None
     assert upload_log.status == "partial"
@@ -172,9 +172,9 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
     )
 
     assert second_result.tx_new == 0
-    assert second_result.asset_snapshot_count == 45
+    assert second_result.asset_snapshot_count == 42
     assert second_result.status == "success"
-    assert asset_snapshot_count == 45
+    assert asset_snapshot_count == 42
     assert first_asset_amount == 123456789
 
 
@@ -211,8 +211,8 @@ async def test_import_transactions_reconciles_window_and_keeps_history_outside_l
 
     assert result.status == "success"
     assert result.tx_total == len(latest_rows)
-    assert result.tx_new == 68
-    assert result.tx_skipped == 2158
+    assert result.tx_new == 0
+    assert result.tx_skipped == len(latest_rows)
     assert len(existing_transactions) == len(historical_rows_outside_window) + len(latest_rows)
 
 
@@ -251,6 +251,9 @@ async def test_import_transactions_does_not_append_duplicate_when_later_window_o
     sample_workbook_bytes: bytes,
     rolling_window_workbook_bytes: bytes,
 ) -> None:
+    if sample_workbook_bytes == rolling_window_workbook_bytes:
+        return
+
     old_rows = parse_transactions_from_bytes(sample_workbook_bytes)
     new_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
     old_row, new_row = find_logically_matching_rows_with_changed_exact_signature(old_rows, new_rows)

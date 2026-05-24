@@ -25,6 +25,7 @@ from app.services.analytics_service import (
     get_recurring_payments,
     get_spending_anomalies,
 )
+from app.services.settings_service import resolve_spending_anomalies_settings
 
 router = APIRouter()
 
@@ -89,7 +90,9 @@ async def get_analytics_merchant_spend(
     )
 
 
-@router.get("/analytics/payment-method-patterns", response_model=PaymentMethodPatternsResponse)
+@router.get(
+    "/analytics/payment-method-patterns", response_model=PaymentMethodPatternsResponse
+)
 async def get_analytics_payment_method_patterns(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
@@ -139,19 +142,25 @@ async def get_analytics_recurring_payments(
 @router.get("/analytics/spending-anomalies", response_model=SpendingAnomaliesResponse)
 async def get_analytics_spending_anomalies(
     end_date: date | None = Query(default=None),
-    baseline_months: int = Query(default=3, ge=1, le=12),
-    anomaly_threshold: float = Query(default=0.5, ge=0.0),
-    min_delta_amount: int = Query(default=100_000, ge=0),
+    baseline_months: int | None = Query(default=None, ge=1, le=12),
+    anomaly_threshold: float | None = Query(default=None, ge=0.0),
+    min_delta_amount: int | None = Query(default=None, ge=0),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=10, ge=1, le=100),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> SpendingAnomaliesResponse:
-    return await get_spending_anomalies(
+    resolved_settings = await resolve_spending_anomalies_settings(
         db_session,
-        end_date=end_date,
         baseline_months=baseline_months,
         anomaly_threshold=anomaly_threshold,
         min_delta_amount=min_delta_amount,
+    )
+    return await get_spending_anomalies(
+        db_session,
+        end_date=end_date,
+        baseline_months=resolved_settings.baseline_months,
+        anomaly_threshold=resolved_settings.anomaly_threshold,
+        min_delta_amount=resolved_settings.min_delta_amount,
         page=page,
         per_page=per_page,
     )

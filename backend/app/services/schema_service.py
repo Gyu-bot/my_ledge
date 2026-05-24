@@ -8,6 +8,10 @@ from app.schemas.schema_doc import (
 )
 
 RAW_TABLE_DESCRIPTIONS = {
+    "app_settings": (
+        "Typed application settings. Analytics defaults are resolved from this table "
+        "when request query parameters do not override them."
+    ),
     "transactions": (
         "Raw transaction rows from imports and manual edits. Read directly for audit, "
         "debugging, or low-level data correction."
@@ -15,6 +19,14 @@ RAW_TABLE_DESCRIPTIONS = {
     "asset_snapshots": "Raw asset snapshot rows keyed by snapshot_date.",
     "investments": "Raw investment snapshot rows keyed by snapshot_date.",
     "loans": "Raw loan snapshot rows keyed by snapshot_date.",
+    "loan_accounts": (
+        "Stable loan account identities keyed by lender and product_name. "
+        "Use this table to map transactions to a loan across multiple snapshots."
+    ),
+    "loan_transaction_links": (
+        "Manual mapping between transactions and stable loan accounts, including "
+        "principal/interest/mixed repayment type."
+    ),
     "upload_logs": "Upload execution history and import result counters.",
 }
 
@@ -54,6 +66,8 @@ def _serialize_defined_columns(
     columns: tuple[SchemaColumnDefinition, ...],
 ) -> list[SchemaColumnResponse]:
     return [
-        SchemaColumnResponse(name=column.name, type=str(column.type), nullable=column.nullable)
+        SchemaColumnResponse(
+            name=column.name, type=str(column.type), nullable=column.nullable
+        )
         for column in columns
     ]

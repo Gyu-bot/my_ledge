@@ -4,6 +4,8 @@ from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text, Time, cas
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Select
 
+from app.models.loan_account import LoanAccount
+from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 
 
@@ -59,13 +61,24 @@ def build_transactions_effective_select(
         Transaction.cost_kind.label("cost_kind"),
         Transaction.fixed_cost_necessity.label("fixed_cost_necessity"),
         Transaction.memo.label("memo"),
+        LoanTransactionLink.loan_account_id.label("loan_account_id"),
+        LoanAccount.lender.label("loan_lender"),
+        LoanAccount.product_name.label("loan_product_name"),
+        LoanTransactionLink.repayment_type.label("loan_repayment_type"),
+        LoanTransactionLink.memo.label("loan_link_memo"),
         Transaction.is_deleted.label("is_deleted"),
         Transaction.merged_into_id.label("merged_into_id"),
         case((transaction_is_edited_clause(), True), else_=False).label("is_edited"),
         Transaction.source.label("source"),
         Transaction.created_at.label("created_at"),
         Transaction.updated_at.label("updated_at"),
-    ).select_from(Transaction)
+    ).select_from(Transaction).outerjoin(
+        LoanTransactionLink,
+        LoanTransactionLink.transaction_id == Transaction.id,
+    ).outerjoin(
+        LoanAccount,
+        LoanAccount.id == LoanTransactionLink.loan_account_id,
+    )
     if not include_deleted:
         query = query.where(Transaction.is_deleted.is_(False))
     if not include_merged:
@@ -123,6 +136,11 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("cost_kind", String(length=20), nullable=True),
             SchemaColumnDefinition("fixed_cost_necessity", String(length=20), nullable=True),
             SchemaColumnDefinition("memo", Text(), nullable=True),
+            SchemaColumnDefinition("loan_account_id", Integer(), nullable=True),
+            SchemaColumnDefinition("loan_lender", String(length=50), nullable=True),
+            SchemaColumnDefinition("loan_product_name", String(length=200), nullable=True),
+            SchemaColumnDefinition("loan_repayment_type", String(length=20), nullable=True),
+            SchemaColumnDefinition("loan_link_memo", Text(), nullable=True),
             SchemaColumnDefinition("is_deleted", Boolean(), nullable=False),
             SchemaColumnDefinition("merged_into_id", Integer(), nullable=True),
             SchemaColumnDefinition("is_edited", Boolean(), nullable=False),

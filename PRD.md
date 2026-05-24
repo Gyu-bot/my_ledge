@@ -481,6 +481,62 @@ Body:
 }
 ```
 
+### 5.3.1 대출 상환 거래 매핑 API
+
+대출 상환으로 보이는 지출 거래는 사용자가 직접 안정적인 대출 계좌 identity에 연결한다. `loans`는 스냅샷 row라서 날짜마다 같은 대출이 다른 `id`를 가질 수 있으므로, 거래 매핑은 `loans.id`가 아니라 별도 `loan_accounts`의 `lender + product_name` 기준 계좌 식별자를 사용한다.
+
+```
+GET /api/v1/loan-accounts
+  # loan_accounts + loans snapshot pair를 lender/product_name 기준으로 dedupe
+
+GET /api/v1/loan-transaction-links
+Query:
+  linked=all|linked|unlinked
+  loan_account_id=1
+  repayment_type=principal|interest|mixed|unknown
+  search=국민은행
+  page=1&per_page=40
+  # 대출 상환 후보 지출 거래와 현재 대출 연결 상태를 함께 조회
+
+GET /api/v1/transactions/{id}/loan-link
+  # 없으면 {"link": null}
+
+PUT /api/v1/transactions/{id}/loan-link
+Body:
+{
+  "loan_account_id": 1,
+  "repayment_type": "interest",  # principal | interest | mixed | unknown
+  "memo": "이자 자동이체"
+}
+
+PUT /api/v1/transactions/{id}/loan-link
+Body:
+{
+  "lender": "국민은행",
+  "product_name": "주택담보대출",
+  "repayment_type": "mixed"
+}
+
+PUT /api/v1/transactions/loan-links/bulk
+Body:
+{
+  "transaction_ids": [101, 145, 188],
+  "loan_account_id": 1,
+  "repayment_type": "mixed",
+  "memo": "매월 원리금"
+}
+
+DELETE /api/v1/transactions/{id}/loan-link
+```
+
+구현 규칙:
+- 거래 1건은 하나의 대출 계좌에만 연결한다.
+- 같은 대출 계좌에는 여러 지출 거래가 연결될 수 있다. 매월 반복되는 상환 거래는 bulk API로 선택한 여러 거래를 한 번에 연결한다.
+- 프론트엔드에서는 기존 거래 작업대와 분리한 `/operations/loan-mapping` 화면에서 후보 지출 거래 목록, 현재 연결된 대출 계좌, 상환 성격, 미연결 상태를 확인하고 일괄 연결한다.
+- 후보 목록은 사용자가 수동으로 상환 거래를 골라내는 작업용 목록이므로 넓게 잡는다. 이미 연결된 거래, `금융` 대분류 지출, 또는 거래 텍스트에 `대출`/`상환`/`이자`/`원리금`/`원금·이자` 같은 상환 단서가 있는 지출을 포함한다.
+- 계좌 후보는 스냅샷의 `lender + product_name` pair와 사용자가 만든 `loan_accounts`를 합쳐서 보여준다.
+- 매핑은 원본 거래 타입/카테고리를 바꾸지 않는다. 지출 분석에서는 기존 거래 해석을 유지하고, 대출 상환 분석에서는 `loan_transaction_links` 및 canonical view의 nullable 대출 연결 컬럼을 파생 의미로 사용한다.
+
 **카테고리 표시 규칙:**
 - `category_major_user`가 NOT NULL이면 사용자 수정값 사용
 - NULL이면 원본 `category_major` 사용
@@ -558,6 +614,8 @@ P1 설계 규칙:
 
 - heuristic 결과는 `confidence`, `reason`, `assumptions` 중 최소 하나를 응답에 포함한다.
 - OpenClaw는 P1 결과를 그대로 설명에 사용하고, drill-down이 필요할 때만 raw transaction 조회로 내려간다.
+- `spending-anomalies` 의 기본 파라미터는 `GET/PATCH /api/v1/settings/analytics` 에 저장된 설정을 사용한다. 명시적 query parameter가 있으면 저장 설정보다 우선한다.
+- 현재 저장 가능 파라미터는 `min_delta_amount`, `anomaly_threshold`, `baseline_months` 다.
 
 #### P2 — 자산/부채 건강도 API
 

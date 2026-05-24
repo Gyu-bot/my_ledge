@@ -180,6 +180,6 @@ OpenClaw 작업자는 skill 패키징 전 아래를 확인해야 한다.
 
 ## 참고 문서
 
-- 연동 규약: [integration-guide.md](/home/gyurin/projects/my_ledge/docs/openclaw/integration-guide.md)
-- 프로젝트 요구사항: [PRD.md](/home/gyurin/projects/my_ledge/PRD.md)
-- 운영 상태: [STATUS.md](/home/gyurin/projects/my_ledge/STATUS.md)
+- 연동 규약: [integration-guide.md](integration-guide.md)
+- 프로젝트 요구사항: [PRD.md](../../PRD.md)
+- 운영 상태: [docs/STATUS.md](../STATUS.md)

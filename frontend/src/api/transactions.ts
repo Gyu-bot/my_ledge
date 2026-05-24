@@ -6,6 +6,11 @@ import type {
   TransactionFilterOptionsResponse,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
+  LoanAccountsResponse,
+  LoanTransactionLinkBulkRequest,
+  LoanTransactionLinkBulkResponse,
+  LoanTransactionMappingListResponse,
+  LoanTransactionMappingParams,
   CategoryTimelineItem,
   CategoryBreakdownItem,
   CategoryBreakdownParams,
@@ -85,6 +90,19 @@ export const transactionApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
+
+  loanAccounts: () =>
+    apiFetch<LoanAccountsResponse>('/loan-accounts'),
+
+  bulkLoanLink: (data: LoanTransactionLinkBulkRequest) =>
+    apiFetch<LoanTransactionLinkBulkResponse>('/transactions/loan-links/bulk', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  loanTransactionMappings: (params: LoanTransactionMappingParams = {}) =>
+    apiFetch<LoanTransactionMappingListResponse>(`/loan-transaction-links${buildQuery(params)}`),
 
   categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
     apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery(

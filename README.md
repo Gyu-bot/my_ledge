@@ -18,8 +18,8 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 자산 현황
   - 데이터 관리
 
-제품 요구사항과 Phase 범위는 [PRD.md](/home/gyurin/projects/my_ledge/PRD.md), 협업 규칙은 [AGENTS.md](/home/gyurin/projects/my_ledge/AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](/home/gyurin/projects/my_ledge/docs/STATUS.md)를 기준으로 본다.
-현재 live backend/API contract는 [docs/backend-api-ssot.md](/home/gyurin/projects/my_ledge/docs/backend-api-ssot.md)를 우선 참조한다.
+제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), 협업 규칙은 [AGENTS.md](AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](docs/STATUS.md)를 기준으로 본다.
+현재 live backend/API contract는 [docs/backend-api-ssot.md](docs/backend-api-ssot.md)를 우선 참조한다.
 
 ## 빠른 시작
 
@@ -139,9 +139,9 @@ MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
 
 함께 전달할 문서:
 
-- [docs/openclaw/README.md](/home/gyurin/projects/my_ledge/docs/openclaw/README.md)
-- [docs/openclaw/integration-guide.md](/home/gyurin/projects/my_ledge/docs/openclaw/integration-guide.md)
-- [docs/openclaw/skill-handoff.md](/home/gyurin/projects/my_ledge/docs/openclaw/skill-handoff.md)
+- [docs/openclaw/README.md](docs/openclaw/README.md)
+- [docs/openclaw/integration-guide.md](docs/openclaw/integration-guide.md)
+- [docs/openclaw/skill-handoff.md](docs/openclaw/skill-handoff.md)
 
 ### 6. 업데이트 절차
 
@@ -268,18 +268,18 @@ npm run build
 
 ## 주요 문서
 
-- 제품 요구사항: [PRD.md](/home/gyurin/projects/my_ledge/PRD.md)
-- 협업 규칙: [AGENTS.md](/home/gyurin/projects/my_ledge/AGENTS.md)
-- 현재 진행 상태: [STATUS.md](/home/gyurin/projects/my_ledge/STATUS.md)
-- OpenClaw 연동 문서 인덱스: [docs/openclaw/README.md](/home/gyurin/projects/my_ledge/docs/openclaw/README.md)
+- 제품 요구사항: [PRD.md](PRD.md)
+- 협업 규칙: [AGENTS.md](AGENTS.md)
+- 현재 진행 상태: [docs/STATUS.md](docs/STATUS.md)
+- OpenClaw 연동 문서 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
 
 ## OpenClaw 연동
 
 OpenClaw 관련 문서는 `docs/openclaw/` 아래에 모아뒀다.
 
-- 시작점: [docs/openclaw/README.md](/home/gyurin/projects/my_ledge/docs/openclaw/README.md)
-- 운영/연동 규약: [docs/openclaw/integration-guide.md](/home/gyurin/projects/my_ledge/docs/openclaw/integration-guide.md)
-- skill 패키징 handoff: [docs/openclaw/skill-handoff.md](/home/gyurin/projects/my_ledge/docs/openclaw/skill-handoff.md)
+- 시작점: [docs/openclaw/README.md](docs/openclaw/README.md)
+- 운영/연동 규약: [docs/openclaw/integration-guide.md](docs/openclaw/integration-guide.md)
+- skill 패키징 handoff: [docs/openclaw/skill-handoff.md](docs/openclaw/skill-handoff.md)
 
 이 저장소에서는 OpenClaw skill 자체를 배포하지 않는다.
 대신 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 필요한 API, DB, 운영 규약, 예시 흐름을 문서로 제공한다.

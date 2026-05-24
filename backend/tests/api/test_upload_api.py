@@ -66,16 +66,16 @@ async def test_upload_returns_import_summary(
     assert response.json() == {
         "status": "success",
         "upload_id": 1,
-        "transactions": {
-            "total": 2219,
-            "new": 2219,
-            "skipped": 0,
-        },
-        "snapshots": {
-            "asset_snapshots": 45,
-            "investments": 11,
-            "loans": 5,
-        },
+            "transactions": {
+                "total": 2357,
+                "new": 2357,
+                "skipped": 0,
+            },
+            "snapshots": {
+                "asset_snapshots": 42,
+                "investments": 9,
+                "loans": 4,
+            },
         "error_message": None,
     }
 

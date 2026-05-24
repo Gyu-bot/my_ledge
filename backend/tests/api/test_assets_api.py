@@ -5,6 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.services import assets_service
 from app.services.upload_service import import_transactions_from_workbook
 
 
@@ -19,14 +20,14 @@ async def test_asset_snapshots_returns_daily_totals(
     assert response.status_code == 200
     assert response.json() == {
         "items": [
-            {
-                "snapshot_date": "2026-03-24",
-                "asset_total": "341467219.62",
-                "liability_total": "234652971.00",
-                "net_worth": "106814248.62",
-            }
-        ]
-    }
+                {
+                    "snapshot_date": "2026-03-24",
+                    "asset_total": "344207571.54",
+                    "liability_total": "222317572.00",
+                    "net_worth": "121889999.54",
+                }
+            ]
+        }
 
 
 async def test_net_worth_history_returns_series(
@@ -40,12 +41,12 @@ async def test_net_worth_history_returns_series(
     assert response.status_code == 200
     assert response.json() == {
         "items": [
-            {
-                "snapshot_date": "2026-03-24",
-                "net_worth": "106814248.62",
-            }
-        ]
-    }
+                {
+                    "snapshot_date": "2026-03-24",
+                    "net_worth": "121889999.54",
+                }
+            ]
+        }
 
 
 async def test_investments_summary_uses_latest_snapshot_by_default(
@@ -59,8 +60,8 @@ async def test_investments_summary_uses_latest_snapshot_by_default(
     assert response.status_code == 200
     payload = response.json()
     assert payload["snapshot_date"] == "2026-03-24"
-    assert payload["totals"]["market_value"] == "16254103.61"
-    assert len(payload["items"]) == 11
+    assert payload["totals"]["market_value"] == "20810947.50"
+    assert len(payload["items"]) == 9
 
 
 async def test_loans_summary_uses_latest_snapshot_by_default(
@@ -74,8 +75,8 @@ async def test_loans_summary_uses_latest_snapshot_by_default(
     assert response.status_code == 200
     payload = response.json()
     assert payload["snapshot_date"] == "2026-03-24"
-    assert payload["totals"]["balance"] == "234652971.00"
-    assert len(payload["items"]) == 5
+    assert payload["totals"]["balance"] == "222317572.00"
+    assert len(payload["items"]) == 4
 
 
 async def test_asset_endpoints_return_multi_snapshot_history_and_latest_defaults(
@@ -127,7 +128,7 @@ async def test_asset_endpoints_return_multi_snapshot_history_and_latest_defaults
 
     assert investments_response.status_code == 200
     assert investments_response.json()["snapshot_date"] == "2026-04-07"
-    assert len(investments_response.json()["items"]) == 11
+    assert len(investments_response.json()["items"]) == 9
 
     assert loans_response.status_code == 200
     assert loans_response.json()["snapshot_date"] == "2026-04-07"
@@ -135,13 +136,15 @@ async def test_asset_endpoints_return_multi_snapshot_history_and_latest_defaults
 
     assert historical_loans_response.status_code == 200
     assert historical_loans_response.json()["snapshot_date"] == "2026-03-11"
-    assert len(historical_loans_response.json()["items"]) == 5
+    assert len(historical_loans_response.json()["items"]) == 4
 
 
 async def test_asset_snapshot_compare_returns_default_latest_available_comparison(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(assets_service, "_today", lambda: date(2026, 4, 8))
     db_session.add_all(
         [
             AssetSnapshot(
@@ -212,7 +215,9 @@ async def test_asset_snapshot_compare_returns_default_latest_available_compariso
 async def test_asset_snapshot_compare_supports_closed_month_mode(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(assets_service, "_today", lambda: date(2026, 4, 8))
     await db_session.execute(delete(AssetSnapshot))
     db_session.add_all(
         [
@@ -295,7 +300,9 @@ async def test_asset_snapshot_compare_smoke_on_real_workbook_chain(
     rolling_window_workbook_bytes: bytes,
     rolling_window_workbook_v2_bytes: bytes,
     latest_workbook_bytes: bytes,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(assets_service, "_today", lambda: date(2026, 4, 8))
     workbooks = [
         ("finance_sample.xlsx", date(2026, 3, 11), sample_workbook_bytes),
         ("sample_260324.xlsx", date(2026, 3, 24), rolling_window_workbook_bytes),

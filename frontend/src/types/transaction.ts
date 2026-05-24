@@ -89,6 +89,83 @@ export interface TransactionBulkUpdateRequest {
   memo?: string | null
 }
 
+export type LoanRepaymentType = 'principal' | 'interest' | 'mixed' | 'unknown'
+
+export interface LoanAccountCandidate {
+  loan_account_id: number | null
+  lender: string
+  product_name: string
+  display_name: string
+  latest_snapshot_date: string | null
+  latest_balance: string | null
+  latest_interest_rate: string | null
+}
+
+export interface LoanAccountsResponse {
+  items: LoanAccountCandidate[]
+}
+
+export interface LoanTransactionLinkBulkRequest {
+  transaction_ids: number[]
+  loan_account_id?: number | null
+  lender?: string | null
+  product_name?: string | null
+  repayment_type: LoanRepaymentType
+  memo?: string | null
+}
+
+export interface LoanTransactionLinkBulkResponse {
+  updated: number
+}
+
+export type LoanLinkStateFilter = 'all' | 'linked' | 'unlinked'
+
+export interface LoanTransactionLinkItem {
+  transaction_id: number
+  loan_account_id: number
+  lender: string
+  product_name: string
+  display_name: string
+  repayment_type: LoanRepaymentType
+  memo: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LoanTransactionMappingItem {
+  transaction_id: number
+  date: string
+  time: string
+  type: string
+  effective_category_major: string
+  effective_category_minor: string | null
+  description: string
+  merchant: string
+  amount: number
+  currency: string
+  payment_method: string | null
+  memo: string | null
+  link: LoanTransactionLinkItem | null
+}
+
+export interface LoanTransactionMappingListResponse {
+  total: number
+  page: number
+  per_page: number
+  items: LoanTransactionMappingItem[]
+}
+
+export interface LoanTransactionMappingParams {
+  page?: number
+  per_page?: number
+  start_date?: string
+  end_date?: string
+  search?: string
+  linked?: LoanLinkStateFilter
+  loan_account_id?: number
+  repayment_type?: LoanRepaymentType
+}
+
 export interface CategoryTimelineItem {
   period: string
   category: string

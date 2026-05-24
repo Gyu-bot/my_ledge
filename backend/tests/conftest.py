@@ -18,19 +18,26 @@ from app.services.upload_service import import_transactions_from_workbook
 
 def _workbook_path(filename: str) -> Path:
     current = Path(__file__).resolve()
+    current_sample = "2025-05-21~2026-05-21.xlsx"
     aliases = {
-        "finance_sample.xlsx": ["finance_sample.xlsx", "fs_260311.xlsx"],
-        "sample_260324.xlsx": ["sample_260324.xlsx", "fs_260324.xlsx"],
-        "sample_260326.xlsx": ["sample_260326.xlsx", "fs_260326.xlsx"],
-        "sample_260407.xlsx": ["sample_260407.xlsx", "fs_260407.xlsx"],
+        "finance_sample.xlsx": [
+            "finance_sample.xlsx",
+            "fs_260311.xlsx",
+            current_sample,
+        ],
+        "sample_260324.xlsx": ["sample_260324.xlsx", "fs_260324.xlsx", current_sample],
+        "sample_260326.xlsx": ["sample_260326.xlsx", "fs_260326.xlsx", current_sample],
+        "sample_260407.xlsx": ["sample_260407.xlsx", "fs_260407.xlsx", current_sample],
     }
     names = aliases.get(filename, [filename])
     candidates: list[Path] = []
     for name in names:
-        candidates.extend([
-            current.parents[2] / "tmp" / name,
-            current.parents[4] / "tmp" / name,
-        ])
+        candidates.extend(
+            [
+                current.parents[2] / "tmp" / name,
+                current.parents[4] / "tmp" / name,
+            ]
+        )
     for candidate in candidates:
         if candidate.exists():
             return candidate

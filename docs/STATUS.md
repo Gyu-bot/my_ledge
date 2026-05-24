@@ -1,11 +1,19 @@
 # STATUS.md
 
 ## Current State
-- **Phase:** 안정화 follow-up 유지, frontend token polish와 anomaly default-period/absolute-threshold contract 정렬 완료
-- **Last Worker:** Codex (2026-04-08T14:51+0900, income stability threshold 설명 보강 완료)
+- **Phase:** 안정화 follow-up 유지, 대출 상환 거래 매핑 별도 운영 화면 분리 완료
+- **Last Worker:** Codex (2026-05-24T23:09+0900, loan mapping 후보 범위 재확대 및 canonical loan fields 연결)
 - **Branch:** main
 
 ## Completed
+- [x] Loan transaction mapping backend/frontend 추가: `loan_accounts` 안정 계좌 identity와 `loan_transaction_links` 거래 매핑 테이블, `GET /api/v1/loan-accounts`, `GET /api/v1/loan-transaction-links`, `GET/PUT/DELETE /api/v1/transactions/{id}/loan-link`, `PUT /api/v1/transactions/loan-links/bulk` API, 별도 `/operations/loan-mapping` 화면, 서비스/API/frontend 테스트, PRD/API 문서 반영
+  - `loan-transaction-links` 기본 목록은 수동 매핑 작업용으로 넓게 유지한다. 이미 연결된 거래, `금융` 대분류 지출, 또는 대출/상환/이자/원리금/원금·이자 단서가 있는 지출을 포함한다.
+  - `vw_transactions_effective` 는 nullable `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo` 컬럼으로 연결된 대출 상환 정보를 함께 노출한다.
+- [x] Spending timeline monthly total labels 추가: `월별 카테고리 추이` stacked bar에 월별 총액 overlay 라벨을 표시하고 hover tooltip에도 `총액` 행을 추가, 브라우저에서 라벨 6개와 tooltip 총액 확인
+- [x] Spending timeline stacked bar 전환 완료: `월별 카테고리 추이`를 `StackedAreaChart`에서 실제 Recharts `BarChart` 기반 `StackedBarChart`로 교체하고 브라우저에서 bar rectangle 렌더링 확인
+- [x] Sample workbook frontend smoke 확인: Docker Compose 테스트 스택을 임시 포트(`frontend :13000`, `backend :18000`)로 기동하고 `tmp/2025-05-21~2026-05-21.xlsx` 업로드 성공 후 개요/거래 작업대/자산 화면 렌더링 확인
+- [x] Analytics settings backend 구현 완료: `app_settings` 테이블과 `GET/PATCH /api/v1/settings/analytics` API를 추가하고, `spending-anomalies` 기본 파라미터를 `query override > persisted setting > code default` 순서로 해석하도록 연결
+- [x] 문서 참조 경로 정리 완료: `AGENTS.md`의 루트 `STATUS.md` 잔여 언급을 `docs/STATUS.md` 단일 상태 파일 기준으로 수정하고, README/OpenClaw 문서의 깨진 운영 상태 링크를 현재 위치로 정렬
 - [x] Income stability threshold 설명 보강 완료: backend metrics reference 문서에 `coefficient_of_variation` 의 backend 산출 범위와 frontend label threshold(`안정/보통/불안정`, `낮음/보통/높음`)를 명시
 - [x] Backend API and metrics reference 문서화 완료: 현재 구현된 backend endpoint 전체, 인증 규칙, 주요 response contract, canonical view, upload/snapshot reconcile, analytics 지표 산출 로직을 코드 기준으로 별도 문서에 정리 (`docs/backend-api-and-metrics-reference.md`)
 - [x] Assets KPI sub cleanup 완료: 자산 현황 KPI 카드에서는 `투자 평가액`만 `원금 대비` sub를 유지하고, 순자산/총자산/총부채의 snapshot compare sub는 제거, frontend 전체 검증 재실행
@@ -158,7 +166,7 @@
 
 ## In Progress
 - [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
-  - 현재 상태: Task 6 완료
+  - 현재 상태: Task 6 완료, 사용자 요청으로 우선순위 보류
   - Task 1 완료: Tailwind 토큰, utils.ts, queryClient.ts, apiClient.ts
   - Task 2 완료: TypeScript 타입 4종 + API 함수 4종 (transactions/assets/analytics/upload)
   - Task 3 완료: React Query 훅 5종 (useTransactions/useAssets/useAnalytics/useUpload/useWriteAccess) + 테스트 2건 통과
@@ -181,9 +189,15 @@
 - 없음
 
 ## Next Up
+- [x] Loan transaction mapping frontend 연결
+  - [x] 별도 `/operations/loan-mapping` 운영 화면 추가
+  - [x] `GET /api/v1/loan-transaction-links` 로 지출 거래와 현재 대출 연결 상태를 함께 조회
+  - [x] 연결/미연결/대출 계좌/상환 성격 필터와 다건 bulk 대출 연결 UI 추가
+  - [x] 기존 거래 작업대에서는 대출 연결 컨트롤 제거
 - [ ] Settings / Token Lab feature kickoff
   - [x] 별도 feature plan 작성 (`docs/superpowers/plans/2026-04-08-settings-and-token-lab.md`)
-  - [ ] settings page shell entry / persisted analytics settings / temporary token lab 구현 순서 확정
+  - [x] persisted analytics settings backend 구현
+  - [ ] settings page shell entry / temporary token lab 구현 순서 확정
 - [ ] Snapshot compare consumer follow-up
   - [x] frontend 자산 surface가 `comparison_label`, `comparison_days`, `is_partial`, `is_stale` 를 어떻게 소비할지 정리
   - [x] real workbook 4종 적재 상태에서 `/api/v1/assets/snapshot-compare` smoke 검증 추가
@@ -195,13 +209,13 @@
 - [ ] Snapshot comparison fallback 정책 정리
   - 현재 상태: 정책과 pre-implementation checklist는 정리 완료. 후속은 실제 영향 범위별 적용 순서와 API/UI 계약 구체화
 - [ ] Backend/API 문서 운영 정리
-  - [ ] `spending-anomalies` 의 `min_delta_amount` query param과 기본값 100000원을 운영/API 문서에 반영
+  - [x] `spending-anomalies` 의 `min_delta_amount` query param과 기본값 100000원을 운영/API 문서에 반영
   - [ ] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
   - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
 - [ ] 현행 기능 system validation
   - [x] 수정 후 `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 운영 플로우 재검증
 - [ ] 신규 기능은 후순위 보류
-  - [ ] `merchant normalization`, `transfers/*`, `liquidity-health`, `debt-health`, `snapshot-compare`, 대출상환 원금/이자 파생 해석은 안정화 배치 이후 재개
+  - [ ] `merchant normalization`, `transfers/*`, `liquidity-health`, `debt-health`, `snapshot-compare`는 안정화 배치 이후 재개
 - [ ] Snapshot coverage 결정
   - [ ] 자산/투자/대출 snapshot 시계열 확보 운영 방식을 정하고 PRD tracking 기대치와 현재 단일 snapshot 상태를 맞출지 결정
 - [ ] Frontend shared interaction rollout
@@ -314,6 +328,8 @@
   - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
 
 ## Key Decisions
+- 2026-05-24: 대출 상환 후보 목록은 완전 자동 분류가 아니라 수동 연결 작업대이므로 `금융` 대분류 지출을 넓게 포함한다. 연결 완료 후의 분석 안정성은 `loan_transaction_links` 와 canonical view의 nullable 대출 연결 컬럼으로 확보한다.
+- 2026-05-24: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다. 거래 작업대는 원장 편집/업로드/삭제에 집중하고, 대출 연결 화면은 반복 지출 후보와 현재 연결 계좌 상태를 함께 확인하는 운영 surface로 둔다.
 - 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 기존 `anomaly_score` cutoff 계약을 유지한다. 다만 응답 `assumptions` 에 threshold가 퍼센트가 아니라 score 기준이며, 표준편차가 있으면 `|delta|/stdev`, 없으면 `|delta|/baseline_avg` 로 계산된다는 설명을 명시한다.
 - 2026-04-08: `spending-anomalies` 기본 호출은 진행 중인 이번 달이 아니라 직전 마감월을 기준으로 본다. 사용자가 partial `end_date` 를 명시한 경우에만 해당 월을 보며, baseline도 이전 월 같은 일자까지만 잘라 비교한다.
 - 2026-04-08: backend-tunable analytics 파라미터는 Insights 카드에 흩뿌리지 않고, 좌측 사이드바 하단 `설정` 페이지에서 관리하는 별도 surface로 계획한다. v1 우선순위는 `spending-anomalies` 파라미터(`min_delta_amount`, `anomaly_threshold`, `baseline_months`)다.

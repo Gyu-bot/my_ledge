@@ -28,21 +28,21 @@ async def test_verify_import_parity_matches_transaction_samples_and_all_snapshot
         transaction_sample_seed=20260324,
     )
 
-    assert report.transaction.total_rows == 2219
-    assert report.transaction.db_rows == 2219
+    assert report.transaction.total_rows == 2357
+    assert report.transaction.db_rows == 2357
     assert report.transaction.sample_size == 12
     assert report.transaction.missing_sample_indices == []
-    assert report.transaction.sampled_indices == [185, 208, 411, 436, 720, 935, 1024, 1102, 1425, 1466, 1481, 2039]
-    assert report.snapshots.asset_snapshots.expected_rows == 45
-    assert report.snapshots.asset_snapshots.db_rows == 45
+    assert report.transaction.sampled_indices == [185, 208, 411, 720, 935, 1102, 1425, 1466, 1481, 2039, 2229, 2328]
+    assert report.snapshots.asset_snapshots.expected_rows == 42
+    assert report.snapshots.asset_snapshots.db_rows == 42
     assert report.snapshots.asset_snapshots.missing_rows == []
     assert report.snapshots.asset_snapshots.extra_rows == []
-    assert report.snapshots.investments.expected_rows == 11
-    assert report.snapshots.investments.db_rows == 11
+    assert report.snapshots.investments.expected_rows == 9
+    assert report.snapshots.investments.db_rows == 9
     assert report.snapshots.investments.missing_rows == []
     assert report.snapshots.investments.extra_rows == []
-    assert report.snapshots.loans.expected_rows == 5
-    assert report.snapshots.loans.db_rows == 5
+    assert report.snapshots.loans.expected_rows == 4
+    assert report.snapshots.loans.db_rows == 4
     assert report.snapshots.loans.missing_rows == []
     assert report.snapshots.loans.extra_rows == []
 

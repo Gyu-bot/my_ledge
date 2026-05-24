@@ -7,21 +7,32 @@ def test_expected_tables_exist() -> None:
     table_names = set(Base.metadata.tables)
 
     assert table_names == {
+        "app_settings",
         "transactions",
         "asset_snapshots",
         "investments",
         "loans",
+        "loan_accounts",
+        "loan_transaction_links",
         "upload_logs",
     }
 
     transactions = Base.metadata.tables["transactions"]
+    app_settings = Base.metadata.tables["app_settings"]
     investments = Base.metadata.tables["investments"]
     loans = Base.metadata.tables["loans"]
+    loan_accounts = Base.metadata.tables["loan_accounts"]
+    loan_transaction_links = Base.metadata.tables["loan_transaction_links"]
 
     assert transactions.c.is_deleted.server_default is not None
     assert transactions.c.source.server_default is not None
     assert transactions.c.merged_into_id.foreign_keys
     assert {index.name for index in transactions.indexes} == {"idx_tx_datetime"}
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in app_settings.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("scope", "key")}
 
     assert not investments.c.broker.nullable
     assert {
@@ -36,6 +47,18 @@ def test_expected_tables_exist() -> None:
         for constraint in loans.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     } == {("snapshot_date", "lender", "product_name")}
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in loan_accounts.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("lender", "product_name")}
+    assert loan_transaction_links.c.transaction_id.foreign_keys
+    assert loan_transaction_links.c.loan_account_id.foreign_keys
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in loan_transaction_links.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("transaction_id",)}
 
 
 async def test_schema_endpoint_requires_api_key(async_client: AsyncClient) -> None:
@@ -51,7 +74,7 @@ async def test_schema_endpoint_returns_tables(
     response = await async_client.get("/api/v1/schema", headers=api_headers)
 
     assert response.status_code == 200
-    assert response.json()["tables"][0]["name"] == "asset_snapshots"
+    assert response.json()["tables"][0]["name"] == "app_settings"
     assert "transactions" in {table["name"] for table in response.json()["tables"]}
     assert {view["name"] for view in response.json()["views"]} == {
         "vw_category_monthly_spend",
@@ -59,10 +82,19 @@ async def test_schema_endpoint_returns_tables(
     }
 
     effective_view = next(
-        view for view in response.json()["views"] if view["name"] == "vw_transactions_effective"
+        view
+        for view in response.json()["views"]
+        if view["name"] == "vw_transactions_effective"
     )
     assert effective_view["recommended_for_ai"] is True
     assert effective_view["kind"] == "view"
     assert "excludes deleted or merged rows" in effective_view["description"]
-    assert any(column["name"] == "effective_category_major" for column in effective_view["columns"])
+    assert any(
+        column["name"] == "effective_category_major"
+        for column in effective_view["columns"]
+    )
     assert any(column["name"] == "merchant" for column in effective_view["columns"])
+    assert any(
+        column["name"] == "loan_repayment_type"
+        for column in effective_view["columns"]
+    )

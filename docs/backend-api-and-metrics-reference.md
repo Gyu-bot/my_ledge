@@ -28,6 +28,7 @@
   - `data_management.py`
   - `transactions.py`
   - `assets.py`
+  - `loan_mapping.py`
   - `analytics.py`
 
 ## Auth
@@ -37,6 +38,9 @@
 - `GET /api/v1/health`
 - `GET /api/v1/upload/logs`
 - 모든 read-only transaction/assets/analytics endpoint
+- `GET /api/v1/loan-accounts`
+- `GET /api/v1/loan-transaction-links`
+- `GET /api/v1/transactions/{transaction_id}/loan-link`
 
 ### `X-API-Key` 필요
 
@@ -49,6 +53,9 @@
 - `DELETE /api/v1/transactions/{transaction_id}`
 - `POST /api/v1/transactions/{transaction_id}/restore`
 - `POST /api/v1/transactions/merge`
+- `PUT /api/v1/transactions/{transaction_id}/loan-link`
+- `DELETE /api/v1/transactions/{transaction_id}/loan-link`
+- `PUT /api/v1/transactions/loan-links/bulk`
 
 ## Endpoints
 
@@ -345,6 +352,107 @@
   - always raises `501 Not Implemented`
   - detail: `"Merge is out of MVP scope."`
 
+#### `GET /api/v1/loan-accounts`
+
+- Purpose: return stable loan account candidates for frontend mapping controls
+- Auth: none
+- Response model: `LoanAccountsResponse`
+- Response shape:
+  - `items[]`
+    - `loan_account_id`
+    - `lender`
+    - `product_name`
+    - `display_name`
+    - `latest_snapshot_date`
+    - `latest_balance`
+    - `latest_interest_rate`
+- Behavior:
+  - combines persisted `loan_accounts` with latest `loans` snapshot rows
+  - deduplicates candidates by `lender + product_name`
+  - does not directly expose or depend on `loans.id`
+
+#### `GET /api/v1/transactions/{transaction_id}/loan-link`
+
+- Purpose: read the loan repayment mapping for one transaction
+- Auth: none
+- Response model: `TransactionLoanLinkResponse`
+- Response shape:
+  - `link: LoanTransactionLinkItem | null`
+- Behavior:
+  - returns `404` if the transaction does not exist
+  - returns `{"link": null}` when the transaction has no mapping
+
+#### `GET /api/v1/loan-transaction-links`
+
+- Purpose: list expense transactions with their current loan repayment mapping state for the dedicated frontend mapping screen
+- Auth: none
+- Query params:
+  - `start_date`
+  - `end_date`
+  - `search`
+  - `linked: "all" | "linked" | "unlinked"` default `all`
+  - `loan_account_id`
+  - `repayment_type: "principal" | "interest" | "mixed" | "unknown"`
+  - `page` default `1`
+  - `per_page` default `40`, max `200`
+- Response model: `LoanTransactionMappingListResponse`
+- Response shape:
+  - `total`
+  - `page`
+  - `per_page`
+  - `items[]`
+    - transaction fields: `transaction_id`, `date`, `time`, `type`, effective category, `description`, `merchant`, `amount`, `currency`, `payment_method`, `memo`
+    - `link: LoanTransactionLinkItem | null`
+- Behavior:
+  - only returns visible `type="지출"` loan repayment candidates
+  - excludes deleted and merged transactions
+  - candidate scope is intentionally broad for manual mapping: already linked rows, `금융` major-category expense rows, or rows whose category/description/merchant/payment method contains loan repayment terms such as `대출`, `상환`, `이자`, `원리금`, `원금·이자`
+  - `search` matches transaction text and linked loan account lender/product text
+  - ordered by `date desc, time desc, id desc`
+
+#### `PUT /api/v1/transactions/{transaction_id}/loan-link`
+
+- Purpose: create or replace the loan repayment mapping for one transaction
+- Auth: API key required
+- Request model: `LoanTransactionLinkUpsertRequest`
+- Request shape:
+  - either `loan_account_id`
+  - or `lender` plus `product_name`
+  - `repayment_type: "principal" | "interest" | "mixed" | "unknown"` default `unknown`
+  - `memo`
+- Response model: `LoanTransactionLinkItem`
+- Behavior:
+  - `loan_account_id` targets an existing stable account
+  - `lender + product_name` upserts a stable account before linking
+  - one transaction can have only one active loan link
+  - returns `404` for unknown transactions or unknown account IDs
+
+#### `PUT /api/v1/transactions/loan-links/bulk`
+
+- Purpose: create or replace loan repayment mappings for selected transactions
+- Auth: API key required
+- Request model: `LoanTransactionLinkBulkUpsertRequest`
+- Request shape:
+  - `transaction_ids: int[]`
+  - either `loan_account_id`
+  - or `lender` plus `product_name`
+  - `repayment_type: "principal" | "interest" | "mixed" | "unknown"` default `unknown`
+  - `memo`
+- Response shape:
+  - `updated: int`
+- Behavior:
+  - maps many transaction rows to one stable loan account
+  - returns `404` if any requested transaction or account ID does not exist
+
+#### `DELETE /api/v1/transactions/{transaction_id}/loan-link`
+
+- Purpose: remove the loan repayment mapping for one transaction
+- Auth: API key required
+- Response: `204 No Content`
+- Behavior:
+  - returns `404` if the transaction does not exist
+  - deleting a missing link is idempotent and still returns `204`
+
 ### Assets / Snapshots
 
 #### `GET /api/v1/assets/snapshots`
@@ -592,9 +700,9 @@
 - Purpose: detect unusual category spend
 - Query params:
   - `end_date`
-  - `baseline_months` default `3`
-  - `anomaly_threshold` default `0.5`
-  - `min_delta_amount` default `100000`
+  - `baseline_months` optional override; default resolves from analytics settings, then code default `3`
+  - `anomaly_threshold` optional override; default resolves from analytics settings, then code default `0.5`
+  - `min_delta_amount` optional override; default resolves from analytics settings, then code default `100000`
   - `page`
   - `per_page`
 - Response model: `SpendingAnomaliesResponse`
@@ -617,6 +725,32 @@
 - Behavior:
   - if `end_date` omitted, uses last closed month end
   - if partial date provided, baseline months use same day cutoff
+  - setting precedence is explicit query param, then persisted analytics setting, then code default
+
+#### `GET /api/v1/settings/analytics`
+
+- Auth: API key required
+- Purpose: read backend-tunable analytics settings for diagnostics
+- Response model: `AnalyticsSettingsResponse`
+- Response shape:
+  - `defaults.spending_anomalies`
+    - `min_delta_amount`
+    - `anomaly_threshold`
+    - `baseline_months`
+  - `saved.spending_anomalies`
+    - nullable saved values
+  - `effective.spending_anomalies`
+    - values currently used when a request does not pass an explicit override
+
+#### `PATCH /api/v1/settings/analytics`
+
+- Auth: API key required
+- Purpose: persist backend-tunable analytics settings
+- Request body:
+  - `spending_anomalies.min_delta_amount` integer, `>= 0`, nullable to reset
+  - `spending_anomalies.anomaly_threshold` number, `>= 0`, nullable to reset
+  - `spending_anomalies.baseline_months` integer, `1..12`, nullable to reset
+- Response model: `AnalyticsSettingsResponse`
 
 ## Canonical Views
 
@@ -633,6 +767,7 @@ Columns:
   - `description`, `merchant`
   - `amount`, `currency`, `payment_method`
   - `cost_kind`, `fixed_cost_necessity`, `memo`
+  - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo`
   - `is_deleted`, `merged_into_id`, `source`, `created_at`, `updated_at`
 - derived fields:
   - `effective_category_major = coalesce(category_major_user, category_major)`
@@ -861,4 +996,5 @@ Source: `app.services.analytics_service.get_spending_anomalies`
   - `reference_date`
   - `is_partial_period`
 - current frontend still contains some fallbacks for older backend contracts, especially around transaction filter options
+- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live scope is `analytics.spending_anomalies`
 - upload file retention to `/data/uploads/` is described in planning docs, but no confirmed live implementation was verified in `upload_service.py`

@@ -39,7 +39,9 @@ async def _seed_asset_snapshot(
 
 async def test_get_asset_snapshot_comparison_uses_latest_available_pair_and_partial_label(
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(assets_service, "_today", lambda: date(2026, 4, 8))
     await _seed_asset_snapshot(
         db_session,
         snapshot_date=date(2026, 3, 31),
@@ -75,7 +77,9 @@ async def test_get_asset_snapshot_comparison_uses_latest_available_pair_and_part
 
 async def test_get_asset_snapshot_comparison_uses_closed_month_pair_when_requested(
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(assets_service, "_today", lambda: date(2026, 4, 8))
     await _seed_asset_snapshot(
         db_session,
         snapshot_date=date(2026, 2, 28),

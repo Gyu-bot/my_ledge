@@ -11,9 +11,10 @@
 my_ledge/
 ├── AGENTS.md                # 이 파일
 ├── PRD.md                   # 상세 요구사항 문서
-├── STATUS.md                # 작업 현황 (모든 작업자가 읽고 갱신)
 ├── docker-compose.yml
 ├── .env                     # 환경변수 (DB_PASSWORD, EXCEL_PASSWORD 등)
+├── docs/
+│   └── STATUS.md            # 작업 현황 (모든 작업자가 읽고 갱신)
 ├── backend/
 │   ├── pyproject.toml       # uv 기반 의존성
 │   ├── alembic/             # DB 마이그레이션
@@ -237,6 +238,7 @@ SELECT COALESCE(category_major_user, category_major) AS category_major,
 | `/analysis/assets` | 자산 현황 | 순자산 추이, 자산 구성, 투자/대출 요약 |
 | `/analysis/insights` | 인사이트 | 핵심 인사이트, 반복 결제, 이상 지출, 거래처 Top, 카테고리 MoM |
 | `/operations/workbench` | 거래 작업대 | 필터 바, 거래 편집 테이블, 업로드, 업로드 이력, Danger Zone |
+| `/operations/loan-mapping` | 대출 연결 | 대출 상환 후보 지출 거래, 현재 연결 계좌, 상환 성격, 다건 연결 |
 
 호환용 redirect만 유지:
 
@@ -307,12 +309,12 @@ CORS_ORIGINS=          # 프론트엔드 도메인
   - 단순 탐색만을 위한 과도한 위임
 - 서브에이전트를 사용한 경우 Codex는 commentary에 위임 범위와 책임을 짧게 공유한다.
 
-### STATUS.md — 프로젝트 상태 파일
+### docs/STATUS.md — 프로젝트 상태 파일
 
-프로젝트 루트의 `STATUS.md`는 **작업 시작 전 반드시 읽고, 작업 완료 후 반드시 갱신**하는 파일이다.
+`docs/STATUS.md`는 **작업 시작 전 반드시 읽고, 작업 완료 후 반드시 갱신**하는 단일 프로젝트 상태 파일이다.
 
 ```markdown
-# STATUS.md
+# docs/STATUS.md
 
 ## Current State
 - **Phase:** Phase 1 — 기반 구축
@@ -347,7 +349,7 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 ### 작업 규칙
 
 **작업 시작 시:**
-1. `STATUS.md`를 읽고 현재 상태 파악
+1. `docs/STATUS.md`를 읽고 현재 상태 파악
 2. `git log --oneline -10`으로 최근 커밋 확인
 3. In Progress 항목 중 자신이 이어받을 작업 확인
 
@@ -362,18 +364,18 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 - 현재 작업에 쓰지 않는 프로세스를 계속 살려두지 않는다. 메모리/포트 점유를 줄이기 위해 항상 정리하면서 진행한다
 
 **작업 완료 시:**
-1. `STATUS.md` 갱신:
+1. `docs/STATUS.md` 갱신:
    - Last Worker, 시간 업데이트
    - 완료 항목을 Completed로 이동
    - In Progress 현재 지점 업데이트
    - 새로 발견한 이슈는 Known Issues에 추가
    - 다음 작업자가 해야 할 일은 Next Up에 추가
-2. `STATUS.md` 변경도 커밋에 포함
+2. `docs/STATUS.md` 변경도 커밋에 포함
 
 **핸드오프 시 (다른 작업자에게 넘길 때):**
 - In Progress에 **현재 작업 지점을 구체적으로** 표시 (파일명, 함수명, 어디까지 했는지)
 - Blocked가 있으면 원인과 해결 방향 기록
-- "context가 code에만 있고 STATUS.md에 없으면 핸드오프 실패"라고 간주
+- "context가 code에만 있고 docs/STATUS.md에 없으면 핸드오프 실패"라고 간주
 
 ### git 브랜치 전략
 
@@ -386,4 +388,4 @@ main                    ← 안정 버전, 직접 커밋 금지
 ```
 
 - 기능 단위로 브랜치 생성, 완료 후 main에 머지
-- 머지 시 STATUS.md도 함께 업데이트
+- 머지 시 docs/STATUS.md도 함께 업데이트

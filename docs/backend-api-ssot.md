@@ -25,12 +25,17 @@
 - `X-API-Key` 필요
   - `POST /api/v1/upload`
   - `GET /api/v1/schema`
+  - `GET /api/v1/settings/analytics`
+  - `PATCH /api/v1/settings/analytics`
   - `POST /api/v1/transactions`
   - `PATCH /api/v1/transactions/bulk-update`
   - `PATCH /api/v1/transactions/{id}`
   - `DELETE /api/v1/transactions/{id}`
   - `POST /api/v1/transactions/{id}/restore`
   - `POST /api/v1/transactions/merge`
+  - `PUT /api/v1/transactions/{id}/loan-link`
+  - `DELETE /api/v1/transactions/{id}/loan-link`
+  - `PUT /api/v1/transactions/loan-links/bulk`
   - `POST /api/v1/data/reset`
 
 ## Live Endpoints
@@ -49,6 +54,8 @@
 | `GET` | `/api/v1/upload/logs` | live | 최근 10건 반환 |
 | `POST` | `/api/v1/upload` | live | multipart + `snapshot_date` required |
 | `POST` | `/api/v1/data/reset` | live | `transactions_only` / `transactions_and_snapshots` |
+| `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
+| `PATCH` | `/api/v1/settings/analytics` | live | API key required, persisted analytics settings |
 
 ### Transactions Read
 
@@ -60,6 +67,7 @@
 | `GET` | `/api/v1/transactions/by-category` | live | `level=major|minor`, `type=지출|수입|이체|all` |
 | `GET` | `/api/v1/transactions/by-category/timeline` | live | timeline aggregate |
 | `GET` | `/api/v1/transactions/payment-methods` | live | payment method aggregate |
+| `GET` | `/api/v1/loan-transaction-links` | live | loan repayment candidate worklist, linked/unlinked filters |
 
 ### Transactions Write
 
@@ -70,6 +78,10 @@
 | `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/fixed necessity/memo |
 | `DELETE` | `/api/v1/transactions/{id}` | live | soft delete |
 | `POST` | `/api/v1/transactions/{id}/restore` | live | restore soft-deleted row |
+| `GET` | `/api/v1/transactions/{id}/loan-link` | live | transaction-to-loan repayment mapping |
+| `PUT` | `/api/v1/transactions/{id}/loan-link` | live | API key required, upsert one mapping |
+| `DELETE` | `/api/v1/transactions/{id}/loan-link` | live | API key required, remove mapping |
+| `PUT` | `/api/v1/transactions/loan-links/bulk` | live | API key required, map selected transactions to one loan account |
 | `POST` | `/api/v1/transactions/merge` | stub | `501 Not Implemented` |
 
 ### Assets / Snapshots
@@ -81,6 +93,7 @@
 | `GET` | `/api/v1/assets/snapshot-compare` | live | `comparison_mode` optional, default `latest_available_vs_previous_available` |
 | `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest |
 | `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest |
+| `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots |
 
 ### Advisor Analytics
 
@@ -125,6 +138,18 @@
 - 업로드는 `snapshot_date`를 필수로 받는다.
 - snapshot 적재는 문서상 UPSERT처럼 보일 수 있지만, **현재 구현은 해당 `snapshot_date` 행을 먼저 삭제한 뒤 새 파싱 결과 전체를 다시 insert** 한다.
 - 즉, contract는 실질적으로 “date-scoped replace”다.
+
+### Analytics Settings
+
+- `GET /api/v1/settings/analytics` 와 `PATCH /api/v1/settings/analytics` 는 `X-API-Key` 인증이 필요하다.
+- 현재 persisted setting 범위는 `spending_anomalies` 다.
+- 응답은 `defaults`, `saved`, `effective` 를 나눠 반환한다.
+- 지원 필드:
+  - `min_delta_amount` default `100000`
+  - `anomaly_threshold` default `0.5`
+  - `baseline_months` default `3`
+- `PATCH` 에서 값을 지정하면 저장되고, `null` 로 보내면 해당 저장값을 삭제해 code default로 되돌린다.
+- `GET /api/v1/analytics/spending-anomalies` 의 설정 해석 순서는 `명시적 query param > persisted setting > code default` 다.
 
 ### Investment / Loan Summary
 

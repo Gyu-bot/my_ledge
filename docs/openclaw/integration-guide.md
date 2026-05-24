@@ -256,4 +256,4 @@ curl http://localhost:8000/api/v1/upload/logs
 - OpenClaw skill 포맷별 frontmatter
 - OpenClaw 내부 tool registry 등록 절차
 
-그 부분은 [skill-handoff.md](/home/gyurin/projects/my_ledge/docs/openclaw/skill-handoff.md)와 OpenClaw 저장소 규칙에서 마무리한다.
+그 부분은 [skill-handoff.md](skill-handoff.md)와 OpenClaw 저장소 규칙에서 마무리한다.

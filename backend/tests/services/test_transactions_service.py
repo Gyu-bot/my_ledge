@@ -3,6 +3,8 @@ from datetime import date, datetime, time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.loan_account import LoanAccount
+from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.services.transactions_service import build_transactions_effective_select
 
@@ -123,3 +125,41 @@ async def test_build_transactions_effective_select_exposes_merchant_and_marks_me
     assert row["description"] == "스타벅스 리저브 종로점"
     assert row["merchant"] == "스타벅스"
     assert row["is_edited"] is True
+
+
+async def test_build_transactions_effective_select_exposes_loan_mapping_fields(
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction(
+        tx_date=date(2026, 5, 15),
+        tx_time=time(8, 30),
+        tx_type="지출",
+        category_major="금융",
+        category_minor="미분류",
+        description="원금·이자 자동이체",
+        amount=-220511,
+        payment_method="토스뱅크 통장",
+    )
+    account = LoanAccount(lender="토스뱅크", product_name="신용대출")
+    db_session.add_all([transaction, account])
+    await db_session.flush()
+    db_session.add(
+        LoanTransactionLink(
+            transaction_id=transaction.id,
+            loan_account_id=account.id,
+            repayment_type="mixed",
+            memo="매월 상환",
+        )
+    )
+    await db_session.commit()
+
+    canonical = build_transactions_effective_select().subquery()
+    row = (
+        await db_session.execute(select(canonical).where(canonical.c.id == transaction.id))
+    ).mappings().one()
+
+    assert row["loan_account_id"] == account.id
+    assert row["loan_lender"] == "토스뱅크"
+    assert row["loan_product_name"] == "신용대출"
+    assert row["loan_repayment_type"] == "mixed"
+    assert row["loan_link_memo"] == "매월 상환"

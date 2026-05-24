@@ -4,6 +4,8 @@ import type {
   TransactionListParams,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
+  LoanTransactionLinkBulkRequest,
+  LoanTransactionMappingParams,
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
   MerchantTreemapNode,
@@ -12,6 +14,9 @@ import type {
 export const txKeys = {
   list: (params: TransactionListParams) => ['transactions', 'list', params] as const,
   filterOptions: () => ['transactions', 'filterOptions'] as const,
+  loanAccounts: () => ['transactions', 'loanAccounts'] as const,
+  loanTransactionMappings: (params: LoanTransactionMappingParams) =>
+    ['transactions', 'loanTransactionMappings', params] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
@@ -32,6 +37,20 @@ export function useTransactionFilterOptions() {
     queryKey: txKeys.filterOptions(),
     queryFn: transactionApi.filterOptions,
     staleTime: Infinity,
+  })
+}
+
+export function useLoanAccounts() {
+  return useQuery({
+    queryKey: txKeys.loanAccounts(),
+    queryFn: transactionApi.loanAccounts,
+  })
+}
+
+export function useLoanTransactionMappings(params: LoanTransactionMappingParams = {}) {
+  return useQuery({
+    queryKey: txKeys.loanTransactionMappings(params),
+    queryFn: () => transactionApi.loanTransactionMappings(params),
   })
 }
 
@@ -105,6 +124,14 @@ export function useBulkUpdateTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TransactionBulkUpdateRequest) => transactionApi.bulkUpdate(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  })
+}
+
+export function useBulkLinkTransactionsToLoan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: LoanTransactionLinkBulkRequest) => transactionApi.bulkLoanLink(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
   })
 }

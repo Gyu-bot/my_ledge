@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { Home, BarChart2, DollarSign, Lightbulb, Settings } from 'lucide-react'
+import { Home, BarChart2, DollarSign, Lightbulb, Settings, Link2 } from 'lucide-react'
 
 export interface NavigationItem {
   path: string
@@ -70,6 +70,17 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
     desktopNav: true,
     mobileNav: true,
     Icon: Settings,
+  },
+  {
+    path: '/operations/loan-mapping',
+    label: '대출 연결',
+    title: '대출 연결',
+    breadcrumb: '운영',
+    section: 'operations',
+    sectionLabel: '운영',
+    desktopNav: true,
+    mobileNav: true,
+    Icon: Link2,
   },
 ]
 
