@@ -21,6 +21,9 @@ def _transaction(
     memo: str | None = None,
     category_major_user: str | None = None,
     category_minor_user: str | None = None,
+    cost_kind: str | None = None,
+    fixed_cost_necessity: str | None = None,
+    recurring_payment_kind: str | None = None,
     is_deleted: bool = False,
     merged_into_id: int | None = None,
     source: str = "import",
@@ -39,6 +42,9 @@ def _transaction(
         amount=amount,
         currency="KRW",
         payment_method=payment_method,
+        cost_kind=cost_kind,
+        fixed_cost_necessity=fixed_cost_necessity,
+        recurring_payment_kind=recurring_payment_kind,
         memo=memo,
         is_deleted=is_deleted,
         merged_into_id=merged_into_id,
@@ -220,6 +226,69 @@ async def test_list_transactions_supports_type_source_and_date_filters(
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["description"] == "수동 식비"
+
+
+async def test_list_transactions_supports_cost_and_recurring_filters(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 3, 10),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="통신",
+                category_minor="휴대폰",
+                description="통신비",
+                amount=-90000,
+                payment_method="카드 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="essential",
+                recurring_payment_kind="monthly_recurring",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 11),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="쇼핑",
+                category_minor="전자제품",
+                description="노트북 할부",
+                amount=-120000,
+                payment_method="카드 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="discretionary",
+                recurring_payment_kind="installment",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 12),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor="외식",
+                description="점심",
+                amount=-15000,
+                payment_method="카드 B",
+                cost_kind="variable",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/transactions",
+        params={
+            "cost_kind": "fixed",
+            "fixed_cost_necessity": "essential",
+            "recurring_payment_kind": "monthly_recurring",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["description"] == "통신비"
+    assert payload["items"][0]["recurring_payment_kind"] == "monthly_recurring"
 
 
 async def test_list_transaction_filter_options_returns_distinct_visible_values(
@@ -544,6 +613,7 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
             "category_minor_user": "배달",
             "cost_kind": "fixed",
             "fixed_cost_necessity": "essential",
+            "recurring_payment_kind": "installment",
             "memo": "일괄 메모",
         },
     )
@@ -571,6 +641,7 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert stored.merchant == "공통 거래처"
     assert stored.cost_kind == "fixed"
     assert stored.fixed_cost_necessity == "essential"
+    assert stored.recurring_payment_kind == "installment"
     assert stored.memo == "일괄 메모"
     assert stored.is_deleted is False
 

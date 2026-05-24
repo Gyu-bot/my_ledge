@@ -75,6 +75,11 @@ export interface RecurringPaymentItem {
   occurrences: number
   confidence: number
   last_date: string
+  recurring_payment_kind: 'installment' | 'monthly_recurring' | null
+  installment_count: number
+  monthly_recurring_count: number
+  unclassified_count: number
+  transaction_ids: number[]
 }
 
 export interface RecurringPaymentsResponse {

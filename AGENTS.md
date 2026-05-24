@@ -239,6 +239,7 @@ SELECT COALESCE(category_major_user, category_major) AS category_major,
 | `/analysis/insights` | 인사이트 | 핵심 인사이트, 반복 결제, 이상 지출, 거래처 Top, 카테고리 MoM |
 | `/operations/workbench` | 거래 작업대 | 필터 바, 거래 편집 테이블, 업로드, 업로드 이력, Danger Zone |
 | `/operations/loan-mapping` | 대출 연결 | 대출 상환 후보 지출 거래, 현재 연결 계좌, 상환 성격, 다건 연결 |
+| `/operations/recurring-classification` | 반복 결제 분류 | 반복 결제 후보, 할부/매월 반복 수동 분류, 그룹 단위 저장 |
 
 호환용 redirect만 유지:
 

@@ -124,7 +124,10 @@ export function useBulkUpdateTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TransactionBulkUpdateRequest) => transactionApi.bulkUpdate(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
   })
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { WorkbenchPage } from '../../pages/WorkbenchPage'
@@ -12,6 +12,8 @@ import type {
 
 const mockUseTransactionList = vi.fn<(params?: TransactionListParams) => { data: TransactionListResponse; isLoading: boolean }>()
 const mockUseWriteAccess = vi.fn<() => boolean>()
+const updateTransactionMock = vi.fn()
+const bulkUpdateTransactionsMock = vi.fn()
 
 function buildTransaction(overrides: Partial<TransactionResponse>): TransactionResponse {
   return {
@@ -32,6 +34,7 @@ function buildTransaction(overrides: Partial<TransactionResponse>): TransactionR
     payment_method: '카드',
     cost_kind: null,
     fixed_cost_necessity: null,
+    recurring_payment_kind: null,
     memo: null,
     is_deleted: false,
     merged_into_id: null,
@@ -59,10 +62,10 @@ vi.mock('../../hooks/useTransactions', () => ({
   useTransactionFilterOptions: () => ({
     data: filterOptions,
   }),
-  useUpdateTransaction: () => ({ mutateAsync: vi.fn() }),
+  useUpdateTransaction: () => ({ mutateAsync: updateTransactionMock }),
   useDeleteTransaction: () => ({ mutateAsync: vi.fn() }),
   useRestoreTransaction: () => ({ mutateAsync: vi.fn() }),
-  useBulkUpdateTransactions: () => ({ mutateAsync: vi.fn() }),
+  useBulkUpdateTransactions: () => ({ mutateAsync: bulkUpdateTransactionsMock }),
 }))
 
 vi.mock('../../hooks/useUpload', () => ({
@@ -92,6 +95,10 @@ beforeEach(() => {
     payment_method_options: ['카드'],
   }
   mockUseWriteAccess.mockReturnValue(false)
+  updateTransactionMock.mockReset()
+  updateTransactionMock.mockResolvedValue({ id: 1 })
+  bulkUpdateTransactionsMock.mockReset()
+  bulkUpdateTransactionsMock.mockResolvedValue({ updated: 1 })
   mockUseTransactionList.mockImplementation(() => ({
     data: { total: 1, page: 1, per_page: 20, items: [] },
     isLoading: false,
@@ -174,8 +181,96 @@ describe('WorkbenchPage', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
 
     expect(screen.getAllByText('배달').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('combobox')).toHaveLength(8)
+    expect(screen.getAllByRole('combobox')).toHaveLength(11)
     expect(screen.getAllByRole('option', { name: '식비' }).length).toBeGreaterThan(0)
+  })
+
+  it('does not expose recurring classification in bulk edit controls or payloads', async () => {
+    mockUseWriteAccess.mockReturnValue(true)
+    mockUseTransactionList.mockImplementation(() => ({
+      data: {
+        total: 1,
+        page: 1,
+        per_page: 40,
+        items: [
+          buildTransaction({
+            id: 22,
+            description: '정기 결제',
+            merchant: '구독 서비스',
+            recurring_payment_kind: 'installment',
+          }),
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<WorkbenchPage />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
+
+    expect(screen.getByText('선택한 행에 같은 값을 일괄 적용합니다.')).toBeInTheDocument()
+    expect(screen.getAllByRole('combobox')).toHaveLength(11)
+    fireEvent.click(screen.getByRole('button', { name: '일괄 적용' }))
+
+    await waitFor(() => {
+      expect(bulkUpdateTransactionsMock).toHaveBeenCalledWith(expect.not.objectContaining({
+        recurring_payment_kind: expect.anything(),
+      }))
+    })
+  })
+
+  it('keeps recurring classification out of single-row update payloads', async () => {
+    mockUseWriteAccess.mockReturnValue(true)
+    mockUseTransactionList.mockImplementation(() => ({
+      data: {
+        total: 1,
+        page: 1,
+        per_page: 40,
+        items: [
+          buildTransaction({
+            id: 23,
+            description: '정기 결제',
+            merchant: '구독 서비스',
+            recurring_payment_kind: 'installment',
+          }),
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<WorkbenchPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '✎' }))
+    fireEvent.click(screen.getByRole('button', { name: '✓' }))
+
+    await waitFor(() => {
+      expect(updateTransactionMock).toHaveBeenCalledWith({
+        id: 23,
+        data: expect.not.objectContaining({
+          recurring_payment_kind: expect.anything(),
+        }),
+      })
+    })
+  })
+
+  it('applies cost and recurring classification filters to the transaction query', () => {
+    mockUseTransactionList.mockImplementation(() => ({
+      data: { total: 0, page: 1, per_page: 40, items: [] },
+      isLoading: false,
+    }))
+
+    wrap(<WorkbenchPage />)
+
+    fireEvent.change(screen.getByLabelText('고정비/변동비 필터'), { target: { value: 'fixed' } })
+    fireEvent.change(screen.getByLabelText('고정비 필수 여부 필터'), { target: { value: 'essential' } })
+    fireEvent.change(screen.getByLabelText('반복결제 분류 필터'), { target: { value: 'installment' } })
+    fireEvent.click(screen.getByRole('button', { name: '적용' }))
+
+    expect(mockUseTransactionList.mock.lastCall?.[0]).toMatchObject({
+      cost_kind: 'fixed',
+      fixed_cost_necessity: 'essential',
+      recurring_payment_kind: 'installment',
+    })
   })
 
   it('falls back to current transaction data when the filter-options response has no subcategory metadata', () => {

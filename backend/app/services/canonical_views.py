@@ -29,6 +29,9 @@ def transaction_is_edited_clause() -> ColumnElement[bool]:
         Transaction.category_major_user.is_not(None),
         Transaction.category_minor_user.is_not(None),
         Transaction.merchant != Transaction.description,
+        Transaction.cost_kind.is_not(None),
+        Transaction.fixed_cost_necessity.is_not(None),
+        Transaction.recurring_payment_kind.is_not(None),
         Transaction.memo.is_not(None),
     )
 
@@ -60,6 +63,7 @@ def build_transactions_effective_select(
         Transaction.payment_method.label("payment_method"),
         Transaction.cost_kind.label("cost_kind"),
         Transaction.fixed_cost_necessity.label("fixed_cost_necessity"),
+        Transaction.recurring_payment_kind.label("recurring_payment_kind"),
         Transaction.memo.label("memo"),
         LoanTransactionLink.loan_account_id.label("loan_account_id"),
         LoanAccount.lender.label("loan_lender"),
@@ -135,6 +139,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("payment_method", String(length=100), nullable=True),
             SchemaColumnDefinition("cost_kind", String(length=20), nullable=True),
             SchemaColumnDefinition("fixed_cost_necessity", String(length=20), nullable=True),
+            SchemaColumnDefinition("recurring_payment_kind", String(length=30), nullable=True),
             SchemaColumnDefinition("memo", Text(), nullable=True),
             SchemaColumnDefinition("loan_account_id", Integer(), nullable=True),
             SchemaColumnDefinition("loan_lender", String(length=50), nullable=True),

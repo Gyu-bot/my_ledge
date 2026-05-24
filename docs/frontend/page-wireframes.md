@@ -12,6 +12,8 @@
 - `/analysis/assets`
 - `/analysis/insights`
 - `/operations/workbench`
+- `/operations/loan-mapping`
+- `/operations/recurring-classification`
 
 ### Legacy redirects
 
@@ -118,6 +120,7 @@
 - 소분류별 지출
 - 고정비/변동비 비율
 - 고정비 필수/비필수
+- 거래 작업대/거래 목록 필터의 `고정/변동`, `필수여부` 수동 편집과 `반복분류` 조회/필터
 - 거래처별 지출 비중 treemap
 - 일별 지출 달력
 - 거래 내역
@@ -192,7 +195,7 @@
   - 수입 변동성
   - 이상 지출 카테고리 수
 - 핵심 인사이트
-- 반복 결제
+- 반복 결제: 거래처별 반복 후보와 저장된 `할부` / `매월 반복` 분류 결과를 읽기 전용으로 표시
 - 이상 지출
 - 거래처 소비 Top 5
 - 카테고리 전월 대비
@@ -231,8 +234,8 @@
 
 - write access alert
 - filter bar
-- bulk edit panel
-- transaction table
+- bulk edit panel: 거래처/카테고리/고정비/필수여부/메모만 수정
+- transaction table: 반복분류는 읽기 전용 표시
 - upload accordion
 - upload history accordion
 - danger zone accordion
@@ -251,6 +254,41 @@
 | transaction table | table + shared badge + `Pagination` | `bg-surface-card`, `text-text-primary`, `text-text-ghost`, `text-pagination`, shared rounded badge token, no row separators |
 | upload / history accordion | accordion shell + compact chevron | `bg-surface-card`, `bg-surface-section`, `border-border-subtle`, `text-nano` chevron |
 | danger zone | destructive accordion | `bg-surface-danger`, `bg-surface-danger-muted`, `border-danger-muted`, `text-danger` |
+
+## Recurring Classification `/operations/recurring-classification`
+
+```text
+[read-only alert]
+
+[summary]
+
+[selected group bulk classification panel]
+
+[recurring payment candidate table + classification select + pagination]
+```
+
+### Blocks
+
+- write access alert
+- summary
+- selected group bulk classification panel
+- recurring payment candidate table
+- group classification select
+- pagination
+
+### Topbar meta
+
+- `현재 page item count / total count`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| write access alert | `AlertBanner` | warn state surface and text tokens |
+| summary | inline shell | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `text-text-ghost` |
+| selected group bulk classification panel | inline edit panel | `bg-surface-section`, `border-border-subtle`, `text-info-default`, `bg-accent-dim` |
+| recurring table | table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
+| classification select | native select | `bg-surface-bar`, `border-border-subtle`, `text-text-secondary` |
 
 ## Notes
 

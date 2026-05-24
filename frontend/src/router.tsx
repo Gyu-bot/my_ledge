@@ -6,6 +6,7 @@ import { AssetsPage } from './pages/AssetsPage'
 import { InsightsPage } from './pages/InsightsPage'
 import { WorkbenchPage } from './pages/WorkbenchPage'
 import { LoanMappingPage } from './pages/LoanMappingPage'
+import { RecurringClassificationPage } from './pages/RecurringClassificationPage'
 
 const routeElements = [
   { index: true, element: <OverviewPage /> },
@@ -14,6 +15,7 @@ const routeElements = [
   { path: 'analysis/insights', element: <InsightsPage /> },
   { path: 'operations/workbench', element: <WorkbenchPage /> },
   { path: 'operations/loan-mapping', element: <LoanMappingPage /> },
+  { path: 'operations/recurring-classification', element: <RecurringClassificationPage /> },
 ]
 
 export const routes = [

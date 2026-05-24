@@ -12,6 +12,7 @@ import {
 } from '../hooks/useAnalytics'
 import { useChromeContext } from '../components/layout/chromeContext'
 import { formatKRW, formatKRWCompact, formatPct } from '../lib/utils'
+import type { RecurringPaymentItem } from '../types/analytics'
 
 interface InsightItem {
   icon: string
@@ -27,6 +28,20 @@ const VARIANT_BADGE: Record<string, string> = {
 }
 const VARIANT_LABEL: Record<string, string> = {
   ok: '양호', warn: '주의', danger: '확인 필요',
+}
+
+function recurringKindLabel(value: RecurringPaymentItem['recurring_payment_kind']) {
+  if (value === 'installment') return '할부'
+  if (value === 'monthly_recurring') return '매월 반복'
+  return '미분류'
+}
+
+function recurringKindSummary(item: RecurringPaymentItem) {
+  return [
+    item.installment_count > 0 ? `할부 ${item.installment_count}` : null,
+    item.monthly_recurring_count > 0 ? `매월 ${item.monthly_recurring_count}` : null,
+    `미분류 ${item.unclassified_count}`,
+  ].filter(Boolean).join(' · ')
 }
 
 export function InsightsPage() {
@@ -141,7 +156,7 @@ export function InsightsPage() {
              <>
                <table className="w-full border-collapse text-caption">
                  <thead>
-                   <tr>{['거래처', '주기', '평균금액', '횟수'].map((h) => (
+                   <tr>{['거래처', '분류', '주기', '평균금액', '횟수'].map((h) => (
                      <th key={h} className="text-micro text-text-ghost pb-1.5 text-left">{h}</th>
                    ))}</tr>
                  </thead>
@@ -149,6 +164,12 @@ export function InsightsPage() {
                    {recurring.data.items.map((item, i) => (
                      <tr key={i}>
                        <td className="py-2 text-text-primary font-medium">{item.merchant}</td>
+                       <td className="py-2">
+                         <span className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
+                           {recurringKindLabel(item.recurring_payment_kind)}
+                         </span>
+                         <span className="block text-micro text-text-ghost mt-1">{recurringKindSummary(item)}</span>
+                       </td>
                        <td className="py-2"><span className="text-nano bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">{item.interval_type}</span></td>
                        <td className="py-2 text-right font-semibold">₩ {formatKRW(item.avg_amount)}</td>
                        <td className="py-2 text-right text-text-muted">{item.occurrences}회</td>

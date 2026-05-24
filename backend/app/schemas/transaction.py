@@ -24,6 +24,7 @@ class TransactionResponse(BaseModel):
     payment_method: str | None
     cost_kind: str | None
     fixed_cost_necessity: str | None
+    recurring_payment_kind: str | None
     memo: str | None
     is_deleted: bool
     merged_into_id: int | None
@@ -93,6 +94,7 @@ class TransactionCreateRequest(BaseModel):
     payment_method: str | None = None
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
+    recurring_payment_kind: Literal["installment", "monthly_recurring"] | None = None
     memo: str | None = None
 
 
@@ -102,6 +104,7 @@ class TransactionUpdateRequest(BaseModel):
     merchant: str | None = None
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
+    recurring_payment_kind: Literal["installment", "monthly_recurring"] | None = None
     memo: str | None = None
 
 
@@ -112,6 +115,7 @@ class TransactionBulkUpdateRequest(BaseModel):
     category_minor_user: str | None = None
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
+    recurring_payment_kind: Literal["installment", "monthly_recurring"] | None = None
     memo: str | None = None
 
 
@@ -140,3 +144,6 @@ TransactionTypeFilter = Literal["지출", "수입", "이체", "all"]
 TransactionSourceFilter = Literal["import", "manual", "all"]
 TransactionCategoryLevel = Literal["major", "minor"]
 TransactionEditedFilter = Literal["true", "false", "all"]
+TransactionCostKindFilter = Literal["fixed", "variable", "all"]
+TransactionFixedCostNecessityFilter = Literal["essential", "discretionary", "all"]
+TransactionRecurringPaymentKindFilter = Literal["installment", "monthly_recurring", "all"]

@@ -183,6 +183,7 @@
       - `merchant`
       - `cost_kind`
       - `fixed_cost_necessity`
+      - `recurring_payment_kind`
       - `is_deleted`
       - `merged_into_id`
       - `is_edited`
@@ -615,6 +616,22 @@
   - `unclassified_total`
   - `unclassified_count`
 
+#### `GET /api/v1/analytics/recurring-payments`
+
+- Purpose: detect recurring expense groups by merchant and expose manual recurring classification state.
+- Query params:
+  - `start_date`
+  - `end_date`
+  - `min_occurrences` default `2`
+  - `page` default `1`
+  - `per_page` default `10`, max `100`
+- Response includes:
+  - `recurring_payment_kind`: resolved group value when all transactions in the group share one manual value
+  - `installment_count`
+  - `monthly_recurring_count`
+  - `unclassified_count`
+  - `transaction_ids`: ids used by the operations recurring-classification screen to bulk-update a recurring group
+
 #### `GET /api/v1/analytics/merchant-spend`
 
 - Purpose: top merchants by spend/inflow amount
@@ -891,6 +908,7 @@ Source: `app.services.analytics_service.get_fixed_cost_summary`
 - `fixed_cost_necessity` further splits fixed into essential/discretionary
 - `cost_kind == variable` goes to variable bucket
 - missing classification goes to unclassified bucket
+- Automatic fixed/variable and essential/discretionary classification is not live yet; current write path is manual.
 
 ### Merchant Spend
 

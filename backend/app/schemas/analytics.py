@@ -93,6 +93,11 @@ class RecurringPaymentItem(BaseModel):
     occurrences: int
     confidence: float
     last_date: date
+    recurring_payment_kind: str | None
+    installment_count: int
+    monthly_recurring_count: int
+    unclassified_count: int
+    transaction_ids: list[int]
 
 
 class RecurringPaymentsResponse(BaseModel):

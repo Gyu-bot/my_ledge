@@ -6,6 +6,7 @@ import { InsightsPage } from '../../pages/InsightsPage'
 
 const useMerchantSpendMock = vi.fn()
 const useCategoryMoMMock = vi.fn()
+const useRecurringPaymentsMock = vi.fn()
 
 vi.mock('../../hooks/useAnalytics', () => ({
   useMonthlyCashflow: () => ({
@@ -18,7 +19,7 @@ vi.mock('../../hooks/useAnalytics', () => ({
     data: { coefficient_of_variation: 0.08, assumptions: '', items: [], avg: 0, stdev: 0 },
     isLoading: false,
   }),
-  useRecurringPayments: () => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }),
+  useRecurringPayments: (...args: unknown[]) => useRecurringPaymentsMock(...args),
   useSpendingAnomalies: (...args: unknown[]) => useSpendingAnomaliesMock(...args),
   useMerchantSpend: (params: unknown) => useMerchantSpendMock(params),
   useCategoryMoM: (params: unknown) => useCategoryMoMMock(params),
@@ -45,6 +46,7 @@ describe('InsightsPage', () => {
     vi.setSystemTime(new Date('2026-04-08T09:00:00+09:00'))
     useMerchantSpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useCategoryMoMMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
+    useRecurringPaymentsMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
     useSpendingAnomaliesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
   })
 
@@ -121,5 +123,38 @@ describe('InsightsPage', () => {
 
     expect(screen.getByText('+16.6%')).toBeInTheDocument()
     expect(screen.queryByText('++16.6%')).not.toBeInTheDocument()
+  })
+
+  it('shows recurring payment classification as a read-only insight result', () => {
+    useRecurringPaymentsMock.mockImplementation(() => ({
+      data: {
+        total: 1,
+        assumptions: '동일 거래처 기준',
+        items: [
+          {
+            merchant: '통신사',
+            category: '통신',
+            avg_amount: 90000,
+            interval_type: 'monthly',
+            avg_interval_days: 31,
+            occurrences: 2,
+            confidence: 0.99,
+            last_date: '2026-02-01',
+            recurring_payment_kind: 'monthly_recurring',
+            installment_count: 0,
+            monthly_recurring_count: 2,
+            unclassified_count: 0,
+            transaction_ids: [11, 12],
+          },
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<InsightsPage />)
+
+    expect(screen.getByText('매월 반복')).toBeInTheDocument()
+    expect(screen.getByText('매월 2 · 미분류 0')).toBeInTheDocument()
+    expect(screen.queryByLabelText('통신사 반복결제 분류')).not.toBeInTheDocument()
   })
 })

@@ -2,13 +2,19 @@
 
 ## Current State
 - **Phase:** 안정화 follow-up 유지, 대출 상환 거래 매핑 별도 운영 화면 분리 완료
-- **Last Worker:** Codex (2026-05-24T23:09+0900, loan mapping 후보 범위 재확대 및 canonical loan fields 연결)
+- **Last Worker:** Codex (2026-05-25T00:34+0900, 반복결제 분류 화면 현재 페이지 일괄 수정 추가)
 - **Branch:** main
 
 ## Completed
 - [x] Loan transaction mapping backend/frontend 추가: `loan_accounts` 안정 계좌 identity와 `loan_transaction_links` 거래 매핑 테이블, `GET /api/v1/loan-accounts`, `GET /api/v1/loan-transaction-links`, `GET/PUT/DELETE /api/v1/transactions/{id}/loan-link`, `PUT /api/v1/transactions/loan-links/bulk` API, 별도 `/operations/loan-mapping` 화면, 서비스/API/frontend 테스트, PRD/API 문서 반영
   - `loan-transaction-links` 기본 목록은 수동 매핑 작업용으로 넓게 유지한다. 이미 연결된 거래, `금융` 대분류 지출, 또는 대출/상환/이자/원리금/원금·이자 단서가 있는 지출을 포함한다.
   - `vw_transactions_effective` 는 nullable `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo` 컬럼으로 연결된 대출 상환 정보를 함께 노출한다.
+- [x] 고정비/반복결제 수동 분류 확장: `transactions.recurring_payment_kind` (`installment` / `monthly_recurring`) 추가, `GET/PATCH /transactions` 및 bulk-update/필터/canonical view에 연결, 별도 `/operations/recurring-classification` 화면에서 거래처 그룹 단위 수동 분류 select 제공
+  - 고정비/변동비와 필수/비필수는 기존 `cost_kind`, `fixed_cost_necessity` 필드를 유지하고 작업대 필터/편집 노출을 보강했다.
+  - `/analysis/insights` 반복결제 카드는 저장된 분류 결과와 count만 읽기 전용으로 표시한다.
+  - `/operations/workbench` 에서는 반복분류를 조회/필터만 제공하고, 단건/일괄 수정은 `/operations/recurring-classification` 으로 일원화했다.
+  - `/operations/recurring-classification` 은 현재 페이지의 여러 거래처 그룹을 선택해 한 번에 `미분류` / `할부` / `매월 반복` 으로 bulk-update 할 수 있다.
+  - 자동 분류는 미구현 상태로 유지하고 PRD/STATUS 계획 항목에만 남겼다.
 - [x] Spending timeline monthly total labels 추가: `월별 카테고리 추이` stacked bar에 월별 총액 overlay 라벨을 표시하고 hover tooltip에도 `총액` 행을 추가, 브라우저에서 라벨 6개와 tooltip 총액 확인
 - [x] Spending timeline stacked bar 전환 완료: `월별 카테고리 추이`를 `StackedAreaChart`에서 실제 Recharts `BarChart` 기반 `StackedBarChart`로 교체하고 브라우저에서 bar rectangle 렌더링 확인
 - [x] Sample workbook frontend smoke 확인: Docker Compose 테스트 스택을 임시 포트(`frontend :13000`, `backend :18000`)로 기동하고 `tmp/2025-05-21~2026-05-21.xlsx` 업로드 성공 후 개요/거래 작업대/자산 화면 렌더링 확인
@@ -312,7 +318,10 @@
     - [ ] bulk delete / bulk restore API 추가 및 프론트 연결
     - [x] bulk edit v1 테스트 및 문서 반영
     - [x] 필터 입력과 실제 목록 반영을 분리하는 `필터 적용` 버튼 흐름 도입
-    - [ ] 카테고리 기반 rule-based `cost_kind` / `fixed_cost_necessity` 자동 분류 계획 구체화
+    - [ ] 카테고리 분류 기반 rule-based 자동 분류 계획 구체화
+      - 대분류/소분류 매핑으로 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 후보를 제안한다.
+      - 자동 적용 전 사용자 승인/미리보기 화면을 두고, 기존 수동값은 덮어쓰지 않는다.
+      - 반복결제 성격은 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 사용한다.
   - Track D. workbench performance
     - [x] `loadAllTransactions()` 기반 전체 페이지 수집 제거
     - [x] 서버 필터링 + 서버 페이지네이션으로 전환
@@ -330,6 +339,8 @@
 ## Key Decisions
 - 2026-05-24: 대출 상환 후보 목록은 완전 자동 분류가 아니라 수동 연결 작업대이므로 `금융` 대분류 지출을 넓게 포함한다. 연결 완료 후의 분석 안정성은 `loan_transaction_links` 와 canonical view의 nullable 대출 연결 컬럼으로 확보한다.
 - 2026-05-24: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다. 거래 작업대는 원장 편집/업로드/삭제에 집중하고, 대출 연결 화면은 반복 지출 후보와 현재 연결 계좌 상태를 함께 확인하는 운영 surface로 둔다.
+- 2026-05-25: 반복결제의 `할부` / `매월 반복` 구분은 별도 recurring rule 테이블이 아니라 거래 단위 nullable `transactions.recurring_payment_kind` 로 먼저 저장한다. 변경은 별도 `/operations/recurring-classification` 운영 화면에서 해당 거래 id 묶음을 bulk-update 하고, 인사이트는 결과만 읽기 전용으로 표시한다. 자동 분류는 추후 rule-based 계획으로만 둔다.
+- 2026-05-25: 거래 작업대는 원장 편집과 조회/필터에 집중하고 반복결제 성격 변경 컨트롤은 제공하지 않는다. 반복분류 수정 surface는 `/operations/recurring-classification` 로 일원화해 단건 거래에 반복 성격을 임의 부여하는 혼선을 줄인다.
 - 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 기존 `anomaly_score` cutoff 계약을 유지한다. 다만 응답 `assumptions` 에 threshold가 퍼센트가 아니라 score 기준이며, 표준편차가 있으면 `|delta|/stdev`, 없으면 `|delta|/baseline_avg` 로 계산된다는 설명을 명시한다.
 - 2026-04-08: `spending-anomalies` 기본 호출은 진행 중인 이번 달이 아니라 직전 마감월을 기준으로 본다. 사용자가 partial `end_date` 를 명시한 경우에만 해당 월을 보며, baseline도 이전 월 같은 일자까지만 잘라 비교한다.
 - 2026-04-08: backend-tunable analytics 파라미터는 Insights 카드에 흩뿌리지 않고, 좌측 사이드바 하단 `설정` 페이지에서 관리하는 별도 surface로 계획한다. v1 우선순위는 `spending-anomalies` 파라미터(`min_delta_amount`, `anomaly_threshold`, `baseline_months`)다.

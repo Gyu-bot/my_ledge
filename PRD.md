@@ -113,6 +113,7 @@ BankSalad에서 내보낸 엑셀 파일을 데이터 소스로 사용하여 지�
 │ payment_method  VARCHAR(100)             │  -- 결제수단
 │ cost_kind       VARCHAR(20)              │  -- 'fixed' | 'variable'
 │ fixed_cost_necessity VARCHAR(20)         │  -- 'essential' | 'discretionary'
+│ recurring_payment_kind VARCHAR(30)       │  -- 'installment' | 'monthly_recurring'
 │ memo            TEXT                     │
 │ is_deleted      BOOLEAN DEFAULT FALSE    │  -- 소프트 삭제
 │ merged_into_id  INTEGER REFERENCES       │  -- 병합 시 대상 거래 ID
@@ -718,6 +719,21 @@ P2 설계 규칙:
 
 MVP에서는 거래 병합 UI를 제공하지 않는다.
 
+#### 6.1.7 반복 결제 분류 (`/operations/recurring-classification`)
+
+- **반복 결제 후보 목록**: `GET /api/v1/analytics/recurring-payments` 결과를 거래처 그룹 단위로 표시한다.
+- **수동 분류**: 그룹의 `transaction_ids`를 `PATCH /api/v1/transactions/bulk-update`로 갱신하여 `recurring_payment_kind`를 `installment` 또는 `monthly_recurring`으로 저장한다.
+- **일괄 분류**: 현재 페이지의 여러 거래처 그룹을 선택하고 같은 분류를 한 번에 적용할 수 있다.
+- **역할 분리**: 인사이트(`/analysis/insights`)는 저장된 분류 결과만 읽기 전용으로 표시하고, 변경은 운영 화면에서만 수행한다.
+- **작업대 경계**: 거래 작업대(`/operations/workbench`)는 반복분류를 조회/필터만 제공하고 수정 컨트롤은 제공하지 않는다.
+
+#### 6.1.8 자동 분류 계획
+
+- **카테고리 기반 후보 제안**: 거래의 대분류/소분류를 우선 힌트로 사용해 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 후보를 계산한다.
+- **보수적 적용**: 기존 수동값은 덮어쓰지 않고, 자동 분류 결과는 미리보기/승인 단계를 거쳐 저장한다.
+- **반복결제 결합 조건**: `recurring_payment_kind` 자동 후보는 반복 결제 후보 그룹 탐지 결과와 카테고리 힌트가 함께 맞을 때만 제안한다.
+- **우선순위**: 먼저 카테고리 매핑 테이블/규칙 문서화, 그 다음 dry-run API와 운영 승인 화면 순서로 구현한다.
+
 ### 6.2 추가 분석 제안
 
 데이터 기반으로 다음 분석을 추가 제공:
@@ -726,6 +742,8 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 |---|---|---|
 | **고정비 vs 변동비 분류** | 거래 단위 `cost_kind` (`fixed`/`variable`) 수동 또는 규칙 기반 분류 | transactions.cost_kind |
 | **고정비 필수/비필수 분류** | 고정비 거래에 대해 `fixed_cost_necessity` (`essential`/`discretionary`) 분류 | transactions.fixed_cost_necessity |
+| **반복결제 성격 분류** | 운영 화면에서 반복결제 후보 거래를 `recurring_payment_kind` (`installment`/`monthly_recurring`)로 수동 분류하고, 인사이트에서는 결과만 조회. 추후 규칙 기반 자동 분류 후보로 확장 | transactions.recurring_payment_kind |
+| **카테고리 기반 자동 분류** | 대분류/소분류 기반 규칙으로 고정비/필수여부/반복결제 성격 후보를 제안하고 사용자 승인 후 반영 | category rules + transactions |
 | **전월 대비 카테고리별 변동** | 각 카테고리 MoM 증감율 및 이상치 탐지 | transactions |
 | **요일별/시간대별 소비 패턴** | 주중 vs 주말, 시간대별 지출 분포 | date + time |
 | **결제수단별 사용 패턴** | 카드별 월 이용액, 주 사용 카테고리 | payment_method |
@@ -892,12 +910,16 @@ CORS_ORIGINS=https://my-ledge.example.com
   - [x] `GET /api/v1/analytics/fixed-cost-summary`
   - [x] `GET /api/v1/analytics/merchant-spend`
   - [ ] canonical aggregate view 보강 (`vw_monthly_cashflow`, `vw_merchant_monthly_spend`)
-- [ ] Phase 4B — advisor diagnostics
-  - [ ] `GET /api/v1/analytics/recurring-payments`
-  - [ ] `GET /api/v1/analytics/spending-anomalies`
-  - [ ] `GET /api/v1/analytics/payment-method-patterns`
-  - [ ] `GET /api/v1/analytics/income-stability`
+- [x] Phase 4B — advisor diagnostics
+  - [x] `GET /api/v1/analytics/recurring-payments`
+  - [x] `GET /api/v1/analytics/spending-anomalies`
+  - [x] `GET /api/v1/analytics/payment-method-patterns`
+  - [x] `GET /api/v1/analytics/income-stability`
   - [ ] merchant normalization 전략 확정 (`description` only vs alias rule table)
+  - [ ] 카테고리 분류 기반 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 자동 분류 계획 구체화
+    - [ ] 대분류/소분류 → 후보 필드 매핑 정의
+    - [ ] 기존 수동값 보존 정책과 dry-run 결과 contract 정의
+    - [ ] 사용자 승인 후 bulk 반영하는 운영 화면 계획
 - [ ] Phase 4C — asset/liability health
   - [ ] `GET /api/v1/analytics/net-worth-breakdown`
   - [ ] `GET /api/v1/analytics/investment-performance`

@@ -43,6 +43,9 @@ async def list_transactions(
     include_deleted: bool,
     include_merged: bool,
     search: str | None,
+    cost_kind: str,
+    fixed_cost_necessity: str,
+    recurring_payment_kind: str,
     page: int,
     per_page: int,
 ) -> TransactionListResponse:
@@ -53,6 +56,9 @@ async def list_transactions(
         source=source,
         category_major=category_major,
         payment_method=payment_method,
+        cost_kind=cost_kind,
+        fixed_cost_necessity=fixed_cost_necessity,
+        recurring_payment_kind=recurring_payment_kind,
         is_edited=is_edited,
         include_deleted=include_deleted,
         include_merged=include_merged,
@@ -277,6 +283,9 @@ async def create_transaction(
         cost_kind=payload_data["cost_kind"],
         fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
     )
+    payload_data["recurring_payment_kind"] = _normalized_recurring_payment_kind(
+        payload_data.get("recurring_payment_kind")
+    )
     transaction = Transaction(
         **payload_data,
         source="manual",
@@ -314,6 +323,8 @@ async def update_transaction(
             continue
         if field == "merchant":
             value = _normalized_merchant(merchant=value, description=transaction.description)
+        elif field == "recurring_payment_kind":
+            value = _normalized_recurring_payment_kind(value)
         setattr(transaction, field, value)
     await db_session.commit()
     await db_session.refresh(transaction)
@@ -369,6 +380,8 @@ async def bulk_update_transactions(
                 continue
             if field == "merchant":
                 value = _normalized_merchant(merchant=value, description=transaction.description)
+            elif field == "recurring_payment_kind":
+                value = _normalized_recurring_payment_kind(value)
             setattr(transaction, field, value)
     await db_session.commit()
     return TransactionBulkUpdateResponse(updated=len(transactions))
@@ -387,12 +400,18 @@ async def _load_filtered_transactions(
     include_deleted: bool,
     include_merged: bool,
     search: str | None,
+    cost_kind: str = "all",
+    fixed_cost_necessity: str = "all",
+    recurring_payment_kind: str = "all",
 ) -> list[RowMapping]:
     query, canonical = _build_transaction_query(
         start_date=start_date,
         end_date=end_date,
         category_major=category_major,
         payment_method=payment_method,
+        cost_kind=cost_kind,
+        fixed_cost_necessity=fixed_cost_necessity,
+        recurring_payment_kind=recurring_payment_kind,
         tx_type=tx_type,
         source=source,
         is_edited=is_edited,
@@ -412,6 +431,9 @@ def _build_transaction_query(
     end_date: date | None,
     category_major: str | None,
     payment_method: str | None,
+    cost_kind: str,
+    fixed_cost_necessity: str,
+    recurring_payment_kind: str,
     tx_type: TransactionTypeFilter,
     source: TransactionSourceFilter,
     is_edited: str,
@@ -432,6 +454,12 @@ def _build_transaction_query(
         query = query.where(canonical.c.payment_method == payment_method)
     if category_major is not None:
         query = query.where(canonical.c.effective_category_major == category_major)
+    if cost_kind != "all":
+        query = query.where(canonical.c.cost_kind == cost_kind)
+    if fixed_cost_necessity != "all":
+        query = query.where(canonical.c.fixed_cost_necessity == fixed_cost_necessity)
+    if recurring_payment_kind != "all":
+        query = query.where(canonical.c.recurring_payment_kind == recurring_payment_kind)
     if tx_type != "all":
         query = query.where(canonical.c.type == tx_type)
     if source != "all":
@@ -483,6 +511,7 @@ def _serialize_transaction_model(transaction: Transaction) -> TransactionRespons
         payment_method=transaction.payment_method,
         cost_kind=transaction.cost_kind,
         fixed_cost_necessity=transaction.fixed_cost_necessity,
+        recurring_payment_kind=transaction.recurring_payment_kind,
         memo=transaction.memo,
         is_deleted=transaction.is_deleted,
         merged_into_id=transaction.merged_into_id,
@@ -512,6 +541,7 @@ def _serialize_transaction_row(transaction: RowMapping) -> TransactionResponse:
         payment_method=transaction["payment_method"],
         cost_kind=transaction["cost_kind"],
         fixed_cost_necessity=transaction["fixed_cost_necessity"],
+        recurring_payment_kind=transaction["recurring_payment_kind"],
         memo=transaction["memo"],
         is_deleted=transaction["is_deleted"],
         merged_into_id=transaction["merged_into_id"],
@@ -537,6 +567,9 @@ def _is_edited(transaction: Transaction) -> bool:
             transaction.category_minor_user is not None,
             transaction.memo is not None,
             transaction.merchant != transaction.description,
+            transaction.cost_kind is not None,
+            transaction.fixed_cost_necessity is not None,
+            transaction.recurring_payment_kind is not None,
         )
     )
 
@@ -572,6 +605,14 @@ def _normalized_fixed_cost_necessity(
         return None
     if fixed_cost_necessity in {"essential", "discretionary"}:
         return fixed_cost_necessity
+    return None
+
+
+def _normalized_recurring_payment_kind(
+    recurring_payment_kind: str | None,
+) -> str | None:
+    if recurring_payment_kind in {"installment", "monthly_recurring"}:
+        return recurring_payment_kind
     return None
 
 

@@ -74,8 +74,8 @@
 | Method | Path | Status | Notes |
 |---|---|---|---|
 | `POST` | `/api/v1/transactions` | live | manual transaction create |
-| `PATCH` | `/api/v1/transactions/bulk-update` | live | merchant/category/cost kind/fixed necessity/memo |
-| `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/fixed necessity/memo |
+| `PATCH` | `/api/v1/transactions/bulk-update` | live | merchant/category/cost kind/fixed necessity/recurring payment kind/memo |
+| `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/fixed necessity/recurring payment kind/memo |
 | `DELETE` | `/api/v1/transactions/{id}` | live | soft delete |
 | `POST` | `/api/v1/transactions/{id}/restore` | live | restore soft-deleted row |
 | `GET` | `/api/v1/transactions/{id}/loan-link` | live | transaction-to-loan repayment mapping |
@@ -119,6 +119,9 @@
   - `source`
   - `category_major`
   - `payment_method`
+  - `cost_kind`
+  - `fixed_cost_necessity`
+  - `recurring_payment_kind`
   - `is_edited`
   - `include_deleted`
   - `include_merged`
@@ -129,9 +132,19 @@
   - `merchant`
   - `cost_kind`
   - `fixed_cost_necessity`
+  - `recurring_payment_kind`
   - `effective_category_major`
   - `effective_category_minor`
   - `is_edited`
+
+### Recurring Payment Classification
+
+- `recurring_payment_kind` is a manual transaction-level classification.
+- Supported values:
+  - `installment`: installment/할부 repayment-like recurring charge
+  - `monthly_recurring`: a fresh monthly recurring charge such as utilities or subscriptions
+- `GET /api/v1/analytics/recurring-payments` groups by merchant and returns transaction ids plus classification counts. The operations recurring-classification screen uses those ids for bulk updates; insights surfaces display the saved result only.
+- Automatic classification is planned only; live behavior does not infer this field.
 
 ### Snapshot Import Behavior
 

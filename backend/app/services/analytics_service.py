@@ -339,13 +339,22 @@ async def get_recurring_payments(
     )
 
     merchant_data: dict[str, dict] = defaultdict(
-        lambda: {"dates": [], "amounts": [], "category": "미분류"}
+        lambda: {
+            "dates": [],
+            "amounts": [],
+            "category": "미분류",
+            "transaction_ids": [],
+            "kind_counts": defaultdict(int),
+        }
     )
     for row in rows:
         merchant = row["merchant"] or row["description"] or "미분류"
         merchant_data[merchant]["dates"].append(row["date"])
         merchant_data[merchant]["amounts"].append(-row["amount"])
         merchant_data[merchant]["category"] = row["effective_category_major"] or "미분류"
+        merchant_data[merchant]["transaction_ids"].append(row["id"])
+        kind = row["recurring_payment_kind"] or "unclassified"
+        merchant_data[merchant]["kind_counts"][kind] += 1
 
     items = []
     for merchant, data in merchant_data.items():
@@ -371,6 +380,7 @@ async def get_recurring_payments(
             confidence = 0.5
 
         avg_amount = round(sum(data["amounts"]) / len(data["amounts"]))
+        kind_counts = data["kind_counts"]
         items.append(
             RecurringPaymentItem(
                 merchant=merchant,
@@ -381,6 +391,11 @@ async def get_recurring_payments(
                 occurrences=len(dates),
                 confidence=confidence,
                 last_date=dates[-1],
+                recurring_payment_kind=_resolved_recurring_payment_kind(kind_counts),
+                installment_count=kind_counts["installment"],
+                monthly_recurring_count=kind_counts["monthly_recurring"],
+                unclassified_count=kind_counts["unclassified"],
+                transaction_ids=data["transaction_ids"],
             )
         )
 
@@ -391,7 +406,11 @@ async def get_recurring_payments(
         page=resolved_page,
         per_page=per_page,
         items=paged_items,
-        assumptions="지출 거래 기준, 동일 거래처의 반복 간격으로 판단. 25-35일=monthly, 6-8일=weekly",
+        assumptions=(
+            "지출 거래 기준, 동일 거래처의 반복 간격으로 판단. "
+            "25-35일=monthly, 6-8일=weekly. "
+            "recurring_payment_kind는 사용자가 수동 분류한 거래값을 집계한다."
+        ),
     )
 
 
@@ -636,6 +655,16 @@ def _previous_period(period: str) -> str:
     if month_int == 1:
         return f"{year_int - 1:04d}-12"
     return f"{year_int:04d}-{month_int - 1:02d}"
+
+
+def _resolved_recurring_payment_kind(kind_counts: dict[str, int]) -> str | None:
+    classified = [
+        kind for kind in ("installment", "monthly_recurring")
+        if kind_counts[kind] > 0
+    ]
+    if len(classified) == 1 and kind_counts["unclassified"] == 0:
+        return classified[0]
+    return None
 
 
 def _safe_ratio(numerator: int, denominator: int) -> float | None:

@@ -31,6 +31,7 @@ def _transaction(
     category_minor_user: str | None = None,
     cost_kind: str | None = None,
     fixed_cost_necessity: str | None = None,
+    recurring_payment_kind: str | None = None,
     is_deleted: bool = False,
     merged_into_id: int | None = None,
 ) -> Transaction:
@@ -50,6 +51,7 @@ def _transaction(
         payment_method=payment_method,
         cost_kind=cost_kind,
         fixed_cost_necessity=fixed_cost_necessity,
+        recurring_payment_kind=recurring_payment_kind,
         is_deleted=is_deleted,
         merged_into_id=merged_into_id,
         source="import",
@@ -786,6 +788,79 @@ async def test_get_recurring_payments_detects_monthly(
     assert 0.0 <= item.confidence <= 1.0
     assert response.page == 1
     assert response.per_page == 10
+
+
+async def test_get_recurring_payments_reports_manual_classification_and_transaction_ids(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 1, 1),
+            tx_time=time(8, 0),
+            tx_type="지출",
+            category_major="통신",
+            category_minor="휴대폰",
+            description="통신비 1월",
+            merchant="통신사",
+            amount=-90000,
+            payment_method="카드 A",
+            recurring_payment_kind="monthly_recurring",
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 1),
+            tx_time=time(8, 0),
+            tx_type="지출",
+            category_major="통신",
+            category_minor="휴대폰",
+            description="통신비 2월",
+            merchant="통신사",
+            amount=-90000,
+            payment_method="카드 A",
+            recurring_payment_kind="monthly_recurring",
+        ),
+        _transaction(
+            tx_date=date(2026, 1, 5),
+            tx_time=time(8, 0),
+            tx_type="지출",
+            category_major="쇼핑",
+            category_minor="전자제품",
+            description="노트북 할부 1월",
+            merchant="전자상가",
+            amount=-120000,
+            payment_method="카드 B",
+            recurring_payment_kind="installment",
+        ),
+        _transaction(
+            tx_date=date(2026, 2, 5),
+            tx_time=time(8, 0),
+            tx_type="지출",
+            category_major="쇼핑",
+            category_minor="전자제품",
+            description="노트북 할부 2월",
+            merchant="전자상가",
+            amount=-120000,
+            payment_method="카드 B",
+            recurring_payment_kind="installment",
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_recurring_payments(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 28),
+        min_occurrences=2,
+        page=1,
+        per_page=10,
+    )
+
+    by_merchant = {item.merchant: item for item in response.items}
+    assert by_merchant["통신사"].recurring_payment_kind == "monthly_recurring"
+    assert by_merchant["통신사"].monthly_recurring_count == 2
+    assert by_merchant["통신사"].installment_count == 0
+    assert len(by_merchant["통신사"].transaction_ids) == 2
+    assert by_merchant["전자상가"].recurring_payment_kind == "installment"
+    assert by_merchant["전자상가"].installment_count == 2
 
 
 async def test_get_recurring_payments_filters_by_min_occurrences(

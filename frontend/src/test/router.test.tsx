@@ -23,3 +23,12 @@ describe('legacy route fallbacks', () => {
     expect((route?.element as { props?: { to?: string } }).props?.to).toBe('/')
   })
 })
+
+describe('operations routes', () => {
+  it('registers the recurring classification operations route', () => {
+    const root = findRoute('/')
+    const children = root?.children as Array<{ path?: string }> | undefined
+
+    expect(children?.some((route) => route.path === 'operations/recurring-classification')).toBe(true)
+  })
+})

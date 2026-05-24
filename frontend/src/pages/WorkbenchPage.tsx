@@ -23,6 +23,9 @@ interface FilterState {
   source: string
   category_major: string
   payment_method: string
+  cost_kind: string
+  fixed_cost_necessity: string
+  recurring_payment_kind: string
   start_date: string
   end_date: string
   include_deleted: boolean
@@ -31,7 +34,8 @@ interface FilterState {
 
 const DEFAULT_FILTER: FilterState = {
   search: '', type: '', source: '', category_major: '',
-  payment_method: '', start_date: '', end_date: '',
+  payment_method: '', cost_kind: '', fixed_cost_necessity: '', recurring_payment_kind: '',
+  start_date: '', end_date: '',
   include_deleted: false, is_edited: undefined,
 }
 
@@ -87,6 +91,9 @@ export function WorkbenchPage() {
     source: appliedFilter.source || undefined,
     category_major: appliedFilter.category_major || undefined,
     payment_method: appliedFilter.payment_method || undefined,
+    cost_kind: (appliedFilter.cost_kind as 'fixed' | 'variable') || undefined,
+    fixed_cost_necessity: (appliedFilter.fixed_cost_necessity as 'essential' | 'discretionary') || undefined,
+    recurring_payment_kind: (appliedFilter.recurring_payment_kind as 'installment' | 'monthly_recurring') || undefined,
     start_date: appliedFilter.start_date || undefined,
     end_date: appliedFilter.end_date || undefined,
     include_deleted: appliedFilter.include_deleted || undefined,
@@ -183,15 +190,22 @@ export function WorkbenchPage() {
     const ids = [...selectedIds]
     if (ids.length === 0) return
     try {
-      const result = await bulkMutation.mutateAsync({
-        ids,
-        merchant: bulkDraft.merchant || null,
-        category_major_user: bulkDraft.category_major_user || null,
-        category_minor_user: bulkDraft.category_minor_user || null,
-        cost_kind: (bulkDraft.cost_kind as 'fixed' | 'variable') || null,
-        fixed_cost_necessity: (bulkDraft.fixed_cost_necessity as 'essential' | 'discretionary') || null,
-        memo: bulkDraft.memo || null,
-      })
+      const data = { ids } as {
+        ids: number[]
+        merchant?: string
+        category_major_user?: string
+        category_minor_user?: string
+        cost_kind?: 'fixed' | 'variable'
+        fixed_cost_necessity?: 'essential' | 'discretionary'
+        memo?: string
+      }
+      if (bulkDraft.merchant) data.merchant = bulkDraft.merchant
+      if (bulkDraft.category_major_user) data.category_major_user = bulkDraft.category_major_user
+      if (bulkDraft.category_minor_user) data.category_minor_user = bulkDraft.category_minor_user
+      if (bulkDraft.cost_kind) data.cost_kind = bulkDraft.cost_kind
+      if (bulkDraft.fixed_cost_necessity) data.fixed_cost_necessity = bulkDraft.fixed_cost_necessity
+      if (bulkDraft.memo) data.memo = bulkDraft.memo
+      const result = await bulkMutation.mutateAsync(data)
       setSelectedIds(new Set())
       setBulkDraft({})
       setAlert({ variant: 'success', title: `${result.updated}건 일괄 수정 완료` })
@@ -283,6 +297,12 @@ export function WorkbenchPage() {
     return categoryMinorOptionsByMajor[major] ?? []
   }
 
+  function recurringPaymentKindLabel(value: TransactionResponse['recurring_payment_kind']) {
+    if (value === 'installment') return '할부'
+    if (value === 'monthly_recurring') return '매월 반복'
+    return '—'
+  }
+
   function toggleSelectVisible() {
     if (editingId !== null || visibleSelectableIds.length === 0) return
 
@@ -353,6 +373,42 @@ export function WorkbenchPage() {
           <select className={inputCls} value={filterDraft.payment_method} onChange={(e) => setFilterDraft((f) => ({ ...f, payment_method: e.target.value }))}>
             <option value="">결제수단 전체</option>
             {filterOptions.data?.payment_method_options.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="cost-kind-filter">고정비/변동비 필터</label>
+          <select
+            id="cost-kind-filter"
+            aria-label="고정비/변동비 필터"
+            className={inputCls}
+            value={filterDraft.cost_kind}
+            onChange={(e) => setFilterDraft((f) => ({ ...f, cost_kind: e.target.value }))}
+          >
+            <option value="">고정/변동 전체</option>
+            <option value="fixed">고정비</option>
+            <option value="variable">변동비</option>
+          </select>
+          <label className="sr-only" htmlFor="fixed-necessity-filter">고정비 필수 여부 필터</label>
+          <select
+            id="fixed-necessity-filter"
+            aria-label="고정비 필수 여부 필터"
+            className={inputCls}
+            value={filterDraft.fixed_cost_necessity}
+            onChange={(e) => setFilterDraft((f) => ({ ...f, fixed_cost_necessity: e.target.value }))}
+          >
+            <option value="">필수 여부 전체</option>
+            <option value="essential">필수</option>
+            <option value="discretionary">비필수</option>
+          </select>
+          <label className="sr-only" htmlFor="recurring-kind-filter">반복결제 분류 필터</label>
+          <select
+            id="recurring-kind-filter"
+            aria-label="반복결제 분류 필터"
+            className={inputCls}
+            value={filterDraft.recurring_payment_kind}
+            onChange={(e) => setFilterDraft((f) => ({ ...f, recurring_payment_kind: e.target.value }))}
+          >
+            <option value="">반복 분류 전체</option>
+            <option value="installment">할부</option>
+            <option value="monthly_recurring">매월 반복</option>
           </select>
           <div className="w-px h-5 bg-border-faint" />
           <input type="date" className={inputCls} value={filterDraft.start_date} onChange={(e) => setFilterDraft((f) => ({ ...f, start_date: e.target.value }))} />
@@ -474,6 +530,7 @@ export function WorkbenchPage() {
                  <col style={{ width: 80 }} /><col style={{ width: 76 }} />
                  <col style={{ width: 56 }} />
                  <col style={{ width: 58 }} /><col style={{ width: 72 }} />
+                 <col style={{ width: 74 }} />
                  <col style={{ width: 60 }} /><col style={{ width: 80 }} />
                  <col style={{ width: 60 }} />
                </colgroup>
@@ -490,7 +547,7 @@ export function WorkbenchPage() {
                        className="w-3 h-3 accent-accent disabled:opacity-40"
                      />
                    </th>
-                   {['날짜', '설명', '거래처', '대분류', '소분류', '고정/변동', '필수여부', '메모', '상태', '금액', '동작'].map((h) => (
+                   {['날짜', '설명', '거래처', '대분류', '소분류', '고정/변동', '필수여부', '반복분류', '메모', '상태', '금액', '동작'].map((h) => (
                      <th key={h} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{h}</th>
                    ))}
                  </tr>
@@ -555,6 +612,9 @@ export function WorkbenchPage() {
                              </select>
                            : <NecessityBadge value={tx.fixed_cost_necessity} />
                          }
+                       </td>
+                       <td className="px-2 py-2">
+                         <span className="text-micro text-text-ghost">{recurringPaymentKindLabel(tx.recurring_payment_kind)}</span>
                        </td>
                        <td className="px-2 py-2">
                          {isEditing

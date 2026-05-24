@@ -16,6 +16,7 @@ export interface TransactionResponse {
   payment_method: string | null
   cost_kind: 'fixed' | 'variable' | null
   fixed_cost_necessity: 'essential' | 'discretionary' | null
+  recurring_payment_kind: 'installment' | 'monthly_recurring' | null
   memo: string | null
   is_deleted: boolean
   merged_into_id: number | null
@@ -50,6 +51,9 @@ export interface TransactionListParams {
   end_date?: string
   include_deleted?: boolean
   is_edited?: boolean
+  cost_kind?: 'fixed' | 'variable'
+  fixed_cost_necessity?: 'essential' | 'discretionary'
+  recurring_payment_kind?: 'installment' | 'monthly_recurring'
   search?: string
   start_month?: string
   end_month?: string
@@ -76,6 +80,7 @@ export interface TransactionUpdateRequest {
   category_minor_user?: string | null
   cost_kind?: 'fixed' | 'variable' | null
   fixed_cost_necessity?: 'essential' | 'discretionary' | null
+  recurring_payment_kind?: 'installment' | 'monthly_recurring' | null
   memo?: string | null
 }
 
@@ -86,6 +91,7 @@ export interface TransactionBulkUpdateRequest {
   category_minor_user?: string | null
   cost_kind?: 'fixed' | 'variable' | null
   fixed_cost_necessity?: 'essential' | 'discretionary' | null
+  recurring_payment_kind?: 'installment' | 'monthly_recurring' | null
   memo?: string | null
 }
 

@@ -22,6 +22,7 @@ def _transaction(
     category_minor_user: str | None = None,
     cost_kind: str | None = None,
     fixed_cost_necessity: str | None = None,
+    recurring_payment_kind: str | None = None,
     is_deleted: bool = False,
     merged_into_id: int | None = None,
 ) -> Transaction:
@@ -41,6 +42,7 @@ def _transaction(
         payment_method=payment_method,
         cost_kind=cost_kind,
         fixed_cost_necessity=fixed_cost_necessity,
+        recurring_payment_kind=recurring_payment_kind,
         is_deleted=is_deleted,
         merged_into_id=merged_into_id,
         source="import",
@@ -534,6 +536,7 @@ async def test_recurring_payments_endpoint_detects_monthly(
             description="넷플릭스",
             amount=-15000,
             payment_method="카드",
+            recurring_payment_kind="monthly_recurring",
         ),
         _transaction(
             tx_date=date(2026, 2, 1),
@@ -544,6 +547,7 @@ async def test_recurring_payments_endpoint_detects_monthly(
             description="넷플릭스",
             amount=-15000,
             payment_method="카드",
+            recurring_payment_kind="monthly_recurring",
         ),
         _transaction(
             tx_date=date(2026, 3, 1),
@@ -554,6 +558,7 @@ async def test_recurring_payments_endpoint_detects_monthly(
             description="넷플릭스",
             amount=-15000,
             payment_method="카드",
+            recurring_payment_kind="monthly_recurring",
         ),
     ])
     await db_session.commit()
@@ -570,6 +575,9 @@ async def test_recurring_payments_endpoint_detects_monthly(
     assert len(data["items"]) == 1
     assert data["items"][0]["interval_type"] == "monthly"
     assert data["items"][0]["merchant"] == "넷플릭스"
+    assert data["items"][0]["recurring_payment_kind"] == "monthly_recurring"
+    assert data["items"][0]["monthly_recurring_count"] == 3
+    assert len(data["items"][0]["transaction_ids"]) == 3
     assert "동일 거래처의 반복 간격" in data["assumptions"]
 
 
