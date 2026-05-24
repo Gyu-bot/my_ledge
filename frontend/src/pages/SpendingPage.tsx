@@ -6,7 +6,7 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { Pagination } from '../components/ui/Pagination'
 import { SegmentedBar } from '../components/ui/SegmentedBar'
 import { DailyCalendar } from '../components/ui/DailyCalendar'
-import { StackedAreaChart } from '../components/charts/StackedAreaChart'
+import { StackedBarChart } from '../components/charts/StackedBarChart'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
 import {
   useCategoryTimeline,
@@ -179,7 +179,7 @@ export function SpendingPage() {
         {timeline.isLoading ? <LoadingState /> :
          timeline.error ? <ErrorState onRetry={() => timeline.refetch()} /> :
          timeline.data && timeline.data.items.length > 0 ? (
-           <StackedAreaChart items={timeline.data.items} height={220} />
+           <StackedBarChart items={timeline.data.items} height={220} />
          ) : <EmptyState />}
       </SectionCard>
 
