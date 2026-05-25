@@ -29,8 +29,7 @@ def transaction_is_edited_clause() -> ColumnElement[bool]:
         Transaction.category_major_user.is_not(None),
         Transaction.category_minor_user.is_not(None),
         Transaction.merchant != Transaction.description,
-        Transaction.cost_kind.is_not(None),
-        Transaction.fixed_cost_necessity.is_not(None),
+        Transaction.cost_classification_source == "manual",
         Transaction.recurring_payment_kind.is_not(None),
         Transaction.memo.is_not(None),
     )
@@ -63,6 +62,7 @@ def build_transactions_effective_select(
         Transaction.payment_method.label("payment_method"),
         Transaction.cost_kind.label("cost_kind"),
         Transaction.fixed_cost_necessity.label("fixed_cost_necessity"),
+        Transaction.cost_classification_source.label("cost_classification_source"),
         Transaction.recurring_payment_kind.label("recurring_payment_kind"),
         Transaction.memo.label("memo"),
         LoanTransactionLink.loan_account_id.label("loan_account_id"),
@@ -106,6 +106,24 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         ),
     ),
     SchemaViewDefinition(
+        name="vw_fixed_cost_monthly_summary",
+        description=(
+            "Canonical monthly fixed/variable cost aggregate. Uses transaction cost "
+            "classification fields and excludes deleted or merged expense transactions."
+        ),
+        recommended_for_ai=True,
+        columns=(
+            SchemaColumnDefinition("period", String(length=7), nullable=False),
+            SchemaColumnDefinition("expense_total", Integer(), nullable=False),
+            SchemaColumnDefinition("fixed_total", Integer(), nullable=False),
+            SchemaColumnDefinition("variable_total", Integer(), nullable=False),
+            SchemaColumnDefinition("essential_fixed_total", Integer(), nullable=False),
+            SchemaColumnDefinition("discretionary_fixed_total", Integer(), nullable=False),
+            SchemaColumnDefinition("unclassified_total", Integer(), nullable=False),
+            SchemaColumnDefinition("unclassified_count", Integer(), nullable=False),
+        ),
+    ),
+    SchemaViewDefinition(
         name="vw_transactions_effective",
         description=(
             "Canonical transaction read model. Prefer this for AI and analysis queries; "
@@ -139,6 +157,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("payment_method", String(length=100), nullable=True),
             SchemaColumnDefinition("cost_kind", String(length=20), nullable=True),
             SchemaColumnDefinition("fixed_cost_necessity", String(length=20), nullable=True),
+            SchemaColumnDefinition("cost_classification_source", String(length=20), nullable=True),
             SchemaColumnDefinition("recurring_payment_kind", String(length=30), nullable=True),
             SchemaColumnDefinition("memo", Text(), nullable=True),
             SchemaColumnDefinition("loan_account_id", Integer(), nullable=True),

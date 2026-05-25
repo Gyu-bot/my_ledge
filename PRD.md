@@ -538,6 +538,31 @@ DELETE /api/v1/transactions/{id}/loan-link
 - 계좌 후보는 스냅샷의 `lender + product_name` pair와 사용자가 만든 `loan_accounts`를 합쳐서 보여준다.
 - 매핑은 원본 거래 타입/카테고리를 바꾸지 않는다. 지출 분석에서는 기존 거래 해석을 유지하고, 대출 상환 분석에서는 `loan_transaction_links` 및 canonical view의 nullable 대출 연결 컬럼을 파생 의미로 사용한다.
 
+#### 자동분류/자동연결 설정 API
+
+```
+GET /api/v1/auto-classification/settings
+PATCH /api/v1/auto-classification/settings
+
+GET /api/v1/auto-classification/category-rules
+POST /api/v1/auto-classification/category-rules
+DELETE /api/v1/auto-classification/category-rules/{id}
+POST /api/v1/auto-classification/apply/category-rules
+
+GET /api/v1/auto-classification/loan-merchant-rules
+POST /api/v1/auto-classification/loan-merchant-rules
+DELETE /api/v1/auto-classification/loan-merchant-rules/{id}
+POST /api/v1/auto-classification/apply/loan-merchant-rules
+```
+
+구현 규칙:
+- `category_classification_rules` 는 effective 대분류/소분류를 `cost_kind` 및 `fixed_cost_necessity` 로 매핑한다.
+- 자동분류 결과는 `transactions.cost_classification_source='auto'` 로 저장한다.
+- 사용자가 거래 작업대에서 고정비/변동비를 직접 수정하면 `cost_classification_source='manual'` 로 저장하고, 이후 자동 적용이 덮어쓰지 않는다.
+- `loan_merchant_rules` 는 거래처명 exact match를 안정 대출 계좌(`loan_accounts.id`)와 상환 성격에 매핑한다.
+- 자동 대출 연결은 기존 수동 연결(`loan_transaction_links.source='manual'`)을 덮어쓰지 않는다.
+- `/operations/auto-classification` 화면에서 규칙 저장, 업로드 후 자동적용 토글, 기존 데이터 일괄 적용을 제공한다.
+
 **카테고리 표시 규칙:**
 - `category_major_user`가 NOT NULL이면 사용자 수정값 사용
 - NULL이면 원본 `category_major` 사용
@@ -592,6 +617,7 @@ GET /api/v1/schema
 | `GET /api/v1/analytics/monthly-cashflow` | `income`, `expense`, `transfer`, `net_cashflow`, `savings_rate` | `vw_transactions_effective` | live |
 | `GET /api/v1/analytics/category-mom` | `category`, `current_amount`, `previous_amount`, `delta_amount`, `delta_pct` | `vw_transactions_effective` 또는 `vw_category_monthly_spend` | live |
 | `GET /api/v1/analytics/fixed-cost-summary` | `fixed_total`, `variable_total`, `essential_fixed_total`, `discretionary_fixed_total`, `unclassified_*` | `vw_transactions_effective.cost_kind`, `fixed_cost_necessity` | live |
+| `GET /api/v1/analytics/fixed-cost-trend` | `period`, `fixed_total`, `variable_total`, `essential_fixed_total`, `discretionary_fixed_total`, `unclassified_*` | `vw_transactions_effective.cost_kind`, `fixed_cost_necessity` 또는 `vw_fixed_cost_monthly_summary` | live |
 | `GET /api/v1/analytics/merchant-spend` | `merchant`, `amount`, `count`, `avg_amount`, `last_seen_at` | `vw_transactions_effective.merchant` | live |
 
 P0 설계 규칙:
@@ -727,11 +753,13 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 - **역할 분리**: 인사이트(`/analysis/insights`)는 저장된 분류 결과만 읽기 전용으로 표시하고, 변경은 운영 화면에서만 수행한다.
 - **작업대 경계**: 거래 작업대(`/operations/workbench`)는 반복분류를 조회/필터만 제공하고 수정 컨트롤은 제공하지 않는다.
 
-#### 6.1.8 자동 분류 계획
+#### 6.1.8 자동 분류 (`/operations/auto-classification`)
 
-- **카테고리 기반 후보 제안**: 거래의 대분류/소분류를 우선 힌트로 사용해 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 후보를 계산한다.
-- **보수적 적용**: 기존 수동값은 덮어쓰지 않고, 자동 분류 결과는 미리보기/승인 단계를 거쳐 저장한다.
-- **반복결제 결합 조건**: `recurring_payment_kind` 자동 후보는 반복 결제 후보 그룹 탐지 결과와 카테고리 힌트가 함께 맞을 때만 제안한다.
+- **고정비/변동비 규칙**: 대분류/소분류와 `fixed|variable`, 고정비의 `essential|discretionary` 여부를 매핑한다.
+- **대출 거래처 규칙**: 거래처명 exact match와 대출 계좌, 상환 성격(`principal|interest|mixed|unknown`)을 매핑한다.
+- **일괄 적용**: 기존 거래에는 manual source가 아닌 항목만 갱신한다.
+- **업로드 자동 적용**: 설정이 켜져 있으면 workbook 업로드 후 규칙을 자동 적용한다.
+- **반복결제와의 관계**: 반복결제 화면은 할부/매월 반복 운영 분류에 집중한다. 고정비 자동분류는 반복결제 전체에 섞지 않고, 필요 시 고정비 배지/필터로 교차 표시한다.
 - **우선순위**: 먼저 카테고리 매핑 테이블/규칙 문서화, 그 다음 dry-run API와 운영 승인 화면 순서로 구현한다.
 
 ### 6.2 추가 분석 제안
@@ -743,7 +771,8 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 | **고정비 vs 변동비 분류** | 거래 단위 `cost_kind` (`fixed`/`variable`) 수동 또는 규칙 기반 분류 | transactions.cost_kind |
 | **고정비 필수/비필수 분류** | 고정비 거래에 대해 `fixed_cost_necessity` (`essential`/`discretionary`) 분류 | transactions.fixed_cost_necessity |
 | **반복결제 성격 분류** | 운영 화면에서 반복결제 후보 거래를 `recurring_payment_kind` (`installment`/`monthly_recurring`)로 수동 분류하고, 인사이트에서는 결과만 조회. 추후 규칙 기반 자동 분류 후보로 확장 | transactions.recurring_payment_kind |
-| **카테고리 기반 자동 분류** | 대분류/소분류 기반 규칙으로 고정비/필수여부/반복결제 성격 후보를 제안하고 사용자 승인 후 반영 | category rules + transactions |
+| **카테고리 기반 자동 분류** | 대분류/소분류 기반 규칙으로 고정비/필수여부를 자동 반영하되 사용자 수동값은 덮지 않음 | category_classification_rules + transactions.cost_classification_source |
+| **대출 거래처 자동 연결** | 거래처명 exact match 규칙으로 대출 계좌 연결을 자동 생성하되 사용자 수동 연결은 덮지 않음 | loan_merchant_rules + loan_transaction_links.source |
 | **전월 대비 카테고리별 변동** | 각 카테고리 MoM 증감율 및 이상치 탐지 | transactions |
 | **요일별/시간대별 소비 패턴** | 주중 vs 주말, 시간대별 지출 분포 | date + time |
 | **결제수단별 사용 패턴** | 카드별 월 이용액, 주 사용 카테고리 | payment_method |

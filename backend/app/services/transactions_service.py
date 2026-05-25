@@ -283,6 +283,11 @@ async def create_transaction(
         cost_kind=payload_data["cost_kind"],
         fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
     )
+    payload_data["cost_classification_source"] = (
+        "manual"
+        if {"cost_kind", "fixed_cost_necessity"} & payload.model_fields_set
+        else None
+    )
     payload_data["recurring_payment_kind"] = _normalized_recurring_payment_kind(
         payload_data.get("recurring_payment_kind")
     )
@@ -309,6 +314,7 @@ async def update_transaction(
     )
     if "cost_kind" in update_fields:
         transaction.cost_kind = effective_cost_kind
+        transaction.cost_classification_source = "manual"
     if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
         transaction.fixed_cost_necessity = _normalized_fixed_cost_necessity(
             cost_kind=effective_cost_kind,
@@ -367,6 +373,7 @@ async def bulk_update_transactions(
         )
         if "cost_kind" in update_fields:
             transaction.cost_kind = effective_cost_kind
+            transaction.cost_classification_source = "manual"
         if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
             transaction.fixed_cost_necessity = _normalized_fixed_cost_necessity(
                 cost_kind=effective_cost_kind,
@@ -511,6 +518,7 @@ def _serialize_transaction_model(transaction: Transaction) -> TransactionRespons
         payment_method=transaction.payment_method,
         cost_kind=transaction.cost_kind,
         fixed_cost_necessity=transaction.fixed_cost_necessity,
+        cost_classification_source=transaction.cost_classification_source,
         recurring_payment_kind=transaction.recurring_payment_kind,
         memo=transaction.memo,
         is_deleted=transaction.is_deleted,
@@ -541,6 +549,7 @@ def _serialize_transaction_row(transaction: RowMapping) -> TransactionResponse:
         payment_method=transaction["payment_method"],
         cost_kind=transaction["cost_kind"],
         fixed_cost_necessity=transaction["fixed_cost_necessity"],
+        cost_classification_source=transaction["cost_classification_source"],
         recurring_payment_kind=transaction["recurring_payment_kind"],
         memo=transaction["memo"],
         is_deleted=transaction["is_deleted"],
@@ -567,8 +576,7 @@ def _is_edited(transaction: Transaction) -> bool:
             transaction.category_minor_user is not None,
             transaction.memo is not None,
             transaction.merchant != transaction.description,
-            transaction.cost_kind is not None,
-            transaction.fixed_cost_necessity is not None,
+            transaction.cost_classification_source == "manual",
             transaction.recurring_payment_kind is not None,
         )
     )

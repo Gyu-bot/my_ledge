@@ -10,6 +10,8 @@ from app.schemas.analytics import (
     CategoryMoMItem,
     CategoryMoMResponse,
     FixedCostSummaryResponse,
+    FixedCostTrendItem,
+    FixedCostTrendResponse,
     IncomeMonthlyItem,
     IncomeStabilityResponse,
     MerchantSpendItem,
@@ -172,6 +174,65 @@ async def get_fixed_cost_summary(
         discretionary_fixed_total=discretionary_fixed_total,
         unclassified_total=unclassified_total,
         unclassified_count=unclassified_count,
+    )
+
+
+async def get_fixed_cost_trend(
+    db_session: AsyncSession,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+) -> FixedCostTrendResponse:
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        tx_type="지출",
+    )
+
+    grouped: dict[str, dict[str, int]] = defaultdict(
+        lambda: {
+            "expense_total": 0,
+            "fixed_total": 0,
+            "variable_total": 0,
+            "essential_fixed_total": 0,
+            "discretionary_fixed_total": 0,
+            "unclassified_total": 0,
+            "unclassified_count": 0,
+        }
+    )
+    for row in rows:
+        period = _month_key(row["date"])
+        amount = -row["amount"]
+        grouped[period]["expense_total"] += amount
+        cost_kind = row["cost_kind"]
+        if cost_kind == "fixed":
+            grouped[period]["fixed_total"] += amount
+            if row["fixed_cost_necessity"] == "essential":
+                grouped[period]["essential_fixed_total"] += amount
+            elif row["fixed_cost_necessity"] == "discretionary":
+                grouped[period]["discretionary_fixed_total"] += amount
+        elif cost_kind == "variable":
+            grouped[period]["variable_total"] += amount
+        else:
+            grouped[period]["unclassified_total"] += amount
+            grouped[period]["unclassified_count"] += 1
+
+    return FixedCostTrendResponse(
+        items=[
+            FixedCostTrendItem(
+                period=period,
+                expense_total=values["expense_total"],
+                fixed_total=values["fixed_total"],
+                variable_total=values["variable_total"],
+                essential_fixed_total=values["essential_fixed_total"],
+                discretionary_fixed_total=values["discretionary_fixed_total"],
+                unclassified_total=values["unclassified_total"],
+                unclassified_count=values["unclassified_count"],
+                fixed_ratio=_safe_ratio(values["fixed_total"], values["expense_total"]),
+            )
+            for period, values in sorted(grouped.items())
+        ]
     )
 
 

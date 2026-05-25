@@ -15,6 +15,7 @@ from app.models.upload_log import UploadLog
 from app.parsers.decrypt import open_excel_bytes
 from app.parsers.snapshots import SnapshotParseResult, parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
+from app.services.auto_classification_service import apply_enabled_auto_classification_after_upload
 
 
 @dataclass(slots=True)
@@ -66,6 +67,7 @@ async def import_transactions_from_workbook(
             )
         db_session.add_all(Transaction(**row) for row in rows_to_insert)
         await db_session.commit()
+        await apply_enabled_auto_classification_after_upload(db_session)
 
         tx_success = True
     except Exception as exc:

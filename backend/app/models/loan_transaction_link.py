@@ -28,4 +28,10 @@ class LoanTransactionLink(TimestampMixin, Base):
         default="unknown",
         server_default=text("'unknown'"),
     )
+    source: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="manual",
+        server_default=text("'manual'"),
+    )
     memo: Mapped[str | None] = mapped_column(Text)

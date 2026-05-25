@@ -56,6 +56,7 @@ class LoanTransactionLinkItem(BaseModel):
     product_name: str
     display_name: str
     repayment_type: RepaymentType
+    source: Literal["manual", "auto"]
     memo: str | None
     created_at: datetime
     updated_at: datetime

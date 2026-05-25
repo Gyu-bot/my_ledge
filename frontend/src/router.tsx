@@ -7,6 +7,7 @@ import { InsightsPage } from './pages/InsightsPage'
 import { WorkbenchPage } from './pages/WorkbenchPage'
 import { LoanMappingPage } from './pages/LoanMappingPage'
 import { RecurringClassificationPage } from './pages/RecurringClassificationPage'
+import { AutoClassificationPage } from './pages/AutoClassificationPage'
 
 const routeElements = [
   { index: true, element: <OverviewPage /> },
@@ -15,6 +16,7 @@ const routeElements = [
   { path: 'analysis/insights', element: <InsightsPage /> },
   { path: 'operations/workbench', element: <WorkbenchPage /> },
   { path: 'operations/loan-mapping', element: <LoanMappingPage /> },
+  { path: 'operations/auto-classification', element: <AutoClassificationPage /> },
   { path: 'operations/recurring-classification', element: <RecurringClassificationPage /> },
 ]
 

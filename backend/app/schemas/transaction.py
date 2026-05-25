@@ -24,6 +24,7 @@ class TransactionResponse(BaseModel):
     payment_method: str | None
     cost_kind: str | None
     fixed_cost_necessity: str | None
+    cost_classification_source: str | None
     recurring_payment_kind: str | None
     memo: str | None
     is_deleted: bool

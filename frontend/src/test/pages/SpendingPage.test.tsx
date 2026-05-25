@@ -10,6 +10,7 @@ const useCategoryTimelineMock = vi.fn()
 const useTransactionListMock = vi.fn()
 const useDailySpendMock = vi.fn()
 const useMerchantTreemapMock = vi.fn()
+const useFixedCostTrendMock = vi.fn()
 
 vi.mock('../../hooks/useTransactions', () => ({
   useCategoryTimeline: (params: unknown) => useCategoryTimelineMock(params),
@@ -32,6 +33,7 @@ vi.mock('../../hooks/useAnalytics', () => ({
     },
     isLoading: false,
   }),
+  useFixedCostTrend: (params: unknown) => useFixedCostTrendMock(params),
 }))
 
 vi.mock('../../components/layout/chromeContext', () => ({
@@ -48,6 +50,12 @@ vi.mock('../../components/charts/NestedTreemapChart', () => ({
   ),
 }))
 
+vi.mock('../../components/charts/FixedCostTrendChart', () => ({
+  FixedCostTrendChart: ({ mode, items }: { mode: string; items: unknown[] }) => (
+    <div data-testid={`fixed-cost-trend-${mode}`} data-items={String(items.length)} />
+  ),
+}))
+
 function wrap(ui: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -59,6 +67,7 @@ function wrap(ui: React.ReactNode) {
 
 describe('SpendingPage', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-15T12:00:00Z'))
     useCategoryTimelineMock.mockImplementation(() => ({
@@ -88,6 +97,26 @@ describe('SpendingPage', () => {
     }))
     useDailySpendMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useMerchantTreemapMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
+    useFixedCostTrendMock.mockImplementation(() => ({
+      data: {
+        items: [
+          {
+            period: '2026-02',
+            expense_total: 250000,
+            fixed_total: 100000,
+            variable_total: 150000,
+            essential_fixed_total: 70000,
+            discretionary_fixed_total: 30000,
+            unclassified_total: 0,
+            unclassified_count: 0,
+            fixed_ratio: 0.4,
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }))
   })
 
   afterEach(() => {
@@ -155,6 +184,20 @@ describe('SpendingPage', () => {
     wrap(<SpendingPage />)
 
     expect(screen.getByText('아래 섹션은 상세 필터 기준')).toBeInTheDocument()
+  })
+
+  it('renders monthly fixed-cost trend charts using the selected detail month span', () => {
+    wrap(<SpendingPage />)
+
+    expect(screen.getByText('월별 고정비 추이')).toBeInTheDocument()
+    expect(screen.getByText('월별 고정비 / 변동비')).toBeInTheDocument()
+    expect(screen.getByText('월별 필수 / 비필수 고정비')).toBeInTheDocument()
+    expect(screen.getByTestId('fixed-cost-trend-cost-kind')).toHaveAttribute('data-items', '1')
+    expect(screen.getByTestId('fixed-cost-trend-fixed-necessity')).toHaveAttribute('data-items', '1')
+    expect(useFixedCostTrendMock).toHaveBeenCalledWith({
+      start_month: '2025-10',
+      end_month: '2026-03',
+    })
   })
 
   it('does not render the legacy merchant treemap helper description copy', () => {

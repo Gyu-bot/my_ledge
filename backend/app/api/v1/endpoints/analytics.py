@@ -7,6 +7,7 @@ from app.core.database import get_db_session
 from app.schemas.analytics import (
     CategoryMoMResponse,
     FixedCostSummaryResponse,
+    FixedCostTrendResponse,
     IncomeStabilityResponse,
     MerchantSpendResponse,
     MonthlyCashflowResponse,
@@ -18,6 +19,7 @@ from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFil
 from app.services.analytics_service import (
     get_category_mom,
     get_fixed_cost_summary,
+    get_fixed_cost_trend,
     get_income_stability,
     get_merchant_spend,
     get_monthly_cashflow,
@@ -67,6 +69,19 @@ async def get_analytics_fixed_cost_summary(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> FixedCostSummaryResponse:
     return await get_fixed_cost_summary(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/analytics/fixed-cost-trend", response_model=FixedCostTrendResponse)
+async def get_analytics_fixed_cost_trend(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> FixedCostTrendResponse:
+    return await get_fixed_cost_trend(
         db_session,
         start_date=start_date,
         end_date=end_date,

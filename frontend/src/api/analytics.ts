@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/apiClient'
 import { monthSpanToDateRange, recentMonthsToDateRange } from '../lib/dateRange'
 import type {
-  MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse,
+  MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse, FixedCostTrendResponse,
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
   SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
 } from '../types/analytics'
@@ -42,6 +42,11 @@ export const analyticsApi = {
 
   fixedCostSummary: (params: { start_month?: string; end_month?: string } = {}) =>
     apiFetch<FixedCostSummaryResponse>(`/analytics/fixed-cost-summary${buildQuery(
+      monthSpanToDateRange(params.start_month, params.end_month),
+    )}`),
+
+  fixedCostTrend: (params: { start_month?: string; end_month?: string } = {}) =>
+    apiFetch<FixedCostTrendResponse>(`/analytics/fixed-cost-trend${buildQuery(
       monthSpanToDateRange(params.start_month, params.end_month),
     )}`),
 

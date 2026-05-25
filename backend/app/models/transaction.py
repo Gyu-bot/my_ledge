@@ -30,6 +30,7 @@ class Transaction(TimestampMixin, Base):
     payment_method: Mapped[str | None] = mapped_column(String(100))
     cost_kind: Mapped[str | None] = mapped_column(String(20))
     fixed_cost_necessity: Mapped[str | None] = mapped_column(String(20))
+    cost_classification_source: Mapped[str | None] = mapped_column(String(20))
     recurring_payment_kind: Mapped[str | None] = mapped_column(String(30))
     memo: Mapped[str | None] = mapped_column(Text)
     is_deleted: Mapped[bool] = mapped_column(

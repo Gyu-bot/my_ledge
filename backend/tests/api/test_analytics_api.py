@@ -232,6 +232,83 @@ async def test_fixed_cost_summary_endpoint_returns_totals_and_unclassified(
     }
 
 
+async def test_fixed_cost_trend_endpoint_returns_monthly_totals(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="주거",
+                category_minor="월세",
+                description="2월 월세",
+                amount=-100,
+                payment_method="계좌 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="essential",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 2),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor="장보기",
+                description="2월 마트",
+                amount=-70,
+                payment_method="카드 B",
+                cost_kind="variable",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 1),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="구독",
+                category_minor="OTT",
+                description="3월 OTT",
+                amount=-50,
+                payment_method="카드 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="discretionary",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/fixed-cost-trend",
+        params={"start_date": "2026-02-01", "end_date": "2026-03-31"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "period": "2026-02",
+            "expense_total": 170,
+            "fixed_total": 100,
+            "variable_total": 70,
+            "essential_fixed_total": 100,
+            "discretionary_fixed_total": 0,
+            "unclassified_total": 0,
+            "unclassified_count": 0,
+            "fixed_ratio": 0.5882,
+        },
+        {
+            "period": "2026-03",
+            "expense_total": 50,
+            "fixed_total": 50,
+            "variable_total": 0,
+            "essential_fixed_total": 0,
+            "discretionary_fixed_total": 50,
+            "unclassified_total": 0,
+            "unclassified_count": 0,
+            "fixed_ratio": 1.0,
+        },
+    ]
+
+
 async def test_merchant_spend_endpoint_returns_ranked_merchants(
     async_client: AsyncClient,
     db_session: AsyncSession,

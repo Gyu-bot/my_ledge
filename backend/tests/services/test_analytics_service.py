@@ -7,6 +7,7 @@ from app.services import analytics_service as analytics_service_module
 from app.services.analytics_service import (
     get_category_mom,
     get_fixed_cost_summary,
+    get_fixed_cost_trend,
     get_income_stability,
     get_merchant_spend,
     get_monthly_cashflow,
@@ -384,6 +385,116 @@ async def test_get_fixed_cost_summary_reports_fixed_variable_and_unclassified_to
         "discretionary_fixed_total": 50,
         "unclassified_total": 30,
         "unclassified_count": 1,
+    }
+
+
+async def test_get_fixed_cost_trend_groups_cost_classification_by_month(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="주거",
+                category_minor="월세",
+                description="2월 월세",
+                amount=-100,
+                payment_method="계좌 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="essential",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 2),
+                tx_time=time(8, 30),
+                tx_type="지출",
+                category_major="구독",
+                category_minor="OTT",
+                description="2월 OTT",
+                amount=-50,
+                payment_method="카드 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 3),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor="장보기",
+                description="2월 마트",
+                amount=-70,
+                payment_method="카드 B",
+                cost_kind="variable",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 1),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="주거",
+                category_minor="월세",
+                description="3월 월세",
+                amount=-120,
+                payment_method="계좌 A",
+                cost_kind="fixed",
+                fixed_cost_necessity="essential",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 3),
+                tx_time=time(9, 30),
+                tx_type="지출",
+                category_major="기타",
+                category_minor=None,
+                description="3월 미분류",
+                amount=-30,
+                payment_method="카드 C",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 5),
+                tx_time=time(10, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=500,
+                payment_method="계좌 A",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await get_fixed_cost_trend(
+        db_session,
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 3, 31),
+    )
+
+    assert response.model_dump() == {
+        "items": [
+            {
+                "period": "2026-02",
+                "expense_total": 220,
+                "fixed_total": 150,
+                "variable_total": 70,
+                "essential_fixed_total": 100,
+                "discretionary_fixed_total": 50,
+                "unclassified_total": 0,
+                "unclassified_count": 0,
+                "fixed_ratio": 0.6818,
+            },
+            {
+                "period": "2026-03",
+                "expense_total": 150,
+                "fixed_total": 120,
+                "variable_total": 0,
+                "essential_fixed_total": 120,
+                "discretionary_fixed_total": 0,
+                "unclassified_total": 30,
+                "unclassified_count": 1,
+                "fixed_ratio": 0.8,
+            },
+        ]
     }
 
 

@@ -43,6 +43,22 @@ export interface FixedCostSummaryResponse {
   unclassified_count: number
 }
 
+export interface FixedCostTrendItem {
+  period: string
+  expense_total: number
+  fixed_total: number
+  variable_total: number
+  essential_fixed_total: number
+  discretionary_fixed_total: number
+  unclassified_total: number
+  unclassified_count: number
+  fixed_ratio: number | null
+}
+
+export interface FixedCostTrendResponse {
+  items: FixedCostTrendItem[]
+}
+
 export interface MerchantSpendItem {
   merchant: string
   amount: number

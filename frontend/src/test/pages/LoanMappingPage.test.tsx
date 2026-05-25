@@ -81,6 +81,7 @@ function response(): LoanTransactionMappingListResponse {
           product_name: '주택담보대출',
           display_name: '국민은행 주택담보대출',
           repayment_type: 'mixed',
+          source: 'manual',
           memo: '자동 연결',
           created_at: '2026-05-24T09:00:00',
           updated_at: '2026-05-24T09:00:00',

@@ -34,6 +34,7 @@ function buildTransaction(overrides: Partial<TransactionResponse>): TransactionR
     payment_method: '카드',
     cost_kind: null,
     fixed_cost_necessity: null,
+    cost_classification_source: null,
     recurring_payment_kind: null,
     memo: null,
     is_deleted: false,

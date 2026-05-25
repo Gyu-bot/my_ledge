@@ -9,6 +9,9 @@ import type {
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
   MerchantTreemapNode,
+  AutoClassificationSettingsPatchRequest,
+  CategoryClassificationRuleRequest,
+  LoanMerchantRuleRequest,
 } from '../types/transaction'
 
 export const txKeys = {
@@ -17,6 +20,9 @@ export const txKeys = {
   loanAccounts: () => ['transactions', 'loanAccounts'] as const,
   loanTransactionMappings: (params: LoanTransactionMappingParams) =>
     ['transactions', 'loanTransactionMappings', params] as const,
+  autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
+  categoryClassificationRules: () => ['transactions', 'categoryClassificationRules'] as const,
+  loanMerchantRules: () => ['transactions', 'loanMerchantRules'] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
@@ -51,6 +57,27 @@ export function useLoanTransactionMappings(params: LoanTransactionMappingParams 
   return useQuery({
     queryKey: txKeys.loanTransactionMappings(params),
     queryFn: () => transactionApi.loanTransactionMappings(params),
+  })
+}
+
+export function useAutoClassificationSettings() {
+  return useQuery({
+    queryKey: txKeys.autoClassificationSettings(),
+    queryFn: transactionApi.autoClassificationSettings,
+  })
+}
+
+export function useCategoryClassificationRules() {
+  return useQuery({
+    queryKey: txKeys.categoryClassificationRules(),
+    queryFn: transactionApi.categoryClassificationRules,
+  })
+}
+
+export function useLoanMerchantRules() {
+  return useQuery({
+    queryKey: txKeys.loanMerchantRules(),
+    queryFn: transactionApi.loanMerchantRules,
   })
 }
 
@@ -135,6 +162,52 @@ export function useBulkLinkTransactionsToLoan() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: LoanTransactionLinkBulkRequest) => transactionApi.bulkLoanLink(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  })
+}
+
+export function usePatchAutoClassificationSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: AutoClassificationSettingsPatchRequest) =>
+      transactionApi.patchAutoClassificationSettings(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.autoClassificationSettings() }),
+  })
+}
+
+export function useUpsertCategoryClassificationRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CategoryClassificationRuleRequest) =>
+      transactionApi.upsertCategoryClassificationRule(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.categoryClassificationRules() }),
+  })
+}
+
+export function useApplyCategoryClassificationRules() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => transactionApi.applyCategoryClassificationRules(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
+  })
+}
+
+export function useUpsertLoanMerchantRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: LoanMerchantRuleRequest) =>
+      transactionApi.upsertLoanMerchantRule(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.loanMerchantRules() }),
+  })
+}
+
+export function useApplyLoanMerchantRules() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => transactionApi.applyLoanMerchantRules(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
   })
 }

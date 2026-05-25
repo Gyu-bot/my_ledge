@@ -2,7 +2,7 @@
 
 BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 대시보드다.
 거래 내역은 증분 import로 누적 적재하고, 자산/투자/대출 스냅샷은 시계열로 관리한다.
-읽기 분석은 API와 canonical view를 통해 제공하고, OpenClaw 같은 외부 에이전트는 readonly DB + 업로드 API를 함께 사용한다.
+읽기 분석은 API와 canonical view를 통해 제공하고, OpenClaw/hermes 같은 외부 에이전트는 readonly DB + API를 함께 사용한다.
 
 ## 현재 범위
 
@@ -13,13 +13,21 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 엑셀 업로드 및 증분 import
   - 거래 조회/수정/삭제/복원
   - 데이터 관리 초기화: 거래만 또는 거래+스냅샷 reset
+  - 대출 상환 거래 매핑
+  - 고정비/변동비, 필수 고정비, 반복 결제 수동 분류
+  - 카테고리 기반 고정비 자동분류 및 거래처 기반 대출 자동연결 규칙
   - 메인 대시보드
   - 지출 분석
   - 자산 현황
-  - 데이터 관리
+  - 인사이트
+  - 거래 작업대
+  - 대출 연결
+  - 자동분류
+  - 반복 결제 분류
 
 제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), 협업 규칙은 [AGENTS.md](AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](docs/STATUS.md)를 기준으로 본다.
 현재 live backend/API contract는 [docs/backend-api-ssot.md](docs/backend-api-ssot.md)를 우선 참조한다.
+에이전트 연동 시에는 [docs/agents/README.md](docs/agents/README.md)를 먼저 읽고, 필요한 경우 기존 OpenClaw 호환 문서인 [docs/openclaw/README.md](docs/openclaw/README.md)를 이어서 본다.
 
 ## 빠른 시작
 
@@ -76,7 +84,7 @@ CORS_ORIGINS=
 권장:
 
 - `DB_PASSWORD`: PostgreSQL 앱 계정 비밀번호
-- `DB_READONLY_PASSWORD`: OpenClaw 등 readonly DB 접근용 비밀번호
+- `DB_READONLY_PASSWORD`: OpenClaw/hermes 등 readonly DB 접근용 비밀번호
 - `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증용 비밀값
 - `API_KEY`: backend write API 인증용 비밀값이며, compose/frontend container 시작 시 `runtime-config.js`로도 같은 값이 주입된다
 - `EXCEL_PASSWORD`: 실제 BankSalad 암호화 파일을 사용할 경우 필요
@@ -122,9 +130,9 @@ curl http://localhost:8000/api/v1/health
 docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
 ```
 
-### 5. OpenClaw 연동에 전달할 값
+### 5. 에이전트 연동에 전달할 값
 
-운영 서버에서 OpenClaw 쪽에 넘겨야 하는 최소 정보:
+운영 서버에서 OpenClaw, hermes, 기타 분석/운영 에이전트에 넘겨야 하는 최소 정보:
 
 ```env
 MY_LEDGE_API_BASE_URL=http://<server>:8000/api/v1
@@ -139,6 +147,7 @@ MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
 
 함께 전달할 문서:
 
+- [docs/agents/README.md](docs/agents/README.md)
 - [docs/openclaw/README.md](docs/openclaw/README.md)
 - [docs/openclaw/integration-guide.md](docs/openclaw/integration-guide.md)
 - [docs/openclaw/skill-handoff.md](docs/openclaw/skill-handoff.md)
@@ -212,7 +221,7 @@ CORS_ORIGINS=
 
 - `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증에 사용
 - `API_KEY`: compose 배포 시 frontend container 시작 시점의 `runtime-config.js`에도 같은 값이 자동 주입된다
-- `DB_READONLY_PASSWORD`: OpenClaw 등 외부 에이전트의 readonly DB 접근에 사용
+- `DB_READONLY_PASSWORD`: OpenClaw/hermes 등 외부 에이전트의 readonly DB 접근에 사용
 - `EXCEL_PASSWORD`: 실제 암호화된 BankSalad 파일 복호화에 사용
 
 ## PostgreSQL readonly 계정
@@ -271,15 +280,20 @@ npm run build
 - 제품 요구사항: [PRD.md](PRD.md)
 - 협업 규칙: [AGENTS.md](AGENTS.md)
 - 현재 진행 상태: [docs/STATUS.md](docs/STATUS.md)
-- OpenClaw 연동 문서 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
+- Backend/API live contract: [docs/backend-api-ssot.md](docs/backend-api-ssot.md)
+- Backend 상세 reference: [docs/backend-api-and-metrics-reference.md](docs/backend-api-and-metrics-reference.md)
+- 에이전트용 canonical README: [docs/agents/README.md](docs/agents/README.md)
+- OpenClaw 호환 연동 문서 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
 
-## OpenClaw 연동
+## 에이전트 연동
 
-OpenClaw 관련 문서는 `docs/openclaw/` 아래에 모아뒀다.
+OpenClaw/hermes 및 기타 에이전트는 읽기에는 API 또는 PostgreSQL readonly 계정을, 쓰기에는 API만 사용한다.
+거래 분석은 raw `transactions`보다 canonical view와 analytics endpoint를 우선한다.
 
-- 시작점: [docs/openclaw/README.md](docs/openclaw/README.md)
+- 시작점: [docs/agents/README.md](docs/agents/README.md)
+- OpenClaw 호환 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
 - 운영/연동 규약: [docs/openclaw/integration-guide.md](docs/openclaw/integration-guide.md)
 - skill 패키징 handoff: [docs/openclaw/skill-handoff.md](docs/openclaw/skill-handoff.md)
 
-이 저장소에서는 OpenClaw skill 자체를 배포하지 않는다.
-대신 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 필요한 API, DB, 운영 규약, 예시 흐름을 문서로 제공한다.
+이 저장소에서는 에이전트 skill 자체를 배포하지 않는다.
+대신 에이전트 런타임에서 skill/tool을 패키징할 수 있도록 필요한 API, DB, canonical view, 운영 규약, 예시 흐름을 문서로 제공한다.

@@ -122,6 +122,7 @@ async def upsert_transaction_loan_link(
         link.loan_account_id = account.id
 
     link.repayment_type = payload.repayment_type
+    link.source = "manual"
     link.memo = payload.memo
     await db_session.commit()
     return await _load_link_item_or_500(db_session, transaction_id)
@@ -156,6 +157,7 @@ async def bulk_upsert_transaction_loan_links(
         else:
             link.loan_account_id = account.id
         link.repayment_type = payload.repayment_type
+        link.source = "manual"
         link.memo = payload.memo
 
     await db_session.commit()
@@ -278,6 +280,7 @@ def _build_loan_transaction_mapping_query(
             Transaction.memo.label("transaction_memo"),
             LoanTransactionLink.loan_account_id,
             LoanTransactionLink.repayment_type,
+            LoanTransactionLink.source.label("link_source"),
             LoanTransactionLink.memo.label("link_memo"),
             LoanTransactionLink.created_at.label("link_created_at"),
             LoanTransactionLink.updated_at.label("link_updated_at"),
@@ -335,6 +338,7 @@ def _serialize_mapping_row(row) -> LoanTransactionMappingItem:
             product_name=row["product_name"],
             display_name=_display_name(row["lender"], row["product_name"]),
             repayment_type=row["repayment_type"],
+            source=row["link_source"],
             memo=row["link_memo"],
             created_at=row["link_created_at"],
             updated_at=row["link_updated_at"],
@@ -455,6 +459,7 @@ async def _load_link_item(
         product_name=account.product_name,
         display_name=_display_name(account.lender, account.product_name),
         repayment_type=link.repayment_type,
+        source=link.source,
         memo=link.memo,
         created_at=link.created_at,
         updated_at=link.updated_at,

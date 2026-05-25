@@ -16,6 +16,7 @@ export interface TransactionResponse {
   payment_method: string | null
   cost_kind: 'fixed' | 'variable' | null
   fixed_cost_necessity: 'essential' | 'discretionary' | null
+  cost_classification_source: 'manual' | 'auto' | null
   recurring_payment_kind: 'installment' | 'monthly_recurring' | null
   memo: string | null
   is_deleted: boolean
@@ -133,6 +134,7 @@ export interface LoanTransactionLinkItem {
   product_name: string
   display_name: string
   repayment_type: LoanRepaymentType
+  source: 'manual' | 'auto'
   memo: string | null
   created_at: string
   updated_at: string
@@ -192,4 +194,60 @@ export interface MerchantTreemapNode {
 export interface MonthlySummaryItem {
   period: string
   amount: number
+}
+
+export interface AutoClassificationSettings {
+  apply_cost_rules_on_upload: boolean
+  apply_loan_rules_on_upload: boolean
+}
+
+export interface AutoClassificationSettingsPatchRequest {
+  apply_cost_rules_on_upload?: boolean
+  apply_loan_rules_on_upload?: boolean
+}
+
+export interface CategoryClassificationRuleRequest {
+  category_major: string
+  category_minor?: string | null
+  cost_kind: 'fixed' | 'variable'
+  fixed_cost_necessity?: 'essential' | 'discretionary' | null
+}
+
+export interface CategoryClassificationRuleResponse extends CategoryClassificationRuleRequest {
+  id: number
+  category_major: string
+  category_minor: string | null
+  cost_kind: 'fixed' | 'variable'
+  fixed_cost_necessity: 'essential' | 'discretionary' | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CategoryClassificationRuleListResponse {
+  items: CategoryClassificationRuleResponse[]
+}
+
+export interface LoanMerchantRuleRequest {
+  merchant: string
+  loan_account_id: number
+  repayment_type: LoanRepaymentType
+  memo?: string | null
+}
+
+export interface LoanMerchantRuleResponse extends LoanMerchantRuleRequest {
+  id: number
+  lender: string
+  product_name: string
+  display_name: string
+  memo: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LoanMerchantRuleListResponse {
+  items: LoanMerchantRuleResponse[]
+}
+
+export interface AutoClassificationApplyResponse {
+  updated: number
 }

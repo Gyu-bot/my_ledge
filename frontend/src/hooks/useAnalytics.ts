@@ -23,6 +23,13 @@ export function useFixedCostSummary(params: { start_month?: string; end_month?: 
   })
 }
 
+export function useFixedCostTrend(params: { start_month?: string; end_month?: string } = {}) {
+  return useQuery({
+    queryKey: ['analytics', 'fixedCostTrend', params],
+    queryFn: () => analyticsApi.fixedCostTrend(params),
+  })
+}
+
 export function useMerchantSpend(
   params: { start_month?: string; end_month?: string; months?: number; limit?: number } = {},
 ) {

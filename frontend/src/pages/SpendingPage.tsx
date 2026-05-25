@@ -8,6 +8,7 @@ import { SegmentedBar } from '../components/ui/SegmentedBar'
 import { DailyCalendar } from '../components/ui/DailyCalendar'
 import { StackedBarChart } from '../components/charts/StackedBarChart'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
+import { FixedCostTrendChart } from '../components/charts/FixedCostTrendChart'
 import {
   useCategoryTimeline,
   useCategoryBreakdown,
@@ -16,7 +17,7 @@ import {
   useDailySpend,
   useMerchantTreemap,
 } from '../hooks/useTransactions'
-import { useFixedCostSummary } from '../hooks/useAnalytics'
+import { useFixedCostSummary, useFixedCostTrend } from '../hooks/useAnalytics'
 import { useChromeContext } from '../components/layout/chromeContext'
 import { monthRange, formatKRWCompact } from '../lib/utils'
 import { NestedTreemapChart } from '../components/charts/NestedTreemapChart'
@@ -69,6 +70,7 @@ export function SpendingPage() {
       }
     : null)
   const fixedCost = useFixedCostSummary({ start_month: detailStart, end_month: detailEnd })
+  const fixedCostTrend = useFixedCostTrend({ start_month: detailStart, end_month: detailEnd })
   const merchantTreemap = useMerchantTreemap({
     start_month: detailStart,
     end_month: detailEnd,
@@ -254,6 +256,23 @@ export function SpendingPage() {
       </div>
 
       {/* 5. 고정비/변동비 + 필수/비필수 */}
+      <SectionCard title="월별 고정비 추이" meta={breakdownMeta}>
+        {fixedCostTrend.isLoading ? <LoadingState /> :
+         fixedCostTrend.error ? <ErrorState onRetry={() => fixedCostTrend.refetch()} /> :
+         fixedCostTrend.data && fixedCostTrend.data.items.length > 0 ? (
+           <div className="grid gap-4 lg:grid-cols-2">
+             <div>
+               <div className="mb-2 text-caption font-semibold text-text-secondary">월별 고정비 / 변동비</div>
+               <FixedCostTrendChart items={fixedCostTrend.data.items} mode="cost-kind" />
+             </div>
+             <div>
+               <div className="mb-2 text-caption font-semibold text-text-secondary">월별 필수 / 비필수 고정비</div>
+               <FixedCostTrendChart items={fixedCostTrend.data.items} mode="fixed-necessity" />
+             </div>
+           </div>
+         ) : <EmptyState message="월별 고정비 분류 데이터가 없습니다" />}
+      </SectionCard>
+
       <div className="grid md:grid-cols-2 gap-4">
         <SectionCard title="고정비 / 변동비 비율" meta={breakdownMeta}>
           {fixedCost.isLoading ? <LoadingState /> :

@@ -16,6 +16,15 @@ import type {
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
   MerchantTreemapNode,
+  AutoClassificationSettings,
+  AutoClassificationSettingsPatchRequest,
+  CategoryClassificationRuleRequest,
+  CategoryClassificationRuleListResponse,
+  CategoryClassificationRuleResponse,
+  LoanMerchantRuleRequest,
+  LoanMerchantRuleListResponse,
+  LoanMerchantRuleResponse,
+  AutoClassificationApplyResponse,
 } from '../types/transaction'
 
 function buildQuery(params: object): string {
@@ -103,6 +112,46 @@ export const transactionApi = {
 
   loanTransactionMappings: (params: LoanTransactionMappingParams = {}) =>
     apiFetch<LoanTransactionMappingListResponse>(`/loan-transaction-links${buildQuery(params)}`),
+
+  autoClassificationSettings: () =>
+    apiFetch<AutoClassificationSettings>('/auto-classification/settings'),
+
+  patchAutoClassificationSettings: (data: AutoClassificationSettingsPatchRequest) =>
+    apiFetch<AutoClassificationSettings>('/auto-classification/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  categoryClassificationRules: () =>
+    apiFetch<CategoryClassificationRuleListResponse>('/auto-classification/category-rules'),
+
+  upsertCategoryClassificationRule: (data: CategoryClassificationRuleRequest) =>
+    apiFetch<CategoryClassificationRuleResponse>('/auto-classification/category-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  applyCategoryClassificationRules: () =>
+    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/category-rules', {
+      method: 'POST',
+    }),
+
+  loanMerchantRules: () =>
+    apiFetch<LoanMerchantRuleListResponse>('/auto-classification/loan-merchant-rules'),
+
+  upsertLoanMerchantRule: (data: LoanMerchantRuleRequest) =>
+    apiFetch<LoanMerchantRuleResponse>('/auto-classification/loan-merchant-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  applyLoanMerchantRules: () =>
+    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/loan-merchant-rules', {
+      method: 'POST',
+    }),
 
   categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
     apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery(

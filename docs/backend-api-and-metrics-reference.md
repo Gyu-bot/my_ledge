@@ -45,6 +45,16 @@
 ### `X-API-Key` 필요
 
 - `GET /api/v1/schema`
+- `GET /api/v1/auto-classification/settings`
+- `PATCH /api/v1/auto-classification/settings`
+- `GET /api/v1/auto-classification/category-rules`
+- `POST /api/v1/auto-classification/category-rules`
+- `DELETE /api/v1/auto-classification/category-rules/{rule_id}`
+- `POST /api/v1/auto-classification/apply/category-rules`
+- `GET /api/v1/auto-classification/loan-merchant-rules`
+- `POST /api/v1/auto-classification/loan-merchant-rules`
+- `DELETE /api/v1/auto-classification/loan-merchant-rules/{rule_id}`
+- `POST /api/v1/auto-classification/apply/loan-merchant-rules`
 - `POST /api/v1/upload`
 - `POST /api/v1/data/reset`
 - `POST /api/v1/transactions`
@@ -183,6 +193,7 @@
       - `merchant`
       - `cost_kind`
       - `fixed_cost_necessity`
+      - `cost_classification_source`
       - `recurring_payment_kind`
       - `is_deleted`
       - `merged_into_id`
@@ -616,6 +627,25 @@
   - `unclassified_total`
   - `unclassified_count`
 
+#### `GET /api/v1/analytics/fixed-cost-trend`
+
+- Purpose: expose monthly fixed/variable and essential/discretionary fixed-cost trend for the selected period
+- Query params:
+  - `start_date`
+  - `end_date`
+- Response model: `FixedCostTrendResponse`
+- Response shape:
+  - `items[]`
+    - `period`
+    - `expense_total`
+    - `fixed_total`
+    - `variable_total`
+    - `essential_fixed_total`
+    - `discretionary_fixed_total`
+    - `unclassified_total`
+    - `unclassified_count`
+    - `fixed_ratio`
+
 #### `GET /api/v1/analytics/recurring-payments`
 
 - Purpose: detect recurring expense groups by merchant and expose manual recurring classification state.
@@ -769,6 +799,40 @@
   - `spending_anomalies.baseline_months` integer, `1..12`, nullable to reset
 - Response model: `AnalyticsSettingsResponse`
 
+#### `GET /api/v1/auto-classification/settings`
+
+- Auth: API key required
+- Purpose: read upload auto-apply toggles for category and loan merchant rules
+- Response fields:
+  - `apply_cost_rules_on_upload`
+  - `apply_loan_rules_on_upload`
+
+#### `PATCH /api/v1/auto-classification/settings`
+
+- Auth: API key required
+- Purpose: persist upload auto-apply toggles
+- Request accepts either or both boolean fields from the GET response
+
+#### Category Auto-Classification Rules
+
+- Endpoints:
+  - `GET /api/v1/auto-classification/category-rules`
+  - `POST /api/v1/auto-classification/category-rules`
+  - `DELETE /api/v1/auto-classification/category-rules/{rule_id}`
+  - `POST /api/v1/auto-classification/apply/category-rules`
+- Rule fields: `category_major`, optional `category_minor`, `cost_kind`, optional `fixed_cost_necessity`
+- Apply behavior: matches effective category values and updates only rows whose `cost_classification_source` is not `manual`
+
+#### Loan Merchant Auto-Link Rules
+
+- Endpoints:
+  - `GET /api/v1/auto-classification/loan-merchant-rules`
+  - `POST /api/v1/auto-classification/loan-merchant-rules`
+  - `DELETE /api/v1/auto-classification/loan-merchant-rules/{rule_id}`
+  - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
+- Rule fields: exact `merchant`, `loan_account_id`, `repayment_type`, optional `memo`
+- Apply behavior: creates or updates only missing/auto loan links; `loan_transaction_links.source='manual'` is preserved
+
 ## Canonical Views
 
 ### `vw_transactions_effective`
@@ -783,7 +847,7 @@ Columns:
   - `category_major_user`, `category_minor_user`
   - `description`, `merchant`
   - `amount`, `currency`, `payment_method`
-  - `cost_kind`, `fixed_cost_necessity`, `memo`
+  - `cost_kind`, `fixed_cost_necessity`, `cost_classification_source`, `memo`
   - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo`
   - `is_deleted`, `merged_into_id`, `source`, `created_at`, `updated_at`
 - derived fields:
@@ -812,6 +876,21 @@ Documented columns:
 - `category_major`
 - `category_minor`
 - `amount`
+
+### `vw_fixed_cost_monthly_summary`
+
+Canonical monthly aggregate for fixed-cost analysis. It is intended for readonly SQL and AI drill-down use cases where the caller needs the same month-level structure shown in the spending page.
+
+Documented columns:
+
+- `period`
+- `expense_total`
+- `fixed_total`
+- `variable_total`
+- `essential_fixed_total`
+- `discretionary_fixed_total`
+- `unclassified_total`
+- `unclassified_count`
 
 ## Major Metric Logic
 

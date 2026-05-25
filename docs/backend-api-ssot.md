@@ -27,6 +27,16 @@
   - `GET /api/v1/schema`
   - `GET /api/v1/settings/analytics`
   - `PATCH /api/v1/settings/analytics`
+  - `GET /api/v1/auto-classification/settings`
+  - `PATCH /api/v1/auto-classification/settings`
+  - `GET /api/v1/auto-classification/category-rules`
+  - `POST /api/v1/auto-classification/category-rules`
+  - `DELETE /api/v1/auto-classification/category-rules/{id}`
+  - `POST /api/v1/auto-classification/apply/category-rules`
+  - `GET /api/v1/auto-classification/loan-merchant-rules`
+  - `POST /api/v1/auto-classification/loan-merchant-rules`
+  - `DELETE /api/v1/auto-classification/loan-merchant-rules/{id}`
+  - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
   - `POST /api/v1/transactions`
   - `PATCH /api/v1/transactions/bulk-update`
   - `PATCH /api/v1/transactions/{id}`
@@ -56,6 +66,16 @@
 | `POST` | `/api/v1/data/reset` | live | `transactions_only` / `transactions_and_snapshots` |
 | `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
 | `PATCH` | `/api/v1/settings/analytics` | live | API key required, persisted analytics settings |
+| `GET` | `/api/v1/auto-classification/settings` | live | API key required, upload auto-apply toggles |
+| `PATCH` | `/api/v1/auto-classification/settings` | live | API key required, persist upload auto-apply toggles |
+| `GET` | `/api/v1/auto-classification/category-rules` | live | API key required, category-to-cost-kind rules |
+| `POST` | `/api/v1/auto-classification/category-rules` | live | API key required, upsert a category rule |
+| `DELETE` | `/api/v1/auto-classification/category-rules/{id}` | live | API key required |
+| `POST` | `/api/v1/auto-classification/apply/category-rules` | live | API key required, apply rules to non-manual transactions |
+| `GET` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, exact merchant-to-loan rules |
+| `POST` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, upsert a merchant rule |
+| `DELETE` | `/api/v1/auto-classification/loan-merchant-rules/{id}` | live | API key required |
+| `POST` | `/api/v1/auto-classification/apply/loan-merchant-rules` | live | API key required, auto-link non-manual loan mappings |
 
 ### Transactions Read
 
@@ -102,6 +122,7 @@
 | `GET` | `/api/v1/analytics/monthly-cashflow` | live | P0 |
 | `GET` | `/api/v1/analytics/category-mom` | live | P0 |
 | `GET` | `/api/v1/analytics/fixed-cost-summary` | live | P0 |
+| `GET` | `/api/v1/analytics/fixed-cost-trend` | live | monthly fixed/variable and essential/discretionary fixed-cost trend |
 | `GET` | `/api/v1/analytics/merchant-spend` | live | P0 |
 | `GET` | `/api/v1/analytics/payment-method-patterns` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/income-stability` | live | P1 shipped |
@@ -121,6 +142,7 @@
   - `payment_method`
   - `cost_kind`
   - `fixed_cost_necessity`
+  - `cost_classification_source`
   - `recurring_payment_kind`
   - `is_edited`
   - `include_deleted`
@@ -144,7 +166,17 @@
   - `installment`: installment/할부 repayment-like recurring charge
   - `monthly_recurring`: a fresh monthly recurring charge such as utilities or subscriptions
 - `GET /api/v1/analytics/recurring-payments` groups by merchant and returns transaction ids plus classification counts. The operations recurring-classification screen uses those ids for bulk updates; insights surfaces display the saved result only.
-- Automatic classification is planned only; live behavior does not infer this field.
+- Automatic recurring-payment classification is not live. The auto-classification surface currently covers fixed/variable cost rules and loan merchant rules, not `recurring_payment_kind`.
+
+### Auto Classification
+
+- Category rules live in `category_classification_rules`.
+- Category rules match effective category values, so `category_major_user/category_minor_user` take precedence over imported categories.
+- Applying category rules writes `transactions.cost_kind`, `transactions.fixed_cost_necessity`, and `transactions.cost_classification_source='auto'`.
+- User edits through transaction update/bulk-update write `cost_classification_source='manual'`; later auto-apply never overwrites those manual rows.
+- Loan merchant rules live in `loan_merchant_rules` and exact-match `transactions.merchant`.
+- Applying loan merchant rules creates or updates only missing/auto loan links. Existing `loan_transaction_links.source='manual'` rows are preserved.
+- Upload auto-apply toggles live in `auto_classification_settings`; when enabled, upload success runs the matching rule application after transaction import.
 
 ### Snapshot Import Behavior
 

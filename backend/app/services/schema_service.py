@@ -12,6 +12,18 @@ RAW_TABLE_DESCRIPTIONS = {
         "Typed application settings. Analytics defaults are resolved from this table "
         "when request query parameters do not override them."
     ),
+    "auto_classification_settings": (
+        "Feature toggles for applying category and loan merchant auto-classification "
+        "rules after workbook uploads."
+    ),
+    "category_classification_rules": (
+        "User-configurable category-to-cost-kind rules. Automatic application writes "
+        "to transactions only when the cost classification source is not manual."
+    ),
+    "loan_merchant_rules": (
+        "User-configurable exact merchant-to-loan-account rules for automatic loan "
+        "repayment linking."
+    ),
     "transactions": (
         "Raw transaction rows from imports and manual edits. Read directly for audit, "
         "debugging, or low-level data correction."

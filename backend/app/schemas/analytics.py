@@ -41,6 +41,22 @@ class FixedCostSummaryResponse(BaseModel):
     unclassified_count: int
 
 
+class FixedCostTrendItem(BaseModel):
+    period: str
+    expense_total: int
+    fixed_total: int
+    variable_total: int
+    essential_fixed_total: int
+    discretionary_fixed_total: int
+    unclassified_total: int
+    unclassified_count: int
+    fixed_ratio: float | None
+
+
+class FixedCostTrendResponse(BaseModel):
+    items: list[FixedCostTrendItem]
+
+
 class MerchantSpendItem(BaseModel):
     merchant: str
     amount: int
