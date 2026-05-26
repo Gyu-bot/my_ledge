@@ -4,6 +4,7 @@ import type {
   TransactionListParams,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
+  LoanAccountMetadataUpdateRequest,
   LoanTransactionLinkBulkRequest,
   LoanTransactionMappingParams,
   CategoryBreakdownParams,
@@ -163,6 +164,18 @@ export function useBulkLinkTransactionsToLoan() {
   return useMutation({
     mutationFn: (data: LoanTransactionLinkBulkRequest) => transactionApi.bulkLoanLink(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  })
+}
+
+export function useUpdateLoanAccountMetadata() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: LoanAccountMetadataUpdateRequest) =>
+      transactionApi.updateLoanAccountMetadata(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: txKeys.loanAccounts() })
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+    },
   })
 }
 

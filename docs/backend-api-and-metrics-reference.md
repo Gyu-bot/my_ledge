@@ -63,6 +63,7 @@
 - `DELETE /api/v1/transactions/{transaction_id}`
 - `POST /api/v1/transactions/{transaction_id}/restore`
 - `POST /api/v1/transactions/merge`
+- `PATCH /api/v1/loan-accounts`
 - `PUT /api/v1/transactions/{transaction_id}/loan-link`
 - `DELETE /api/v1/transactions/{transaction_id}/loan-link`
 - `PUT /api/v1/transactions/loan-links/bulk`
@@ -374,7 +375,9 @@
     - `loan_account_id`
     - `lender`
     - `product_name`
+    - `display_name_user`
     - `display_name`
+    - `loan_kind`
     - `latest_snapshot_date`
     - `latest_balance`
     - `latest_interest_rate`
@@ -382,6 +385,25 @@
   - combines persisted `loan_accounts` with latest `loans` snapshot rows
   - deduplicates candidates by `lender + product_name`
   - does not directly expose or depend on `loans.id`
+  - `display_name` prefers user-managed `display_name_user`
+  - `loan_kind` is one of `unknown`, `overdraft`, `equal_principal_interest`, `equal_principal`, `bullet`, `other`
+
+#### `PATCH /api/v1/loan-accounts`
+
+- Purpose: update loan account metadata used by mapping controls and advisor analysis
+- Auth: API key required
+- Request model: `LoanAccountMetadataUpdateRequest`
+- Request shape:
+  - either `loan_account_id`
+  - or `lender` plus `product_name`
+  - `display_name_user`
+  - `loan_kind: "unknown" | "overdraft" | "equal_principal_interest" | "equal_principal" | "bullet" | "other"`
+- Response model: `LoanAccountCandidateResponse`
+- Behavior:
+  - stores user-managed display name on the stable `loan_accounts` identity
+  - stores `loan_kind` as nullable when the request value is `unknown`
+  - creates a stable account for a `lender + product_name` pair if only snapshot data exists
+  - returns the latest loan snapshot metadata when available
 
 #### `GET /api/v1/transactions/{transaction_id}/loan-link`
 
@@ -848,7 +870,7 @@ Columns:
   - `description`, `merchant`
   - `amount`, `currency`, `payment_method`
   - `cost_kind`, `fixed_cost_necessity`, `cost_classification_source`, `memo`
-  - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo`
+  - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_display_name`, `loan_kind`, `loan_repayment_type`, `loan_link_memo`
   - `is_deleted`, `merged_into_id`, `source`, `created_at`, `updated_at`
 - derived fields:
   - `effective_category_major = coalesce(category_major_user, category_major)`

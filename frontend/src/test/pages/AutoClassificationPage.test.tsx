@@ -8,6 +8,7 @@ import type {
   CategoryClassificationRuleListResponse,
   LoanAccountsResponse,
   LoanMerchantRuleListResponse,
+  TransactionFilterOptionsResponse,
 } from '../../types/transaction'
 
 const mockUseWriteAccess = vi.fn<() => boolean>()
@@ -15,6 +16,7 @@ const mockUseAutoClassificationSettings = vi.fn()
 const mockUseCategoryClassificationRules = vi.fn()
 const mockUseLoanMerchantRules = vi.fn()
 const mockUseLoanAccounts = vi.fn<() => { data: LoanAccountsResponse }>()
+const mockUseTransactionFilterOptions = vi.fn<() => { data: TransactionFilterOptionsResponse }>()
 let patchSettingsMutate = vi.fn()
 let upsertCategoryRuleMutate = vi.fn()
 let applyCategoryRulesMutate = vi.fn()
@@ -26,6 +28,7 @@ vi.mock('../../hooks/useWriteAccess', () => ({
 }))
 
 vi.mock('../../hooks/useTransactions', () => ({
+  useTransactionFilterOptions: () => mockUseTransactionFilterOptions(),
   useAutoClassificationSettings: () => mockUseAutoClassificationSettings(),
   useCategoryClassificationRules: () => mockUseCategoryClassificationRules(),
   useLoanMerchantRules: () => mockUseLoanMerchantRules(),
@@ -88,6 +91,18 @@ const loanRules: LoanMerchantRuleListResponse = {
 
 beforeEach(() => {
   mockUseWriteAccess.mockReturnValue(true)
+  mockUseTransactionFilterOptions.mockReturnValue({
+    data: {
+      category_options: ['주거', '통신', '식비'],
+      category_minor_options: ['월세', '관리비', '휴대폰', '외식'],
+      category_minor_options_by_major: {
+        주거: ['월세', '관리비'],
+        통신: ['휴대폰'],
+        식비: ['외식'],
+      },
+      payment_method_options: [],
+    },
+  })
   mockUseAutoClassificationSettings.mockReturnValue({ data: settings, isLoading: false })
   mockUseCategoryClassificationRules.mockReturnValue({ data: categoryRules, isLoading: false })
   mockUseLoanMerchantRules.mockReturnValue({ data: loanRules, isLoading: false })
@@ -98,7 +113,9 @@ beforeEach(() => {
           loan_account_id: 1,
           lender: '국민은행',
           product_name: '주택담보대출',
+          display_name_user: null,
           display_name: '국민은행 주택담보대출',
+          loan_kind: 'unknown',
           latest_snapshot_date: '2026-05-24',
           latest_balance: '200000000.00',
           latest_interest_rate: '3.4',
@@ -140,6 +157,23 @@ describe('AutoClassificationPage', () => {
       })
       expect(applyCategoryRulesMutate).toHaveBeenCalled()
     })
+  })
+
+  it('uses category dropdowns and filters subcategories by selected major category', () => {
+    wrap(<AutoClassificationPage />)
+
+    const majorSelect = screen.getByLabelText('대분류')
+    const minorSelect = screen.getByLabelText('소분류')
+
+    expect(majorSelect.tagName).toBe('SELECT')
+    expect(minorSelect.tagName).toBe('SELECT')
+    expect(screen.getByRole('option', { name: '주거' })).toBeInTheDocument()
+
+    fireEvent.change(majorSelect, { target: { value: '주거' } })
+
+    expect(screen.getByRole('option', { name: '월세' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '관리비' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '휴대폰' })).not.toBeInTheDocument()
   })
 
   it('saves a loan merchant rule and toggles upload automation', async () => {

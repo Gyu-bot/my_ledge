@@ -46,6 +46,7 @@
   - `PUT /api/v1/transactions/{id}/loan-link`
   - `DELETE /api/v1/transactions/{id}/loan-link`
   - `PUT /api/v1/transactions/loan-links/bulk`
+  - `PATCH /api/v1/loan-accounts`
   - `POST /api/v1/data/reset`
 
 ## Live Endpoints
@@ -99,9 +100,10 @@
 | `DELETE` | `/api/v1/transactions/{id}` | live | soft delete |
 | `POST` | `/api/v1/transactions/{id}/restore` | live | restore soft-deleted row |
 | `GET` | `/api/v1/transactions/{id}/loan-link` | live | transaction-to-loan repayment mapping |
-| `PUT` | `/api/v1/transactions/{id}/loan-link` | live | API key required, upsert one mapping |
+| `PUT` | `/api/v1/transactions/{id}/loan-link` | live | API key required, upsert one transaction-to-loan mapping |
 | `DELETE` | `/api/v1/transactions/{id}/loan-link` | live | API key required, remove mapping |
 | `PUT` | `/api/v1/transactions/loan-links/bulk` | live | API key required, map selected transactions to one loan account |
+| `PATCH` | `/api/v1/loan-accounts` | live | API key required, update loan account display name and loan kind |
 | `POST` | `/api/v1/transactions/merge` | stub | `501 Not Implemented` |
 
 ### Assets / Snapshots

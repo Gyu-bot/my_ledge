@@ -6,6 +6,8 @@ import type {
   TransactionFilterOptionsResponse,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
+  LoanAccountCandidate,
+  LoanAccountMetadataUpdateRequest,
   LoanAccountsResponse,
   LoanTransactionLinkBulkRequest,
   LoanTransactionLinkBulkResponse,
@@ -102,6 +104,13 @@ export const transactionApi = {
 
   loanAccounts: () =>
     apiFetch<LoanAccountsResponse>('/loan-accounts'),
+
+  updateLoanAccountMetadata: (data: LoanAccountMetadataUpdateRequest) =>
+    apiFetch<LoanAccountCandidate>('/loan-accounts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
 
   bulkLoanLink: (data: LoanTransactionLinkBulkRequest) =>
     apiFetch<LoanTransactionLinkBulkResponse>('/transactions/loan-links/bulk', {

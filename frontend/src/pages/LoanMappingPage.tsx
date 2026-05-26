@@ -8,11 +8,13 @@ import {
   useBulkLinkTransactionsToLoan,
   useLoanAccounts,
   useLoanTransactionMappings,
+  useUpdateLoanAccountMetadata,
 } from '../hooks/useTransactions'
 import { useWriteAccess } from '../hooks/useWriteAccess'
 import { formatKRW } from '../lib/utils'
 import type {
   LoanAccountCandidate,
+  LoanKind,
   LoanLinkStateFilter,
   LoanRepaymentType,
   LoanTransactionMappingItem,
@@ -31,6 +33,11 @@ interface LinkDraft {
   loan_account_id: string
   repayment_type: LoanRepaymentType
   memo: string
+}
+
+interface LoanAccountMetadataDraft {
+  display_name_user: string
+  loan_kind: LoanKind
 }
 
 const PAGE_SIZE = 40
@@ -55,6 +62,17 @@ const REPAYMENT_LABEL: Record<LoanRepaymentType, string> = {
   unknown: '미정',
 }
 
+const LOAN_KIND_LABEL: Record<LoanKind, string> = {
+  unknown: '미지정',
+  overdraft: '마이너스 통장',
+  equal_principal_interest: '원리금 균등 상환',
+  equal_principal: '원금 균등 상환',
+  bullet: '일시 원금 상환',
+  other: '기타',
+}
+
+const LOAN_KIND_OPTIONS = Object.entries(LOAN_KIND_LABEL) as [LoanKind, string][]
+
 function accountValue(account: LoanAccountCandidate) {
   return account.loan_account_id !== null
     ? `id:${account.loan_account_id}`
@@ -76,6 +94,7 @@ export function LoanMappingPage() {
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [linkDraft, setLinkDraft] = useState<LinkDraft>(DEFAULT_LINK_DRAFT)
+  const [accountMetadataDrafts, setAccountMetadataDrafts] = useState<Record<string, LoanAccountMetadataDraft>>({})
   const [alert, setAlert] = useState<{ variant: 'success' | 'error'; title: string; description?: string } | null>(null)
 
   const mappingParams = {
@@ -91,6 +110,7 @@ export function LoanMappingPage() {
   const mappings = useLoanTransactionMappings(mappingParams)
   const loanAccounts = useLoanAccounts()
   const bulkLoanLinkMutation = useBulkLinkTransactionsToLoan()
+  const updateLoanAccountMetadataMutation = useUpdateLoanAccountMetadata()
 
   useEffect(() => {
     const total = mappings.data?.total ?? 0
@@ -112,6 +132,25 @@ export function LoanMappingPage() {
       selectPageCheckboxRef.current.indeterminate = someVisibleSelected && !allVisibleSelected
     }
   }, [allVisibleSelected, someVisibleSelected])
+
+  useEffect(() => {
+    if (!loanAccounts.data?.items) return
+    setAccountMetadataDrafts((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const account of loanAccounts.data.items) {
+        const key = accountValue(account)
+        if (!next[key]) {
+          next[key] = {
+            display_name_user: account.display_name_user ?? '',
+            loan_kind: account.loan_kind,
+          }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [loanAccounts.data])
 
   function applyFilter() {
     setAppliedFilter(filterDraft)
@@ -168,6 +207,33 @@ export function LoanMappingPage() {
       setAlert({ variant: 'success', title: `${result.updated}건 대출 연결 완료` })
     } catch (e) {
       setAlert({ variant: 'error', title: '대출 연결 실패', description: String(e) })
+    }
+  }
+
+  async function saveLoanAccountMetadata(account: LoanAccountCandidate) {
+    const key = accountValue(account)
+    const draft = accountMetadataDrafts[key] ?? {
+      display_name_user: account.display_name_user ?? '',
+      loan_kind: account.loan_kind,
+    }
+    try {
+      const updated = await updateLoanAccountMetadataMutation.mutateAsync({
+        loan_account_id: account.loan_account_id,
+        lender: account.loan_account_id === null ? account.lender : null,
+        product_name: account.loan_account_id === null ? account.product_name : null,
+        display_name_user: draft.display_name_user.trim() || null,
+        loan_kind: draft.loan_kind,
+      })
+      setAccountMetadataDrafts((prev) => ({
+        ...prev,
+        [accountValue(updated)]: {
+          display_name_user: updated.display_name_user ?? '',
+          loan_kind: updated.loan_kind,
+        },
+      }))
+      setAlert({ variant: 'success', title: '대출 계좌 정보 저장 완료' })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '대출 계좌 정보 저장 실패', description: String(e) })
     }
   }
 
@@ -253,6 +319,82 @@ export function LoanMappingPage() {
         </div>
       </div>
 
+      <div className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-faint">
+          <div>
+            <span className="text-label font-semibold text-text-secondary">대출 계좌 관리</span>
+            <div className="text-micro text-text-ghost mt-0.5">대출 표시명과 대출 성격을 거래 연결과 분리해 관리합니다.</div>
+          </div>
+          <span className="text-micro text-text-muted bg-surface-bar border border-border-subtle px-2 py-0.5 rounded-full">
+            {loanAccounts.data?.items.length ?? 0}개 계좌
+          </span>
+        </div>
+
+        {loanAccounts.data?.items.length ? (
+          <div className="divide-y divide-border-faint">
+            {loanAccounts.data.items.map((account) => {
+              const key = accountValue(account)
+              const draft = accountMetadataDrafts[key] ?? {
+                display_name_user: account.display_name_user ?? '',
+                loan_kind: account.loan_kind,
+              }
+              return (
+                <div key={key} className="px-4 py-3 flex flex-wrap items-end gap-2">
+                  <div className="min-w-44 flex-1">
+                    <div className="text-caption text-text-secondary font-semibold truncate">
+                      {account.lender} {account.product_name}
+                    </div>
+                    <div className="text-micro text-text-ghost mt-0.5">
+                      {account.latest_snapshot_date ?? '스냅샷 없음'}
+                      {account.latest_balance ? ` · 잔액 ₩${formatKRW(Number(account.latest_balance))}` : ''}
+                      {account.latest_interest_rate ? ` · ${account.latest_interest_rate}%` : ''}
+                    </div>
+                  </div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-micro text-text-faint">대출 계좌명</span>
+                    <input
+                      aria-label="대출 계좌명"
+                      className={`${inputCls} w-44 py-1`}
+                      value={draft.display_name_user}
+                      placeholder={account.display_name}
+                      onChange={(e) => setAccountMetadataDrafts((prev) => ({
+                        ...prev,
+                        [key]: { ...draft, display_name_user: e.target.value },
+                      }))}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-micro text-text-faint">대출 성격</span>
+                    <select
+                      aria-label="대출 성격"
+                      className={`${inputCls} min-w-40 py-1`}
+                      value={draft.loan_kind}
+                      onChange={(e) => setAccountMetadataDrafts((prev) => ({
+                        ...prev,
+                        [key]: { ...draft, loan_kind: e.target.value as LoanKind },
+                      }))}
+                    >
+                      {LOAN_KIND_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    onClick={() => saveLoanAccountMetadata(account)}
+                    disabled={isReadOnly || updateLoanAccountMetadataMutation.isPending}
+                    className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
+                  >
+                    계좌 정보 저장
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyState message="등록 가능한 대출 계좌가 없습니다" />
+        )}
+      </div>
+
       {hasSelection && (
         <div className="px-4 py-3 bg-surface-section border border-border-subtle rounded-card">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -274,7 +416,10 @@ export function LoanMappingPage() {
                 aria-label="대출 계좌"
                 className={`${inputCls} min-w-44 py-1`}
                 value={linkDraft.loan_account_id}
-                onChange={(e) => setLinkDraft((draft) => ({ ...draft, loan_account_id: e.target.value }))}
+                onChange={(e) => setLinkDraft((draft) => ({
+                  ...draft,
+                  loan_account_id: e.target.value,
+                }))}
               >
                 <option value="">— 선택 —</option>
                 {loanAccounts.data?.items.map((account) => (

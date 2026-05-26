@@ -338,7 +338,7 @@ def _serialize_loan_merchant_rule(
         loan_account_id=account.id,
         lender=account.lender,
         product_name=account.product_name,
-        display_name=f"{account.lender} {account.product_name}",
+        display_name=account.display_name_user or f"{account.lender} {account.product_name}",
         repayment_type=rule.repayment_type,
         memo=rule.memo,
         created_at=rule.created_at,

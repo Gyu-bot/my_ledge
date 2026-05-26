@@ -7,6 +7,7 @@ from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.transaction import Transaction
 from app.schemas.loan_mapping import (
+    LoanAccountMetadataUpdateRequest,
     LoanTransactionLinkBulkUpsertRequest,
     LoanTransactionLinkUpsertRequest,
 )
@@ -15,6 +16,7 @@ from app.services.loan_mapping_service import (
     delete_transaction_loan_link,
     get_transaction_loan_link,
     list_loan_accounts,
+    update_loan_account_metadata,
     upsert_transaction_loan_link,
 )
 
@@ -75,6 +77,7 @@ async def test_list_loan_accounts_dedupes_snapshot_rows_by_lender_and_product(
         ("카카오뱅크", "신용대출"),
     ]
     assert response.items[0].loan_account_id is None
+    assert response.items[0].loan_kind == "unknown"
     assert response.items[0].latest_snapshot_date == date(2026, 5, 31)
     assert response.items[0].latest_balance == Decimal("209500000.00")
 
@@ -141,6 +144,38 @@ async def test_upsert_transaction_loan_link_replaces_existing_account_mapping(
     assert deleted is True
     fetched = await get_transaction_loan_link(db_session, transaction.id)
     assert fetched.link is None
+
+
+async def test_update_loan_account_metadata_saves_display_name_and_kind(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        Loan(
+            snapshot_date=date(2026, 5, 31),
+            lender="국민은행",
+            product_name="주택담보대출",
+            balance="209500000.00",
+            interest_rate="3.45",
+        )
+    )
+    await db_session.commit()
+
+    updated = await update_loan_account_metadata(
+        db_session,
+        LoanAccountMetadataUpdateRequest(
+            lender="국민은행",
+            product_name="주택담보대출",
+            display_name_user="우리집 주담대",
+            loan_kind="equal_principal_interest",
+        ),
+    )
+
+    assert updated.loan_account_id is not None
+    assert updated.display_name == "우리집 주담대"
+    assert updated.loan_kind == "equal_principal_interest"
+    accounts = await list_loan_accounts(db_session)
+    assert accounts.items[0].display_name == "우리집 주담대"
+    assert accounts.items[0].loan_kind == "equal_principal_interest"
 
 
 async def test_bulk_upsert_transaction_loan_links_maps_many_transactions_to_one_account(

@@ -16,6 +16,7 @@ const mockUseLoanTransactionMappings = vi.fn<
 >()
 const mockUseWriteAccess = vi.fn<() => boolean>()
 let bulkLoanLinkMutate = vi.fn()
+let updateLoanAccountMetadataMutate = vi.fn()
 
 vi.mock('../../hooks/useWriteAccess', () => ({
   useWriteAccess: () => mockUseWriteAccess(),
@@ -31,7 +32,9 @@ vi.mock('../../hooks/useTransactions', () => ({
           loan_account_id: null,
           lender: '국민은행',
           product_name: '주택담보대출',
+          display_name_user: null,
           display_name: '국민은행 주택담보대출',
+          loan_kind: 'unknown',
           latest_snapshot_date: '2026-05-31',
           latest_balance: '209500000.00',
           latest_interest_rate: '3.45',
@@ -40,6 +43,10 @@ vi.mock('../../hooks/useTransactions', () => ({
     },
   }),
   useBulkLinkTransactionsToLoan: () => ({ mutateAsync: bulkLoanLinkMutate, isPending: false }),
+  useUpdateLoanAccountMetadata: () => ({
+    mutateAsync: updateLoanAccountMetadataMutate,
+    isPending: false,
+  }),
 }))
 
 vi.mock('../../components/layout/chromeContext', () => ({
@@ -79,7 +86,9 @@ function response(): LoanTransactionMappingListResponse {
           loan_account_id: 1,
           lender: '국민은행',
           product_name: '주택담보대출',
+          display_name_user: null,
           display_name: '국민은행 주택담보대출',
+          loan_kind: 'unknown',
           repayment_type: 'mixed',
           source: 'manual',
           memo: '자동 연결',
@@ -109,6 +118,17 @@ function response(): LoanTransactionMappingListResponse {
 beforeEach(() => {
   mockUseWriteAccess.mockReturnValue(true)
   bulkLoanLinkMutate = vi.fn().mockResolvedValue({ updated: 2 })
+  updateLoanAccountMetadataMutate = vi.fn().mockResolvedValue({
+    loan_account_id: 1,
+    lender: '국민은행',
+    product_name: '주택담보대출',
+    display_name_user: '우리집 주담대',
+    display_name: '우리집 주담대',
+    loan_kind: 'equal_principal_interest',
+    latest_snapshot_date: '2026-05-31',
+    latest_balance: '209500000.00',
+    latest_interest_rate: '3.45',
+  })
   mockUseLoanTransactionMappings.mockImplementation(() => ({
     data: response(),
     isLoading: false,
@@ -141,6 +161,30 @@ describe('LoanMappingPage', () => {
         product_name: '주택담보대출',
         repayment_type: 'mixed',
         memo: null,
+      })
+    })
+  })
+
+  it('edits loan account display name and loan kind in a separate account section', async () => {
+    wrap(<LoanMappingPage />)
+
+    expect(screen.getByText('대출 계좌 관리')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('대출 계좌명'), {
+      target: { value: '우리집 주담대' },
+    })
+    fireEvent.change(screen.getByLabelText('대출 성격'), {
+      target: { value: 'equal_principal_interest' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '계좌 정보 저장' }))
+
+    await waitFor(() => {
+      expect(updateLoanAccountMetadataMutate).toHaveBeenCalledWith({
+        loan_account_id: null,
+        lender: '국민은행',
+        product_name: '주택담보대출',
+        display_name_user: '우리집 주담대',
+        loan_kind: 'equal_principal_interest',
       })
     })
   })

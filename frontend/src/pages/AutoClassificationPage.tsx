@@ -11,6 +11,7 @@ import {
   useLoanAccounts,
   useLoanMerchantRules,
   usePatchAutoClassificationSettings,
+  useTransactionFilterOptions,
   useUpsertCategoryClassificationRule,
   useUpsertLoanMerchantRule,
 } from '../hooks/useTransactions'
@@ -33,6 +34,7 @@ export function AutoClassificationPage() {
   const hasWrite = useWriteAccess()
   const { setMetaBadge } = useChromeContext()
   const settings = useAutoClassificationSettings()
+  const filterOptions = useTransactionFilterOptions()
   const categoryRules = useCategoryClassificationRules()
   const loanRules = useLoanMerchantRules()
   const loanAccounts = useLoanAccounts()
@@ -51,6 +53,23 @@ export function AutoClassificationPage() {
   const [repaymentType, setRepaymentType] = useState<LoanRepaymentType>('mixed')
   const [loanMemo, setLoanMemo] = useState('')
   const [alert, setAlert] = useState<{ variant: 'success' | 'error'; title: string; description?: string } | null>(null)
+
+  const categoryMajorOptions = Array.from(
+    new Set([
+      ...(filterOptions.data?.category_options ?? []),
+      ...(categoryRules.data?.items.map((rule) => rule.category_major) ?? []),
+    ]),
+  ).sort((left, right) => left.localeCompare(right, 'ko'))
+  const minorOptionsByMajor = filterOptions.data?.category_minor_options_by_major ?? {}
+  const categoryMinorOptions = Array.from(
+    new Set([
+      ...(categoryMajor ? (minorOptionsByMajor[categoryMajor] ?? []) : (filterOptions.data?.category_minor_options ?? [])),
+      ...(categoryRules.data?.items
+        .filter((rule) => !categoryMajor || rule.category_major === categoryMajor)
+        .map((rule) => rule.category_minor)
+        .filter((value): value is string => !!value) ?? []),
+    ]),
+  ).sort((left, right) => left.localeCompare(right, 'ko'))
 
   useEffect(() => {
     const total = (categoryRules.data?.items.length ?? 0) + (loanRules.data?.items.length ?? 0)
@@ -204,11 +223,35 @@ export function AutoClassificationPage() {
             <div className="px-4 py-3 flex flex-wrap items-end gap-2 border-b border-border-faint">
               <label className="flex flex-col gap-1">
                 <span className="text-micro text-text-faint">대분류</span>
-                <input aria-label="대분류" className={`${INPUT_CLS} w-28`} value={categoryMajor} onChange={(event) => setCategoryMajor(event.target.value)} />
+                <select
+                  aria-label="대분류"
+                  className={`${INPUT_CLS} w-32`}
+                  value={categoryMajor}
+                  onChange={(event) => {
+                    setCategoryMajor(event.target.value)
+                    setCategoryMinor('')
+                  }}
+                >
+                  <option value="">— 선택 —</option>
+                  {categoryMajorOptions.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-micro text-text-faint">소분류</span>
-                <input aria-label="소분류" className={`${INPUT_CLS} w-28`} value={categoryMinor} onChange={(event) => setCategoryMinor(event.target.value)} />
+                <select
+                  aria-label="소분류"
+                  className={`${INPUT_CLS} w-32`}
+                  value={categoryMinor}
+                  disabled={!categoryMajor}
+                  onChange={(event) => setCategoryMinor(event.target.value)}
+                >
+                  <option value="">전체 소분류</option>
+                  {categoryMinorOptions.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-micro text-text-faint">비용 성격</span>

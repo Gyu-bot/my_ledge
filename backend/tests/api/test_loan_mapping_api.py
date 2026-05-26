@@ -59,12 +59,65 @@ async def test_loan_accounts_endpoint_returns_snapshot_candidates(
             "loan_account_id": None,
             "lender": "국민은행",
             "product_name": "주택담보대출",
+            "display_name_user": None,
             "display_name": "국민은행 주택담보대출",
+            "loan_kind": "unknown",
             "latest_snapshot_date": "2026-05-31",
             "latest_balance": "209500000.00",
             "latest_interest_rate": "3.45",
         }
     ]
+
+
+async def test_loan_account_metadata_endpoint_updates_display_name_and_kind(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        Loan(
+            snapshot_date=date(2026, 5, 31),
+            lender="국민은행",
+            product_name="주택담보대출",
+            balance="209500000.00",
+            interest_rate="3.45",
+        )
+    )
+    await db_session.commit()
+
+    unauthorized = await async_client.patch(
+        "/api/v1/loan-accounts",
+        json={
+            "lender": "국민은행",
+            "product_name": "주택담보대출",
+            "display_name_user": "우리집 주담대",
+            "loan_kind": "equal_principal_interest",
+        },
+    )
+    assert unauthorized.status_code == 401
+
+    response = await async_client.patch(
+        "/api/v1/loan-accounts",
+        headers=api_headers,
+        json={
+            "lender": "국민은행",
+            "product_name": "주택담보대출",
+            "display_name_user": "우리집 주담대",
+            "loan_kind": "equal_principal_interest",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["loan_account_id"] is not None
+    assert body["display_name_user"] == "우리집 주담대"
+    assert body["display_name"] == "우리집 주담대"
+    assert body["loan_kind"] == "equal_principal_interest"
+
+    fetched = await async_client.get("/api/v1/loan-accounts")
+    assert fetched.status_code == 200
+    assert fetched.json()["items"][0]["display_name"] == "우리집 주담대"
+    assert fetched.json()["items"][0]["loan_kind"] == "equal_principal_interest"
 
 
 async def test_transaction_loan_link_endpoints_require_auth_and_support_crud(

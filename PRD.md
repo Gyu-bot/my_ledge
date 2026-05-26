@@ -489,6 +489,25 @@ Body:
 ```
 GET /api/v1/loan-accounts
   # loan_accounts + loans snapshot pair를 lender/product_name 기준으로 dedupe
+  # display_name은 사용자가 지정한 display_name_user가 있으면 그 값을 우선 사용
+  # loan_kind는 overdraft/equal_principal_interest/equal_principal/bullet/other/unknown 중 하나
+
+PATCH /api/v1/loan-accounts
+Body:
+{
+  "loan_account_id": 1,
+  "display_name_user": "우리집 주담대",
+  "loan_kind": "equal_principal_interest"
+}
+
+PATCH /api/v1/loan-accounts
+Body:
+{
+  "lender": "국민은행",
+  "product_name": "주택담보대출",
+  "display_name_user": "우리집 주담대",
+  "loan_kind": "overdraft"
+}
 
 GET /api/v1/loan-transaction-links
 Query:
@@ -533,7 +552,7 @@ DELETE /api/v1/transactions/{id}/loan-link
 구현 규칙:
 - 거래 1건은 하나의 대출 계좌에만 연결한다.
 - 같은 대출 계좌에는 여러 지출 거래가 연결될 수 있다. 매월 반복되는 상환 거래는 bulk API로 선택한 여러 거래를 한 번에 연결한다.
-- 프론트엔드에서는 기존 거래 작업대와 분리한 `/operations/loan-mapping` 화면에서 후보 지출 거래 목록, 현재 연결된 대출 계좌, 상환 성격, 미연결 상태를 확인하고 일괄 연결한다.
+- 프론트엔드에서는 기존 거래 작업대와 분리한 `/operations/loan-mapping` 화면에서 후보 지출 거래 목록, 현재 연결된 대출 계좌, 상환 성격, 미연결 상태를 확인하고 일괄 연결한다. 대출 표시명과 대출 성격은 같은 운영 화면의 별도 계좌 관리 섹션에서 거래 연결과 분리해 저장한다.
 - 후보 목록은 사용자가 수동으로 상환 거래를 골라내는 작업용 목록이므로 넓게 잡는다. 이미 연결된 거래, `금융` 대분류 지출, 또는 거래 텍스트에 `대출`/`상환`/`이자`/`원리금`/`원금·이자` 같은 상환 단서가 있는 지출을 포함한다.
 - 계좌 후보는 스냅샷의 `lender + product_name` pair와 사용자가 만든 `loan_accounts`를 합쳐서 보여준다.
 - 매핑은 원본 거래 타입/카테고리를 바꾸지 않는다. 지출 분석에서는 기존 거래 해석을 유지하고, 대출 상환 분석에서는 `loan_transaction_links` 및 canonical view의 nullable 대출 연결 컬럼을 파생 의미로 사용한다.

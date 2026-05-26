@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field, model_validator
 
 
 RepaymentType = Literal["principal", "interest", "mixed", "unknown"]
+LoanKind = Literal[
+    "unknown",
+    "overdraft",
+    "equal_principal_interest",
+    "equal_principal",
+    "bullet",
+    "other",
+]
 LoanLinkStateFilter = Literal["all", "linked", "unlinked"]
 
 
@@ -13,7 +21,9 @@ class LoanAccountCandidateResponse(BaseModel):
     loan_account_id: int | None
     lender: str
     product_name: str
+    display_name_user: str | None = None
     display_name: str
+    loan_kind: LoanKind = "unknown"
     latest_snapshot_date: date | None
     latest_balance: Decimal | None
     latest_interest_rate: Decimal | None
@@ -21,6 +31,24 @@ class LoanAccountCandidateResponse(BaseModel):
 
 class LoanAccountsResponse(BaseModel):
     items: list[LoanAccountCandidateResponse]
+
+
+class LoanAccountMetadataUpdateRequest(BaseModel):
+    loan_account_id: int | None = None
+    lender: str | None = None
+    product_name: str | None = None
+    display_name_user: str | None = Field(default=None, max_length=200)
+    loan_kind: LoanKind = "unknown"
+
+    @model_validator(mode="after")
+    def validate_account_target(self) -> "LoanAccountMetadataUpdateRequest":
+        has_account_id = self.loan_account_id is not None
+        has_lender_product = bool(self.lender and self.product_name)
+        if not has_account_id and not has_lender_product:
+            raise ValueError("loan_account_id or lender/product_name is required")
+        if has_account_id and (self.lender or self.product_name):
+            raise ValueError("use either loan_account_id or lender/product_name")
+        return self
 
 
 class LoanTransactionLinkUpsertRequest(BaseModel):
@@ -54,7 +82,9 @@ class LoanTransactionLinkItem(BaseModel):
     loan_account_id: int
     lender: str
     product_name: str
+    display_name_user: str | None = None
     display_name: str
+    loan_kind: LoanKind = "unknown"
     repayment_type: RepaymentType
     source: Literal["manual", "auto"]
     memo: str | None

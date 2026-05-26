@@ -116,6 +116,11 @@ async def test_schema_endpoint_returns_tables(
         for column in effective_view["columns"]
     )
     assert any(
+        column["name"] == "loan_display_name"
+        for column in effective_view["columns"]
+    )
+    assert any(column["name"] == "loan_kind" for column in effective_view["columns"])
+    assert any(
         column["name"] == "cost_classification_source"
         for column in effective_view["columns"]
     )

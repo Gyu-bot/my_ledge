@@ -2,10 +2,12 @@
 
 ## Current State
 - **Phase:** 안정화 follow-up 유지, 대출 상환 거래 매핑 별도 운영 화면 분리 완료
-- **Last Worker:** Codex (2026-05-25T22:59+0900, 고정비 월별 추이/API/canonical 집계 view 추가)
+- **Last Worker:** Codex (2026-05-26T20:30+0900, 대출 계좌 관리 섹션 및 대출 성격 추가)
 - **Branch:** main
 
 ## Completed
+- [x] 대출 계좌 관리 섹션 및 대출 성격 추가: `loan_accounts.display_name_user`, `loan_accounts.loan_kind` 저장 필드, `PATCH /api/v1/loan-accounts`, `loan_display_name`/`loan_kind` canonical view 컬럼, `/operations/loan-mapping` 별도 `대출 계좌 관리` 섹션을 추가하고 연결 바에서는 거래-대출 연결만 담당하도록 분리
+- [x] 자동분류 카테고리 규칙 입력 UX 보강: `/operations/auto-classification` 의 고정비/변동비 규칙 대분류/소분류 입력을 거래 필터 옵션 기반 dropdown으로 전환하고, 대분류 선택 시 소분류 옵션을 해당 대분류 기준으로 제한
 - [x] 고정비 월별 추이 추가: `GET /api/v1/analytics/fixed-cost-trend`, `vw_fixed_cost_monthly_summary`, 지출 분석 `/analysis/spending` 월별 고정비/변동비 및 필수/비필수 고정비 stacked bar, frontend/backend 테스트와 API/canonical 문서 반영
 - [x] 자동분류/대출 자동연결 규칙 추가: `category_classification_rules`, `loan_merchant_rules`, `auto_classification_settings`, `transactions.cost_classification_source`, `loan_transaction_links.source` 추가, `GET/PATCH /api/v1/auto-classification/settings`, category rule CRUD/apply, loan merchant rule CRUD/apply API, 업로드 후 자동 적용 옵션, `/operations/auto-classification` 화면과 테스트/문서 반영
   - 카테고리 규칙은 effective 대분류/소분류 기준으로 `cost_kind` / `fixed_cost_necessity` 를 자동 적용한다.
@@ -15,7 +17,7 @@
 - [x] README 및 에이전트 연동 문서 갱신: `README.md` 를 현재 route/API/운영 범위에 맞추고, OpenClaw 전용 문서를 OpenClaw/hermes 및 전체 에이전트 대상으로 확장, canonical view 우선 사용을 정리한 `docs/agents/README.md` 추가
 - [x] Loan transaction mapping backend/frontend 추가: `loan_accounts` 안정 계좌 identity와 `loan_transaction_links` 거래 매핑 테이블, `GET /api/v1/loan-accounts`, `GET /api/v1/loan-transaction-links`, `GET/PUT/DELETE /api/v1/transactions/{id}/loan-link`, `PUT /api/v1/transactions/loan-links/bulk` API, 별도 `/operations/loan-mapping` 화면, 서비스/API/frontend 테스트, PRD/API 문서 반영
   - `loan-transaction-links` 기본 목록은 수동 매핑 작업용으로 넓게 유지한다. 이미 연결된 거래, `금융` 대분류 지출, 또는 대출/상환/이자/원리금/원금·이자 단서가 있는 지출을 포함한다.
-  - `vw_transactions_effective` 는 nullable `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo` 컬럼으로 연결된 대출 상환 정보를 함께 노출한다.
+  - `vw_transactions_effective` 는 nullable `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_display_name`, `loan_repayment_type`, `loan_link_memo` 컬럼으로 연결된 대출 상환 정보를 함께 노출한다.
 - [x] 고정비/반복결제 수동 분류 확장: `transactions.recurring_payment_kind` (`installment` / `monthly_recurring`) 추가, `GET/PATCH /transactions` 및 bulk-update/필터/canonical view에 연결, 별도 `/operations/recurring-classification` 화면에서 거래처 그룹 단위 수동 분류 select 제공
   - 고정비/변동비와 필수/비필수는 기존 `cost_kind`, `fixed_cost_necessity` 필드를 유지하고 작업대 필터/편집 노출을 보강했다.
   - `/analysis/insights` 반복결제 카드는 저장된 분류 결과와 count만 읽기 전용으로 표시한다.

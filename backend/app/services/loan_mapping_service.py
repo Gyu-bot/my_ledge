@@ -11,6 +11,7 @@ from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.loan_mapping import (
     LoanAccountCandidateResponse,
+    LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
     LoanLinkStateFilter,
     LoanTransactionLinkBulkUpsertRequest,
@@ -50,6 +51,28 @@ async def list_loan_accounts(db_session: AsyncSession) -> LoanAccountsResponse:
             )
             for key in all_keys
         ]
+    )
+
+
+async def update_loan_account_metadata(
+    db_session: AsyncSession,
+    payload: LoanAccountMetadataUpdateRequest,
+) -> LoanAccountCandidateResponse:
+    account = await _resolve_metadata_account(db_session, payload)
+    account.display_name_user = _normalize_optional_text(payload.display_name_user)
+    account.loan_kind = None if payload.loan_kind == "unknown" else payload.loan_kind
+    await db_session.commit()
+    await db_session.refresh(account)
+    snapshot = await _load_latest_loan_snapshot_for_key(
+        db_session,
+        account.lender,
+        account.product_name,
+    )
+    return _build_account_candidate(
+        account=account,
+        snapshot=snapshot,
+        lender=account.lender,
+        product_name=account.product_name,
     )
 
 
@@ -228,6 +251,37 @@ async def _load_latest_loan_snapshots(
     ]
 
 
+async def _load_latest_loan_snapshot_for_key(
+    db_session: AsyncSession,
+    lender: str,
+    product_name: str,
+) -> dict[str, object] | None:
+    result = await db_session.execute(
+        select(
+            Loan.lender,
+            Loan.product_name,
+            Loan.snapshot_date,
+            Loan.balance,
+            Loan.interest_rate,
+        )
+        .where(Loan.lender == lender)
+        .where(Loan.product_name == product_name)
+        .order_by(Loan.snapshot_date.desc())
+        .limit(1)
+    )
+    row = result.one_or_none()
+    if row is None:
+        return None
+    snapshot_lender, snapshot_product_name, snapshot_date, balance, interest_rate = row
+    return {
+        "lender": snapshot_lender,
+        "product_name": snapshot_product_name,
+        "latest_snapshot_date": snapshot_date,
+        "latest_balance": balance,
+        "latest_interest_rate": interest_rate,
+    }
+
+
 def _build_loan_transaction_mapping_query(
     *,
     start_date: date | None,
@@ -286,6 +340,8 @@ def _build_loan_transaction_mapping_query(
             LoanTransactionLink.updated_at.label("link_updated_at"),
             LoanAccount.lender,
             LoanAccount.product_name,
+            LoanAccount.display_name_user,
+            LoanAccount.loan_kind,
         )
         .select_from(Transaction)
         .outerjoin(
@@ -323,6 +379,7 @@ def _build_loan_transaction_mapping_query(
                 Transaction.payment_method.ilike(pattern),
                 LoanAccount.lender.ilike(pattern),
                 LoanAccount.product_name.ilike(pattern),
+                LoanAccount.display_name_user.ilike(pattern),
             )
         )
     return query
@@ -336,7 +393,13 @@ def _serialize_mapping_row(row) -> LoanTransactionMappingItem:
             loan_account_id=row["loan_account_id"],
             lender=row["lender"],
             product_name=row["product_name"],
-            display_name=_display_name(row["lender"], row["product_name"]),
+            display_name_user=row["display_name_user"],
+            display_name=_display_name(
+                row["lender"],
+                row["product_name"],
+                row["display_name_user"],
+            ),
+            loan_kind=row["loan_kind"] or "unknown",
             repayment_type=row["repayment_type"],
             source=row["link_source"],
             memo=row["link_memo"],
@@ -363,6 +426,39 @@ def _serialize_mapping_row(row) -> LoanTransactionMappingItem:
 async def _resolve_account(
     db_session: AsyncSession,
     payload: LoanTransactionLinkUpsertRequest,
+) -> LoanAccount:
+    if payload.loan_account_id is not None:
+        account = await db_session.get(LoanAccount, payload.loan_account_id)
+        if account is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Loan account not found.",
+            )
+        return account
+
+    lender = _normalize_required_text(payload.lender)
+    product_name = _normalize_required_text(payload.product_name)
+    account = await db_session.scalar(
+        select(LoanAccount).where(
+            LoanAccount.lender == lender,
+            LoanAccount.product_name == product_name,
+        )
+    )
+    if account is not None:
+        return account
+
+    account = LoanAccount(
+        lender=lender,
+        product_name=product_name,
+    )
+    db_session.add(account)
+    await db_session.flush()
+    return account
+
+
+async def _resolve_metadata_account(
+    db_session: AsyncSession,
+    payload: LoanAccountMetadataUpdateRequest,
 ) -> LoanAccount:
     if payload.loan_account_id is not None:
         account = await db_session.get(LoanAccount, payload.loan_account_id)
@@ -457,7 +553,13 @@ async def _load_link_item(
         loan_account_id=account.id,
         lender=account.lender,
         product_name=account.product_name,
-        display_name=_display_name(account.lender, account.product_name),
+        display_name_user=account.display_name_user,
+        display_name=_display_name(
+            account.lender,
+            account.product_name,
+            account.display_name_user,
+        ),
+        loan_kind=account.loan_kind or "unknown",
         repayment_type=link.repayment_type,
         source=link.source,
         memo=link.memo,
@@ -485,7 +587,13 @@ def _build_account_candidate(
         loan_account_id=account.id if account is not None else None,
         lender=lender,
         product_name=product_name,
-        display_name=_display_name(lender, product_name),
+        display_name_user=account.display_name_user if account is not None else None,
+        display_name=_display_name(
+            lender,
+            product_name,
+            account.display_name_user if account is not None else None,
+        ),
+        loan_kind=account.loan_kind if account is not None and account.loan_kind else "unknown",
         latest_snapshot_date=latest_snapshot_date
         if isinstance(latest_snapshot_date, date)
         else None,
@@ -500,7 +608,13 @@ def _account_key(lender: str, product_name: str) -> tuple[str, str]:
     return (lender, product_name)
 
 
-def _display_name(lender: str, product_name: str) -> str:
+def _display_name(
+    lender: str,
+    product_name: str,
+    display_name_user: str | None = None,
+) -> str:
+    if display_name_user:
+        return display_name_user
     return f"{lender} {product_name}"
 
 
@@ -512,3 +626,8 @@ def _normalize_required_text(value: str | None) -> str:
             detail="lender and product_name must not be blank.",
         )
     return normalized
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    normalized = (value or "").strip()
+    return normalized or None

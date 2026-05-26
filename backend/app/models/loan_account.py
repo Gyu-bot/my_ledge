@@ -17,3 +17,5 @@ class LoanAccount(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     lender: Mapped[str] = mapped_column(String(50), nullable=False)
     product_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    display_name_user: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    loan_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)

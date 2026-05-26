@@ -97,12 +97,21 @@ export interface TransactionBulkUpdateRequest {
 }
 
 export type LoanRepaymentType = 'principal' | 'interest' | 'mixed' | 'unknown'
+export type LoanKind =
+  | 'unknown'
+  | 'overdraft'
+  | 'equal_principal_interest'
+  | 'equal_principal'
+  | 'bullet'
+  | 'other'
 
 export interface LoanAccountCandidate {
   loan_account_id: number | null
   lender: string
   product_name: string
+  display_name_user: string | null
   display_name: string
+  loan_kind: LoanKind
   latest_snapshot_date: string | null
   latest_balance: string | null
   latest_interest_rate: string | null
@@ -121,6 +130,14 @@ export interface LoanTransactionLinkBulkRequest {
   memo?: string | null
 }
 
+export interface LoanAccountMetadataUpdateRequest {
+  loan_account_id?: number | null
+  lender?: string | null
+  product_name?: string | null
+  display_name_user?: string | null
+  loan_kind: LoanKind
+}
+
 export interface LoanTransactionLinkBulkResponse {
   updated: number
 }
@@ -132,7 +149,9 @@ export interface LoanTransactionLinkItem {
   loan_account_id: number
   lender: string
   product_name: string
+  display_name_user: string | null
   display_name: string
+  loan_kind: LoanKind
   repayment_type: LoanRepaymentType
   source: 'manual' | 'auto'
   memo: string | null

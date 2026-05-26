@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.loan_mapping import (
+    LoanAccountCandidateResponse,
+    LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
     LoanLinkStateFilter,
     LoanTransactionLinkBulkUpsertRequest,
@@ -22,6 +24,7 @@ from app.services.loan_mapping_service import (
     get_transaction_loan_link,
     list_loan_accounts,
     list_loan_transaction_mappings,
+    update_loan_account_metadata,
     upsert_transaction_loan_link,
 )
 
@@ -33,6 +36,18 @@ async def get_loan_accounts(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> LoanAccountsResponse:
     return await list_loan_accounts(db_session)
+
+
+@router.patch(
+    "/loan-accounts",
+    response_model=LoanAccountCandidateResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_loan_account_metadata(
+    payload: LoanAccountMetadataUpdateRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LoanAccountCandidateResponse:
+    return await update_loan_account_metadata(db_session, payload)
 
 
 @router.get(
