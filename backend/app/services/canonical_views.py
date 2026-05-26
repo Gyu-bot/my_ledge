@@ -4,6 +4,7 @@ from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text, Time, cas
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Select
 
+from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
@@ -40,6 +41,30 @@ def build_transactions_effective_select(
     include_deleted: bool = False,
     include_merged: bool = False,
 ) -> Select:
+    latest_loan_date_subquery = (
+        select(
+            Loan.lender.label("lender"),
+            Loan.product_name.label("product_name"),
+            func.max(Loan.snapshot_date).label("latest_snapshot_date"),
+        )
+        .group_by(Loan.lender, Loan.product_name)
+        .subquery()
+    )
+    latest_loan_subquery = (
+        select(
+            Loan.lender.label("lender"),
+            Loan.product_name.label("product_name"),
+            Loan.start_date.label("loan_start_date"),
+            Loan.maturity_date.label("loan_maturity_date"),
+        )
+        .join(
+            latest_loan_date_subquery,
+            (Loan.lender == latest_loan_date_subquery.c.lender)
+            & (Loan.product_name == latest_loan_date_subquery.c.product_name)
+            & (Loan.snapshot_date == latest_loan_date_subquery.c.latest_snapshot_date),
+        )
+        .subquery()
+    )
     query = select(
         Transaction.id.label("id"),
         Transaction.date.label("date"),
@@ -73,6 +98,8 @@ def build_transactions_effective_select(
             LoanAccount.lender + " " + LoanAccount.product_name,
         ).label("loan_display_name"),
         LoanAccount.loan_kind.label("loan_kind"),
+        latest_loan_subquery.c.loan_start_date.label("loan_start_date"),
+        latest_loan_subquery.c.loan_maturity_date.label("loan_maturity_date"),
         LoanTransactionLink.repayment_type.label("loan_repayment_type"),
         LoanTransactionLink.memo.label("loan_link_memo"),
         Transaction.is_deleted.label("is_deleted"),
@@ -87,6 +114,10 @@ def build_transactions_effective_select(
     ).outerjoin(
         LoanAccount,
         LoanAccount.id == LoanTransactionLink.loan_account_id,
+    ).outerjoin(
+        latest_loan_subquery,
+        (latest_loan_subquery.c.lender == LoanAccount.lender)
+        & (latest_loan_subquery.c.product_name == LoanAccount.product_name),
     )
     if not include_deleted:
         query = query.where(Transaction.is_deleted.is_(False))
@@ -170,6 +201,8 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("loan_product_name", String(length=200), nullable=True),
             SchemaColumnDefinition("loan_display_name", String(length=200), nullable=True),
             SchemaColumnDefinition("loan_kind", String(length=40), nullable=True),
+            SchemaColumnDefinition("loan_start_date", Date(), nullable=True),
+            SchemaColumnDefinition("loan_maturity_date", Date(), nullable=True),
             SchemaColumnDefinition("loan_repayment_type", String(length=20), nullable=True),
             SchemaColumnDefinition("loan_link_memo", Text(), nullable=True),
             SchemaColumnDefinition("is_deleted", Boolean(), nullable=False),

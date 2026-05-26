@@ -39,6 +39,8 @@ async def test_loan_accounts_endpoint_returns_snapshot_candidates(
                 product_name="주택담보대출",
                 balance="210000000.00",
                 interest_rate="3.50",
+                start_date=date(2021, 6, 1),
+                maturity_date=date(2051, 5, 31),
             ),
             Loan(
                 snapshot_date=date(2026, 5, 31),
@@ -46,6 +48,8 @@ async def test_loan_accounts_endpoint_returns_snapshot_candidates(
                 product_name="주택담보대출",
                 balance="209500000.00",
                 interest_rate="3.45",
+                start_date=date(2021, 6, 1),
+                maturity_date=date(2051, 5, 31),
             ),
         ]
     )
@@ -62,6 +66,8 @@ async def test_loan_accounts_endpoint_returns_snapshot_candidates(
             "display_name_user": None,
             "display_name": "국민은행 주택담보대출",
             "loan_kind": "unknown",
+            "loan_start_date": "2021-06-01",
+            "loan_maturity_date": "2051-05-31",
             "latest_snapshot_date": "2026-05-31",
             "latest_balance": "209500000.00",
             "latest_interest_rate": "3.45",

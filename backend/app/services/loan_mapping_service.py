@@ -230,6 +230,8 @@ async def _load_latest_loan_snapshots(
             Loan.snapshot_date,
             Loan.balance,
             Loan.interest_rate,
+            Loan.start_date,
+            Loan.maturity_date,
         )
         .join(
             latest_date_subquery,
@@ -246,8 +248,18 @@ async def _load_latest_loan_snapshots(
             "latest_snapshot_date": snapshot_date,
             "latest_balance": balance,
             "latest_interest_rate": interest_rate,
+            "loan_start_date": start_date,
+            "loan_maturity_date": maturity_date,
         }
-        for lender, product_name, snapshot_date, balance, interest_rate in result.all()
+        for (
+            lender,
+            product_name,
+            snapshot_date,
+            balance,
+            interest_rate,
+            start_date,
+            maturity_date,
+        ) in result.all()
     ]
 
 
@@ -263,6 +275,8 @@ async def _load_latest_loan_snapshot_for_key(
             Loan.snapshot_date,
             Loan.balance,
             Loan.interest_rate,
+            Loan.start_date,
+            Loan.maturity_date,
         )
         .where(Loan.lender == lender)
         .where(Loan.product_name == product_name)
@@ -272,13 +286,23 @@ async def _load_latest_loan_snapshot_for_key(
     row = result.one_or_none()
     if row is None:
         return None
-    snapshot_lender, snapshot_product_name, snapshot_date, balance, interest_rate = row
+    (
+        snapshot_lender,
+        snapshot_product_name,
+        snapshot_date,
+        balance,
+        interest_rate,
+        start_date,
+        maturity_date,
+    ) = row
     return {
         "lender": snapshot_lender,
         "product_name": snapshot_product_name,
         "latest_snapshot_date": snapshot_date,
         "latest_balance": balance,
         "latest_interest_rate": interest_rate,
+        "loan_start_date": start_date,
+        "loan_maturity_date": maturity_date,
     }
 
 
@@ -578,10 +602,14 @@ def _build_account_candidate(
     latest_snapshot_date = None
     latest_balance = None
     latest_interest_rate = None
+    loan_start_date = None
+    loan_maturity_date = None
     if snapshot is not None:
         latest_snapshot_date = snapshot["latest_snapshot_date"]
         latest_balance = snapshot["latest_balance"]
         latest_interest_rate = snapshot["latest_interest_rate"]
+        loan_start_date = snapshot["loan_start_date"]
+        loan_maturity_date = snapshot["loan_maturity_date"]
 
     return LoanAccountCandidateResponse(
         loan_account_id=account.id if account is not None else None,
@@ -594,6 +622,10 @@ def _build_account_candidate(
             account.display_name_user if account is not None else None,
         ),
         loan_kind=account.loan_kind if account is not None and account.loan_kind else "unknown",
+        loan_start_date=loan_start_date if isinstance(loan_start_date, date) else None,
+        loan_maturity_date=loan_maturity_date
+        if isinstance(loan_maturity_date, date)
+        else None,
         latest_snapshot_date=latest_snapshot_date
         if isinstance(latest_snapshot_date, date)
         else None,

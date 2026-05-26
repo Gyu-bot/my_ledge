@@ -378,6 +378,8 @@
     - `display_name_user`
     - `display_name`
     - `loan_kind`
+    - `loan_start_date`
+    - `loan_maturity_date`
     - `latest_snapshot_date`
     - `latest_balance`
     - `latest_interest_rate`
@@ -387,6 +389,7 @@
   - does not directly expose or depend on `loans.id`
   - `display_name` prefers user-managed `display_name_user`
   - `loan_kind` is one of `unknown`, `overdraft`, `equal_principal_interest`, `equal_principal`, `bullet`, `other`
+  - `loan_start_date` and `loan_maturity_date` come from the latest `loans` snapshot for the same `lender + product_name`
 
 #### `PATCH /api/v1/loan-accounts`
 
@@ -870,7 +873,7 @@ Columns:
   - `description`, `merchant`
   - `amount`, `currency`, `payment_method`
   - `cost_kind`, `fixed_cost_necessity`, `cost_classification_source`, `memo`
-  - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_display_name`, `loan_kind`, `loan_repayment_type`, `loan_link_memo`
+  - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_display_name`, `loan_kind`, `loan_start_date`, `loan_maturity_date`, `loan_repayment_type`, `loan_link_memo`
   - `is_deleted`, `merged_into_id`, `source`, `created_at`, `updated_at`
 - derived fields:
   - `effective_category_major = coalesce(category_major_user, category_major)`

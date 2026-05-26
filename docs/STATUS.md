@@ -2,11 +2,11 @@
 
 ## Current State
 - **Phase:** 안정화 follow-up 유지, 대출 상환 거래 매핑 별도 운영 화면 분리 완료
-- **Last Worker:** Codex (2026-05-26T20:30+0900, 대출 계좌 관리 섹션 및 대출 성격 추가)
+- **Last Worker:** Codex (2026-05-26T20:42+0900, 대출 신규일/만기일 노출 추가)
 - **Branch:** main
 
 ## Completed
-- [x] 대출 계좌 관리 섹션 및 대출 성격 추가: `loan_accounts.display_name_user`, `loan_accounts.loan_kind` 저장 필드, `PATCH /api/v1/loan-accounts`, `loan_display_name`/`loan_kind` canonical view 컬럼, `/operations/loan-mapping` 별도 `대출 계좌 관리` 섹션을 추가하고 연결 바에서는 거래-대출 연결만 담당하도록 분리
+- [x] 대출 계좌 관리 섹션 및 대출 성격/만기 정보 추가: `loan_accounts.display_name_user`, `loan_accounts.loan_kind` 저장 필드, `PATCH /api/v1/loan-accounts`, `loan_display_name`/`loan_kind`/`loan_start_date`/`loan_maturity_date` canonical view 컬럼, `/operations/loan-mapping` 별도 `대출 계좌 관리` 섹션을 추가하고 최신 스냅샷의 신규일/만기일을 함께 표시
 - [x] 자동분류 카테고리 규칙 입력 UX 보강: `/operations/auto-classification` 의 고정비/변동비 규칙 대분류/소분류 입력을 거래 필터 옵션 기반 dropdown으로 전환하고, 대분류 선택 시 소분류 옵션을 해당 대분류 기준으로 제한
 - [x] 고정비 월별 추이 추가: `GET /api/v1/analytics/fixed-cost-trend`, `vw_fixed_cost_monthly_summary`, 지출 분석 `/analysis/spending` 월별 고정비/변동비 및 필수/비필수 고정비 stacked bar, frontend/backend 테스트와 API/canonical 문서 반영
 - [x] 자동분류/대출 자동연결 규칙 추가: `category_classification_rules`, `loan_merchant_rules`, `auto_classification_settings`, `transactions.cost_classification_source`, `loan_transaction_links.source` 추가, `GET/PATCH /api/v1/auto-classification/settings`, category rule CRUD/apply, loan merchant rule CRUD/apply API, 업로드 후 자동 적용 옵션, `/operations/auto-classification` 화면과 테스트/문서 반영

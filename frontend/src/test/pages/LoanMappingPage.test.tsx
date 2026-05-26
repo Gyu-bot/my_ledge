@@ -35,6 +35,8 @@ vi.mock('../../hooks/useTransactions', () => ({
           display_name_user: null,
           display_name: '국민은행 주택담보대출',
           loan_kind: 'unknown',
+          loan_start_date: '2021-06-01',
+          loan_maturity_date: '2051-05-31',
           latest_snapshot_date: '2026-05-31',
           latest_balance: '209500000.00',
           latest_interest_rate: '3.45',
@@ -125,6 +127,8 @@ beforeEach(() => {
     display_name_user: '우리집 주담대',
     display_name: '우리집 주담대',
     loan_kind: 'equal_principal_interest',
+    loan_start_date: '2021-06-01',
+    loan_maturity_date: '2051-05-31',
     latest_snapshot_date: '2026-05-31',
     latest_balance: '209500000.00',
     latest_interest_rate: '3.45',
@@ -140,6 +144,8 @@ describe('LoanMappingPage', () => {
     wrap(<LoanMappingPage />)
 
     expect(screen.getAllByText('국민은행 주택담보대출').length).toBeGreaterThan(0)
+    expect(screen.getByText(/신규 2021-06-01/)).toBeInTheDocument()
+    expect(screen.getByText(/만기 2051-05-31/)).toBeInTheDocument()
     expect(screen.getAllByText('원리금').length).toBeGreaterThan(0)
     expect(screen.getAllByText('미연결').length).toBeGreaterThan(0)
   })

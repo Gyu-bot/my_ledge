@@ -112,6 +112,8 @@ export interface LoanAccountCandidate {
   display_name_user: string | null
   display_name: string
   loan_kind: LoanKind
+  loan_start_date: string | null
+  loan_maturity_date: string | null
   latest_snapshot_date: string | null
   latest_balance: string | null
   latest_interest_rate: string | null

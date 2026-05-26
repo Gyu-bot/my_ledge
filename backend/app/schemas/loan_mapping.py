@@ -24,6 +24,8 @@ class LoanAccountCandidateResponse(BaseModel):
     display_name_user: str | None = None
     display_name: str
     loan_kind: LoanKind = "unknown"
+    loan_start_date: date | None
+    loan_maturity_date: date | None
     latest_snapshot_date: date | None
     latest_balance: Decimal | None
     latest_interest_rate: Decimal | None

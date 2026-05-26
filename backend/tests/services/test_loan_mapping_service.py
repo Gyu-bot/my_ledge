@@ -51,6 +51,8 @@ async def test_list_loan_accounts_dedupes_snapshot_rows_by_lender_and_product(
                 product_name="주택담보대출",
                 balance="210000000.00",
                 interest_rate="3.50",
+                start_date=date(2021, 6, 1),
+                maturity_date=date(2051, 5, 31),
             ),
             Loan(
                 snapshot_date=date(2026, 5, 31),
@@ -58,6 +60,8 @@ async def test_list_loan_accounts_dedupes_snapshot_rows_by_lender_and_product(
                 product_name="주택담보대출",
                 balance="209500000.00",
                 interest_rate="3.45",
+                start_date=date(2021, 6, 1),
+                maturity_date=date(2051, 5, 31),
             ),
             Loan(
                 snapshot_date=date(2026, 5, 31),
@@ -80,6 +84,8 @@ async def test_list_loan_accounts_dedupes_snapshot_rows_by_lender_and_product(
     assert response.items[0].loan_kind == "unknown"
     assert response.items[0].latest_snapshot_date == date(2026, 5, 31)
     assert response.items[0].latest_balance == Decimal("209500000.00")
+    assert response.items[0].loan_start_date == date(2021, 6, 1)
+    assert response.items[0].loan_maturity_date == date(2051, 5, 31)
 
 
 async def test_upsert_transaction_loan_link_creates_account_from_lender_product(

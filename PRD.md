@@ -491,6 +491,7 @@ GET /api/v1/loan-accounts
   # loan_accounts + loans snapshot pair를 lender/product_name 기준으로 dedupe
   # display_name은 사용자가 지정한 display_name_user가 있으면 그 값을 우선 사용
   # loan_kind는 overdraft/equal_principal_interest/equal_principal/bullet/other/unknown 중 하나
+  # loan_start_date, loan_maturity_date는 최신 loans snapshot의 신규일/만기일을 노출
 
 PATCH /api/v1/loan-accounts
 Body:

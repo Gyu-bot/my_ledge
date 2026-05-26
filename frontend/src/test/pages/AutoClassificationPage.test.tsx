@@ -116,6 +116,8 @@ beforeEach(() => {
           display_name_user: null,
           display_name: '국민은행 주택담보대출',
           loan_kind: 'unknown',
+          loan_start_date: '2021-06-01',
+          loan_maturity_date: '2051-05-31',
           latest_snapshot_date: '2026-05-24',
           latest_balance: '200000000.00',
           latest_interest_rate: '3.4',

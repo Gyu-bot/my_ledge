@@ -338,6 +338,13 @@ export function LoanMappingPage() {
                 display_name_user: account.display_name_user ?? '',
                 loan_kind: account.loan_kind,
               }
+              const loanMeta = [
+                account.latest_snapshot_date ? `스냅샷 ${account.latest_snapshot_date}` : '스냅샷 없음',
+                account.loan_start_date ? `신규 ${account.loan_start_date}` : null,
+                account.loan_maturity_date ? `만기 ${account.loan_maturity_date}` : null,
+                account.latest_balance ? `잔액 ₩${formatKRW(Number(account.latest_balance))}` : null,
+                account.latest_interest_rate ? `${account.latest_interest_rate}%` : null,
+              ].filter(Boolean).join(' · ')
               return (
                 <div key={key} className="px-4 py-3 flex flex-wrap items-end gap-2">
                   <div className="min-w-44 flex-1">
@@ -345,9 +352,7 @@ export function LoanMappingPage() {
                       {account.lender} {account.product_name}
                     </div>
                     <div className="text-micro text-text-ghost mt-0.5">
-                      {account.latest_snapshot_date ?? '스냅샷 없음'}
-                      {account.latest_balance ? ` · 잔액 ₩${formatKRW(Number(account.latest_balance))}` : ''}
-                      {account.latest_interest_rate ? ` · ${account.latest_interest_rate}%` : ''}
+                      {loanMeta}
                     </div>
                   </div>
                   <label className="flex flex-col gap-1">
