@@ -55,6 +55,10 @@
 - `POST /api/v1/auto-classification/loan-merchant-rules`
 - `DELETE /api/v1/auto-classification/loan-merchant-rules/{rule_id}`
 - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
+- `GET /api/v1/auto-classification/recurring-category-rules`
+- `POST /api/v1/auto-classification/recurring-category-rules`
+- `DELETE /api/v1/auto-classification/recurring-category-rules/{rule_id}`
+- `POST /api/v1/auto-classification/apply/recurring-category-rules`
 - `POST /api/v1/upload`
 - `POST /api/v1/data/reset`
 - `POST /api/v1/transactions`
@@ -94,6 +98,29 @@
 - Notes:
   - built from `Base.metadata`
   - canonical views come from `app.services.canonical_views.CANONICAL_VIEWS`
+
+#### `GET /api/v1/canonical-views/dashboard`
+
+- Purpose: actual row values from P0/P0.5 canonical views for the frontend canonical dashboard
+- Auth: API key required
+- Request query:
+  - `months`: integer, default `12`, range `1..36`
+  - `merchant_limit`: integer, default `10`, range `1..50`
+  - `queue_limit`: integer, default `10`, range `1..50`
+- Response model: `CanonicalViewsDashboardResponse`
+- Response shape:
+  - `monthly_cashflow[]`: rows from `vw_monthly_cashflow`, recent months in ascending display order
+  - `true_spendable_monthly[]`: rows from `vw_true_spendable_monthly`, enriched with optional current-month income estimates
+  - `loan_repayment_monthly[]`: recent rows from `vw_loan_repayment_monthly`
+  - `merchant_monthly_baseline[]`: top recent rows from `vw_merchant_monthly_baseline`
+  - `unclassified_work_queue[]`: top priority rows from `vw_unclassified_work_queue`
+- Notes:
+  - view names are hardcoded in the service; this endpoint is not an arbitrary SQL execution surface
+  - intended consumer is `/operations/canonical-views`
+  - for the current calendar month only, if observed income is less than 50% of the recent income baseline, true-spendable rows keep observed fields and add `income_basis='estimated'`, `estimated_income_total`, `estimated_spendable_before_variable_spend`, and `estimated_remaining_after_variable_spend`
+  - the income baseline uses up to 6 closed months, removes months outside ±30% of the median as outliers, and averages the remaining months when at least 3 remain; otherwise it falls back to the 6-month median
+  - `income_estimate_source`, `income_estimate_month_count`, and `excluded_income_periods` explain the estimate source and excluded months
+  - estimated fields are API-level interpretation helpers, not DB view columns
 
 ### Upload / Operations
 
@@ -684,6 +711,7 @@
   - `recurring_payment_kind`: resolved group value when all transactions in the group share one manual value
   - `installment_count`
   - `monthly_recurring_count`
+  - `not_recurring_count`
   - `unclassified_count`
   - `transaction_ids`: ids used by the operations recurring-classification screen to bulk-update a recurring group
 
@@ -827,10 +855,11 @@
 #### `GET /api/v1/auto-classification/settings`
 
 - Auth: API key required
-- Purpose: read upload auto-apply toggles for category and loan merchant rules
+- Purpose: read upload auto-apply toggles for category, recurring category, and loan merchant rules
 - Response fields:
   - `apply_cost_rules_on_upload`
   - `apply_loan_rules_on_upload`
+  - `apply_recurring_rules_on_upload`
 
 #### `PATCH /api/v1/auto-classification/settings`
 
@@ -857,6 +886,17 @@
   - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
 - Rule fields: exact `merchant`, `loan_account_id`, `repayment_type`, optional `memo`
 - Apply behavior: creates or updates only missing/auto loan links; `loan_transaction_links.source='manual'` is preserved
+
+#### Recurring Category Auto-Classification Rules
+
+- Endpoints:
+  - `GET /api/v1/auto-classification/recurring-category-rules`
+  - `POST /api/v1/auto-classification/recurring-category-rules`
+  - `DELETE /api/v1/auto-classification/recurring-category-rules/{rule_id}`
+  - `POST /api/v1/auto-classification/apply/recurring-category-rules`
+- Rule fields: `category_major`, optional `category_minor`, `recurring_payment_kind`
+- Supported recurring values: `installment`, `monthly_recurring`, `not_recurring`
+- Apply behavior: matches effective category values and updates only rows whose `recurring_payment_kind` is currently empty. A transaction is eligible only when its merchant has at least 2 active months, at least 2 active dates, and amount coefficient of variation `<= 0.5`, or when the transaction already has `cost_kind='fixed'`.
 
 ## Canonical Views
 
@@ -920,7 +960,7 @@ Documented columns:
 
 ### Advisor canonical read model expansion
 
-These views are live DB read surfaces created by Alembic and registered in `CANONICAL_VIEWS` for schema documentation. They are intended for readonly SQL and external agents; they do not replace the public analytics API.
+These views are live DB read surfaces created by Alembic and registered in `CANONICAL_VIEWS` for schema documentation. The main P0/P0.5 values are also exposed through `GET /api/v1/canonical-views/dashboard` for the frontend canonical dashboard; arbitrary SQL access remains limited to readonly DB users.
 
 Direction:
 
@@ -942,7 +982,7 @@ Live P0/P0.5 views:
 - `vw_loan_repayment_monthly`: monthly repayment totals by `loan_account_id`, display name, lender, product, loan kind, maturity date, and repayment type.
 - `vw_true_spendable_monthly`: monthly spendable amount after loan repayment and fixed commitments, with `spendable_before_variable_spend` separated from `remaining_after_variable_spend`.
 - `vw_merchant_monthly_baseline`: canonical `merchant` monthly spend/count plus trailing 3-month closed-month baseline and delta fields.
-- `vw_unclassified_work_queue`: prioritized transactions missing cost classification, fixed-cost necessity, recurring kind, or likely loan-link review. Priority combines analysis impact, amount, and recurrence likelihood.
+- `vw_unclassified_work_queue`: prioritized transactions missing cost classification, fixed-cost necessity, monthly recurring kind, or likely loan-link review. Recurring review requires a monthly signal, not just two transactions at the same merchant: at least 2 active months, at least 2 active dates, and merchant amount coefficient of variation `<= 0.5`. Same-day split purchases are therefore not recurring-classification candidates. Priority combines analysis impact, amount, and recurrence likelihood.
 
 Planned P1/P2 views:
 

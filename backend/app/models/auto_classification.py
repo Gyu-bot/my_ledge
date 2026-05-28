@@ -40,6 +40,22 @@ class LoanMerchantRule(TimestampMixin, Base):
     memo: Mapped[str | None] = mapped_column(Text)
 
 
+class RecurringCategoryRule(TimestampMixin, Base):
+    __tablename__ = "recurring_category_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "category_major",
+            "category_minor",
+            name="uq_recurring_category_rules_category",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_major: Mapped[str] = mapped_column(String(50), nullable=False)
+    category_minor: Mapped[str | None] = mapped_column(String(50))
+    recurring_payment_kind: Mapped[str] = mapped_column(String(30), nullable=False)
+
+
 class AutoClassificationSettings(Base):
     __tablename__ = "auto_classification_settings"
 
@@ -51,6 +67,12 @@ class AutoClassificationSettings(Base):
         server_default=false(),
     )
     apply_loan_rules_on_upload: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    apply_recurring_rules_on_upload: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,

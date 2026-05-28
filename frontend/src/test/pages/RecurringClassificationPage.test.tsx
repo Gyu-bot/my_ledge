@@ -55,6 +55,7 @@ beforeEach(() => {
           recurring_payment_kind: null,
           installment_count: 0,
           monthly_recurring_count: 0,
+          not_recurring_count: 0,
           unclassified_count: 2,
           transaction_ids: [11, 12],
         },
@@ -70,6 +71,7 @@ beforeEach(() => {
           recurring_payment_kind: null,
           installment_count: 0,
           monthly_recurring_count: 0,
+          not_recurring_count: 0,
           unclassified_count: 3,
           transaction_ids: [21, 22, 23],
         },
@@ -114,6 +116,21 @@ describe('RecurringClassificationPage', () => {
       })
     })
     expect(await screen.findByText('2개 그룹 분류 저장 완료')).toBeInTheDocument()
+  })
+
+  it('can explicitly mark a candidate as not recurring', async () => {
+    wrap(<RecurringClassificationPage />)
+
+    fireEvent.change(screen.getByLabelText('통신사 반복결제 분류'), {
+      target: { value: 'not_recurring' },
+    })
+
+    await waitFor(() => {
+      expect(bulkUpdateTransactionsMock).toHaveBeenCalledWith({
+        ids: [11, 12],
+        recurring_payment_kind: 'not_recurring',
+      })
+    })
   })
 
   it('disables classification controls in read-only mode', () => {

@@ -7,16 +7,19 @@ from pydantic import BaseModel, Field, model_validator
 CostKind = Literal["fixed", "variable"]
 FixedCostNecessity = Literal["essential", "discretionary"]
 LoanRepaymentType = Literal["principal", "interest", "mixed", "unknown"]
+RecurringPaymentKind = Literal["installment", "monthly_recurring", "not_recurring"]
 
 
 class AutoClassificationSettingsResponse(BaseModel):
     apply_cost_rules_on_upload: bool
     apply_loan_rules_on_upload: bool
+    apply_recurring_rules_on_upload: bool
 
 
 class AutoClassificationSettingsPatchRequest(BaseModel):
     apply_cost_rules_on_upload: bool | None = None
     apply_loan_rules_on_upload: bool | None = None
+    apply_recurring_rules_on_upload: bool | None = None
 
 
 class CategoryClassificationRuleRequest(BaseModel):
@@ -68,6 +71,25 @@ class LoanMerchantRuleResponse(BaseModel):
 
 class LoanMerchantRuleListResponse(BaseModel):
     items: list[LoanMerchantRuleResponse]
+
+
+class RecurringCategoryRuleRequest(BaseModel):
+    category_major: str = Field(min_length=1, max_length=50)
+    category_minor: str | None = Field(default=None, max_length=50)
+    recurring_payment_kind: RecurringPaymentKind
+
+
+class RecurringCategoryRuleResponse(BaseModel):
+    id: int
+    category_major: str
+    category_minor: str | None
+    recurring_payment_kind: RecurringPaymentKind
+    created_at: datetime
+    updated_at: datetime
+
+
+class RecurringCategoryRuleListResponse(BaseModel):
+    items: list[RecurringCategoryRuleResponse]
 
 
 class AutoClassificationApplyResponse(BaseModel):

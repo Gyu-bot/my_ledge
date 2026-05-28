@@ -112,6 +112,7 @@ class RecurringPaymentItem(BaseModel):
     recurring_payment_kind: str | None
     installment_count: int
     monthly_recurring_count: int
+    not_recurring_count: int
     unclassified_count: int
     transaction_ids: list[int]
 

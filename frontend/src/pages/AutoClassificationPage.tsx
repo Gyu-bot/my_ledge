@@ -6,17 +6,20 @@ import { useChromeContext } from '../components/layout/chromeContext'
 import {
   useApplyCategoryClassificationRules,
   useApplyLoanMerchantRules,
+  useApplyRecurringCategoryRules,
   useAutoClassificationSettings,
   useCategoryClassificationRules,
   useLoanAccounts,
   useLoanMerchantRules,
   usePatchAutoClassificationSettings,
+  useRecurringCategoryRules,
   useTransactionFilterOptions,
   useUpsertCategoryClassificationRule,
   useUpsertLoanMerchantRule,
+  useUpsertRecurringCategoryRule,
 } from '../hooks/useTransactions'
 import { useWriteAccess } from '../hooks/useWriteAccess'
-import type { LoanRepaymentType } from '../types/transaction'
+import type { LoanRepaymentType, RecurringPaymentKind } from '../types/transaction'
 
 type CostKind = 'fixed' | 'variable'
 type Necessity = '' | 'essential' | 'discretionary'
@@ -30,6 +33,12 @@ const REPAYMENT_LABEL: Record<LoanRepaymentType, string> = {
   unknown: '미정',
 }
 
+const RECURRING_KIND_LABEL: Record<RecurringPaymentKind, string> = {
+  installment: '할부',
+  monthly_recurring: '매월 반복',
+  not_recurring: '반복 아님',
+}
+
 export function AutoClassificationPage() {
   const hasWrite = useWriteAccess()
   const { setMetaBadge } = useChromeContext()
@@ -37,12 +46,15 @@ export function AutoClassificationPage() {
   const filterOptions = useTransactionFilterOptions()
   const categoryRules = useCategoryClassificationRules()
   const loanRules = useLoanMerchantRules()
+  const recurringRules = useRecurringCategoryRules()
   const loanAccounts = useLoanAccounts()
   const patchSettings = usePatchAutoClassificationSettings()
   const upsertCategoryRule = useUpsertCategoryClassificationRule()
   const applyCategoryRules = useApplyCategoryClassificationRules()
   const upsertLoanRule = useUpsertLoanMerchantRule()
   const applyLoanRules = useApplyLoanMerchantRules()
+  const upsertRecurringRule = useUpsertRecurringCategoryRule()
+  const applyRecurringRules = useApplyRecurringCategoryRules()
 
   const [categoryMajor, setCategoryMajor] = useState('')
   const [categoryMinor, setCategoryMinor] = useState('')
@@ -52,12 +64,16 @@ export function AutoClassificationPage() {
   const [loanAccountId, setLoanAccountId] = useState('')
   const [repaymentType, setRepaymentType] = useState<LoanRepaymentType>('mixed')
   const [loanMemo, setLoanMemo] = useState('')
+  const [recurringCategoryMajor, setRecurringCategoryMajor] = useState('')
+  const [recurringCategoryMinor, setRecurringCategoryMinor] = useState('')
+  const [recurringKind, setRecurringKind] = useState<RecurringPaymentKind>('monthly_recurring')
   const [alert, setAlert] = useState<{ variant: 'success' | 'error'; title: string; description?: string } | null>(null)
 
   const categoryMajorOptions = Array.from(
     new Set([
       ...(filterOptions.data?.category_options ?? []),
       ...(categoryRules.data?.items.map((rule) => rule.category_major) ?? []),
+      ...(recurringRules.data?.items.map((rule) => rule.category_major) ?? []),
     ]),
   ).sort((left, right) => left.localeCompare(right, 'ko'))
   const minorOptionsByMajor = filterOptions.data?.category_minor_options_by_major ?? {}
@@ -68,20 +84,38 @@ export function AutoClassificationPage() {
         .filter((rule) => !categoryMajor || rule.category_major === categoryMajor)
         .map((rule) => rule.category_minor)
         .filter((value): value is string => !!value) ?? []),
+      ...(recurringRules.data?.items
+        .filter((rule) => !categoryMajor || rule.category_major === categoryMajor)
+        .map((rule) => rule.category_minor)
+        .filter((value): value is string => !!value) ?? []),
+    ]),
+  ).sort((left, right) => left.localeCompare(right, 'ko'))
+  const recurringCategoryMinorOptions = Array.from(
+    new Set([
+      ...(recurringCategoryMajor ? (minorOptionsByMajor[recurringCategoryMajor] ?? []) : (filterOptions.data?.category_minor_options ?? [])),
+      ...(recurringRules.data?.items
+        .filter((rule) => !recurringCategoryMajor || rule.category_major === recurringCategoryMajor)
+        .map((rule) => rule.category_minor)
+        .filter((value): value is string => !!value) ?? []),
     ]),
   ).sort((left, right) => left.localeCompare(right, 'ko'))
 
   useEffect(() => {
-    const total = (categoryRules.data?.items.length ?? 0) + (loanRules.data?.items.length ?? 0)
+    const total = (categoryRules.data?.items.length ?? 0)
+      + (loanRules.data?.items.length ?? 0)
+      + (recurringRules.data?.items.length ?? 0)
     setMetaBadge(
       <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
         {total}개 규칙
       </span>,
     )
     return () => setMetaBadge(null)
-  }, [categoryRules.data, loanRules.data, setMetaBadge])
+  }, [categoryRules.data, loanRules.data, recurringRules.data, setMetaBadge])
 
-  async function toggleSetting(field: 'apply_cost_rules_on_upload' | 'apply_loan_rules_on_upload', value: boolean) {
+  async function toggleSetting(
+    field: 'apply_cost_rules_on_upload' | 'apply_loan_rules_on_upload' | 'apply_recurring_rules_on_upload',
+    value: boolean,
+  ) {
     try {
       await patchSettings.mutateAsync({ [field]: value })
       setAlert({ variant: 'success', title: '자동 적용 옵션 저장 완료' })
@@ -147,7 +181,33 @@ export function AutoClassificationPage() {
     }
   }
 
-  const isLoading = settings.isLoading || categoryRules.isLoading || loanRules.isLoading
+  async function saveRecurringRule() {
+    if (!recurringCategoryMajor.trim()) return
+    try {
+      await upsertRecurringRule.mutateAsync({
+        category_major: recurringCategoryMajor.trim(),
+        category_minor: recurringCategoryMinor.trim() || null,
+        recurring_payment_kind: recurringKind,
+      })
+      setRecurringCategoryMajor('')
+      setRecurringCategoryMinor('')
+      setRecurringKind('monthly_recurring')
+      setAlert({ variant: 'success', title: '반복결제 카테고리 규칙 저장 완료' })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '반복결제 카테고리 규칙 저장 실패', description: String(e) })
+    }
+  }
+
+  async function applyExistingRecurringRules() {
+    try {
+      const result = await applyRecurringRules.mutateAsync()
+      setAlert({ variant: 'success', title: '반복결제 규칙 일괄 적용 완료', description: `${result.updated}건 반영` })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '반복결제 규칙 일괄 적용 실패', description: String(e) })
+    }
+  }
+
+  const isLoading = settings.isLoading || categoryRules.isLoading || loanRules.isLoading || recurringRules.isLoading
   const disabled = !hasWrite
 
   return (
@@ -197,6 +257,17 @@ export function AutoClassificationPage() {
                 className="w-3 h-3 accent-accent disabled:opacity-40"
               />
               업로드 후 대출 거래처 규칙 자동 적용
+            </label>
+            <label className="flex items-center gap-2 text-caption text-text-secondary">
+              <input
+                type="checkbox"
+                aria-label="업로드 후 반복결제 규칙 자동 적용"
+                checked={settings.data?.apply_recurring_rules_on_upload ?? false}
+                disabled={disabled || patchSettings.isPending}
+                onChange={(event) => void toggleSetting('apply_recurring_rules_on_upload', event.target.checked)}
+                className="w-3 h-3 accent-accent disabled:opacity-40"
+              />
+              업로드 후 반복결제 규칙 자동 적용
             </label>
           </div>
         </div>
@@ -302,6 +373,102 @@ export function AutoClassificationPage() {
                 </table>
               </div>
             ) : <EmptyState message="등록된 고정비 규칙이 없습니다." />}
+          </section>
+
+          <section className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border-faint">
+              <div>
+                <span className="text-label font-semibold text-text-secondary">반복결제 카테고리 규칙</span>
+                <div className="text-micro text-text-ghost mt-0.5">반복 후보이거나 고정비인 거래만 카테고리 기준으로 반복결제 성격을 저장합니다.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void applyExistingRecurringRules()}
+                disabled={disabled || applyRecurringRules.isPending}
+                className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40"
+              >
+                반복결제 규칙 일괄 적용
+              </button>
+            </div>
+
+            <div className="px-4 py-3 flex flex-wrap items-end gap-2 border-b border-border-faint">
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">대분류</span>
+                <select
+                  aria-label="반복결제 대분류"
+                  className={`${INPUT_CLS} w-32`}
+                  value={recurringCategoryMajor}
+                  onChange={(event) => {
+                    setRecurringCategoryMajor(event.target.value)
+                    setRecurringCategoryMinor('')
+                  }}
+                >
+                  <option value="">— 선택 —</option>
+                  {categoryMajorOptions.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">소분류</span>
+                <select
+                  aria-label="반복결제 소분류"
+                  className={`${INPUT_CLS} w-32`}
+                  value={recurringCategoryMinor}
+                  disabled={!recurringCategoryMajor}
+                  onChange={(event) => setRecurringCategoryMinor(event.target.value)}
+                >
+                  <option value="">전체 소분류</option>
+                  {recurringCategoryMinorOptions.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">반복결제 성격</span>
+                <select
+                  aria-label="반복결제 성격"
+                  className={INPUT_CLS}
+                  value={recurringKind}
+                  onChange={(event) => setRecurringKind(event.target.value as RecurringPaymentKind)}
+                >
+                  <option value="monthly_recurring">매월 반복</option>
+                  <option value="installment">할부</option>
+                  <option value="not_recurring">반복 아님</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveRecurringRule()}
+                disabled={disabled || !recurringCategoryMajor.trim() || upsertRecurringRule.isPending}
+                className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
+              >
+                반복결제 규칙 저장
+              </button>
+            </div>
+
+            {recurringRules.data && recurringRules.data.items.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-caption" style={{ tableLayout: 'fixed' }}>
+                  <thead>
+                    <tr>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">카테고리</th>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">반복결제 성격</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recurringRules.data.items.map((rule) => (
+                      <tr key={rule.id} className="border-t border-border-faint">
+                        <td className="px-4 py-2 text-text-secondary truncate">
+                          {rule.category_major}{rule.category_minor ? ` / ${rule.category_minor}` : ''}
+                        </td>
+                        <td className="px-4 py-2 text-text-muted">{RECURRING_KIND_LABEL[rule.recurring_payment_kind]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <EmptyState message="등록된 반복결제 카테고리 규칙이 없습니다." />}
           </section>
 
           <section className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">

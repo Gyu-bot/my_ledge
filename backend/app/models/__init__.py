@@ -3,6 +3,7 @@ from app.models.auto_classification import (
     AutoClassificationSettings,
     CategoryClassificationRule,
     LoanMerchantRule,
+    RecurringCategoryRule,
 )
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.base import Base, TimestampMixin
@@ -24,6 +25,7 @@ __all__ = [
     "LoanAccount",
     "LoanMerchantRule",
     "LoanTransactionLink",
+    "RecurringCategoryRule",
     "TimestampMixin",
     "Transaction",
     "UploadLog",

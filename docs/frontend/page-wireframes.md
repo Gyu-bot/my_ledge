@@ -275,7 +275,7 @@
 - summary
 - selected group bulk classification panel
 - recurring payment candidate table
-- group classification select
+- group classification select: `미분류`, `할부`, `매월 반복`, `반복 아님`
 - pagination
 
 ### Topbar meta
@@ -292,41 +292,68 @@
 | recurring table | table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
 | classification select | native select | `bg-surface-bar`, `border-border-subtle`, `text-text-secondary` |
 
+## Auto Classification `/operations/auto-classification`
+
+```text
+[upload auto-apply toggles]
+
+[fixed/variable category rules]
+
+[recurring category rules]
+
+[loan merchant rules]
+```
+
+### Blocks
+
+- upload auto-apply toggles: 고정비 규칙, 대출 거래처 규칙, 반복결제 규칙
+- fixed/variable category rules
+- recurring category rules: `할부`, `매월 반복`, `반복 아님`
+- loan merchant rules
+- apply existing transactions buttons
+
 ## Canonical Views `/operations/canonical-views`
 
 ```text
 [KPI x4]
 
-[Advisor canonical views]
+[월별 현금흐름 chart + table]    [실질 가용액]
+
+[대출 상환] [거래처 기준선] [분류 품질 큐]
 
 [분류 품질 작업 연결]
 
-[Canonical view columns table]
+[Canonical view reference table]
 ```
 
 ### Blocks
 
 - KPI 4개:
-  - canonical view 수
-  - advisor view 수
-  - schema column 수
-  - 연결된 operations route 수
-- advisor canonical views: P0/P0.5 view 이름, 한국어 label, description, 핵심 field badge
+  - latest income
+  - non-loan spend
+  - net cashflow
+  - spendable after variable
+- 월별 현금흐름: `vw_monthly_cashflow` 실제 row 기반 수입/지출 chart와 월별 table
+- 실질 가용액: `vw_true_spendable_monthly` 실제 row 기반 변동 지출 전/후 잔액. 진행 중인 월의 수입이 낮으면 `예상` 태그로 최근 6개 마감월 이상치 제외 baseline 기준 값을 주 표시하고 관측값과 제외 월을 보조 표시
+- 대출 상환: `vw_loan_repayment_monthly` 실제 row 기반 대출 계좌별 월 상환액
+- 거래처 기준선: `vw_merchant_monthly_baseline` 실제 row 기반 월 지출과 baseline delta
+- 분류 품질 큐: `vw_unclassified_work_queue` 실제 row 기반 우선순위 거래
 - 분류 품질 작업 연결: 자동분류, 대출 연결, 반복 결제 분류 route link
-- canonical view columns table: `/api/v1/schema` 의 view/column registry
+- canonical view reference table: `/api/v1/schema` 의 view/column registry
 
 ### Topbar meta
 
-- `N개 advisor view`
+- `N개월 canonical data`
 
 ### Component token map
 
 | Block | Component | Primary tokens |
 | --- | --- | --- |
 | KPI row | `KpiCard` x4 | `bg-surface-card`, `border-border`, `text-kpi`, `text-text-secondary` |
-| advisor views | `SectionCard` + divided rows | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `bg-surface-section` |
+| monthly cashflow | `SectionCard` + `DualBarChart` + compact table | `bg-surface-card`, `border-border`, shared chart tooltip contract |
+| spendable / loan / merchant / queue | `SectionCard` + compact divided rows | `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
 | quality links | `SectionCard` + route links | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `text-text-ghost` |
-| columns table | `SectionCard` + compact table | `bg-surface-card`, `bg-surface-bar`, `border-border-faint`, `text-micro`, `text-caption` |
+| reference table | `SectionCard` + compact table | `bg-surface-card`, `bg-surface-bar`, `border-border-faint`, `text-micro`, `text-caption` |
 
 ## Notes
 

@@ -238,19 +238,19 @@ def _create_unclassified_work_queue_view() -> None:
         classified AS (
             SELECT
                 transaction_rows.*,
-                (transaction_rows.cost_kind IS NULL) AS needs_cost_kind,
-                (
+                COALESCE(transaction_rows.cost_kind IS NULL, FALSE) AS needs_cost_kind,
+                COALESCE((
                     transaction_rows.cost_kind = 'fixed'
                     AND transaction_rows.fixed_cost_necessity IS NULL
-                ) AS needs_fixed_cost_necessity,
-                (
+                ), FALSE) AS needs_fixed_cost_necessity,
+                COALESCE((
                     transaction_rows.recurring_payment_kind IS NULL
                     AND (
                         transaction_rows.cost_kind = 'fixed'
                         OR transaction_rows.merchant_expense_count >= 2
                     )
-                ) AS needs_recurring_payment_kind,
-                (
+                ), FALSE) AS needs_recurring_payment_kind,
+                COALESCE((
                     transaction_rows.effective_category_major = '금융'
                     OR COALESCE(transaction_rows.effective_category_minor, '') ILIKE '%대출%'
                     OR COALESCE(transaction_rows.effective_category_minor, '') ILIKE '%상환%'
@@ -267,7 +267,7 @@ def _create_unclassified_work_queue_view() -> None:
                     OR COALESCE(transaction_rows.payment_method, '') ILIKE '%대출%'
                     OR COALESCE(transaction_rows.payment_method, '') ILIKE '%상환%'
                     OR COALESCE(transaction_rows.payment_method, '') ILIKE '%이자%'
-                ) AS needs_loan_link_review
+                ), FALSE) AS needs_loan_link_review
             FROM expense_rows transaction_rows
         )
         SELECT

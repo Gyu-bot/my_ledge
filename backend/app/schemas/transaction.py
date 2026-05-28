@@ -95,7 +95,11 @@ class TransactionCreateRequest(BaseModel):
     payment_method: str | None = None
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: Literal["installment", "monthly_recurring"] | None = None
+    recurring_payment_kind: Literal[
+        "installment",
+        "monthly_recurring",
+        "not_recurring",
+    ] | None = None
     memo: str | None = None
 
 
@@ -105,7 +109,11 @@ class TransactionUpdateRequest(BaseModel):
     merchant: str | None = None
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: Literal["installment", "monthly_recurring"] | None = None
+    recurring_payment_kind: Literal[
+        "installment",
+        "monthly_recurring",
+        "not_recurring",
+    ] | None = None
     memo: str | None = None
 
 
@@ -116,7 +124,11 @@ class TransactionBulkUpdateRequest(BaseModel):
     category_minor_user: str | None = None
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: Literal["installment", "monthly_recurring"] | None = None
+    recurring_payment_kind: Literal[
+        "installment",
+        "monthly_recurring",
+        "not_recurring",
+    ] | None = None
     memo: str | None = None
 
 
@@ -147,4 +159,9 @@ TransactionCategoryLevel = Literal["major", "minor"]
 TransactionEditedFilter = Literal["true", "false", "all"]
 TransactionCostKindFilter = Literal["fixed", "variable", "all"]
 TransactionFixedCostNecessityFilter = Literal["essential", "discretionary", "all"]
-TransactionRecurringPaymentKindFilter = Literal["installment", "monthly_recurring", "all"]
+TransactionRecurringPaymentKindFilter = Literal[
+    "installment",
+    "monthly_recurring",
+    "not_recurring",
+    "all",
+]

@@ -10,6 +10,7 @@ def test_expected_tables_exist() -> None:
         "app_settings",
         "auto_classification_settings",
         "category_classification_rules",
+        "recurring_category_rules",
         "transactions",
         "asset_snapshots",
         "investments",
@@ -25,6 +26,7 @@ def test_expected_tables_exist() -> None:
     category_classification_rules = Base.metadata.tables[
         "category_classification_rules"
     ]
+    recurring_category_rules = Base.metadata.tables["recurring_category_rules"]
     investments = Base.metadata.tables["investments"]
     loans = Base.metadata.tables["loans"]
     loan_accounts = Base.metadata.tables["loan_accounts"]
@@ -43,6 +45,11 @@ def test_expected_tables_exist() -> None:
     assert {
         tuple(column.name for column in constraint.columns)
         for constraint in category_classification_rules.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("category_major", "category_minor")}
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in recurring_category_rules.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     } == {("category_major", "category_minor")}
 

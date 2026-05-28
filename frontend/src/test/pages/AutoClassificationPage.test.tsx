@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { AutoClassificationPage } from '../../pages/AutoClassificationPage'
@@ -8,6 +8,7 @@ import type {
   CategoryClassificationRuleListResponse,
   LoanAccountsResponse,
   LoanMerchantRuleListResponse,
+  RecurringCategoryRuleListResponse,
   TransactionFilterOptionsResponse,
 } from '../../types/transaction'
 
@@ -15,6 +16,7 @@ const mockUseWriteAccess = vi.fn<() => boolean>()
 const mockUseAutoClassificationSettings = vi.fn()
 const mockUseCategoryClassificationRules = vi.fn()
 const mockUseLoanMerchantRules = vi.fn()
+const mockUseRecurringCategoryRules = vi.fn()
 const mockUseLoanAccounts = vi.fn<() => { data: LoanAccountsResponse }>()
 const mockUseTransactionFilterOptions = vi.fn<() => { data: TransactionFilterOptionsResponse }>()
 let patchSettingsMutate = vi.fn()
@@ -22,6 +24,8 @@ let upsertCategoryRuleMutate = vi.fn()
 let applyCategoryRulesMutate = vi.fn()
 let upsertLoanRuleMutate = vi.fn()
 let applyLoanRulesMutate = vi.fn()
+let upsertRecurringRuleMutate = vi.fn()
+let applyRecurringRulesMutate = vi.fn()
 
 vi.mock('../../hooks/useWriteAccess', () => ({
   useWriteAccess: () => mockUseWriteAccess(),
@@ -32,12 +36,15 @@ vi.mock('../../hooks/useTransactions', () => ({
   useAutoClassificationSettings: () => mockUseAutoClassificationSettings(),
   useCategoryClassificationRules: () => mockUseCategoryClassificationRules(),
   useLoanMerchantRules: () => mockUseLoanMerchantRules(),
+  useRecurringCategoryRules: () => mockUseRecurringCategoryRules(),
   useLoanAccounts: () => mockUseLoanAccounts(),
   usePatchAutoClassificationSettings: () => ({ mutateAsync: patchSettingsMutate, isPending: false }),
   useUpsertCategoryClassificationRule: () => ({ mutateAsync: upsertCategoryRuleMutate, isPending: false }),
   useApplyCategoryClassificationRules: () => ({ mutateAsync: applyCategoryRulesMutate, isPending: false }),
   useUpsertLoanMerchantRule: () => ({ mutateAsync: upsertLoanRuleMutate, isPending: false }),
   useApplyLoanMerchantRules: () => ({ mutateAsync: applyLoanRulesMutate, isPending: false }),
+  useUpsertRecurringCategoryRule: () => ({ mutateAsync: upsertRecurringRuleMutate, isPending: false }),
+  useApplyRecurringCategoryRules: () => ({ mutateAsync: applyRecurringRulesMutate, isPending: false }),
 }))
 
 vi.mock('../../components/layout/chromeContext', () => ({
@@ -56,6 +63,7 @@ function wrap(ui: React.ReactNode) {
 const settings: AutoClassificationSettings = {
   apply_cost_rules_on_upload: false,
   apply_loan_rules_on_upload: false,
+  apply_recurring_rules_on_upload: false,
 }
 
 const categoryRules: CategoryClassificationRuleListResponse = {
@@ -89,16 +97,30 @@ const loanRules: LoanMerchantRuleListResponse = {
   ],
 }
 
+const recurringRules: RecurringCategoryRuleListResponse = {
+  items: [
+    {
+      id: 1,
+      category_major: '구독',
+      category_minor: null,
+      recurring_payment_kind: 'monthly_recurring',
+      created_at: '2026-05-25T09:00:00',
+      updated_at: '2026-05-25T09:00:00',
+    },
+  ],
+}
+
 beforeEach(() => {
   mockUseWriteAccess.mockReturnValue(true)
   mockUseTransactionFilterOptions.mockReturnValue({
     data: {
-      category_options: ['주거', '통신', '식비'],
-      category_minor_options: ['월세', '관리비', '휴대폰', '외식'],
+      category_options: ['주거', '통신', '식비', '구독'],
+      category_minor_options: ['월세', '관리비', '휴대폰', '외식', 'OTT'],
       category_minor_options_by_major: {
         주거: ['월세', '관리비'],
         통신: ['휴대폰'],
         식비: ['외식'],
+        구독: ['OTT'],
       },
       payment_method_options: [],
     },
@@ -106,6 +128,7 @@ beforeEach(() => {
   mockUseAutoClassificationSettings.mockReturnValue({ data: settings, isLoading: false })
   mockUseCategoryClassificationRules.mockReturnValue({ data: categoryRules, isLoading: false })
   mockUseLoanMerchantRules.mockReturnValue({ data: loanRules, isLoading: false })
+  mockUseRecurringCategoryRules.mockReturnValue({ data: recurringRules, isLoading: false })
   mockUseLoanAccounts.mockReturnValue({
     data: {
       items: [
@@ -130,6 +153,8 @@ beforeEach(() => {
   applyCategoryRulesMutate = vi.fn().mockResolvedValue({ updated: 3 })
   upsertLoanRuleMutate = vi.fn().mockResolvedValue(loanRules.items[0])
   applyLoanRulesMutate = vi.fn().mockResolvedValue({ updated: 2 })
+  upsertRecurringRuleMutate = vi.fn().mockResolvedValue(recurringRules.items[0])
+  applyRecurringRulesMutate = vi.fn().mockResolvedValue({ updated: 4 })
 })
 
 describe('AutoClassificationPage', () => {
@@ -138,15 +163,17 @@ describe('AutoClassificationPage', () => {
 
     expect(screen.getByText('통신 / 휴대폰')).toBeInTheDocument()
     expect(screen.getAllByText('국민은행 주택담보대출').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('구독').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('매월 반복').length).toBeGreaterThan(0)
   })
 
   it('saves a category rule and applies existing transactions', async () => {
     wrap(<AutoClassificationPage />)
 
-    fireEvent.change(screen.getByLabelText('대분류'), { target: { value: '주거' } })
-    fireEvent.change(screen.getByLabelText('소분류'), { target: { value: '월세' } })
-    fireEvent.change(screen.getByLabelText('비용 성격'), { target: { value: 'fixed' } })
-    fireEvent.change(screen.getByLabelText('고정비 필수 여부'), { target: { value: 'essential' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /^대분류$/ }), { target: { value: '주거' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /^소분류$/ }), { target: { value: '월세' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /^비용 성격$/ }), { target: { value: 'fixed' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /^고정비 필수 여부$/ }), { target: { value: 'essential' } })
     fireEvent.click(screen.getByRole('button', { name: '고정비 규칙 저장' }))
     fireEvent.click(screen.getByRole('button', { name: '고정비 규칙 일괄 적용' }))
 
@@ -164,18 +191,18 @@ describe('AutoClassificationPage', () => {
   it('uses category dropdowns and filters subcategories by selected major category', () => {
     wrap(<AutoClassificationPage />)
 
-    const majorSelect = screen.getByLabelText('대분류')
-    const minorSelect = screen.getByLabelText('소분류')
+    const majorSelect = screen.getByRole('combobox', { name: /^대분류$/ })
+    const minorSelect = screen.getByRole('combobox', { name: /^소분류$/ })
 
     expect(majorSelect.tagName).toBe('SELECT')
     expect(minorSelect.tagName).toBe('SELECT')
-    expect(screen.getByRole('option', { name: '주거' })).toBeInTheDocument()
+    expect(within(majorSelect).getByRole('option', { name: '주거' })).toBeInTheDocument()
 
     fireEvent.change(majorSelect, { target: { value: '주거' } })
 
-    expect(screen.getByRole('option', { name: '월세' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '관리비' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: '휴대폰' })).not.toBeInTheDocument()
+    expect(within(minorSelect).getByRole('option', { name: '월세' })).toBeInTheDocument()
+    expect(within(minorSelect).getByRole('option', { name: '관리비' })).toBeInTheDocument()
+    expect(within(minorSelect).queryByRole('option', { name: '휴대폰' })).not.toBeInTheDocument()
   })
 
   it('saves a loan merchant rule and toggles upload automation', async () => {
@@ -196,6 +223,35 @@ describe('AutoClassificationPage', () => {
         memo: null,
       })
       expect(applyLoanRulesMutate).toHaveBeenCalled()
+    })
+  })
+
+  it('saves a recurring category rule and applies existing transactions', async () => {
+    wrap(<AutoClassificationPage />)
+
+    fireEvent.change(screen.getByLabelText('반복결제 대분류'), { target: { value: '구독' } })
+    fireEvent.change(screen.getByLabelText('반복결제 소분류'), { target: { value: 'OTT' } })
+    fireEvent.change(screen.getByLabelText('반복결제 성격'), { target: { value: 'monthly_recurring' } })
+    fireEvent.click(screen.getByRole('button', { name: '반복결제 규칙 저장' }))
+    fireEvent.click(screen.getByRole('button', { name: '반복결제 규칙 일괄 적용' }))
+
+    await waitFor(() => {
+      expect(upsertRecurringRuleMutate).toHaveBeenCalledWith({
+        category_major: '구독',
+        category_minor: 'OTT',
+        recurring_payment_kind: 'monthly_recurring',
+      })
+      expect(applyRecurringRulesMutate).toHaveBeenCalled()
+    })
+  })
+
+  it('toggles recurring rule automation on upload', async () => {
+    wrap(<AutoClassificationPage />)
+
+    fireEvent.click(screen.getByLabelText('업로드 후 반복결제 규칙 자동 적용'))
+
+    await waitFor(() => {
+      expect(patchSettingsMutate).toHaveBeenCalledWith({ apply_recurring_rules_on_upload: true })
     })
   })
 })

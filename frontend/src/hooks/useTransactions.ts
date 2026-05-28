@@ -13,6 +13,7 @@ import type {
   AutoClassificationSettingsPatchRequest,
   CategoryClassificationRuleRequest,
   LoanMerchantRuleRequest,
+  RecurringCategoryRuleRequest,
 } from '../types/transaction'
 
 export const txKeys = {
@@ -24,6 +25,7 @@ export const txKeys = {
   autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
   categoryClassificationRules: () => ['transactions', 'categoryClassificationRules'] as const,
   loanMerchantRules: () => ['transactions', 'loanMerchantRules'] as const,
+  recurringCategoryRules: () => ['transactions', 'recurringCategoryRules'] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
@@ -79,6 +81,13 @@ export function useLoanMerchantRules() {
   return useQuery({
     queryKey: txKeys.loanMerchantRules(),
     queryFn: transactionApi.loanMerchantRules,
+  })
+}
+
+export function useRecurringCategoryRules() {
+  return useQuery({
+    queryKey: txKeys.recurringCategoryRules(),
+    queryFn: transactionApi.recurringCategoryRules,
   })
 }
 
@@ -222,5 +231,25 @@ export function useApplyLoanMerchantRules() {
   return useMutation({
     mutationFn: () => transactionApi.applyLoanMerchantRules(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  })
+}
+
+export function useUpsertRecurringCategoryRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: RecurringCategoryRuleRequest) =>
+      transactionApi.upsertRecurringCategoryRule(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.recurringCategoryRules() }),
+  })
+}
+
+export function useApplyRecurringCategoryRules() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => transactionApi.applyRecurringCategoryRules(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
   })
 }

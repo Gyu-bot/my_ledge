@@ -455,6 +455,7 @@ async def get_recurring_payments(
                 recurring_payment_kind=_resolved_recurring_payment_kind(kind_counts),
                 installment_count=kind_counts["installment"],
                 monthly_recurring_count=kind_counts["monthly_recurring"],
+                not_recurring_count=kind_counts["not_recurring"],
                 unclassified_count=kind_counts["unclassified"],
                 transaction_ids=data["transaction_ids"],
             )
@@ -720,7 +721,7 @@ def _previous_period(period: str) -> str:
 
 def _resolved_recurring_payment_kind(kind_counts: dict[str, int]) -> str | None:
     classified = [
-        kind for kind in ("installment", "monthly_recurring")
+        kind for kind in ("installment", "monthly_recurring", "not_recurring")
         if kind_counts[kind] > 0
     ]
     if len(classified) == 1 and kind_counts["unclassified"] == 0:

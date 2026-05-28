@@ -619,7 +619,7 @@ def _normalized_fixed_cost_necessity(
 def _normalized_recurring_payment_kind(
     recurring_payment_kind: str | None,
 ) -> str | None:
-    if recurring_payment_kind in {"installment", "monthly_recurring"}:
+    if recurring_payment_kind in {"installment", "monthly_recurring", "not_recurring"}:
         return recurring_payment_kind
     return None
 

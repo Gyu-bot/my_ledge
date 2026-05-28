@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Phase:** P0/P0.5 canonical read model backend/frontend surface 구현 완료. 다음 초점은 source verification scope, merchant normalization/recurring 자동분류, asset/liability health 후보 정리다.
-- **Last Worker:** Codex (2026-05-28T21:10+0900, canonical view frontend surface)
+- **Phase:** P0/P0.5 canonical read model backend/frontend dashboard 구현 완료. 반복결제 카테고리 자동분류 1차 구현 완료. 다음 초점은 source verification scope, merchant normalization, asset/liability health 후보 정리다.
+- **Last Worker:** Codex (2026-05-28T23:45+0900, recurring category rules implemented)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -24,7 +24,10 @@
 - [x] README 기능 설명 보강: 프론트엔드 화면별 표시 항목, 주요 지표 의미, canonical view/read surface 목록 정리
 - [x] P0 upload retention 구현: `POST /api/v1/upload` 원본 파일을 `UPLOAD_DIR` 기본값 `/data/uploads`에 저장하고 최신 5개만 유지
 - [x] P0/P0.5 canonical read model 구현: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`
-- [x] Canonical view frontend surface 구현: `/operations/canonical-views`에서 `/api/v1/schema` 기반 view registry, advisor view, 분류 품질 작업 연결 표시
+- [x] Canonical view dashboard 구현: `/api/v1/canonical-views/dashboard`로 P0/P0.5 view 실제 row 값을 제공하고, `/operations/canonical-views`에서 월별 현금흐름/true spendable/대출 상환/거래처 baseline/분류 품질 큐를 KPI·차트·테이블로 표시
+- [x] 분류 품질 큐 반복 후보 기준 보수화: `vw_unclassified_work_queue`의 `missing_recurring_kind`는 같은 거래처 2건만으로 판단하지 않고, 서로 다른 월/날짜와 금액 안정성이 있는 경우에만 표시
+- [x] 반복결제 카테고리 자동분류 1차 구현: `recurring_category_rules`, 반복 후보/고정비 gate, `not_recurring`, `/operations/auto-classification` 규칙 UI와 `/operations/recurring-classification` 수동 선택지 반영
+- [x] 진행월 true spendable 예상 표시: 현재 월 수입이 최근 6개 마감월의 이상치 제외 수입 baseline의 50% 미만이면 dashboard API가 `estimated_*` 필드와 `excluded_income_periods`를 제공하고, frontend가 `예상` 태그/관측값/제외 월을 함께 표시
 - [x] `vw_fixed_cost_monthly_summary`를 loan-linked repayment 제외 기준으로 정렬
 - [x] Planned backlog 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 [planned-work.md](planned-work.md)에 반영
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
@@ -62,14 +65,18 @@
 1. `verify_import_parity` 범위를 sample presence로 문서화할지 rolling-window overlap extra-row 검증까지 확장할지 결정.
 2. Settings page와 analytics settings frontend panel 구현.
 3. Merchant alias/normalization rule 방식 결정.
-4. `vw_recurring_merchant_monthly` 또는 recurring 자동분류 dry-run contract 설계.
+4. `vw_recurring_merchant_monthly` read surface 설계.
 5. asset/liability health 전에 cash-equivalent/liquidity tier 분류 방식 결정.
 
 ## Key Decisions
 
 - 2026-05-28: `docs/STATUS.md`는 handoff 요약만 유지한다. 오래된 완료 로그와 상세 결정 기록은 `docs/archive/status/`로 옮기고, 현재 파일에는 archive 링크와 최신 핵심만 남긴다.
 - 2026-05-28: `POST /api/v1/upload` 원본 파일 retention은 API upload 경로에서만 opt-in 저장한다. service helper 직접 호출은 `persist_upload_file=True`일 때만 저장해 테스트/스크립트 부작용을 줄인다.
-- 2026-05-28: P0/P0.5 canonical view는 DB view + `/schema` registry로 제공하고, API 중복 endpoint는 만들지 않는다.
+- 2026-05-28: P0/P0.5 canonical view는 DB view를 source of truth로 유지하되, 프론트엔드 대시보드에는 allowlist 기반 `GET /api/v1/canonical-views/dashboard`로 실제 row 값을 제공한다. `/schema`는 reference/registry 역할로 유지한다.
+- 2026-05-28: 진행 중인 월의 월급 입금 전 왜곡은 DB view 원본을 바꾸지 않고 dashboard API enrichment로 처리한다. `income_total`은 관측값으로 유지하고, 예상 수입/예상 가용액은 `estimated_*`와 `income_basis='estimated'`로 구분한다.
+- 2026-05-28: 진행월 예상 수입은 최근 3개월 단순 평균 대신 최근 6개 마감월의 median 기준 ±30% 밖 수입 월을 제외한 baseline으로 계산한다. 연말정산 환급/보너스처럼 월급과 같이 입금되어 거래 단위 분리가 어려운 수입은 `excluded_income_periods`로 표시한다.
+- 2026-05-28: `vw_unclassified_work_queue`의 반복결제 미분류 신호는 같은 거래처 2건만으로 판단하지 않는다. 같은 날 분할 구매를 제외하기 위해 최소 2개 월, 최소 2개 거래일, 금액 변동계수 `<= 0.5`를 만족하는 거래처만 `missing_recurring_kind` 후보로 본다.
+- 2026-05-28: 반복결제 카테고리 자동분류는 전체 거래를 단순 카테고리로 덮지 않는다. 기존 `recurring_payment_kind`를 보존하고, 반복 후보 gate(최소 2개 월/2개 거래일/CV `<= 0.5`) 또는 `cost_kind='fixed'`인 거래에만 `recurring_category_rules`를 적용한다. `not_recurring`은 reviewed non-recurring 상태를 명시하기 위한 값으로 추가했다.
 - 2026-05-28: `docs/planned-work.md`는 미구현 backlog/roadmap으로 유지하고 `docs/STATUS.md`와 분리한다.
 - 2026-05-28: My Ledge core는 재무 어시스턴트의 말투/성격을 결정하지 않는다. 재무 어시스턴트가 사용할 canonical read model foundation과 `reason`/`confidence`/`assumptions`/`risk_level` 같은 판단 재료를 제공한다.
 - 2026-05-28: 다음 작업은 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어가되, 운영 smoke와 contract 검증은 각 구현 batch의 acceptance check로 유지한다.

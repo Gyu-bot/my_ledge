@@ -113,7 +113,7 @@ BankSalad에서 내보낸 엑셀 파일을 데이터 소스로 사용하여 지�
 │ payment_method  VARCHAR(100)             │  -- 결제수단
 │ cost_kind       VARCHAR(20)              │  -- 'fixed' | 'variable'
 │ fixed_cost_necessity VARCHAR(20)         │  -- 'essential' | 'discretionary'
-│ recurring_payment_kind VARCHAR(30)       │  -- 'installment' | 'monthly_recurring'
+│ recurring_payment_kind VARCHAR(30)       │  -- 'installment' | 'monthly_recurring' | 'not_recurring'
 │ memo            TEXT                     │
 │ is_deleted      BOOLEAN DEFAULT FALSE    │  -- 소프트 삭제
 │ merged_into_id  INTEGER REFERENCES       │  -- 병합 시 대상 거래 ID
@@ -573,6 +573,11 @@ GET /api/v1/auto-classification/loan-merchant-rules
 POST /api/v1/auto-classification/loan-merchant-rules
 DELETE /api/v1/auto-classification/loan-merchant-rules/{id}
 POST /api/v1/auto-classification/apply/loan-merchant-rules
+
+GET /api/v1/auto-classification/recurring-category-rules
+POST /api/v1/auto-classification/recurring-category-rules
+DELETE /api/v1/auto-classification/recurring-category-rules/{id}
+POST /api/v1/auto-classification/apply/recurring-category-rules
 ```
 
 구현 규칙:
@@ -581,6 +586,7 @@ POST /api/v1/auto-classification/apply/loan-merchant-rules
 - 사용자가 거래 작업대에서 고정비/변동비를 직접 수정하면 `cost_classification_source='manual'` 로 저장하고, 이후 자동 적용이 덮어쓰지 않는다.
 - `loan_merchant_rules` 는 거래처명 exact match를 안정 대출 계좌(`loan_accounts.id`)와 상환 성격에 매핑한다.
 - 자동 대출 연결은 기존 수동 연결(`loan_transaction_links.source='manual'`)을 덮어쓰지 않는다.
+- `recurring_category_rules` 는 반복 후보이거나 고정비인 미분류 거래에만 `recurring_payment_kind`를 채운다. 기존 `recurring_payment_kind`가 있는 거래는 덮어쓰지 않는다.
 - `/operations/auto-classification` 화면에서 규칙 저장, 업로드 후 자동적용 토글, 기존 데이터 일괄 적용을 제공한다.
 
 **카테고리 표시 규칙:**
@@ -620,10 +626,14 @@ GET /api/v1/loans/summary
 GET /api/v1/schema
   # DB 스키마 문서 반환 (테이블, 컬럼, 타입, 설명)
   # OpenClaw 에이전트가 SQL 쿼리 작성 시 참조
+
+GET /api/v1/canonical-views/dashboard
+  # P0/P0.5 canonical view 실제 row 값을 프론트엔드 dashboard용으로 반환
+  # 진행 중인 월은 최근 6개 마감월의 이상치 제외 수입 baseline 기반 예상 true spendable 값을 별도 필드로 제공 가능
 ```
 
 보안 규칙:
-- `POST /api/v1/upload` 와 `GET /api/v1/schema` 는 `X-API-Key` 헤더 기반 인증을 요구한다.
+- `POST /api/v1/upload`, `GET /api/v1/schema`, `GET /api/v1/canonical-views/dashboard` 는 `X-API-Key` 헤더 기반 인증을 요구한다.
 - 쓰기성 거래 편집 API도 동일한 API key 인증을 적용한다.
 
 ### 5.6 Advisor Analytics API (Live + Planned)
@@ -695,9 +705,9 @@ P2 설계 규칙:
 |---|---|---|---|
 | P0 | `vw_monthly_cashflow` | 월별 수입/지출/이체/대출/고정비/순현금흐름 entry point | `income_total`, `expense_total`, `non_loan_expense_total`, `transfer_activity_total`, `loan_repayment_total`, `fixed_total`, `variable_total`, `unclassified_expense_total`, `net_cashflow`, `savings_rate` |
 | P0 | `vw_loan_repayment_monthly` | 대출 상환을 일반 소비와 분리 | `loan_transaction_links` 기준만 집계하고, 미연결 후보는 work queue로 분리 |
-| P0 | `vw_true_spendable_monthly` | 대출/필수 고정비 차감 후 실제 재량 여력 산출 | `spendable_before_variable_spend`와 `remaining_after_variable_spend`를 분리해 의미를 명확히 한다 |
+| P0 | `vw_true_spendable_monthly` | 대출/필수 고정비 차감 후 실제 재량 여력 산출 | `spendable_before_variable_spend`와 `remaining_after_variable_spend`를 분리한다. 진행 중인 월의 월급 입금 전 왜곡은 dashboard API의 `estimated_*` 필드와 제외된 이상치 월로 구분 표시한다 |
 | P0 | `vw_merchant_monthly_baseline` | 거래처별 월 기준선과 변화량 | canonical `merchant` 기준. 정규화 전 alias 분산 한계를 `assumptions`/문서에 남긴다 |
-| P0.5 | `vw_unclassified_work_queue` | 분석 품질을 흔드는 미분류 거래 우선순위 queue | `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind`, loan link 후보 누락을 함께 표시 |
+| P0.5 | `vw_unclassified_work_queue` | 분석 품질을 흔드는 미분류 거래 우선순위 queue | `cost_kind`, `fixed_cost_necessity`, 월 단위 반복 신호가 있는 `recurring_payment_kind`, loan link 후보 누락을 함께 표시. 같은 날 분할 구매는 반복분류 후보에서 제외한다 |
 | P1 | `vw_recurring_merchant_monthly` | 수동 반복결제 분류 결과의 월별 read surface | `recurring_payment_kind` 저장값 기준. 반복 탐지 heuristic은 API에 유지 |
 | P1 | discretionary velocity / purchase gate base view | 월중 경고와 구매 검토 후보의 feature base | `CURRENT_DATE` 의존 plain view로 고정하지 말고 `as_of_date` API parameter와 settings threshold를 우선한다 |
 | P2 | `vw_asset_snapshot_canonical` | snapshot 기준 자산/부채/순자산 표준화 | `asset_snapshots`와 `loans`/`investments` 간 source of truth 및 double count 방지 규칙을 먼저 고정 |
@@ -782,7 +792,7 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 #### 6.1.7 반복 결제 분류 (`/operations/recurring-classification`)
 
 - **반복 결제 후보 목록**: `GET /api/v1/analytics/recurring-payments` 결과를 거래처 그룹 단위로 표시한다.
-- **수동 분류**: 그룹의 `transaction_ids`를 `PATCH /api/v1/transactions/bulk-update`로 갱신하여 `recurring_payment_kind`를 `installment` 또는 `monthly_recurring`으로 저장한다.
+- **수동 분류**: 그룹의 `transaction_ids`를 `PATCH /api/v1/transactions/bulk-update`로 갱신하여 `recurring_payment_kind`를 `installment`, `monthly_recurring`, `not_recurring`으로 저장한다.
 - **일괄 분류**: 현재 페이지의 여러 거래처 그룹을 선택하고 같은 분류를 한 번에 적용할 수 있다.
 - **역할 분리**: 인사이트(`/analysis/insights`)는 저장된 분류 결과만 읽기 전용으로 표시하고, 변경은 운영 화면에서만 수행한다.
 - **작업대 경계**: 거래 작업대(`/operations/workbench`)는 반복분류를 조회/필터만 제공하고 수정 컨트롤은 제공하지 않는다.
@@ -790,18 +800,20 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 #### 6.1.8 자동 분류 (`/operations/auto-classification`)
 
 - **고정비/변동비 규칙**: 대분류/소분류와 `fixed|variable`, 고정비의 `essential|discretionary` 여부를 매핑한다.
+- **반복결제 카테고리 규칙**: 대분류/소분류와 `installment|monthly_recurring|not_recurring`을 매핑하되, 반복 후보 또는 고정비로 좁혀진 미분류 거래에만 적용한다.
 - **대출 거래처 규칙**: 거래처명 exact match와 대출 계좌, 상환 성격(`principal|interest|mixed|unknown`)을 매핑한다.
 - **일괄 적용**: 기존 거래에는 manual source가 아닌 항목만 갱신한다.
 - **업로드 자동 적용**: 설정이 켜져 있으면 workbook 업로드 후 규칙을 자동 적용한다.
-- **반복결제와의 관계**: 반복결제 화면은 할부/매월 반복 운영 분류에 집중한다. 고정비 자동분류는 반복결제 전체에 섞지 않고, 필요 시 고정비 배지/필터로 교차 표시한다.
+- **반복결제와의 관계**: 반복결제 화면은 수동 운영 분류에 집중한다. 자동분류 화면은 반복 후보/고정비 gate를 통과한 거래에 카테고리 규칙을 보수적으로 적용한다.
 - **우선순위**: 먼저 카테고리 매핑 테이블/규칙 문서화, 그 다음 dry-run API와 운영 승인 화면 순서로 구현한다.
 
 #### 6.1.9 캐노니컬 뷰 (`/operations/canonical-views`)
 
-- **schema registry 표시**: `GET /api/v1/schema` 의 canonical view 목록과 column registry를 읽기 전용으로 표시한다.
-- **advisor read model 표시**: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`를 별도 그룹으로 보여준다.
+- **실제 canonical 값 표시**: `GET /api/v1/canonical-views/dashboard` 로 P0/P0.5 view row를 읽어 월별 현금흐름, true spendable, 대출 상환, 거래처 baseline, 분류 품질 큐를 KPI/차트/테이블로 표시한다.
+- **진행월 예상 표시**: 현재 월 수입이 최근 6개 마감월의 이상치 제외 수입 baseline보다 크게 낮으면 `예상` 태그와 함께 baseline 기준 true spendable을 보여주고, 실제 관측값과 제외된 이상치 월은 보조 정보로 남긴다.
+- **schema reference 표시**: `GET /api/v1/schema` 의 canonical view 목록과 column registry는 하단 reference로 유지한다.
+- **advisor read model 표시**: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`가 실제 데이터 dashboard의 source임을 화면 구조로 드러낸다.
 - **작업 연결**: `vw_unclassified_work_queue`가 드러내는 데이터 품질 후속 작업을 `/operations/auto-classification`, `/operations/loan-mapping`, `/operations/recurring-classification`으로 연결한다.
-- **역할 경계**: 이 화면은 DB view row 값을 직접 조회하지 않고, backend schema contract와 운영 동선을 확인하는 surface로 둔다.
 
 ### 6.2 추가 분석 제안
 
@@ -811,7 +823,7 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 |---|---|---|
 | **고정비 vs 변동비 분류** | 거래 단위 `cost_kind` (`fixed`/`variable`) 수동 또는 규칙 기반 분류 | transactions.cost_kind |
 | **고정비 필수/비필수 분류** | 고정비 거래에 대해 `fixed_cost_necessity` (`essential`/`discretionary`) 분류 | transactions.fixed_cost_necessity |
-| **반복결제 성격 분류** | 운영 화면에서 반복결제 후보 거래를 `recurring_payment_kind` (`installment`/`monthly_recurring`)로 수동 분류하고, 인사이트에서는 결과만 조회. 추후 규칙 기반 자동 분류 후보로 확장 | transactions.recurring_payment_kind |
+| **반복결제 성격 분류** | 운영 화면에서 반복결제 후보 거래를 `recurring_payment_kind` (`installment`/`monthly_recurring`/`not_recurring`)로 수동 분류하고, 자동분류 화면에서 반복 후보/고정비 gate를 통과한 거래에 카테고리 규칙을 적용 | transactions.recurring_payment_kind + recurring_category_rules |
 | **카테고리 기반 자동 분류** | 대분류/소분류 기반 규칙으로 고정비/필수여부를 자동 반영하되 사용자 수동값은 덮지 않음 | category_classification_rules + transactions.cost_classification_source |
 | **대출 거래처 자동 연결** | 거래처명 exact match 규칙으로 대출 계좌 연결을 자동 생성하되 사용자 수동 연결은 덮지 않음 | loan_merchant_rules + loan_transaction_links.source |
 | **전월 대비 카테고리별 변동** | 각 카테고리 MoM 증감율 및 이상치 탐지 | transactions |
@@ -984,10 +996,10 @@ CORS_ORIGINS=https://my-ledge.example.com
   - [ ] 반복결제 read surface 추가 (`vw_recurring_merchant_monthly`)
   - [ ] discretionary velocity / purchase gate는 base view와 API parameter/settings 계약으로 분리
   - [ ] merchant normalization은 수동 alias rule 기반으로 시작
-  - [ ] 카테고리 분류 기반 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 자동 분류 계획 구체화
-    - [ ] 대분류/소분류 → 후보 필드 매핑 정의
-    - [ ] 기존 수동값 보존 정책과 dry-run 후보 contract 정의
-    - [ ] 사용자 승인 후 bulk 반영하는 운영 화면 계획
+  - [x] 카테고리 분류 기반 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 자동 분류 1차 구현
+    - [x] 대분류/소분류 → 후보 필드 매핑 정의
+    - [x] 기존 수동값 보존 정책 정의
+    - [x] 운영 화면에서 저장/일괄 적용/업로드 후 자동 적용 제공
 - [ ] P1 asset/liability health
   - [ ] `GET /api/v1/analytics/net-worth-breakdown`
   - [ ] `GET /api/v1/analytics/investment-performance`

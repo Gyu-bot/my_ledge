@@ -13,18 +13,25 @@ from app.schemas.auto_classification import (
     LoanMerchantRuleListResponse,
     LoanMerchantRuleRequest,
     LoanMerchantRuleResponse,
+    RecurringCategoryRuleListResponse,
+    RecurringCategoryRuleRequest,
+    RecurringCategoryRuleResponse,
 )
 from app.services.auto_classification_service import (
     apply_category_classification_rules,
     apply_loan_merchant_rules,
+    apply_recurring_category_rules,
     delete_category_classification_rule,
     delete_loan_merchant_rule,
+    delete_recurring_category_rule,
     get_auto_classification_settings,
     list_category_classification_rules,
     list_loan_merchant_rules,
+    list_recurring_category_rules,
     patch_auto_classification_settings,
     upsert_category_classification_rule,
     upsert_loan_merchant_rule,
+    upsert_recurring_category_rule,
 )
 
 router = APIRouter(
@@ -41,6 +48,7 @@ async def get_settings(
     return AutoClassificationSettingsResponse(
         apply_cost_rules_on_upload=settings.apply_cost_rules_on_upload,
         apply_loan_rules_on_upload=settings.apply_loan_rules_on_upload,
+        apply_recurring_rules_on_upload=settings.apply_recurring_rules_on_upload,
     )
 
 
@@ -53,6 +61,7 @@ async def patch_settings(
     return AutoClassificationSettingsResponse(
         apply_cost_rules_on_upload=settings.apply_cost_rules_on_upload,
         apply_loan_rules_on_upload=settings.apply_loan_rules_on_upload,
+        apply_recurring_rules_on_upload=settings.apply_recurring_rules_on_upload,
     )
 
 
@@ -131,4 +140,49 @@ async def apply_loan_rules(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> AutoClassificationApplyResponse:
     result = await apply_loan_merchant_rules(db_session)
+    return AutoClassificationApplyResponse(updated=result.updated)
+
+
+@router.get(
+    "/recurring-category-rules",
+    response_model=RecurringCategoryRuleListResponse,
+)
+async def get_recurring_category_rules(
+    db_session: AsyncSession = Depends(get_db_session),
+) -> RecurringCategoryRuleListResponse:
+    return await list_recurring_category_rules(db_session)
+
+
+@router.post(
+    "/recurring-category-rules",
+    response_model=RecurringCategoryRuleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_recurring_category_rule(
+    payload: RecurringCategoryRuleRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> RecurringCategoryRuleResponse:
+    return await upsert_recurring_category_rule(db_session, payload)
+
+
+@router.delete(
+    "/recurring-category-rules/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_recurring_category_rule_endpoint(
+    rule_id: int,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    deleted = await delete_recurring_category_rule(db_session, rule_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND)
+
+
+@router.post(
+    "/apply/recurring-category-rules",
+    response_model=AutoClassificationApplyResponse,
+)
+async def apply_recurring_rules(
+    db_session: AsyncSession = Depends(get_db_session),
+) -> AutoClassificationApplyResponse:
+    result = await apply_recurring_category_rules(db_session)
     return AutoClassificationApplyResponse(updated=result.updated)

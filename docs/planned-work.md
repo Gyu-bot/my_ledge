@@ -40,6 +40,10 @@
   - `vw_merchant_monthly_baseline`
   - `vw_unclassified_work_queue`
   - `vw_fixed_cost_monthly_summary`는 loan-linked repayment를 ordinary fixed/variable total에서 제외하도록 정렬했다.
+- 반복결제 카테고리 규칙 1차 구현
+  - `recurring_category_rules`와 `/api/v1/auto-classification/recurring-category-rules`를 추가했다.
+  - 기존 `recurring_payment_kind`를 덮지 않고, 반복 후보 또는 고정비 거래에만 카테고리 기반 반복결제 성격을 채운다.
+  - `/operations/auto-classification`에서 저장, 일괄 적용, 업로드 후 자동 적용을 제공한다.
 
 ---
 
@@ -119,7 +123,8 @@
 
 - `vw_unclassified_work_queue`
   - 분석 품질을 떨어뜨리는 거래를 우선순위별로 노출
-  - 대상: `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind`, loan-link 후보 누락
+  - 대상: `cost_kind`, `fixed_cost_necessity`, 월 단위 반복 신호가 있는 `recurring_payment_kind`, loan-link 후보 누락
+  - 반복분류 후보는 같은 거래처 2건만으로 판단하지 않고, 서로 다른 월/날짜와 금액 안정성을 요구해 같은 날 분할 구매를 제외
   - 우선순위 기준: 분석 영향도, 금액, 반복 가능성
   - 자동 분류를 수행하지 않고 운영 화면/agent workflow의 queue 역할만 맡음
 

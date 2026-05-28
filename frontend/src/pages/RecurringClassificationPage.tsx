@@ -11,13 +11,14 @@ import { formatKRW } from '../lib/utils'
 import type { RecurringPaymentItem } from '../types/analytics'
 
 type RecurringKind = RecurringPaymentItem['recurring_payment_kind']
-type BulkRecurringKind = '' | 'unclassified' | 'installment' | 'monthly_recurring'
+type BulkRecurringKind = '' | 'unclassified' | 'installment' | 'monthly_recurring' | 'not_recurring'
 
 const PAGE_SIZE = 20
 
 function recurringKindLabel(value: RecurringKind) {
   if (value === 'installment') return '할부'
   if (value === 'monthly_recurring') return '매월 반복'
+  if (value === 'not_recurring') return '반복 아님'
   return '미분류'
 }
 
@@ -25,6 +26,7 @@ function recurringKindSummary(item: RecurringPaymentItem) {
   return [
     item.installment_count > 0 ? `할부 ${item.installment_count}` : null,
     item.monthly_recurring_count > 0 ? `매월 ${item.monthly_recurring_count}` : null,
+    item.not_recurring_count > 0 ? `반복 아님 ${item.not_recurring_count}` : null,
     `미분류 ${item.unclassified_count}`,
   ].filter(Boolean).join(' · ')
 }
@@ -192,6 +194,7 @@ export function RecurringClassificationPage() {
                 <option value="unclassified">미분류</option>
                 <option value="installment">할부</option>
                 <option value="monthly_recurring">매월 반복</option>
+                <option value="not_recurring">반복 아님</option>
               </select>
             </label>
             <button
@@ -305,6 +308,7 @@ export function RecurringClassificationPage() {
                             <option value="">미분류</option>
                             <option value="installment">할부</option>
                             <option value="monthly_recurring">매월 반복</option>
+                            <option value="not_recurring">반복 아님</option>
                           </select>
                         </td>
                       </tr>

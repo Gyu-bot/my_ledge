@@ -195,6 +195,7 @@
 
 - usage:
   - Overview 월간 현금흐름
+  - Canonical Views 월별 현금흐름
 - token source:
   - `chartTheme.ts`
 
@@ -299,6 +300,27 @@
   - upload accordion
   - upload history accordion
   - danger zone accordion
+- topbar meta:
+  - 현재 page item count / total count
+
+### `AutoClassificationPage`
+
+- blocks:
+  - write access alert
+  - upload auto-apply toggles
+  - fixed/variable category rules table
+  - recurring category rules table
+  - loan merchant rules table
+- topbar meta:
+  - 등록된 규칙 수
+
+### `RecurringClassificationPage`
+
+- blocks:
+  - write access alert
+  - selected group bulk classification panel
+  - recurring payment candidate table
+  - classification selects with `미분류`, `할부`, `매월 반복`, `반복 아님`
 - topbar meta:
   - 현재 page item count / total count
 

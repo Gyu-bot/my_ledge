@@ -380,7 +380,8 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         description=(
             "Canonical data-quality queue for transactions that reduce analytics "
             "confidence. Flags missing cost classification, fixed-cost necessity, "
-            "recurring classification, and likely missing loan repayment links."
+            "monthly recurring classification candidates, and likely missing loan "
+            "repayment links."
         ),
         recommended_for_ai=True,
         columns=(

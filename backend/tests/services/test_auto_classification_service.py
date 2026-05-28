@@ -3,13 +3,18 @@ from datetime import date, time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auto_classification import CategoryClassificationRule, LoanMerchantRule
+from app.models.auto_classification import (
+    CategoryClassificationRule,
+    LoanMerchantRule,
+    RecurringCategoryRule,
+)
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.services.auto_classification_service import (
     apply_category_classification_rules,
     apply_loan_merchant_rules,
+    apply_recurring_category_rules,
     get_auto_classification_settings,
 )
 
@@ -19,10 +24,12 @@ def _transaction(
     category_major: str,
     category_minor: str | None,
     merchant: str,
+    tx_date: date = date(2026, 5, 20),
     cost_classification_source: str | None = None,
+    recurring_payment_kind: str | None = None,
 ) -> Transaction:
     return Transaction(
-        date=date(2026, 5, 20),
+        date=tx_date,
         time=time(9, 0),
         type="지출",
         category_major=category_major,
@@ -33,6 +40,7 @@ def _transaction(
         currency="KRW",
         payment_method="카드",
         cost_classification_source=cost_classification_source,
+        recurring_payment_kind=recurring_payment_kind,
         source="import",
     )
 
@@ -160,6 +168,57 @@ async def test_loan_merchant_rules_create_auto_links_without_overwriting_manual_
     assert manual_link.repayment_type == "interest"
 
 
+async def test_recurring_category_rules_apply_to_recurring_candidates_only(
+    db_session: AsyncSession,
+) -> None:
+    monthly_targets = [
+        _transaction(
+            tx_date=date(2026, month, 5),
+            category_major="구독",
+            category_minor="OTT",
+            merchant="넷플릭스",
+        )
+        for month in (1, 2, 3)
+    ]
+    one_off = _transaction(
+        tx_date=date(2026, 1, 10),
+        category_major="구독",
+        category_minor="OTT",
+        merchant="일회성구독",
+    )
+    manual_target = _transaction(
+        tx_date=date(2026, 1, 5),
+        category_major="구독",
+        category_minor="OTT",
+        merchant="수동구독",
+        recurring_payment_kind="not_recurring",
+    )
+    db_session.add_all(
+        [
+            *monthly_targets,
+            one_off,
+            manual_target,
+            RecurringCategoryRule(
+                category_major="구독",
+                category_minor=None,
+                recurring_payment_kind="monthly_recurring",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await apply_recurring_category_rules(db_session)
+
+    assert result.updated == 3
+    for transaction in monthly_targets:
+        await db_session.refresh(transaction)
+        assert transaction.recurring_payment_kind == "monthly_recurring"
+    await db_session.refresh(one_off)
+    await db_session.refresh(manual_target)
+    assert one_off.recurring_payment_kind is None
+    assert manual_target.recurring_payment_kind == "not_recurring"
+
+
 async def test_auto_classification_settings_default_to_disabled(
     db_session: AsyncSession,
 ) -> None:
@@ -167,3 +226,4 @@ async def test_auto_classification_settings_default_to_disabled(
 
     assert settings.apply_cost_rules_on_upload is False
     assert settings.apply_loan_rules_on_upload is False
+    assert settings.apply_recurring_rules_on_upload is False

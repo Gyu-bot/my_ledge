@@ -14,8 +14,8 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 거래 조회/수정/삭제/복원
   - 데이터 관리 초기화: 거래만 또는 거래+스냅샷 reset
   - 대출 상환 거래 매핑
-  - 고정비/변동비, 필수 고정비, 반복 결제 수동 분류
-  - 카테고리 기반 고정비 자동분류 및 거래처 기반 대출 자동연결 규칙
+  - 고정비/변동비, 필수 고정비, 반복 결제 분류
+  - 카테고리 기반 고정비/반복결제 자동분류 및 거래처 기반 대출 자동연결 규칙
   - 메인 대시보드
   - 지출 분석
   - 자산 현황
@@ -42,8 +42,8 @@ My Ledge는 BankSalad 엑셀 파일을 개인 재무 분석용 DB로 바꾸고, 
 | 자산 분석 | 업로드된 snapshot 기반 자산/부채/투자/대출 현황 확인 | 순자산, 총자산, 총부채, 투자 평가액, 투자 원금 대비 수익률, 포트폴리오 비중, 대출 잔액/금리/상품 |
 | 인사이트 | 최근 현금흐름과 이상 징후를 한 화면에서 확인 | 저축률, 수입 변동성, 이상 지출 카테고리 수, 반복 결제 후보, 거래처 Top 5, 카테고리 전월 대비 |
 | 대출 연결 | 지출 거래 중 대출 상환 성격의 거래를 안정적인 대출 계좌에 직접 연결 | 연결/미연결 후보, 대출 기관/상품/표시명, 신규일/만기일, 상환 유형(원금/이자/원리금/미정), 연결 메모 |
-| 자동분류 | 카테고리 기반 고정비/변동비 규칙과 거래처 기반 대출 연결 규칙 관리 | 업로드 후 자동 적용 토글, 기존 데이터 일괄 적용 결과, category rule 목록, loan merchant rule 목록 |
-| 반복 결제 분류 | 거래처별 반복 결제 후보를 수동으로 `할부` 또는 `매월 반복`으로 분류 | 반복 후보 그룹, 평균 금액, 발생 횟수, interval/confidence, 그룹 내 거래 id, 저장된 분류 상태 |
+| 자동분류 | 카테고리 기반 고정비/변동비 규칙, 반복결제 카테고리 규칙, 거래처 기반 대출 연결 규칙 관리 | 업로드 후 자동 적용 토글, 기존 데이터 일괄 적용 결과, category rule 목록, recurring category rule 목록, loan merchant rule 목록 |
+| 반복 결제 분류 | 거래처별 반복 결제 후보를 수동으로 `할부`, `매월 반복`, `반복 아님`으로 분류 | 반복 후보 그룹, 평균 금액, 발생 횟수, interval/confidence, 그룹 내 거래 id, 저장된 분류 상태 |
 | 에이전트/SQL 분석 | OpenClaw/hermes 같은 외부 에이전트가 readonly DB와 API를 함께 사용 | raw table schema, canonical view schema, analytics endpoint, stable loan-account mapping field |
 
 ## 프론트엔드 화면과 주요 지표
@@ -56,9 +56,9 @@ My Ledge는 BankSalad 엑셀 파일을 개인 재무 분석용 DB로 바꾸고, 
 | `/analysis/insights` | 인사이트 | 저축률, 수입 변동성, 이상 지출 카테고리 수, 핵심 인사이트, 반복 결제 후보와 저장된 반복분류, 이상 지출, 거래처 소비 Top 5, 카테고리 MoM |
 | `/operations/workbench` | 거래 작업대 | write access 상태, 거래 필터, 선택 거래 bulk edit, 거래 테이블, 업로드, 최근 업로드 이력, 거래/스냅샷 reset |
 | `/operations/loan-mapping` | 대출 연결 | 대출 상환 후보 거래, 현재 연결 대출 계좌, 연결 출처, 상환 유형, 대출 신규일/만기일, 다건 연결 |
-| `/operations/auto-classification` | 자동분류 | 업로드 후 자동 적용 옵션, 고정비/변동비 category rule, 거래처 대출 연결 rule, 기존 데이터 일괄 적용 |
-| `/operations/canonical-views` | 캐노니컬 뷰 | `/api/v1/schema` 기반 canonical view registry, P0/P0.5 advisor read model, 분류 품질 작업 연결 |
-| `/operations/recurring-classification` | 반복 결제 분류 | 반복 후보 요약, 선택 그룹 bulk classification, 거래처별 반복 후보 테이블, `할부` / `매월 반복` / 미분류 선택 |
+| `/operations/auto-classification` | 자동분류 | 업로드 후 자동 적용 옵션, 고정비/변동비 category rule, 반복결제 category rule, 거래처 대출 연결 rule, 기존 데이터 일괄 적용 |
+| `/operations/canonical-views` | 캐노니컬 뷰 | `/api/v1/canonical-views/dashboard` 기반 실제 canonical row KPI/차트/테이블, `/api/v1/schema` 기반 view reference, 분류 품질 작업 연결 |
+| `/operations/recurring-classification` | 반복 결제 분류 | 반복 후보 요약, 선택 그룹 bulk classification, 거래처별 반복 후보 테이블, `할부` / `매월 반복` / `반복 아님` / 미분류 선택 |
 
 호환용 redirect는 `/spending` -> `/analysis/spending`, `/assets` -> `/analysis/assets`, `/income` -> `/`, `/transfers` -> `/`, `/data` -> `/operations/workbench`로 유지한다.
 
@@ -80,14 +80,14 @@ My Ledge는 BankSalad 엑셀 파일을 개인 재무 분석용 DB로 바꾸고, 
 | 거래처 지출 | 거래처별 소비 규모와 빈도 | `merchant` 기준 합계, 건수, 평균 금액, 마지막 거래일 |
 | 결제수단 패턴 | 결제수단별 소비 비중 | `payment_method`별 총액, 건수, 평균, 전체 대비 비중 |
 | 수입 안정성 | 월별 수입 변동성 | 월별 수입 평균, 표준편차, `coefficient_of_variation = stdev / avg` |
-| 반복 결제 | 주기적으로 발생하는 거래처별 지출 후보 | 거래처별 발생 간격으로 monthly/weekly/irregular와 confidence를 계산하고, 사용자가 `할부`/`매월 반복`을 저장한다 |
+| 반복 결제 | 주기적으로 발생하는 거래처별 지출 후보 | 거래처별 발생 간격으로 monthly/weekly/irregular와 confidence를 계산하고, 사용자가 `할부`/`매월 반복`/`반복 아님`을 저장한다. 자동분류 규칙은 반복 후보이거나 고정비인 거래만 카테고리 기준으로 채운다 |
 | 이상 지출 | 기준 기간 대비 특정 카테고리가 유난히 커진 경우 | 직전 마감월 또는 지정 기준일을 baseline window와 비교하고 `min_delta_amount`, `anomaly_threshold`로 필터링 |
 | 대출 상환액 | 일반 소비와 분리해 볼 대출 연결 지출 | `loan_transaction_links`로 연결된 거래를 대출 계좌/상환 유형별로 집계 |
-| true spendable | 대출 상환과 고정 지출을 뺀 후의 가용 현금 | 수입에서 대출 상환과 fixed commitments를 먼저 제외하고, 변동 지출 전/후 잔액을 나눠 본다 |
+| true spendable | 대출 상환과 고정 지출을 뺀 후의 가용 현금 | 수입에서 대출 상환과 fixed commitments를 먼저 제외하고, 변동 지출 전/후 잔액을 나눠 본다. 진행 중인 월의 수입이 최근 6개 마감월의 이상치 제외 baseline보다 크게 낮으면 dashboard API가 예상 수입/예상 가용액을 별도 태그로 함께 제공한다 |
 
 ## Canonical view와 에이전트용 read surface
 
-Canonical view는 raw table을 직접 다시 해석하지 않아도 같은 기준으로 거래와 월별 지표를 읽게 하는 read surface다. `/api/v1/schema`는 raw table과 함께 아래 view schema를 문서화하며, 외부 에이전트는 가능하면 raw `transactions`보다 이 계층을 우선 사용한다.
+Canonical view는 raw table을 직접 다시 해석하지 않아도 같은 기준으로 거래와 월별 지표를 읽게 하는 read surface다. `/api/v1/canonical-views/dashboard`는 주요 P0/P0.5 view의 실제 row 값을 프론트엔드 대시보드에 제공하고, 진행 중인 월에는 최근 6개 마감월에서 환급/보너스성 이상치를 제외한 수입 baseline 기반 예상값을 명확히 태그해 함께 보여줄 수 있다. `/api/v1/schema`는 raw table과 함께 아래 view schema를 문서화한다. 외부 에이전트는 가능하면 raw `transactions`보다 이 계층을 우선 사용한다.
 
 | View | 용도 | 주요 항목 |
 |---|---|---|
@@ -98,7 +98,7 @@ Canonical view는 raw table을 직접 다시 해석하지 않아도 같은 기�
 | `vw_loan_repayment_monthly` | 대출 상환 부담 추적 | 월별 상환액, 대출 계좌 id, 표시명, 기관, 상품, 대출 종류, 만기일, 상환 유형 |
 | `vw_true_spendable_monthly` | 실제 가용 현금 파악 | 대출 상환과 고정 지출 차감 후 변동 지출 전 가용액, 변동 지출 후 잔액 |
 | `vw_merchant_monthly_baseline` | 거래처별 baseline과 증감 확인 | 월별 거래처 지출/건수, 직전 3개월 마감월 baseline, delta field |
-| `vw_unclassified_work_queue` | 분류 품질 개선 우선순위 | 비용 성격/필수 여부/반복분류/대출 연결 검토가 필요한 거래와 우선순위 |
+| `vw_unclassified_work_queue` | 분류 품질 개선 우선순위 | 비용 성격/필수 여부/월 단위 반복분류/대출 연결 검토가 필요한 거래와 우선순위. 같은 날 분할 구매처럼 월 반복성이 없는 거래는 반복분류 후보로 보지 않는다 |
 
 P1/P2 후보로 `vw_recurring_merchant_monthly`, `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`가 계획되어 있다. 아직 구현되지 않은 항목은 [docs/planned-work.md](docs/planned-work.md)를 기준으로 확인한다.
 

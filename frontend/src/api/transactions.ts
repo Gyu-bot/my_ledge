@@ -26,6 +26,9 @@ import type {
   LoanMerchantRuleRequest,
   LoanMerchantRuleListResponse,
   LoanMerchantRuleResponse,
+  RecurringCategoryRuleRequest,
+  RecurringCategoryRuleListResponse,
+  RecurringCategoryRuleResponse,
   AutoClassificationApplyResponse,
 } from '../types/transaction'
 
@@ -159,6 +162,21 @@ export const transactionApi = {
 
   applyLoanMerchantRules: () =>
     apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/loan-merchant-rules', {
+      method: 'POST',
+    }),
+
+  recurringCategoryRules: () =>
+    apiFetch<RecurringCategoryRuleListResponse>('/auto-classification/recurring-category-rules'),
+
+  upsertRecurringCategoryRule: (data: RecurringCategoryRuleRequest) =>
+    apiFetch<RecurringCategoryRuleResponse>('/auto-classification/recurring-category-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  applyRecurringCategoryRules: () =>
+    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/recurring-category-rules', {
       method: 'POST',
     }),
 

@@ -25,6 +25,7 @@
 - `X-API-Key` 필요
   - `POST /api/v1/upload`
   - `GET /api/v1/schema`
+  - `GET /api/v1/canonical-views/dashboard`
   - `GET /api/v1/settings/analytics`
   - `PATCH /api/v1/settings/analytics`
   - `GET /api/v1/auto-classification/settings`
@@ -37,6 +38,10 @@
   - `POST /api/v1/auto-classification/loan-merchant-rules`
   - `DELETE /api/v1/auto-classification/loan-merchant-rules/{id}`
   - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
+  - `GET /api/v1/auto-classification/recurring-category-rules`
+  - `POST /api/v1/auto-classification/recurring-category-rules`
+  - `DELETE /api/v1/auto-classification/recurring-category-rules/{id}`
+  - `POST /api/v1/auto-classification/apply/recurring-category-rules`
   - `POST /api/v1/transactions`
   - `PATCH /api/v1/transactions/bulk-update`
   - `PATCH /api/v1/transactions/{id}`
@@ -57,6 +62,7 @@
 |---|---|---|---|
 | `GET` | `/api/v1/health` | live | healthcheck |
 | `GET` | `/api/v1/schema` | live | API key required |
+| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, P0/P0.5 canonical view row dashboard, current-month estimated true spendable enrichment with 6-month outlier-adjusted income baseline |
 
 ### Upload / Operations
 
@@ -77,6 +83,10 @@
 | `POST` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, upsert a merchant rule |
 | `DELETE` | `/api/v1/auto-classification/loan-merchant-rules/{id}` | live | API key required |
 | `POST` | `/api/v1/auto-classification/apply/loan-merchant-rules` | live | API key required, auto-link non-manual loan mappings |
+| `GET` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, category-to-recurring-kind rules |
+| `POST` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, upsert a recurring category rule |
+| `DELETE` | `/api/v1/auto-classification/recurring-category-rules/{id}` | live | API key required |
+| `POST` | `/api/v1/auto-classification/apply/recurring-category-rules` | live | API key required, apply rules to recurring candidates or fixed costs only |
 
 ### Transactions Read
 
@@ -167,8 +177,9 @@
 - Supported values:
   - `installment`: installment/할부 repayment-like recurring charge
   - `monthly_recurring`: a fresh monthly recurring charge such as utilities or subscriptions
+  - `not_recurring`: explicitly reviewed non-recurring merchant activity
 - `GET /api/v1/analytics/recurring-payments` groups by merchant and returns transaction ids plus classification counts. The operations recurring-classification screen uses those ids for bulk updates; insights surfaces display the saved result only.
-- Automatic recurring-payment classification is not live. The auto-classification surface currently covers fixed/variable cost rules and loan merchant rules, not `recurring_payment_kind`.
+- Category-based recurring-payment classification is live via `recurring_category_rules`. It only fills unclassified `recurring_payment_kind` values for transactions whose merchant passes the recurring-candidate gate or whose `cost_kind='fixed'`; explicit manual/previous values are preserved.
 
 ### Auto Classification
 

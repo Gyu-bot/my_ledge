@@ -1,3 +1,5 @@
+export type RecurringPaymentKind = 'installment' | 'monthly_recurring' | 'not_recurring'
+
 export interface TransactionResponse {
   id: number
   date: string         // "YYYY-MM-DD"
@@ -17,7 +19,7 @@ export interface TransactionResponse {
   cost_kind: 'fixed' | 'variable' | null
   fixed_cost_necessity: 'essential' | 'discretionary' | null
   cost_classification_source: 'manual' | 'auto' | null
-  recurring_payment_kind: 'installment' | 'monthly_recurring' | null
+  recurring_payment_kind: RecurringPaymentKind | null
   memo: string | null
   is_deleted: boolean
   merged_into_id: number | null
@@ -54,7 +56,7 @@ export interface TransactionListParams {
   is_edited?: boolean
   cost_kind?: 'fixed' | 'variable'
   fixed_cost_necessity?: 'essential' | 'discretionary'
-  recurring_payment_kind?: 'installment' | 'monthly_recurring'
+  recurring_payment_kind?: RecurringPaymentKind
   search?: string
   start_month?: string
   end_month?: string
@@ -81,7 +83,7 @@ export interface TransactionUpdateRequest {
   category_minor_user?: string | null
   cost_kind?: 'fixed' | 'variable' | null
   fixed_cost_necessity?: 'essential' | 'discretionary' | null
-  recurring_payment_kind?: 'installment' | 'monthly_recurring' | null
+  recurring_payment_kind?: RecurringPaymentKind | null
   memo?: string | null
 }
 
@@ -92,7 +94,7 @@ export interface TransactionBulkUpdateRequest {
   category_minor_user?: string | null
   cost_kind?: 'fixed' | 'variable' | null
   fixed_cost_necessity?: 'essential' | 'discretionary' | null
-  recurring_payment_kind?: 'installment' | 'monthly_recurring' | null
+  recurring_payment_kind?: RecurringPaymentKind | null
   memo?: string | null
 }
 
@@ -220,11 +222,13 @@ export interface MonthlySummaryItem {
 export interface AutoClassificationSettings {
   apply_cost_rules_on_upload: boolean
   apply_loan_rules_on_upload: boolean
+  apply_recurring_rules_on_upload: boolean
 }
 
 export interface AutoClassificationSettingsPatchRequest {
   apply_cost_rules_on_upload?: boolean
   apply_loan_rules_on_upload?: boolean
+  apply_recurring_rules_on_upload?: boolean
 }
 
 export interface CategoryClassificationRuleRequest {
@@ -267,6 +271,25 @@ export interface LoanMerchantRuleResponse extends LoanMerchantRuleRequest {
 
 export interface LoanMerchantRuleListResponse {
   items: LoanMerchantRuleResponse[]
+}
+
+export interface RecurringCategoryRuleRequest {
+  category_major: string
+  category_minor?: string | null
+  recurring_payment_kind: RecurringPaymentKind
+}
+
+export interface RecurringCategoryRuleResponse extends RecurringCategoryRuleRequest {
+  id: number
+  category_major: string
+  category_minor: string | null
+  recurring_payment_kind: RecurringPaymentKind
+  created_at: string
+  updated_at: string
+}
+
+export interface RecurringCategoryRuleListResponse {
+  items: RecurringCategoryRuleResponse[]
 }
 
 export interface AutoClassificationApplyResponse {
