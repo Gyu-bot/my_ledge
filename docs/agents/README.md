@@ -7,11 +7,13 @@ OpenClaw, hermes, Codex, Claude 등 외부 에이전트가 `my_ledge`를 읽기/
 
 1. 현재 live backend/API contract: [docs/backend-api-ssot.md](../backend-api-ssot.md)
 2. 상세 endpoint/metric reference: [docs/backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md)
-3. 기존 OpenClaw 호환 연동 문서: [docs/openclaw/README.md](../openclaw/README.md)
-4. 협업 규칙과 상태: [AGENTS.md](../../AGENTS.md), [docs/STATUS.md](../STATUS.md)
+3. 미구현 계획 backlog: [docs/planned-work.md](../planned-work.md)
+4. 기존 OpenClaw 호환 연동 문서: [docs/openclaw/README.md](../openclaw/README.md)
+5. 협업 규칙과 상태: [AGENTS.md](../../AGENTS.md), [docs/STATUS.md](../STATUS.md)
 
 `PRD.md`와 과거 plan/spec 문서는 제품 의도와 배경을 볼 때만 사용한다.
 live endpoint나 필드 계약이 충돌하면 backend 코드와 [docs/backend-api-ssot.md](../backend-api-ssot.md)를 우선한다.
+아직 구현되지 않은 계획은 [docs/planned-work.md](../planned-work.md)에 승격된 항목만 current backlog로 본다.
 
 ## 연결 정보
 

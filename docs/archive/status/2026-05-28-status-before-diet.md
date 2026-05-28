@@ -1,0 +1,537 @@
+# STATUS.md
+
+> Historical snapshot of `docs/STATUS.md` before the 2026-05-28 diet pass.
+> Current handoff status lives at [docs/STATUS.md](../../STATUS.md).
+
+## Current State
+- **Phase:** 안정화 follow-up 유지, 대출 상환 거래 매핑 별도 운영 화면 분리 완료
+- **Last Worker:** Codex (2026-05-28T12:51+0900, planned backlog 보강 및 STATUS 길이 운영 원칙 정리)
+- **Branch:** main
+
+## Completed
+- [x] Planned backlog 추가 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 `docs/planned-work.md`에 반영. `AGENTS.md`에 `docs/STATUS.md` 길이 관리와 archive 운영 원칙 추가
+- [x] docs 역할 정리: `docs/planned-work.md` 는 미구현 backlog/roadmap으로 유지하고 `docs/STATUS.md` 는 handoff/status log로 분리, 문서별 참조 위치를 `AGENTS.md`, `README.md`, `docs/agents/README.md`, `docs/backend-api-ssot.md` 에 반영, 루트 `docs/additional_feature.md` 는 `docs/archive/planning/finance-advisor-analytics-expansion.md` 로 이동
+- [x] Planned backlog 결정사항 반영: `docs/planned-work.md`, `PRD.md`, advisor analytics plan, backend metrics reference에 P0/P0.5/P1/P2 결정사항과 "My Ledge는 재무 어시스턴트용 canonical read model foundation, assistant personality는 별도 consumer layer" 원칙을 정리
+- [x] Planned-but-unimplemented backlog 정리: `docs/planned-work.md` 를 추가해 P0/P0.5/P1/P2/Paused/Stale 기준으로 미구현 계획 항목을 단일 정리하고, `PRD.md` 마일스톤을 현재 backlog 문서 기준으로 갱신
+- [x] Canonical read model 확장 요구사항 정리: `PRD.md`, `docs/planned-work.md`, `docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`, `docs/backend-api-and-metrics-reference.md` 에 P0/P0.5/P1/P2 view 후보, 대출 상환 double-count 방지, true spendable, merchant baseline, unclassified work queue, as_of/threshold API 분리 원칙을 반영
+- [x] 대출 계좌 관리 섹션 및 대출 성격/만기 정보 추가: `loan_accounts.display_name_user`, `loan_accounts.loan_kind` 저장 필드, `PATCH /api/v1/loan-accounts`, `loan_display_name`/`loan_kind`/`loan_start_date`/`loan_maturity_date` canonical view 컬럼, `/operations/loan-mapping` 별도 `대출 계좌 관리` 섹션을 추가하고 최신 스냅샷의 신규일/만기일을 함께 표시
+- [x] 자동분류 카테고리 규칙 입력 UX 보강: `/operations/auto-classification` 의 고정비/변동비 규칙 대분류/소분류 입력을 거래 필터 옵션 기반 dropdown으로 전환하고, 대분류 선택 시 소분류 옵션을 해당 대분류 기준으로 제한
+- [x] 고정비 월별 추이 추가: `GET /api/v1/analytics/fixed-cost-trend`, `vw_fixed_cost_monthly_summary`, 지출 분석 `/analysis/spending` 월별 고정비/변동비 및 필수/비필수 고정비 stacked bar, frontend/backend 테스트와 API/canonical 문서 반영
+- [x] 자동분류/대출 자동연결 규칙 추가: `category_classification_rules`, `loan_merchant_rules`, `auto_classification_settings`, `transactions.cost_classification_source`, `loan_transaction_links.source` 추가, `GET/PATCH /api/v1/auto-classification/settings`, category rule CRUD/apply, loan merchant rule CRUD/apply API, 업로드 후 자동 적용 옵션, `/operations/auto-classification` 화면과 테스트/문서 반영
+  - 카테고리 규칙은 effective 대분류/소분류 기준으로 `cost_kind` / `fixed_cost_necessity` 를 자동 적용한다.
+  - 자동분류는 `cost_classification_source='auto'`, 사용자 작업대 수정은 `manual` 로 저장하며 자동 적용은 manual 값을 덮어쓰지 않는다.
+  - 대출 거래처 규칙은 `merchant` exact match로 대출 계좌와 상환 성격을 자동 연결하고, 기존 수동 대출 연결(`loan_transaction_links.source='manual'`)은 덮어쓰지 않는다.
+  - 반복결제 화면은 할부/매월 반복 분류에 집중하고, 고정비 자동분류는 별도 자동분류 메뉴에서 관리한다.
+- [x] README 및 에이전트 연동 문서 갱신: `README.md` 를 현재 route/API/운영 범위에 맞추고, OpenClaw 전용 문서를 OpenClaw/hermes 및 전체 에이전트 대상으로 확장, canonical view 우선 사용을 정리한 `docs/agents/README.md` 추가
+- [x] Loan transaction mapping backend/frontend 추가: `loan_accounts` 안정 계좌 identity와 `loan_transaction_links` 거래 매핑 테이블, `GET /api/v1/loan-accounts`, `GET /api/v1/loan-transaction-links`, `GET/PUT/DELETE /api/v1/transactions/{id}/loan-link`, `PUT /api/v1/transactions/loan-links/bulk` API, 별도 `/operations/loan-mapping` 화면, 서비스/API/frontend 테스트, PRD/API 문서 반영
+  - `loan-transaction-links` 기본 목록은 수동 매핑 작업용으로 넓게 유지한다. 이미 연결된 거래, `금융` 대분류 지출, 또는 대출/상환/이자/원리금/원금·이자 단서가 있는 지출을 포함한다.
+  - `vw_transactions_effective` 는 nullable `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_display_name`, `loan_repayment_type`, `loan_link_memo` 컬럼으로 연결된 대출 상환 정보를 함께 노출한다.
+- [x] 고정비/반복결제 수동 분류 확장: `transactions.recurring_payment_kind` (`installment` / `monthly_recurring`) 추가, `GET/PATCH /transactions` 및 bulk-update/필터/canonical view에 연결, 별도 `/operations/recurring-classification` 화면에서 거래처 그룹 단위 수동 분류 select 제공
+  - 고정비/변동비와 필수/비필수는 기존 `cost_kind`, `fixed_cost_necessity` 필드를 유지하고 작업대 필터/편집 노출을 보강했다.
+  - `/analysis/insights` 반복결제 카드는 저장된 분류 결과와 count만 읽기 전용으로 표시한다.
+  - `/operations/workbench` 에서는 반복분류를 조회/필터만 제공하고, 단건/일괄 수정은 `/operations/recurring-classification` 으로 일원화했다.
+  - `/operations/recurring-classification` 은 현재 페이지의 여러 거래처 그룹을 선택해 한 번에 `미분류` / `할부` / `매월 반복` 으로 bulk-update 할 수 있다.
+  - 자동분류의 고정비/대출연결 규칙은 `/operations/auto-classification` 으로 분리했고, 반복결제 성격 자동분류는 아직 적용하지 않는다.
+- [x] Spending timeline monthly total labels 추가: `월별 카테고리 추이` stacked bar에 월별 총액 overlay 라벨을 표시하고 hover tooltip에도 `총액` 행을 추가, 브라우저에서 라벨 6개와 tooltip 총액 확인
+- [x] Spending timeline stacked bar 전환 완료: `월별 카테고리 추이`를 `StackedAreaChart`에서 실제 Recharts `BarChart` 기반 `StackedBarChart`로 교체하고 브라우저에서 bar rectangle 렌더링 확인
+- [x] Sample workbook frontend smoke 확인: Docker Compose 테스트 스택을 임시 포트(`frontend :13000`, `backend :18000`)로 기동하고 `tmp/2025-05-21~2026-05-21.xlsx` 업로드 성공 후 개요/거래 작업대/자산 화면 렌더링 확인
+- [x] Analytics settings backend 구현 완료: `app_settings` 테이블과 `GET/PATCH /api/v1/settings/analytics` API를 추가하고, `spending-anomalies` 기본 파라미터를 `query override > persisted setting > code default` 순서로 해석하도록 연결
+- [x] 문서 참조 경로 정리 완료: `AGENTS.md`의 루트 `STATUS.md` 잔여 언급을 `docs/STATUS.md` 단일 상태 파일 기준으로 수정하고, README/OpenClaw 문서의 깨진 운영 상태 링크를 현재 위치로 정렬
+- [x] Income stability threshold 설명 보강 완료: backend metrics reference 문서에 `coefficient_of_variation` 의 backend 산출 범위와 frontend label threshold(`안정/보통/불안정`, `낮음/보통/높음`)를 명시
+- [x] Backend API and metrics reference 문서화 완료: 현재 구현된 backend endpoint 전체, 인증 규칙, 주요 response contract, canonical view, upload/snapshot reconcile, analytics 지표 산출 로직을 코드 기준으로 별도 문서에 정리 (`docs/backend-api-and-metrics-reference.md`)
+- [x] Assets KPI sub cleanup 완료: 자산 현황 KPI 카드에서는 `투자 평가액`만 `원금 대비` sub를 유지하고, 순자산/총자산/총부채의 snapshot compare sub는 제거, frontend 전체 검증 재실행
+- [x] Assets snapshot copy cleanup 완료: 자산 현황 KPI/요약 카드에서 `부분 기간` 같은 기간 진단 문구를 제거하고 baseline snapshot date 중심 비교 문구로 정렬, frontend 전체 검증 재실행
+- [x] Overview signal control 완료: 개요 `주의 신호` 카드에 `직전 마감월/부분 기간` 공통 기준 selector 추가, `income-stability`/`spending-anomalies` 응답에 `comparison_mode`, `reference_date`, `is_partial_period` 메타데이터를 포함하도록 확장, backend/frontend 전체 검증 재실행
+- [x] Income stability period-alignment hotfix 완료: `income-stability` 도 `spending-anomalies` 와 같은 규칙으로 직전 마감월 기본값과 partial same-day cutoff 를 적용하도록 정렬, service/API 회귀와 backend 전체 테스트 재검증
+- [x] Workbench 소분류 옵션 fallback hotfix 완료: 실제 구버전 `filter-options` 응답에 소분류 메타데이터가 없을 때도 현재 로드된 거래의 effective category 값으로 소분류 콤보박스를 구성하도록 프론트 fallback 추가, frontend 전체 검증 재실행
+- [x] Workbench 카테고리 세부 UX hotfix 완료: 설명 열 폭 축소, 소분류 열 추가, edit/bulk category 입력을 대분류-소분류 콤보박스로 전환, backend `filter-options` 에 소분류 목록과 대분류별 매핑 추가, backend/frontend 전체 검증 재실행
+- [x] Workbench 거래목록 usability hotfix 완료: 페이지당 40건으로 확대, 현재 페이지 기준 전체 선택 체크박스 추가, 검색 입력 placeholder를 포함 검색 의미에 맞게 정렬, frontend 테스트/린트/typecheck 재검증
+- [x] PRD 작성 (`PRD.md`)
+- [x] AGENTS.md 작성
+- [x] STATUS.md 초기화
+- [x] 구현 전 요구사항 공백 점검 및 의사결정 반영
+- [x] Phase 1 구현계획 문서 작성 (`docs/superpowers/plans/2026-03-23-phase1-mvp-foundation.md`)
+- [x] Task 1 완료: backend 스캐폴딩 + `/api/v1/health` + 설정/보안 뼈대
+- [x] Task 2 완료: SQLAlchemy 모델 + Alembic 초기 마이그레이션 추가
+- [x] Task 3 완료: 엑셀 복호화 헬퍼 + 거래/스냅샷 파서 + 샘플 기반 parser 테스트
+- [x] Task 4A 완료: transaction-only 업로드 서비스 + incremental import + upload_logs 기록
+- [x] Task 4A.1 완료: Docker Compose 기반 PostgreSQL 기동 + migration/import smoke test
+- [x] Task 4B 완료: snapshot 적재 + `partial`/`failed` 업로드 정책 구현
+- [x] Task 5 완료: upload/schema/assets API + 인증/응답 스키마 구현
+- [x] Task 6 완료: 거래 조회/편집 API 구현 (`merge`는 501 stub)
+- [x] Task 8 일부 완료: 샘플 workbook 원본 대조 검증 자동화
+- [x] Task 7 완료: frontend 최소 스캐폴딩 + Docker runtime
+- [x] Task 8 완료: 최신 workbook `fs_260326.xlsx` 기준 PostgreSQL parity + `finance_sample.xlsx -> sample_260324.xlsx -> fs_260326.xlsx` rolling-window 연속 업로드 검증
+- [x] Task 9 완료: canonical view(`vw_transactions_effective`, `vw_category_monthly_spend`) 추가 + `/api/v1/schema` raw/view 병행 문서화 + 거래 read path canonical shared query 정렬
+- [x] Phase 1 마감 정리: `seeded_finance_data` fixture 날짜 고정 + backend 전체 테스트 sweep 통과
+- [x] Phase 2 착수 준비: dashboard core 설계/계획 문서 작성 + UI baseline 확정
+- [x] Phase 2 Task 1 완료: frontend app shell + data foundation
+- [x] Phase 2 Task 2 완료: 메인 대시보드 구현
+- [x] Phase 2 Task 3 완료: 자산 현황 페이지 구현
+- [x] Phase 2 Task 4 완료: 지출 분석 페이지 구현
+- [x] Phase 2 Task 5 완료: 데이터 관리 페이지 구현
+- [x] Phase 2 Task 5.1 완료: 현재 구현된 frontend 화면 전반을 shadcn/ui primitive 중심으로 재정렬 (`dashboard`, `assets`, `spending`, `data`, app shell, 공통 필터/테이블/상태 카드)
+- [x] Phase 2 Task 6A 완료: 데이터 관리 write flow 실검증
+- [x] Phase 2 Task 6B 완료: 최근 10건 `upload_logs` 조회 경로 추가 + 데이터 관리 화면 연동
+- [x] Phase 3 준비 문서화 완료: README 확장 + OpenClaw 연동/skill handoff 문서 추가 (`docs/openclaw/`)
+- [x] Phase 3 인프라 준비 일부 완료: docker compose DB init 단계에 readonly 유저 + `statement_timeout=30s` 자동 bootstrap 추가
+- [x] 운영 서버 설치 절차 문서화: `README.md` 에 production `.env`, compose 기동, readonly bootstrap, OpenClaw 전달값 추가
+- [x] 운영 배포 자동화: `docker compose up -d --build` 시 `migrate` one-shot 서비스로 Alembic migration 자동 적용
+- [x] 운영 프론트 hotfix: 대시보드/데이터 화면에서 배열 필드 누락 응답도 빈 컬렉션으로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
+- [x] 운영 프론트 hotfix 확장: 자산/지출 화면에서도 `items`/`totals` 누락 응답을 빈 컬렉션·0 합계로 정규화해 런타임 crash 방지 + 회귀 테스트 추가
+- [x] 운영 write 경로 정리: compose 배포 시 `API_KEY`를 frontend build의 `VITE_API_KEY`로 자동 주입하도록 연결하고, 업로드 API의 `snapshot_date`를 필수 입력값으로 고정
+- [x] 운영 프론트 hotfix: static nginx에 `/api/` reverse proxy와 업로드용 body size 한도를 추가해 compose 배포에서 상대경로 API POST가 405로 막히지 않도록 수정
+- [x] 운영 프론트 hotfix: 데이터 관리 화면이 첫 페이지만 읽어 빈 상태처럼 보일 수 있는 경로를 전체 페이지 수집 + mount 시 재조회로 보강하고, 거래 0건 시 placeholder를 표시하도록 수정
+- [x] 문서 운영 정비: `docs/STATUS.md` 단일화 (루트 STATUS.md 제거)
+- [x] 데이터 관리 Track A 완료: `POST /api/v1/data/reset` 추가 + 거래 전용/거래+스냅샷 reset 지원 + 데이터 관리 Danger Zone UI 연결
+- [x] 테스트 환경 정비: backend `greenlet` 의존성 추가, frontend `npm install` 수행, reset 관련 backend test / frontend test·lint·typecheck 재실행
+- [x] OpenClaw read contract hotfix: `vw_transactions_effective` 기본 계약을 삭제/병합 제외로 수정 + API include 플래그 경로 유지 + Alembic view migration 및 문서/테스트 반영
+- [x] Advisor analytics 확장 문서화: `docs/archive/planning/finance-advisor-analytics-expansion.md` feasibility 평가 반영 + `PRD.md` 범위 확장 + 구현 계획 문서 추가 (`docs/superpowers/plans/2026-03-31-advisor-analytics-expansion.md`)
+- [x] Phase 3 실검증 완료: OpenClaw 환경에서 readonly DB / `/api/v1/schema` / upload-read flow 검증 완료, 현재 API contract 이상 없음
+- [x] Phase 4A P0 advisor analytics 구현 완료: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend` 추가 + backend 서비스/API 테스트 통과
+- [x] Phase 4B P1 rule-based diagnostics 구현 완료: `GET /api/v1/analytics/payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies` 추가 + 전체 테스트 통과 (`57 passed`)
+- [x] 운영 git hygiene hotfix: `.env` 를 `.gitignore` 에 추가하고 latest commit 재작성으로 로컬 history 추적 제거
+- [x] Frontend 재설계 operations slice 완료: `OperationsWorkbenchPage` 추가, `거래 작업대`를 본문 랜딩으로 승격, `업로드`/`최근 업로드 이력`/`Danger Zone`을 accordion으로 재구성, `/data`를 legacy alias wrapper로 유지
+- [x] Frontend 문서화 완료: `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md` 추가로 컴포넌트/토큰 인벤토리와 현재 IA wireframe 정리
+- [x] Frontend token/UI follow-up 완료: pagination/daily calendar/treemap/palette/anomaly delta 표현을 현재 실데이터와 요청한 token contract 기준으로 재정렬하고 frontend 전체 검증 통과
+- [x] Backend anomaly default-period contract 정렬 완료: `spending-anomalies` 기본값은 직전 마감월 기준으로 보고, 명시적 partial `end_date` 는 이전 월 같은 일자 cutoff baseline으로 비교하도록 조정
+- [x] Backend anomaly sensitivity 보정 완료: `spending-anomalies` 에 `min_delta_amount` 기본값 100000원을 추가해 소액 변동 카테고리를 기본 탐지에서 제외하고, query param으로 추후 조정 가능하게 정리
+- [x] 리뷰용 dev server 기동: backend `uvicorn` (`0.0.0.0:8000`) + frontend Vite (`0.0.0.0:4173`) 실행, `/api/v1/health` 와 `/` 응답 확인
+- [x] Transfer tracking 계획 보강: 현재 live 데이터에서 대출원금상환이 `type='이체'`가 아니라 `type='지출'`/`금융`으로 적재되는 점을 확인하고, expense-side 재분류 레이어를 계획 문서에 반영
+- [x] 대출상환 분류 정책 확정: raw transaction은 `지출`로 유지하고, transfer tracking은 debt-movement 파생 태그/뷰로만 추가해 지출 분석과 사용자 fixed-cost 분류를 보존
+- [x] 대출상환 analytics 정책 정리: 기본 spending/fixed-cost 분석은 상환액을 포함하고, debt-health/transfer slice에서는 원금·이자 추정치를 별도 파생 지표로 제공
+- [x] 우선순위 조정: 대출상환의 expense-side 원금/이자 파생 해석 구현은 transfer/liquidity/debt 기본 기능 안정화 이후로 미룸
+- [x] 우선순위 재정렬: 신규 기능 구현보다 현재 API/백엔드/프론트엔드 정합성 수정과 안정적 구현을 최우선으로 전환
+- [x] 안정화 1차 배치 완료: analytics service pagination 기본값 복구, `merchant-spend` month-span 계약 추가, `SpendingPage` treemap query 범위 정렬, workbook fixture alias 복구
+- [x] 회귀 검증 완료: `cd backend && uv run pytest -q` → `62 passed`, `cd frontend && npm test -- --runInBand` → `38 passed`, `cd frontend && npm run lint && npm run typecheck` → 통과
+- [x] Frontend shell polish: desktop 사이드바를 기본 icon-only 상태로 접고 클릭 토글로 펼치는 interaction 추가 + layout 테스트/린트/typecheck 통과
+- [x] Frontend UI polish batch 설계 문서 작성: shell hierarchy, shared interaction, Spending/Insights/Workbench polish, Tailnet review 안정화 범위를 spec 으로 고정 (`docs/superpowers/specs/2026-04-08-frontend-ui-polish-batch-design.md`)
+- [x] Frontend UI polish spec 확장: divider contrast, chart hover/tooltip tone, Spending stacked area / 조회기간 picker / nested treemap 요구 반영
+- [x] Frontend UI polish 구현 계획 작성: 공통 shell/token, chart hover contract, Spending/Insights/Workbench, Tailnet review 검증 순서로 실행 계획 고정 (`docs/superpowers/plans/2026-04-08-frontend-ui-polish-batch.md`)
+- [x] Frontend UI polish batch 구현/검증 완료: `SectionCard` header contract 확장, divider/soft-text/chart tooltip token 조정, Spending stacked area + 조회기간 picker + nested treemap + daily calendar popover, Insights 기간/기준월 control, Workbench hierarchy polish, frontend `npm test -- --runInBand` / `npm run lint` / `npm run typecheck` 통과
+- [x] Frontend UI polish batch 구현 완료: 공통 `SectionCard`/`Pagination`/dark theme divider·text token 정리, chart hover/tooltip contract 정규화, `SpendingPage` stacked area + 조회 기간 month picker + nested treemap + `DailyCalendar` popover, `InsightsPage` 기간/기준월 control, `WorkbenchPage` hierarchy/read-only/bulk feedback 보정, Vite Tailnet hostname allowlist 정리
+- [x] Frontend UI polish batch 검증 완료: `cd frontend && npm test -- --runInBand` → `48 passed`, `npm run lint` 통과, `npm run typecheck` 통과
+- [x] Frontend UI polish batch 구현 완료: divider contrast 완화, chart hover/tooltip semantic token 정리, Spending stacked area + 조회기간 picker + 소분류 기간 badge + nested treemap + calendar popover, Insights 기간/기준월 selector, Workbench hierarchy/read-only polish, Vite MagicDNS allowlist 반영, 관련 테스트 보강
+- [x] Frontend UI polish follow-up 완료: topbar breadcrumb spacing 및 `MyLedge` 가독성 상향, 그래프 month axis year-month formatter 공통화, popover/background 분리 강화, secondary font/border contrast 재조정, Spending treemap category-first drilldown + 높이 확장, frontend `npm test -- --runInBand` → `53 passed`, `npm run lint`, `npm run typecheck` 재통과, Tailnet host smoke `HTTP/1.1 200 OK` 재확인
+- [x] Frontend UI polish checklist follow-up 완료: breadcrumb 상단 title treatment 전역 밝기 상향, table row/header separator 제거, pagination 전용 token/compact sizing 추가, Spending stacked area + treemap palette 대비 재구성, `DailyCalendar` tooltip 셀 기준 anchor + shared tooltip token contract 적용, frontend `npm test -- --runInBand` → `54 passed`, `npm run lint`, `npm run typecheck` 통과
+- [x] Frontend UI polish extra follow-up 완료: Workbench 거래 목록 페이지/건수 badge를 shared badge token으로 정렬, desktop sidebar inactive/section text 가독성 상향, `SpendingPage` timeline/detail scope separator 추가, accordion chevron 크기 축소, shared popover typography를 1.5x 수준으로 통일, frontend `npm test -- --runInBand` → `58 passed`, `npm run lint`, `npm run typecheck` 통과
+- [x] Frontend token/wireframe 문서 갱신 완료: `docs/frontend-design-tokens.md`, `docs/frontend/page-wireframes.md`, `docs/frontend/components-and-design-token-inventory.md` 를 현재 구현 기준으로 동기화하고, wireframe별 component token / font color / palette mapping을 문서화
+- [x] Real workbook backend sweep 완료: 현재 DB reset 후 `tmp/fs_260311.xlsx`, `fs_260324.xlsx`, `fs_260326.xlsx`, `fs_260407.xlsx` 를 파일명 기반 `snapshot_date` 로 순차 적재하고 import/snapshot parity 및 주요 read endpoint smoke test 확인
+- [x] Rolling-window import contract 보강 완료: overlap window 내부는 최신 workbook 기준으로 reconcile 하고, window 밖 과거 history 는 유지하도록 transaction import delete/insert 계획을 보정
+- [x] Multi-date snapshot coverage 추가 완료: assets/investments/loans summary/history API에 대해 4개 snapshot date 기준 ordering, latest default, requested snapshot semantics 테스트 추가
+- [x] Backend 전체 회귀 재검증 완료: `cd backend && uv run pytest -q` → `65 passed`
+- [x] Snapshot comparison fallback 정책 정리 완료: 기본 비교는 `latest_available_vs_previous_available`, closed-month pair가 있을 때만 `last_closed_month_vs_previous_closed_month` 를 보조로 노출하고, irregular gap에는 partial/stale metadata를 필수로 둔다
+- [x] Snapshot comparison stabilization pre-implementation checklist 정리 완료: 영향 화면, fallback 규칙, required metadata, backend/frontend test matrix, acceptance criteria를 계획 문서에 명시
+- [x] 테이블 밀도 개선 완료: `ui/table` 에 `compact` density variant 추가 후 거래 작업대, 최근 거래, 인사이트 테이블에 적용
+- [x] Frontend shell redesign spec 완료: `docs/superpowers/specs/2026-04-03-frontend-sidebar-shell-redesign-design.md` 작성 및 subagent review 승인
+- [x] Frontend shell redesign implementation plan 완료: `docs/superpowers/plans/2026-04-03-frontend-sidebar-shell-redesign-implementation.md` 작성 및 subagent review 승인
+- [x] Frontend 재설계 foundation 완료: 상단 섹션 IA(`개요 | 분석 | 운영`), 섹션 탭 네비게이션, 분석/운영 canonical route map, legacy route redirect/wrapper 적용
+- [x] Frontend 재설계 overview/insights slice 완료: `OverviewPage`, `InsightsPage`, analytics read hook/타입/카드·테이블 컴포넌트 추가
+- [x] Frontend 재설계 1차 검증 완료: frontend 전체 테스트, lint, typecheck 통과
+- [x] Frontend 실브라우저 점검 일부 완료: 실제 서버 기준 desktop canonical route 4종(`개요`, `지출`, `자산`, `인사이트`) 캡처 확보, 런타임 오류는 `favicon.ico` 404만 확인
+- [x] Frontend 레이아웃 보정 완료: 극단적 저축률 표시를 compact label로 정규화하고, 단일 포인트 시계열은 빈 차트 대신 summary fallback으로 전환
+- [x] 거래처 컬럼 도입 완료: `transactions.merchant` 추가, 기존/신규 row 기본값을 `description` 으로 백필하고 거래 편집 작업대에서 `description` 은 read-only, `merchant` 는 editable 로 분리
+- [x] Frontend heroicon-density refresh Task 1-2 완료: local Heroicons module 추가, navigation icon metadata 연결, sidebar/mobile drawer 아이콘 렌더링 및 density 축소
+- [x] Frontend heroicon-density refresh 완료: section/card title inline icon 적용, `ButtonGroup` 기반 작업대 icon-only action column 적용, 공통 `Table` primitive spacing 전역 축소, Chrome headless fallback으로 desktop/mobile live screenshot 재검토 완료
+- [x] Frontend color token refresh 완료: `primary=navy`, `secondary=orange`, `accent=red` 축으로 전역 토큰 재정의, `*-soft` 채도 완화, generic hover/select/table highlight를 `primary`/`secondary` 중심으로 재배치, desktop/mobile overview 캡처로 실화면 재검토 완료
+- [x] Frontend monetary axis compaction 완료: `OverviewPage`, `CategoryTimelineAreaChart`, `LineTrendChart` 의 금액 축 tick을 `천원` 단위 숫자로 축약하고 axis width를 축소해 mobile chart 레이아웃 여유를 확보, overview/spending mobile 캡처로 재확인 완료
+- [x] Frontend card-group emphasis polish 완료: 개요 KPI, 자산 요약, 인사이트 요약/목록, 운영 업로드 결과 등 프로젝트 전반의 card group surface에 저채도 gradient를 공통 적용하고, `Button` / `Input` / `Select` / `Checkbox` 기본 크기를 small 기준으로 재정렬
+- [x] Frontend chart/control/table refinement 완료: `월별 카테고리 추이` 를 stacked bar + no y-axis 로 전환, chart tooltip / popover shadow 강화, `Button` 기본 크기를 small 기준으로 통일, `Input` / `Select` 높이 정렬, 공통 `Table` border 제거
+- [x] Frontend table surface cleanup 완료: 카드 내부 읽기용 테이블과 거래 작업대의 table wrapper border까지 제거해 card-in-card 표면을 borderless로 통일하고 회귀 테스트 추가
+- [x] Frontend table separator rollback 완료: 카드 내부 wrapper border 제거는 유지하고 공통 `Table` row/header separator를 복구, `반복결제` 거래처 컬럼은 fixed layout + truncate로 폭 변동을 방지
+- [x] Frontend chart tooltip/card-header polish 완료: 개요 `월간 현금흐름` y축 제거, 공통 `ChartTooltipContent` 로 tooltip text size/color indicator 통일, 지출 `월별 카테고리 추이` 를 linear stacked area 로 복귀, range badge nowrap 보정, 거래처 treemap square ratio/높이 확대, `일별 지출액` 기간 badge 제거, popover padding 축소, KPI 카드 그룹 border contrast 강화
+- [x] 누적 visual refresh baseline 커밋/푸시 완료 (`395c66a`, `[frontend] visual system refresh and workbench polish (codex)`)
+- [x] Frontend merchant treemap width follow-up 완료: 카드 높이는 유지하고 `MerchantTreemapChart` 의 square/max-width 제약만 제거해 카드 본문 가로폭을 전부 사용하도록 조정
+- [x] Git hygiene 정리: ignored review artifact 디렉터리 `output/`, `.playwright-cli/`, `.codex/` 를 Git index 에서 제거하고, `.gitignore` 를 Python/test/build cache 산출물까지 확장
+- [x] 개요/인사이트 거래처 표기 정리 완료: 개요 `최근 거래` 카드와 인사이트 `반복 결제` 카드의 주요 식별 컬럼을 `description` 대신 `merchant` 기준으로 표시하도록 정렬
+- [x] 인사이트 카드 API 페이지네이션 완료: `반복 결제`, `이상 지출` endpoint/card에 `page`, `per_page`, `total` 기반 10건 단위 페이지네이션을 추가해 카드 길이와 payload를 함께 제어
+- [x] 거래 작업대 성능 최적화 batch 완료: `/transactions` 전건 수집을 제거하고 서버 필터링 + 서버 페이지네이션 + filter-options endpoint + query 분리 + 부분 invalidation/cached update로 재구성
+- [x] 거래 작업대 정보 밀도 정리 완료: 테이블/모바일 카드에 `고정비/변동비`, `고정비 필수 여부`를 직접 노출하고 상태 셀의 `업로드` source badge를 제거
+- [x] 기간 뱃지 공통화 완료: `CardPeriodBadgeGroup` 추가 후 `SpendingPage`, `InsightsPage`, `AssetsPage`, `OverviewPage`, `CategoryBreakdownCard`의 카드 헤더 기간/기준일 메타데이터를 같은 reference token으로 정렬
+- [x] 지출/자산 후속 UI batch 완료: 지출 시계열 slider apply 버튼화, 상세 월 필터 단순화, 결제수단별 카드 제거, 거래처 TreeMap full-width 확장, 투자 요약 pie chart 전환, 기준 badge 색상 `reference` variant로 통일
+- [x] Frontend 업로드 runtime config hotfix 완료: compose/nginx frontend가 build-time `VITE_API_KEY` 고정 대신 container start 시 `runtime-config.js` 로 API key를 주입하도록 수정하고, workbench upload 200 / frontend 전체 test·typecheck·lint를 재검증
+- [x] Frontend sidebar shell foundation batch 완료: `navigation.ts` source-of-truth 추가, `AppShellState` localStorage persistence 추가, `AppSidebar` / `MobileSidebarDrawer` / `AppTopbar` / `PageBreadcrumb` / `ContentFrame` 구현, `AppLayout` 을 sidebar + thin topbar shell로 cutover, 관련 테스트 13건 추가/통과
+- [x] Frontend sidebar shell rollout 완료: canonical 5개 페이지의 `PageHeader` 제거, `AppChromeContext` 기반 topbar meta slot 연결, `일별 지출액` 카드 내부 독립 dropdown filter 추가, mobile topbar breadcrumb compact 처리
+- [x] Frontend 실브라우저 점검 완료: Playwright CLI로 desktop/mobile canonical route 캡처를 수집하고, mobile 상단 chrome 중복 문제를 `AppTopbar` compact patch로 수정한 뒤 재촬영/재검증 완료
+- [x] Frontend 최종 검증 완료: `cd frontend && npm test`, `npm run lint`, `npm run typecheck` 통과
+- [x] Frontend mobile overflow hotfix follow-up 완료: 주요 chart `ResponsiveContainer` 의 desktop `minWidth` 제약 제거, `SpendingPage` 의 detail-scope separator row를 `min-w-0 + flex-1` 구조로 교체, iPhone Pro 폭 headless Chrome 재캡처로 overview/spending/assets 재검토
+- [x] Frontend spending detail month filter mobile hotfix 완료: `DateRangeFilter` 를 mobile 1열 + `min-w-0` month input 구조로 조정해 두 번째 월 필터가 카드 폭을 넘지 않도록 수정하고, 지출 페이지 iPhone Pro 폭 캡처로 재확인
+- [x] Frontend spending detail month picker iPhone Safari hotfix 완료: `SpendingPage` 상세 월 필터에 month option 기반 `Select` picker를 도입해 native `type="month"` intrinsic width overflow를 제거하고, mobile 캡처로 재확인
+- [x] Frontend read-only table mobile card rollout 완료: `RecurringPaymentsTable`, `SpendingAnomaliesTable`, `CategoryBreakdownTable` 에 `desktop table + mobile cards` 분기를 추가하고, 인사이트 모바일 캡처로 반복결제/이상지출 카드형 표시를 재확인
+- [x] Frontend mobile table-card overflow tightening 완료: `TableMobileCard` 와 읽기용 테이블 wrapper에 `overflow-hidden`, `min-w-0`, grid-based value rows를 적용해 인사이트 `반복 결제` 카드가 iPhone 폭에서 카드 밖으로 밀리지 않도록 보정
+- [x] Frontend insights mobile row/pagination overflow tightening 완료: `InsightsPage` 의 `거래처 소비 Top N`, `카테고리 증감 요약`, card pagination row에 `min-w-0`, `truncate`, `shrink-0`, mobile stack layout을 적용해 인사이트 모바일 카드 전반의 좌우 밀림을 추가 보정
+- [x] Frontend 재구현 handoff 문서화 완료: 기존 CSS/토큰/디자인시스템을 제외하고 현재 shell, 라우트, page wireframe, content block, 상호작용, API 의존성을 정리한 `docs/frontend-reimplementation-wireframe-functional-requirements.md` 작성
+- [x] Frontend review runtime hotfix 완료: 누락된 `@heroicons/react` 설치 상태 때문에 깨지던 layout chrome(`AppSidebar`, `AppTopbar`, `MobileDrawer`)을 `lucide-react` 기준으로 정리하고, `AppLayout` 렌더 회귀 테스트를 추가해 review용 dev server가 다시 기동되도록 수정
+- [x] 리뷰용 서버/Tailnet 접근 재검증 완료: backend `.venv/bin/uvicorn` `:8000`, frontend Vite `:4173` 을 다시 띄우고 `http://100.69.156.40:4173` / `http://100.69.156.40:8000/api/v1/health` 응답을 확인
+- [x] Frontend 폰트 시스템 토큰화 완료: `html { font-size: 21px }` (1.5× 스케일) + `tailwind.config.js` 에 `nano/micro/caption/label/body-sm/body-md/body/kpi/display` rem 기반 토큰 9종 추가, 전체 `.tsx` 에서 `text-[Npx]` 하드코딩 → 시멘틱 토큰으로 1-pass 치환
+- [x] Frontend heroicons → lucide-react 교체: `AppSidebar`, `AppTopbar`, `MobileDrawer` 의 `@heroicons/react` import 를 `lucide-react` 동등 아이콘으로 교체 (`@heroicons/react` 미설치 상태)
+- [x] Frontend 차트/버그 수정 완료: `categoryTimeline` URL 오타 수정(`/category-timeline` → `/by-category/timeline`), 거래처별 지출 비중 Recharts `Treemap` 전환, `StatusBadge` `whitespace-nowrap` 추가, `text-[9.5px]` 잔여값 토큰화, Pagination `'...'` key 충돌 수정, `useDailySpend` `retry: false` 설정
+- [x] 로컬 도구 정비: Codex `playwright` skill 을 `~/.codex/skills/playwright` 에 설치해 후속 브라우저 자동화/캡처 작업 준비
+- [x] 로컬 도구 정비: Codex `frontend-skill` 을 `~/.codex/skills/frontend-skill` 에 설치해 frontend 전용 구현 워크플로 사용 준비
+- [x] Frontend source-of-truth 문서 갱신 완료: `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md` 를 현재 구현 기준으로 전면 재작성
+- [x] Frontend historical 문서 archive 완료: 과거 재설계 plan/spec 문서를 `docs/archive/frontend/{plans,specs}/` 로 이동하고 historical 경고 문구를 추가해 현재 문서와 분리
+- [x] Frontend semantic token sweep 완료: `index.css`/`tailwind.config.js` 를 기준으로 surface, border, info, accent, chart 계열 토큰을 재정의하고 차트/페이지/워크벤치의 raw hex 및 palette class를 토큰 기반으로 정리
+- [x] Frontend 검증 기준 복구 완료: `AppSidebar` prop drift 제거, layout chrome context 분리, effect deps 정리, `chartTheme` 테스트 추가 후 `npm test`, `npm run lint`, `npm run typecheck` 재통과
+- [x] Frontend contract alignment 완료: `apiClient.ts` 를 `__MY_LEDGE_RUNTIME_CONFIG__.{apiKey, apiBaseUrl}` 기준으로 정렬하고, month-based UI query를 backend `start_date`/`end_date` 계약으로 어댑트하며, 누락된 `daily-spend` endpoint는 기존 transactions list 기반 client aggregation으로 대체
+- [x] Legacy route fallback 정리 완료: `/income`, `/transfers` 를 overview(`/`) redirect로 명시하고 관련 문서/테스트/AGENTS route 설명을 현재 기준으로 갱신
+- [x] Frontend review 완료: `frontend-developer` 병렬 코드 구조 검토 + 현재 frontend `npm test`/`npm run lint`/`npm run typecheck` 재검증 + 후속 우선순위 재정렬
+- [x] Frontend UI/IA decision spec 초안 작성: shell contract, `SpendingPage` filter ownership, shared interaction spec, acceptance criteria, handoff 구현 순서를 `docs/superpowers/specs/2026-04-07-frontend-ui-ia-decision-design.md` 에 정리
+- [x] Frontend UI/IA rollout implementation plan 작성: `docs/superpowers/plans/2026-04-07-frontend-ui-ia-rollout-implementation.md`
+- [x] Frontend shell/spending contract batch 완료: route manifest 기반 shell metadata 정렬, labeled sidebar 유지, `SpendingPage` detail-range 기준 treemap sync, 실제 subcategory drill-down 집계, 관련 테스트/검증 통과
+- [x] Backend/API SSOT 문서화 완료: `docs/backend-api-ssot.md` 추가, `README.md` / `PRD.md` live contract 동기화, `docs/archive/planning/finance-advisor-analytics-expansion.md` historical 표기 추가
+- [x] PRD/code/data 기준 현행 기능 리뷰 완료: 구현 범위, 적재 데이터, 테스트 상태, 추가 기능 우선순위 점검
+- [x] Advisor analytics 확장 계획 보강 완료: transfer tracking MVP, irregular snapshot compare, liquidity health, debt health, deferred merchant normalization/classification을 구현계획에 반영
+- [x] Backend 안정화 2차 완료: `GET /api/v1/assets/snapshot-compare` 구현 + `latest_available_vs_previous_available` / `last_closed_month_vs_previous_closed_month` / exact pair contract 고정 + service/API 테스트 추가
+- [x] Frontend 자산 연결 완료: 기존 `AssetsPage` 에 snapshot compare query 연결 + KPI/section badge에 `comparison_label` / `comparison_days` / delta 반영 + 페이지 테스트 추가
+- [x] 운영 semantics 정리: Workbench Danger Zone에 reset 이후 `upload_logs` retained 의미를 UI copy로 명시 + SSOT 문서에 reset/upload history semantics 반영
+- [x] Backend smoke 보강: real workbook 4종 적재 상태에서 `/api/v1/assets/snapshot-compare` API smoke test 추가
+- [x] 종합 검증 완료: `backend pytest 74 passed`, `frontend vitest 39 passed`, `frontend lint/typecheck` 통과, upload/read/edit/reset/assets/source parity 관련 API·service 검증 재실행 완료
+
+## In Progress
+- [ ] **Frontend v2 전면 재구현** (`feat/frontend-v2` 브랜치)
+  - 현재 상태: Task 6 완료, 사용자 요청으로 우선순위 보류
+  - Task 1 완료: Tailwind 토큰, utils.ts, queryClient.ts, apiClient.ts
+  - Task 2 완료: TypeScript 타입 4종 + API 함수 4종 (transactions/assets/analytics/upload)
+  - Task 3 완료: React Query 훅 5종 (useTransactions/useAssets/useAnalytics/useUpload/useWriteAccess) + 테스트 2건 통과
+  - Task 4 완료: 공통 UI 컴포넌트 (Button, Card, Badge, Table, Select, Input, Checkbox, Popover 등)
+  - Task 5 완료: 앱 셸 (AppSidebar, MobileDrawer, AppTopbar, AppLayout, router, App, main) + @heroicons/react + 5개 placeholder 페이지, 테스트 19건 통과
+  - Task 6 완료: 차트 컴포넌트 5종 (DualBarChart, StackedBarChart, LineAreaChart, HorizontalBarList, MoMBarList), Recharts v3 타입 호환 처리, typecheck/build 통과
+  - 현재 지점: Task 6 커밋 완료
+  - 남은 작업: Task 7~12 순서대로 구현 (5 pages → validation)
+- [ ] Advisor analytics Phase 4 후속 설계/구현
+  - 현재 상태: P0/P1 8종 endpoint 구현 완료. 신규 canonical read model 확장 요구사항과 전체 planned backlog는 `docs/planned-work.md` 에 정리 완료. 실제 migration/API 구현은 안정화 배치 완료 전까지 후순위 보류
+- [ ] Review follow-up triage
+  - 현재 상태: analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적, irregular snapshot comparison contract, 자산 프론트 연결, reset/upload history semantics UI copy는 복구/정리 완료
+  - 현재 지점: 코드/테스트 기준 검증은 완료. 남은 안정화 범위는 운영 배포본 smoke capture와 live 문서/배포 환경 정렬
+- [ ] Frontend 런타임 점검 후속
+  - 현재 상태: `output/playwright/desktop`, `output/playwright/mobile` 에 canonical route screenshot을 저장했고, mobile topbar compact fix 반영본까지 재검수 완료
+  - 현재 지점: source-of-truth 문서 갱신, historical doc archive, semantic token sweep, runtime config/API query/legacy route contract 정합화, MagicDNS host allowlist 정리는 완료했다. 현재 남은 프론트 리스크는 운영 배포본 smoke capture다
+  - 남은 작업: 운영 배포본 기준 smoke capture, 실제 기기 기준 추가 캡처 수집
+
+## Blocked
+- 없음
+
+## Next Up
+- [x] Loan transaction mapping frontend 연결
+  - [x] 별도 `/operations/loan-mapping` 운영 화면 추가
+  - [x] `GET /api/v1/loan-transaction-links` 로 지출 거래와 현재 대출 연결 상태를 함께 조회
+  - [x] 연결/미연결/대출 계좌/상환 성격 필터와 다건 bulk 대출 연결 UI 추가
+  - [x] 기존 거래 작업대에서는 대출 연결 컨트롤 제거
+- [ ] Settings / Token Lab feature kickoff
+  - [x] 별도 feature plan 작성 (`docs/superpowers/plans/2026-04-08-settings-and-token-lab.md`)
+  - [x] persisted analytics settings backend 구현
+  - [ ] settings page shell entry / temporary token lab 구현 순서 확정
+- [ ] Snapshot compare consumer follow-up
+  - [x] frontend 자산 surface가 `comparison_label`, `comparison_days`, `is_partial`, `is_stale` 를 어떻게 소비할지 정리
+  - [x] real workbook 4종 적재 상태에서 `/api/v1/assets/snapshot-compare` smoke 검증 추가
+- [ ] End-to-end validation
+  - [x] `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 주요 운영 플로우 재검증
+  - [ ] 운영 배포본 기준 asset compare consuming smoke 또는 screenshot 확보
+- [ ] Source verification scope 정리
+  - [ ] `verify_import_parity` 가 transaction sample presence 검증에 머무르는 현재 범위를 문서화할지, overlap window extra-row 검증까지 확장할지 결정
+- [ ] Snapshot comparison fallback 정책 정리
+  - 현재 상태: 정책과 pre-implementation checklist는 정리 완료. 후속은 실제 영향 범위별 적용 순서와 API/UI 계약 구체화
+- [ ] Backend/API 문서 운영 정리
+  - [x] `spending-anomalies` 의 `min_delta_amount` query param과 기본값 100000원을 운영/API 문서에 반영
+  - [x] `docs/backend-api-ssot.md` 를 기준으로 OpenClaw handoff 문서와 운영 문서의 충돌 항목 추가 정리
+  - [ ] 업로드 원본 파일 retention(`/data/uploads/` recent 5) 구현 여부를 결정하고 문서/코드를 일치시킬지 판단
+- [ ] 현행 기능 system validation
+  - [x] 수정 후 `input -> process -> storage -> output` 기준으로 upload/read/edit/reset 운영 플로우 재검증
+- [ ] 신규 기능은 후순위 보류
+  - [ ] `merchant normalization`, `transfers/*`, `liquidity-health`, `debt-health`, `snapshot-compare`는 안정화 배치 이후 재개
+- [ ] Snapshot coverage 결정
+  - [ ] 자산/투자/대출 snapshot 시계열 확보 운영 방식을 정하고 PRD tracking 기대치와 현재 단일 snapshot 상태를 맞출지 결정
+- [ ] Frontend shared interaction rollout
+  - [x] Spending / Insights / Workbench section에 공통 `loading / error / empty / ready` 경계 도입
+  - [x] `SectionCard` header slot(`title/meta/action/description/body`) 사용 규칙을 surface별로 통일
+  - [x] Workbench filter bar / bulk panel / table / secondary accordion 경계를 spec 기준으로 재정렬
+- [ ] Frontend behavior test 보강
+  - [x] 지출 분석 range/detail interaction 및 subcategory drill-down 회귀 테스트 추가
+  - [x] Workbench read-only gating 회귀 테스트 추가
+  - [ ] bulk toolbar / mutation success-error 흐름 테스트 추가
+  - [ ] topbar meta lifecycle 및 canonical route metadata 테스트 추가
+- [ ] Frontend UI/UX 후속 개선 묶음
+  - 현재 상태: spec/plan 기준 1차 구현과 frontend 검증은 완료. 남은 후속은 운영 배포본 smoke와 추가 behavior coverage다
+  - [x] 카드 섹션 내 divider contrast 완화
+  - [x] chart hover highlight / tooltip font color를 공통 semantic token으로 정리
+  - [x] `월별 카테고리 추이` 는 Top 5 카테고리만 개별 series로 표시하고 나머지는 `기타` 로 묶기
+  - [x] `월별 카테고리 추이` 기간 필터를 조회기간 month picker로 정리
+  - [x] `소분류별 지출` 기준 기간 badge 추가
+  - [x] `거래처별 지출 비중` 을 category -> merchant nested treemap 으로 전환
+  - [x] `일별 지출 달력` 에 hover/popover 금액 표시 추가
+  - [x] 프로젝트 전체 pagination 폰트 크기를 한 단계 축소
+  - [x] breadcrumb 상단 title treatment 을 전역적으로 밝게 정리
+  - [x] table header/row separator 를 제거해 시선 분산을 줄임
+  - [x] pagination 전용 font token과 compact control sizing을 추가
+  - [x] Spending stacked area / treemap palette 를 dark theme 기준 고대비 색으로 재구성
+  - [x] `일별 지출 달력` tooltip 을 날짜 셀 기준 상대 위치로 고정하고 chart tooltip token을 공유
+  - [x] Workbench 거래 목록의 페이지/건수 badge를 shared badge token으로 정리
+  - [x] desktop sidebar 폰트를 main font color 기준으로 상향
+  - [x] `SpendingPage` 에 timeline section 과 상세 필터 section 을 나누는 separator 추가
+  - [x] accordion chevron 크기를 compact token으로 축소
+  - [x] shared popover typography를 키우고 `DailyCalendar` 와 chart tooltip 폰트 스타일을 통일
+  - [x] `text-pagination` 을 `text-nano` 와 같은 크기로 맞추고 pagination border를 제거
+  - [x] chart axis label 크기를 `text-body-sm` 기준으로 상향
+  - [x] `text-muted`, `text-faint` 를 더 밝은 한 단계로 일원화
+  - [x] `거래처별 지출 비중` 에 `카테고리별` / `거래처별` selector를 추가하고 helper copy / category pill을 제거
+  - [x] 실제 적재 데이터 상위 8개 카테고리(`금융`, `데이트`, `식비`, `자동차`, `미분류`, `여행/숙박`, `주거/통신`, `문화/여가`) 기준으로 Spending palette를 재매핑
+  - [x] 인사이트 `이상 지출` 의 증감율 표기를 단일 방향 부호와 색상 규칙으로 정리
+  - [x] 인사이트 `거래처 소비 Top 5` 기간 선택지 추가: 최근 1개월 / 3개월 / 6개월 / 1년
+  - [x] 인사이트 `카테고리 전월 대비` 기준월 선택 UI 추가
+  - [x] dark theme 에서 가독성이 낮은 `soft` 계열 font color를 전역적으로 상향 조정
+  - [x] sidebar/topbar/card/filter hierarchy 재정렬
+  - [x] desktop sidebar 기본 icon-only collapse + click-to-expand shell interaction
+- [x] Vite dev server의 Tailnet hostname(`moltbot.tailbe7385.ts.net`) 접근 시 403이 나오는 host allowlist 경로를 정리해 MagicDNS 기반 review URL도 안정화
+  - [x] Vite config `allowedHosts` 에 MagicDNS hostname 허용 추가
+  - [x] `curl -I -H 'Host: moltbot.tailbe7385.ts.net' http://127.0.0.1:4174` 기준 `HTTP/1.1 200 OK` 확인
+- [ ] Frontend 재설계
+  - [x] 상세 wireframe 승인 반영
+  - [x] `docs/superpowers/specs/` 아래 redesign spec 작성
+  - [x] `docs/frontend-design-tokens.md` 작성 및 legacy `docs/DESIGN.md` 제거
+  - [x] 구현 범위와 단계별 migration plan 정리
+  - [x] operations workbench slice 구현 시작
+  - [x] app shell / route migration 실행
+  - [x] overview / insights 신규 페이지 구현
+  - [x] sidebar shell implementation plan 작성 및 reviewer 승인
+  - [x] sidebar shell foundation (`AppSidebar`, `MobileSidebarDrawer`, `AppTopbar`, `AppLayout` cutover) 구현 시작
+  - [x] 캡처 기준 레이아웃 보정 1차 완료
+  - [x] page-level hero/title 제거와 shell topbar 메타 연결
+  - [x] spending / assets 본문 redesign 정교화
+  - [x] spending 시계열/상세 필터 범위 separator 및 시스템 월 기본값 정렬
+  - [x] 최종 visual polish
+  - [ ] legacy 컴포넌트 정리
+  - [x] workbench 상단 보조 카드 제거 및 필터 행 압축
+  - [x] 지출 시계열 slider `적용` 버튼 흐름 도입
+  - [x] 지출 상세 필터를 `시작 월` / `종료 월`만 남기도록 단순화
+  - [x] `일별 지출액` 카드 내부 독립 dropdown filter 추가
+  - [x] `결제수단별 지출` 제거 + `거래처별 TreeMap` full-width 확장
+  - [x] 자산 `투자 요약` 카드 하단 pie chart 비중화
+  - [x] 기준 월/기준 일자 badge 배경색 전역 통일
+- [ ] 거래처 데이터 정리
+  - [x] `transactions.merchant` 컬럼 추가 및 기존 row 백필
+  - [x] 작업대 merchant 편집 지원 + analytics merchant 집계 전환
+  - [ ] 실제 데이터 기준 merchant 정규화 룰/일괄 편집 방식 결정
+- [ ] Frontend 실브라우저 점검 보강
+  - [x] desktop/mobile canonical route 캡처
+  - [x] mobile topbar compact fix 반영 재촬영
+  - [ ] 운영 배포본 기준 smoke capture
+  - [x] desktop route 4종 캡처 및 console smoke 확인
+  - [x] 로컬 사용자 리뷰용 dev server 재기동 (`4173`/`8000`, Tailscale 접속 확인)
+  - [x] `operations/workbench` 및 `/data` wrapper desktop 캡처 재수집
+  - [x] mobile viewport canonical route 5종 캡처
+  - [x] insights iPhone 폭 overflow pass 4 캡처 + card width CDP 측정 확인
+  - [x] `/data` wrapper 제거 후 canonical workbench redirect 반영
+  - [x] 분석/운영 canonical route API proxy 200 재확인
+  - [x] root `.env` `API_KEY` → frontend `VITE_API_KEY` 승계 확인
+  - [ ] redirect(`/spending`, `/assets`) 브라우저 기준 마무리 확인
+- [ ] Advisor analytics 구현
+  - Phase 4C. asset/liability health: `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`
+  - Canonical read model follow-up:
+    - [ ] P0 aggregate view: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`
+    - [ ] P0.5 data-quality queue: `vw_unclassified_work_queue`
+    - [ ] P1 recurring read surface: `vw_recurring_merchant_monthly`
+    - [ ] P2 snapshot read surface: `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`
+- [ ] 데이터 관리 후속 기능
+  - Track B. bulk edit v1
+    - [x] 거래 작업대 다건 선택 UX 추가: row checkbox, select-all, bulk toolbar
+    - [x] bulk-update endpoint에 `memo` 포함 확장 및 프론트 연결
+    - [x] bulk-update endpoint에 `merchant` 포함 확장 및 프론트 연결
+    - [x] bulk-update endpoint에 `cost_kind`, `fixed_cost_necessity` 포함 확장 및 프론트 연결
+    - [ ] bulk delete / bulk restore API 추가 및 프론트 연결
+    - [x] bulk edit v1 테스트 및 문서 반영
+    - [x] 필터 입력과 실제 목록 반영을 분리하는 `필터 적용` 버튼 흐름 도입
+    - [x] 카테고리 분류 기반 rule-based 자동 분류 1차 구현
+      - 대분류/소분류 매핑으로 `cost_kind`, `fixed_cost_necessity` 를 자동 적용한다.
+      - 자동 적용은 `cost_classification_source='manual'` 거래를 덮어쓰지 않는다.
+      - 반복결제 성격 자동분류는 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 써야 하므로 후속으로 둔다.
+  - Track D. workbench performance
+    - [x] `loadAllTransactions()` 기반 전체 페이지 수집 제거
+    - [x] 서버 필터링 + 서버 페이지네이션으로 전환
+    - [x] mutation 후 전체 재조회 대신 현재 페이지 캐시 갱신/부분 invalidation 적용
+    - [x] 거래 목록 query와 업로드 이력 query 분리
+  - Track C. bulk edit v2
+    - [ ] `description_user` nullable 컬럼 추가 + Alembic migration 작성
+    - [ ] canonical read path 확장: `effective_description`, `is_edited`, schema 문서 갱신
+    - [ ] rolling import 사용자 수정 보존 규칙에 `description_user` 이월 추가
+    - [ ] 설명 단건/다건 수정 UI 및 회귀 테스트 추가
+- [ ] Phase 2 polish만 후순위로 진행
+  - 범위: 화면 미세 정렬, chunk 분할, 번들 경고(현재 build chunk > 500kB) 정리, 디자인 polish, UI 다크모드 토글/테마 시스템 설계 및 구현
+  - 참고: 기능/API 검증 범위는 완료됐고, 남은 프론트 이슈는 대부분 cosmetic 또는 성능 경고 성격이다
+
+## Key Decisions
+- 2026-05-28: 다음 작업은 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어가되, 운영 smoke와 contract 검증은 각 구현 batch의 acceptance check로 유지한다. 업로드 원본 파일은 `/data/uploads/` 최근 5개 보관을 구현하고, 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 sparse 데이터로 본다. My Ledge core는 재무 어시스턴트의 말투/성격을 결정하지 않고, 재무 어시스턴트가 사용할 canonical read model foundation과 `reason`/`confidence`/`assumptions`/`risk_level` 같은 판단 재료를 제공한다.
+- 2026-05-27: Advisor canonical 확장은 API 중복 구현이 아니라 readonly SQL/외부 에이전트용 read model 안정화로 본다. 월별 현금흐름 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total` 을 함께 노출해 대출 상환과 일반 소비의 double count를 막고, `fixed_total`/`variable_total` 계열은 기본적으로 대출 연결 거래를 제외한다. `discretionary velocity` 와 `purchase gate` 는 `as_of_date`/threshold 의존성이 커서 plain DB view보다 API/settings contract를 우선한다.
+- 2026-05-25: 고정비/변동비와 필수/비필수 고정비는 기간 전체 비율뿐 아니라 월별 추이를 함께 봐야 하므로 지출 분석 화면에 별도 월별 stacked bar를 추가한다. 거래 단위 canonical view에는 이미 `cost_kind`, `fixed_cost_necessity`, `cost_classification_source` 가 있으므로 중복 컬럼은 늘리지 않고, readonly SQL/AI 월별 분석용으로 `vw_fixed_cost_monthly_summary` aggregate view를 별도 제공한다.
+- 2026-05-25: 에이전트 연동 문서의 canonical 시작점은 `docs/agents/README.md` 로 두고, 기존 `docs/openclaw/` 경로는 OpenClaw 호환 세부 guide/handoff 디렉터리로 유지한다. OpenClaw/hermes 및 기타 에이전트 모두 읽기는 API 또는 readonly DB, 쓰기는 API-only, 거래 SQL은 canonical view 우선 규칙을 따른다.
+- 2026-05-24: 대출 상환 후보 목록은 완전 자동 분류가 아니라 수동 연결 작업대이므로 `금융` 대분류 지출을 넓게 포함한다. 연결 완료 후의 분석 안정성은 `loan_transaction_links` 와 canonical view의 nullable 대출 연결 컬럼으로 확보한다.
+- 2026-05-24: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다. 거래 작업대는 원장 편집/업로드/삭제에 집중하고, 대출 연결 화면은 반복 지출 후보와 현재 연결 계좌 상태를 함께 확인하는 운영 surface로 둔다.
+- 2026-05-25: 반복결제의 `할부` / `매월 반복` 구분은 별도 recurring rule 테이블이 아니라 거래 단위 nullable `transactions.recurring_payment_kind` 로 먼저 저장한다. 변경은 별도 `/operations/recurring-classification` 운영 화면에서 해당 거래 id 묶음을 bulk-update 하고, 인사이트는 결과만 읽기 전용으로 표시한다. 자동 분류는 추후 rule-based 계획으로만 둔다.
+- 2026-05-25: 거래 작업대는 원장 편집과 조회/필터에 집중하고 반복결제 성격 변경 컨트롤은 제공하지 않는다. 반복분류 수정 surface는 `/operations/recurring-classification` 로 일원화해 단건 거래에 반복 성격을 임의 부여하는 혼선을 줄인다.
+- 2026-05-25: 반복결제와 고정비는 목적이 다르므로 고정비 전체를 반복결제 화면에 섞지 않는다. 반복결제는 할부/매월 반복 운영 분류, 자동분류는 예산 구조와 대출 연결 규칙 관리로 분리하고 필요 시 교차 배지/필터로 연결한다.
+- 2026-05-25: 고정비 자동분류와 대출 자동연결은 사용자 수정 우선 원칙을 보장하기 위해 각각 `transactions.cost_classification_source`, `loan_transaction_links.source` 로 auto/manual 출처를 저장한다.
+- 2026-04-08: `spending-anomalies` 의 `anomaly_threshold` 는 기존 `anomaly_score` cutoff 계약을 유지한다. 다만 응답 `assumptions` 에 threshold가 퍼센트가 아니라 score 기준이며, 표준편차가 있으면 `|delta|/stdev`, 없으면 `|delta|/baseline_avg` 로 계산된다는 설명을 명시한다.
+- 2026-04-08: `spending-anomalies` 기본 호출은 진행 중인 이번 달이 아니라 직전 마감월을 기준으로 본다. 사용자가 partial `end_date` 를 명시한 경우에만 해당 월을 보며, baseline도 이전 월 같은 일자까지만 잘라 비교한다.
+- 2026-04-08: backend-tunable analytics 파라미터는 Insights 카드에 흩뿌리지 않고, 좌측 사이드바 하단 `설정` 페이지에서 관리하는 별도 surface로 계획한다. v1 우선순위는 `spending-anomalies` 파라미터(`min_delta_amount`, `anomaly_threshold`, `baseline_months`)다.
+- 2026-04-08: `설정` feature는 analytics parameter control에만 묶지 않고, persisted backend settings와 temporary frontend design-token tuning lab을 함께 담는 별도 shell feature로 분리한다. token lab은 live preview/debug surface이며 v1에서는 repo/source-of-truth를 자동 변경하지 않는다.
+- 2026-03-23: my_ledge v1을 리셋/확장하는 방향으로 결정 (완전 새 프로젝트 X)
+- 2026-03-23: 중복 처리는 복합 유니크 대신 시간 커서 기반 증분 적재 방식 채택
+- 2026-03-23: OpenClaw 연동은 하이브리드 (DB readonly + 업로드 API)
+- 2026-03-23: 소분류 자동 분류는 다음 버전으로 미룸, 이번 버전은 수동 편집만
+- 2026-03-23: 뱅샐현황은 스냅샷 시계열 누적 (덮어쓰기 X)
+- 2026-03-23: 이체 타입은 수입/지출 분석에서 제외, 별도 '자산이동' tracking
+- 2026-03-23: `snapshot_date`는 API 입력값 우선, 없으면 서버 업로드 날짜 사용
+- 2026-03-23: 업로드는 부분 성공(`partial`) 허용, 성공분은 유지하고 실패 정보는 `upload_logs`에 기록
+- 2026-03-23: 카테고리/결제수단 선택지는 `transactions` distinct 값 기반으로 조회
+- 2026-03-23: 조회 API는 `is_edited`, `include_deleted`, `include_merged`, `search` 필터 포함
+- 2026-03-23: 비공개/쓰기성 API는 `X-API-Key` 인증 방식 사용
+- 2026-03-23: 원본 업로드 파일은 최근 5개만 보관
+- 2026-03-23: 거래 병합 기능은 MVP 범위에서 제외
+- 2026-03-24: PRD 부록은 실데이터 원문 대신 익명화된 분포/규모 예시만 유지
+- 2026-03-24: AGENTS.md의 도메인 지식 예시는 실명 금융사/정확 금액 대신 일반화된 설명만 유지
+- 2026-03-24: 비암호화 개발 샘플 경로는 시스템 `/tmp` 가 아니라 저장소 내부 `./tmp/finance_sample.xlsx` 로 고정해 다음 세션 혼선을 방지
+- 2026-03-24: AGENTS.md에 Codex의 무확인 서브에이전트 스폰 허용 조건과 금지 조건을 명시해 매 세션 해석 차이를 줄임
+- 2026-03-24: Task 4는 한 번에 끝내지 않고 `transaction-only import` 를 4A로 먼저 완료한 뒤 snapshot 적재를 4B로 분리
+- 2026-03-24: transaction import 검증은 먼저 sqlite async DB로 고정해 서비스 로직을 안정화하고, PostgreSQL smoke test는 `.env`/실DB 준비 후 별도로 수행
+- 2026-03-24: 로컬 migration/smoke script는 컨테이너 내부가 아니라 호스트에서 실행하므로 `.env.example` 의 `DATABASE_URL` 기본값은 `db` 가 아니라 `127.0.0.1:5432` 기준으로 둔다
+- 2026-03-24: snapshot 샘플에는 스키마 unique 키와 충돌하는 중복 `product_name` 이 있어, 적재 시 같은 key 반복분은 결정론적 suffix (`(2)`, `(3)`) 를 붙여 보존한다
+- 2026-03-24: assets/investments/loans API의 금액 응답은 DB `NUMERIC(15,2)` 저장 정밀도를 그대로 따라 소수 둘째 자리 문자열로 직렬화한다
+- 2026-03-24: 거래 summary/by-category/payment-methods 집계는 MVP 단계에서 SQLite/PostgreSQL 일관성을 우선해 필터된 transaction row를 Python에서 그룹핑하는 방식으로 구현한다
+- 2026-03-24: 원본 대조 검증은 transaction 전건 비교 대신 전체 행 수 + seed 고정 랜덤 샘플 비교로 수행하고, snapshot/investment/loan은 전건 비교로 수행한다
+- 2026-03-24: Task 7 compose는 호스트 실행용 `.env.example` 의 `127.0.0.1:5432` `DATABASE_URL` 을 유지하고, 컨테이너 내부 `backend` 서비스에는 compose에서 `db:5432` 기준 값을 별도 주입한다
+- 2026-03-24: 실제 BankSalad 소스는 현재 비암호화 workbook 기준으로 검증되었고, 기존 복호화 코드는 호환용 fallback으로만 유지한다
+- 2026-03-24: `sample_260324.xlsx` 검증 결과 최신 export는 strict cumulative snapshot이 아니라 rolling window + 일부 중간 구간 변경이 섞일 수 있어, 단순 max(date,time) 커서 방식만으로는 최종 상태 동기화를 보장하지 못한다
+- 2026-03-24: rolling-window transaction import는 workbook의 `[min(datetime), max(datetime)]` 범위 안 `source='import'` 행을 최신 workbook 상태로 재동기화하고, manual row는 유지하며 logically matching row의 사용자 수정 필드(`category_*_user`, `memo`, `is_deleted`, `merged_into_id`)를 이월한다
+- 2026-03-25: 거래 사용자 수정 보존을 최신 export와의 완전 동기화보다 우선한다. rolling-window 재업로드 시 겹치는 기존 imported row는 수정/삭제하지 않고 유지한다. 중복 판정은 먼저 exact signature로 수행하고, exact 실패분에 한해 `date/type/description/amount/currency/payment_method` 동일 + 시간차 60초 이하인 fallback match를 적용해 category drift와 초 단위 truncation으로 인한 false duplicate를 줄인다
+- 2026-03-25: Task 9 canonical analysis layer 1차 범위는 view 생성과 문서화에 그치지 않고, 기존 거래 조회/분석 런타임이 `vw_transactions_effective` / `vw_category_monthly_spend` 또는 그와 정의상 동일한 shared read path를 실제로 사용하도록 맞추는 것까지 포함한다
+- 2026-03-26: Task 8 운영 검증은 메인 개발 데이터셋을 건드리지 않도록 임시 PostgreSQL DB `my_ledge_task8_verify` 에 마이그레이션 후 수행한다
+- 2026-03-26: `/api/v1/schema` 는 AI 에이전트 기본 조회 경로로 canonical view를 먼저 노출하되, 원본 정합성 점검을 위해 raw table 문서도 함께 유지한다
+- 2026-03-26: 테스트 fixture에서 `snapshot_date=None` 을 쓰면 실행일에 따라 assets API 기대값이 흔들리므로, 공통 seed fixture는 고정 날짜를 명시한다
+- 2026-03-26: Phase 2 frontend 구현 순서는 `dashboard -> assets -> spending -> data` 로 고정하고, UI 디자인 작업마다 `ui-ux-pro-max` 를 기본 스킬로 사용한다
+- 2026-03-26: 메인 대시보드의 `카테고리 비중` 카드는 항상 펼쳐진 제어 패널 대신 compact filter 패턴을 사용하고, 월 단위 범위 선택만 허용한다
+- 2026-03-26: 데이터 관리 화면의 write API는 `X-API-Key`가 필요하므로 프론트는 선택적 `VITE_API_KEY` 헤더 지원을 넣고, 키가 없으면 read-only 경고를 먼저 노출한다
+- 2026-03-26: 지출 분석의 `결제수단별 지출`은 백엔드 endpoint가 아직 `type=지출` 필터를 지원하지 않아, 프론트에서 필터된 지출 거래 rows를 다시 그룹핑해 의미를 맞춘다
+- 2026-03-26: 지출 분석의 월별 카테고리 시계열은 `vw_category_monthly_spend` 계열 read path를 노출하는 `/transactions/by-category/timeline` endpoint로 내리고, 프론트에서는 상위 카테고리만 stacked area로 보여주고 나머지는 `기타`로 묶는다
+- 2026-03-26: 외부 리뷰용 dev server에서 direct API base URL을 쓸 수 있도록 backend 앱에 `CORS_ORIGINS` 기반 CORSMiddleware를 실제 적용한다
+- 2026-03-26: 지출 분석 필터는 하나로 묶지 않고, `월별 카테고리 추이` 카드에는 전용 기간 slider를 두며 하단 집계 카드와 거래 내역은 별도 공용 기간 필터를 쓴다. 카테고리/결제수단/검색은 거래 내역에만 적용한다
+- 2026-03-26: 지출 분석의 `월별 카테고리 추이` 기간 제어는 두 개의 독립 슬라이더 대신 dual-thumb range slider로 통합한다
+- 2026-03-26: 지출 분석의 `하위 카테고리`는 `카테고리별 지출` 카드 내부 토글로 욱여넣지 않고, 별도 `하위 카테고리별 지출` 섹션으로 분리한다. 거래 내역 표에도 상위/하위 카테고리를 함께 표시한다
+- 2026-03-26: 고정비/변동비 분류는 별도 테이블로 빼지 않고 `transactions.cost_kind`, `transactions.fixed_cost_necessity` nullable 컬럼으로 먼저 예약한다. 초기값은 전부 `NULL`로 두고, 프론트는 placeholder 섹션부터 연결한다
+- 2026-03-26: 지출 분석의 `결제수단별 지출`은 막대 차트 대신 파이 차트를 사용하고, 기간 필터는 `카테고리별 지출`/`하위 카테고리별 지출`과 동기화한다. 거래 내역은 기본 접힘 아코디언 + 20행 페이지네이션으로 유지한다
+- 2026-03-26: 지출 분석 렌더링 비용을 줄이기 위해 페이지 훅 하나에 데이터를 몰아넣지 않고 `월별 시계열`, `기간 집계`, `거래 내역` 훅으로 분리한다. 카테고리/검색 필터 변경 시 월별 시계열 섹션은 다시 fetch하지 않는다
+- 2026-03-26: `하위 카테고리별 지출`은 테이블을 제거하고 차트 전용 섹션으로 유지한다. `거래처별 Tree Map`은 별도 vendor 컬럼이 생기기 전까지 `description` 기준 집계로 우선 구현한다
+- 2026-03-26: frontend 공통 primitive는 `shadcn/ui` 스타일(`Card`, `Button`, `Input`, `Select`, `Accordion`, `Table`, `Badge`, `Alert`)을 우선 사용하고, 차트는 현재 기능 범위상 Recharts를 유지하되 주변 레이아웃과 empty-state는 동일 디자인 시스템으로 정렬한다
+- 2026-03-26: frontend 전역 accent color는 메인 대시보드 `월별 지출 추이` 라인의 blue(`#2563eb`)를 기준으로 통일하고, 카드/아코디언/테이블/내부 패널 반경은 CSS radius 토큰(`--radius`, `--radius-sm`, `--radius-xs`)으로만 관리한다
+- 2026-03-26: 개발 DB의 자산 검증용 snapshot_date는 workbook에 내장된 값이 없으므로 외부 입력으로 관리한다. 현재 검증에서는 `finance_sample.xlsx` 는 transaction window 기준으로 `2026-03-12` 를 가정해 적재했다
+- 2026-03-27: 거래 내역 페이지네이션은 query key 변경 시 로딩 카드로 섹션을 갈아끼우지 않고 `placeholderData`로 이전 페이지 내용을 유지한다. 그래야 아코디언 열린 상태와 스크롤 맥락이 유지된다
+- 2026-03-27: Phase 2 남은 작업은 polish보다 기능 완결과 write flow 검증을 우선한다. 화면 미세 polish와 성능/번들 경고 정리는 다른 미완료 작업을 모두 닫은 뒤 마지막에 처리한다
+- 2026-03-27: `upload_logs`는 MVP에서 페이지네이션 없이 최근 10건만 읽는다. 데이터 관리 화면의 업로드 이력 확인 목적에는 이것으로 충분하고, 복잡도를 늘릴 이유가 없다
+- 2026-03-27: OpenClaw skill 자체는 이 저장소에서 배포하지 않는다. 대신 이 저장소는 OpenClaw 작업자가 별도 환경에서 skill을 패키징/배포할 수 있도록 README 진입점과 handoff 문서를 제공한다
+- 2026-03-27: readonly DB 유저는 문서 수동 절차만 두지 않고 `docker-entrypoint-initdb.d` bootstrap으로 자동 생성한다. 그래야 새 compose 환경에서 OpenClaw 읽기 경로가 바로 재현된다
+- 2026-03-27: 운영 배포는 `docker compose up -d --build` 한 번으로 끝나도록 `migrate` one-shot 서비스를 추가한다. backend는 `db healthy + migrate success` 이후에만 기동한다
+- 2026-03-27: 운영 프론트 read hook은 응답의 배열 필드(`items`)가 누락되거나 레거시 형태여도 즉시 crash하지 않도록 빈 배열로 정규화한다. 서버 계약이 깨졌을 때도 화면은 비워서 유지하고, 상세 원인은 별도 조사한다
+- 2026-03-27: 자산/지출 read hook은 배열뿐 아니라 중첩 객체(`totals`, `snapshot_date`)도 누락될 수 있다고 가정하고 기본 객체/0 값으로 정규화한다. pagination loop와 집계 훅도 동일 규칙을 적용해 queryFn 내부 예외를 막는다
+- 2026-03-27: compose 배포에서는 `.env`의 `API_KEY` 하나만 관리한다. 초기 구현은 frontend build 주입 방식이었지만, 2026-04-03부터는 container start 시 `runtime-config.js` 생성으로 대체했다.
+- 2026-03-27: 업로드의 `snapshot_date`는 서버 fallback을 허용하지 않고 필수 입력값으로 고정한다. 업로드 시점 기준일 drift를 피하는 쪽이 더 중요하다
+- 2026-04-03: sidebar/drawer 아이콘은 외부 Heroicons 패키지 없이 저장소 내부 SVG 컴포넌트로 고정한다. 배포 의존성을 늘리지 않고 outline 스타일을 유지하기 위함이다
+- 2026-04-06: frontend 재구현용 handoff는 기존 CSS/디자인 토큰/디자인시스템을 계승 대상으로 보지 않고, 현재 route map, shell, content hierarchy, functional behavior만 기준 문서로 남긴다
+- 2026-04-03: 개요 KPI 카드와 자산 요약 카드처럼 강조가 필요한 summary group은 그림자나 강한 채도 대신 매우 옅은 gradient surface로만 구분한다. 이후 같은 역할의 card group은 페이지를 가리지 않고 같은 규칙을 재사용한다.
+- 2026-04-03: `Button`, `Input`, `Select`, `Checkbox` 의 기본 밀도는 small 기준으로 통일한다. 화면 전반의 정보 밀도를 맞추고 모바일에서 필터 행과 card header가 과도하게 커지는 문제를 줄이는 편이 더 중요하다.
+- 2026-04-03: 지출 `월별 카테고리 추이` 는 stacked area 대신 stacked bar 로 표현하고 y축은 제거한다. 월 단위 비교에서는 누적 막대가 더 직관적이고, mobile width 제약에서 축을 없애는 쪽이 정보 밀도와 가독성 모두 낫다.
+- 2026-04-03: 공통 `Table` primitive는 구분선을 border보다 spacing/hover에 의존하도록 정리한다. 현재 정보량에서는 행 border가 시각 잡음이 더 커서, 전역 제거가 더 깔끔하다.
+- 2026-03-27: compose 배포의 frontend는 상대경로 `/api` 호출을 유지하고, 정적 nginx가 `backend:8000` 으로 reverse proxy 한다. 브라우저가 Docker 내부 DNS를 직접 알 수 없으므로 build-time 절대 URL 주입보다 single-origin proxy가 안전하다
+- 2026-03-27: 데이터 관리 화면의 거래 작업대는 서버 첫 페이지 응답만 신뢰하지 않고 전체 페이지를 수집한 뒤 상단 20건만 노출한다. spending 화면과 read path 일관성을 맞추고, 캐시/페이지네이션 편차로 빈 화면처럼 보이는 위험을 줄이는 쪽이 더 안전하다
+- 2026-03-30: STATUS.md는 `docs/STATUS.md` 단일 파일로 관리한다. 루트 `STATUS.md`는 제거했다.
+- 2026-03-30: reset 기능은 `POST /api/v1/data/reset` 단일 endpoint로 두고 `scope` 값으로 거래 전용/거래+스냅샷 전체 초기화를 분기한다. `upload_logs`는 운영 이력 성격이 강하므로 reset 대상에서 제외한다.
+- 2026-03-30: `vw_transactions_effective` 는 OpenClaw와 AI 분석의 canonical row surface이므로 기본적으로 삭제/병합 row를 제외한다. 삭제/병합까지 포함한 조회는 canonical view가 아니라 raw `transactions` 또는 API의 `include_deleted` / `include_merged` 플래그를 사용한다.
+- 2026-03-31: advisor analytics는 P0/P1/P2로 나눠 rollout한다. P0는 현재 스키마만으로 구현하고, P1은 conservative rule-based heuristic, P2는 `*_est`와 mapping 기반 자산·부채 건강도 API로 설계한다.
+- 2026-04-03: shell breadcrumb는 desktop 정보밀도 유지용으로 남기되, mobile에서는 title과 중복돼 첫 viewport를 잠식하므로 `AppTopbar` 에서 `md` 이상에만 노출한다.
+- 2026-03-31: `merchant_normalized`, 현금성 자산 분류, 대출 상환 메타데이터는 P0 blocker가 아니다. 실제 OpenClaw 응답 품질을 확인한 뒤 Phase 4B/4C에서 schema enrichment 여부를 결정한다.
+- 2026-03-31: OpenClaw 환경의 readonly DB, `/api/v1/schema`, upload/read 흐름 검증은 완료된 것으로 간주한다. 이후 최우선 작업은 P0 advisor analytics 구현이다.
+- 2026-03-31: `monthly-cashflow.transfer` 는 자산이동의 순증감이 아니라 activity volume 으로 해석해 `ABS(amount)` 월합계로 제공한다. 단일 양수 필드 계약과 OpenClaw 설명 안정성을 우선했다.
+- 2026-04-01: 루트 비밀값 파일 `.env` 는 저장소에 절대 추적하지 않는다. HEAD에 실수로 포함된 경우 전체 filter 대신 latest commit rewrite로 우선 제거한다.
+- 2026-04-01: frontend 재설계는 모바일 대응을 위해 좌측 사이드바 중심 구조 대신 `상단 섹션(개요/분석/운영) + 섹션 내부 탭` 혼합형 IA를 우선 검토한다. `income`/`transfers`는 독립 페이지보다 현금흐름/인사이트 surface로 흡수하는 쪽을 기본안으로 둔다.
+- 2026-04-01: 운영 섹션에서는 업로드보다 거래 편집이 주 사용 흐름이므로 `거래 작업대`를 랜딩 본문으로 두고, `업로드`/`최근 업로드 이력`/`Danger Zone`은 모두 접힌 아코디언으로 내린다.
+- 2026-04-01: legacy `docs/DESIGN.md` 의 PipelinePro 시스템은 CRM/pipeline 도메인 언어와 상태 의미를 강하게 내장하고 있어 my_ledge에는 그대로 적용하지 않는다. spacing/radius/input/button 같은 중립 토큰만 선별 차용해 `docs/frontend-design-tokens.md`로 재정의한다.
+- 2026-04-01: `/data` route는 제거하지 않고 `OperationsWorkbenchPage` 를 렌더하는 thin legacy wrapper로 유지한다. 기존 진입 링크 호환성과 새 운영 IA를 동시에 만족시키는 쪽이 안전하다.
+- 2026-04-01: frontend 재설계의 canonical route는 `/`, `/analysis/spending`, `/analysis/assets`, `/analysis/insights`, `/operations/workbench` 로 둔다. 기존 `/spending`, `/assets`, `/data` 는 redirect 또는 wrapper 로만 유지해 링크 호환성만 보장한다.
+- 2026-04-01: 실브라우저 점검은 상시 dev server를 오래 유지하지 않고 route별 단발성 실행/캡처로 줄인다. 현재 세션에서는 자원 사용량 이슈로 desktop 4개 route까지만 확인하고 서버를 모두 정리했다.
+- 2026-04-01: 저축률은 수입이 극단적으로 작거나 비율이 비정상적으로 커질 때 퍼센트 그대로 노출하지 않고 `적자 구간`/`산정 보류`로 축약한다. 값의 의미를 유지하면서 카드 레이아웃 붕괴를 막는 쪽이 더 안전하다.
+- 2026-04-01: 시계열 데이터가 1건뿐이면 chart 컴포넌트는 빈 플롯을 그리지 않고 단일 시점 summary panel을 보여준다. 자산 화면의 큰 빈 영역보다 상태 전달력이 높다.
+- 2026-04-02: 사용자 실리뷰를 위한 임시 dev server는 Vite 설정 파일을 바꾸지 않고 CLI `--host 0.0.0.0` override로 연다. 기본 로컬 전용 설정은 유지하면서 Tailscale 접근만 임시로 허용하는 쪽이 안전하다.
+- 2026-04-02: 화면 진단 결과 페이지 제목/설명/메타는 `Card` 안에 두지 않고 page-level compact header로 분리한다. 첫 화면 정보 밀도를 높이고 모바일에서 제목 줄바꿈과 불필요한 상단 여백을 줄이는 쪽이 더 중요하다.
+- 2026-04-02: 새 IA로 대체된 이후에는 legacy page 컴포넌트(`DashboardPage`, `DataPage`, `PlaceholderApp`)를 남겨두지 않는다. `/data` 는 wrapper가 아니라 canonical `operations/workbench` 로 redirect 해 route 호환만 유지한다.
+- 2026-04-02: overview 하단 2열은 거래 가독성을 우선해 `카테고리 요약 Top 5` 보다 `최근 거래` 에 더 큰 폭을 준다. 테이블에서는 날짜/결제수단/금액 컬럼을 `nowrap` 으로 고정해 설명 열이 먼저 폭을 가져가게 한다.
+- 2026-04-02: overview `월간 현금흐름` 카드는 정보 밀도를 위해 `transfer` 시리즈를 제거하고, `income` / `expense` 는 양수 bar, `net_cashflow` 는 line 으로 겹치는 혼합 차트를 기본 표현으로 사용한다.
+- 2026-04-02: 차트 색상은 단일 블루 계열을 피하고 `primary`, `secondary`, `accent`, `info`, `danger`, `muted` 축을 함께 쓰는 공통 팔레트를 사용한다. bar chart radius는 pill 형태 대신 거의 직각에 가까운 낮은 roundness를 기본값으로 유지한다.
+- 2026-04-02: badge, alert, slider, empty state, 상태 패널 같은 보조 surface는 순색 배경이나 neutral 하드코딩보다 공통 팔레트의 `*-soft` 배경을 우선 사용한다. 같은 hue 체계를 유지하되 채도는 낮춰 정보 계층만 남기는 쪽이 더 일관적이다.
+- 2026-04-02: frontend dev/build 는 root `.env` 의 `API_KEY` 를 별도 중복 입력 없이 client-side `VITE_API_KEY` 로 승계한다. 운영/리뷰 세션에서 작업대 write access 경고를 줄이고 단일 비밀값 소스를 유지하는 쪽이 낫다.
+- 2026-04-03: frontend write API key는 build artifact 안에 고정하지 않고 nginx container start 시 `runtime-config.js` 로 주입한다. 그래야 backend `API_KEY` 교체나 stale frontend image 상황에서도 rebuild 없이 restart만으로 작업대 upload/write 경로를 맞출 수 있다.
+- 2026-04-02: operations workbench 는 우측 sidebar보다 full-width 편집 surface가 우선이다. 상단 보조 정보(`작업대 요약`, `현재 필터`, `최근 업로드 맥락`)도 기본 화면에서는 숨기거나 제거해 첫 viewport를 거래 편집에 우선 배정한다. 편집 테이블은 필터 결과 전체를 페이지네이션으로 끝까지 탐색할 수 있어야 한다.
+- 2026-04-02: 원본 `description` 은 import fidelity 보존용으로 고정하고, 사용자 편집/분석용 거래처는 별도 `transactions.merchant` 컬럼으로 관리한다. 신규/기존 row의 초기 merchant 값은 `description` 으로 채우고, `merchant != description` 은 사용자 수정으로 간주한다.
+- 2026-04-02: spending 상단의 월별 추이 카드는 공통 시계열 슬라이더와 분리하고, 추이 카드 아래에는 separator로 상세 월 필터 적용 영역을 명시한다. 하단 집계 카드들의 초기 월 필터는 시스템 월을 우선 사용하고, 해당 월 데이터가 없을 때만 가장 가까운 사용 가능 월로 fallback 한다.
+- 2026-04-02: 리뷰/캡처 산출물은 `.gitignore` 만으로 충분하지 않다. 이미 추적된 `output/`, `.playwright-cli/` 파일은 index 에서 제거해 로컬 전용 artifact 로 유지한다.
+- 2026-04-02: Git ignore 범위는 현재 저장소에서 반복 생성되는 로컬 산출물만 포함한다. 이번 턴에서는 `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, coverage/test report 계열까지 확장하고, fixture·문서·샘플 데이터는 추적 유지한다.
+- 2026-04-02: 저장소 로컬 전용 도구 자산인 `.codex/` 는 버전 관리 대상에서 제외한다. 이후 skill 데이터는 각 작업자 로컬 환경에만 두고 저장소에는 커밋하지 않는다.
+- 2026-04-02: 거래 작업대 bulk edit v1은 선택된 row가 있을 때만 상단 toolbar를 노출한다. 빈 bulk 필드는 `수정 안 함`으로 해석하고, 단건 편집과 bulk 선택은 동시에 허용하지 않는다.
+- 2026-04-03: 거래 작업대의 상태 셀은 작업 상태만 보여주고 입력 출처 badge는 숨긴다. 현재 신규 입력 경로가 사실상 업로드 하나라 `업로드` 표시는 구분 가치보다 시각 잡음이 크다.
+- 2026-04-03: 카드 헤더의 기간/기준일 메타데이터는 개별 페이지에서 직접 `Badge`를 흩뿌리지 않고 공통 `CardPeriodBadgeGroup`으로 렌더링한다. 범위형(`start ~ end`)과 단일 기준일형을 같은 reference token과 gap 규칙으로 통일해야 페이지 간 밀도가 안정적이다.
+- 2026-04-03: frontend 현재 구조 문서는 구현 코드와 분리해 `docs/frontend/` 아래에 유지한다. `components-and-design-token-inventory.md`는 현재 UI surface 인벤토리와 토큰 연결표, `page-wireframes.md`는 실제 route 기준 section 구성을 담당한다.
+- 2026-04-07: 프론트엔드 current source-of-truth는 `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md` 네 문서로 제한한다. 과거 redesign plan/spec은 `docs/archive/frontend/` 로 이동해 historical reference로만 남긴다.
+- 2026-04-07: frontend는 month-based UI 입력을 유지하되 backend API 호출 직전 `start_date` / `end_date` 로 변환한다. backend에 없는 `daily-spend` endpoint는 추가하지 않고 기존 `transactions` list 응답을 클라이언트에서 일자별 합산해 대체한다.
+- 2026-04-07: `/income`, `/transfers` 는 live page를 복구하지 않고 compatibility redirect만 유지한다. stale 링크는 overview(`/`)로 흡수하고 current route map은 `docs/frontend/` 와 `AGENTS.md` 에서만 관리한다.
+- 2026-04-07: frontend shell은 desktop 기준 label이 보이는 standard sidebar로 정리하고, topbar는 breadcrumb + page title + meta badge 중심으로 유지한다. page-level filter/action은 기본적으로 본문에 둔다.
+- 2026-04-07: `SpendingPage` filter ownership은 `detail range`, `income toggle` 을 page-global 로 두고, `calendar month`, `category drill-down` 은 section-local control로 유지한다. timeline range는 상단 추이 section 전용 control로 취급한다.
+- 2026-04-07: 신규 기능 구현은 모두 후순위로 미루고, 현재 live 기능의 API 계약, backend 테스트, frontend-backend 정합성, 운영 문서와 실제 동작의 일치를 먼저 복구한다.
+- 2026-04-07: backend/API live contract의 문서상 SSOT는 `docs/backend-api-ssot.md` 로 두고, `README.md`/`PRD.md` 는 이 문서를 참조해 동기화한다.
+- 2026-04-07: snapshot import의 live behavior는 `snapshot_date` 단위 UPSERT가 아니라 기존 row delete 후 전체 re-insert 하는 date-scoped replace다.
+- 2026-04-07: 실제 `fs_*.xlsx` 샘플은 전체 누적 export가 아니라 약 1년 rolling window 이다. 따라서 import 계약은 최신 workbook 전체와 DB를 동일하게 맞추는 것이 아니라, overlap window 는 최신 workbook 기준으로 reconcile 하고 window 밖 과거 history 는 유지한다.
+- 2026-04-07: snapshot 비교는 `전월 대비`를 기본으로 두지 않는다. 기본값은 `latest_available_vs_previous_available` 이고, 실제 month-end pair가 있을 때만 `last_closed_month_vs_previous_closed_month` 를 보조 비교로 노출한다. irregular gap 비교에는 항상 `comparison_days`, `is_partial`, `comparison_label` 같은 메타데이터를 붙인다.
+- 2026-04-07: 월별 비교 fallback 정책 정리는 신규 기능 기획이 아니라 기존 자산/월별 비교 surface의 안정화 작업으로 취급한다. 빈 데이터나 잘못된 `전월 대비` 라벨을 줄이는 것이 목적이다.
+- 2026-04-07: backend 재개 순서는 `irregular snapshot comparison contract -> upload_logs retained semantics -> 운영 문서/SSOT 정렬` 로 둔다. snapshot 비교 계약이 먼저 고정돼야 자산 surface와 API 메타데이터를 안전하게 확장할 수 있다.
+- 2026-04-07: live snapshot compare endpoint는 `GET /api/v1/assets/snapshot-compare` 로 둔다. historical planning의 `analytics/snapshot-compare` 대신 assets namespace에 붙여 기존 snapshot summary/history surface와 계약을 묶는다.
+- 2026-04-07: frontend는 새 asset compare 전용 화면을 만들지 않고 기존 `AssetsPage` 의 KPI subtext와 section badge에서 comparison metadata를 소비한다. compare contract는 summary surface 확장으로만 연결한다.
+- 2026-04-08: 검증 우선순위는 full build 대신 `backend 전체 pytest -> frontend 전체 vitest -> frontend lint/typecheck -> upload/read/edit/reset/source parity 관련 API/service 테스트` 로 둔다. `AGENTS.md`의 ask-before-full-build 규칙 때문에 배포 빌드는 별도 승인 없이는 돌리지 않는다.
+- 2026-04-07: 리뷰 기준 우선순위는 `backend 구현 코드 -> docs/backend-api-ssot.md -> PRD.md` 로 고정한다. PRD의 미구현 항목은 제품 계획으로 유지하되 live contract로 취급하지 않는다.
+- 2026-04-07: shared interaction spec은 page별 예외를 늘리기보다 공통 규칙으로 강하게 묶는다. 우선 고정 대상은 card header action, accordion 사용 기준, pagination 위치/크기, empty/loading/error 배치, mobile table-card fallback, destructive action 표현 규칙이다.
+- 2026-04-03: 데이터 밀도가 중요한 표면은 새 테이블 라이브러리로 갈아타지 않고 공통 `ui/table` 의 `density="compact"` variant로 줄인다. 우선 적용 범위는 거래 작업대, 최근 거래, 인사이트 테이블이며 모바일 카드형 레이아웃은 그대로 둔다.
+- 2026-04-03: 카드 내부 테이블은 바깥 `Card`가 이미 외곽 경계를 제공하므로 내부 table wrapper에는 별도 border를 두지 않는다. Data Table 전환 검토 시에도 server-driven filter bar와 mobile 카드 레이아웃은 별도 구조로 유지한다.
+- 2026-04-03: 공통 `Table`의 행/헤더 separator는 정보 구분을 위해 유지하고, 제거 대상은 카드 내부의 별도 table wrapper border만 한정한다. `반복결제`처럼 문자열 길이가 긴 열은 `table-fixed` + truncate로 폭 흔들림을 막는다.
+- 2026-04-03: chart tooltip은 chart 종류별로 별도 DOM 스타일을 유지하지 않고 공통 `ChartTooltipContent` 컴포넌트로 통일한다. compact text size와 line indicator를 한 곳에서 관리해야 mobile density와 palette consistency를 함께 유지할 수 있다.
+- 2026-04-03: range 기준 badge가 2개 이상 필요한 카드 헤더는 줄바꿈보다 `CardPeriodBadgeGroup`의 nowrap + 가로 스크롤을 우선한다. 헤더 높이 증가로 card body가 밀리는 비용이 더 크기 때문이다.
+- 2026-04-03: KPI 성격의 summary card group은 저채도 gradient surface 위에 동일 계열의 더 진한 border variant를 사용한다. 배경 채도는 낮게 유지하면서도 카드 경계 인지를 살리는 쪽이 overview/assets/insights 공통 패턴으로 더 안정적이다.
+- 2026-04-03: 다음 frontend IA 리패스는 기존 top navigation shell을 누적 수정하지 않고 새 sidebar shell로 재작성한다. desktop은 lean collapsible sidebar, mobile은 drawer, content는 넓은 max-width, page chrome은 thin topbar를 기준으로 하고, 그룹 항목은 route link가 아니라 disclosure/flyout trigger로 정의한다.
+- 2026-04-03: sidebar shell의 breadcrumb/title/active group은 `frontend/src/app/navigation.ts` 하나에서 파생한다. `AppLayout` 에 route prefix 분기를 다시 흩뿌리지 않고, shell chrome과 nav 컴포넌트가 같은 구성을 참조하는 쪽이 이후 page-level header 제거에도 안전하다.
+- 2026-04-03: desktop sidebar expansion state는 `AppShellState` 에서 localStorage로만 영속화하고, mobile drawer open state는 세션 메모리 상태로만 둔다. mobile open 상태를 영속화할 이유는 없고, desktop 정보 밀도 선호만 복원하면 충분하다.
+- 2026-04-02: overview `최근 거래` 와 insights `반복 결제` 의 대표 식별자는 원본 description이 아니라 `merchant` 로 통일한다. 반복 결제 휴리스틱도 동일 거래처 기준으로 묶어야 화면 라벨과 진단 의미가 어긋나지 않는다.
+- 2026-04-02: `cost_kind` 는 입력값을 `fixed | variable` 로만 제한하고, 새 수동 거래의 기본값은 `variable` 로 둔다. 다건 편집 toolbar에서는 안전하게 기본 선택을 `수정 안 함` 으로 유지해 의도치 않은 일괄 덮어쓰기를 막는다.
+- 2026-04-02: 인사이트 카드의 `반복 결제`, `이상 지출` 은 카드 내부 로컬 slice가 아니라 API 페이지네이션으로 처리한다. 데이터가 커져도 카드 높이와 네트워크 payload를 함께 제어해야 하므로 `page/per_page/total` 계약을 endpoint에 직접 추가한다.
+- 2026-04-02: 지출 페이지의 시계열 slider도 작업대 필터와 같은 draft/apply 패턴을 적용한다. slider 이동마다 즉시 query를 다시 태우는 것보다 사용자가 범위를 잡은 뒤 `적용` 버튼으로 확정하는 편이 더 안정적이다.
+- 2026-04-02: 지출 페이지 상세 필터는 `시작 월` / `종료 월`만 남기고, `카테고리`, `결제수단`, `설명 검색`은 제거한다. 현재 정보 구조에서 세부 필터가 많을수록 카드 간 기준이 흐려지고 workbench와도 역할이 겹친다.
+- 2026-04-02: 거래 편집 작업대 성능 최적화의 최우선 목표는 `frontend/src/hooks/useDataManagement.ts` 의 `loadAllTransactions()` 전체 페이지 수집을 없애는 것이다. 현재처럼 전건 fetch 후 클라이언트 필터링/페이지네이션을 하는 구조는 데이터가 늘수록 느려질 수밖에 없다.
+- 2026-04-07: review용 dev server 재기동이 우선인 상황에서는 누락 설치 상태의 `@heroicons/react` 를 다시 맞추기보다 이미 의존성에 포함된 `lucide-react` 로 layout chrome 아이콘을 통일한다. 런타임 복구 범위가 작고 추가 설치 없이 바로 검증 가능하기 때문이다.
+
+## Known Issues
+- openpyxl read_only 모드에서 `ws.max_row`가 None 반환될 수 있음 — iter_rows 순회 필수
+- 현재 제공된 샘플 `./tmp/finance_sample.xlsx` 와 `./tmp/sample_260324.xlsx` 는 비암호화 파일이다. 복호화 코드는 fallback으로 유지하지만 현재 운영 검증 전제는 비암호화 workbook이다
+- worktree에는 ignored `tmp/` 디렉터리가 자동 체크아웃되지 않으므로 parser 테스트는 루트 저장소의 `tmp/finance_sample.xlsx` 를 탐색해 사용
+- PostgreSQL smoke test는 `DB_PASSWORD=my_ledge_dev` / `DATABASE_URL=postgresql+asyncpg://my_ledge:my_ledge_dev@127.0.0.1:5432/my_ledge` 기준으로 검증했다. 실제 개발 환경에서는 `.env` 복사 후 비밀번호를 로컬 값으로 맞춰야 한다
+- 로컬 5432 포트를 이미 다른 PostgreSQL이 사용 중이면 `docker compose up -d db` 가 포트 충돌로 실패할 수 있다
+- `docker compose up -d db` 직후에는 Postgres healthcheck가 아직 `starting` 일 수 있어, 이때 바로 `uv run alembic upgrade head` 를 치면 연결 reset/거부가 날 수 있다. `docker compose ps` 또는 health 상태 확인 후 migration/smoke test를 실행하는 게 안전하다
+- frontend 개발 의존성 기준 `npm audit` 에서 moderate 취약점 5건이 보고된다. 현재 Task 7 범위에서는 빌드/런타임을 우선했고 의존성 업그레이드는 후속 정리 과제로 남겨둔다
+- Vite dev server는 Tailnet IP(`100.69.156.40`) 접근은 허용하지만 MagicDNS hostname(`moltbot.tailbe7385.ts.net`)으로는 현재 host check 403을 반환한다. 리뷰는 우선 Tailnet IP 기준으로 진행해야 한다
+- 메인 대시보드의 `월별 지출 추이` 와 `카테고리 비중` 카드 높이는 현재 실사용 가능 수준까지 맞췄지만, 픽셀 단위 완전 정렬은 후속 polish 항목으로 남겨둔다
+- Vitest + Recharts 조합에서 `ResponsiveContainer` 가 jsdom 크기를 계산하지 못해 width/height warning을 stderr에 출력한다. 브라우저 렌더링과 Playwright 캡처는 정상이다
+- 현재 샌드박스에서는 Playwright headless Chrome이 crashpad 초기화 문제로 실행되지 않아 브라우저 자동화 기반 `/data` write flow 검증은 막힌다. 대신 실제 임시 서버에 대한 HTTP 검증(`upload -> patch -> delete -> restore`)으로 기능 확인을 남겼다
+- `merchant_normalized` 부재로 merchant 분석 v1은 raw `merchant` 입력 품질에 영향을 받는다. 현재는 작업대 수동 수정으로 보정할 수 있지만, 상점명 정규화 규칙이나 alias 병합 전략은 후속 과제다
+- `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다
+- `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다
+- 현재 실데이터 기준 대출원금상환은 raw `type='이체'`가 아니라 `type='지출'`, `category_major='금융'`에 섞여 있다. transfer tracking 구현은 expense-side 재분류를 반드시 포함해야 한다
+- 대출상환은 사용자 의도상 고정비 지출로도 해석될 수 있으므로 MVP에서는 raw `지출`을 `이체`로 바꾸지 않는다. 별도 transfer/debt movement slice는 파생 레이어로만 제공한다
+- 대출상환의 원금/이자 파생 분리 구현은 설계는 정리됐지만 우선순위를 뒤로 미뤘다. 먼저 raw transfer slice, liquidity-health, debt-health, snapshot-compare의 기본 계약과 안정성을 확보한다
+- 현재 실DB는 `fs_260311`, `fs_260324`, `fs_260326`, `fs_260407` 기준으로 snapshot date 4개가 적재되어 있다. 실샘플 검증은 이 state를 기준으로 수행한다
+- 현재 snapshot read surface는 latest summary/history만 제공하고 irregular comparison metadata는 없다. 월별 비교 UX를 추가할 때는 partial/stale/closed-month fallback 규칙을 먼저 계약으로 고정해야 한다
+- 현재 지출 실데이터에서 `cost_kind`, `fixed_cost_necessity`가 전혀 채워져 있지 않아 fixed-cost/essential/discretionary 진단은 구현 완료 대비 실사용 효용이 낮다
+- 2026-04-07 기준 analytics pagination drift, `SpendingPage` treemap 기간 drift, rolling-window overlap stale row 누적은 복구됐다. 현재 backend 전체 pytest는 real workbook fixture alias(`finance_sample.xlsx -> fs_260311.xlsx`, `sample_260324.xlsx -> fs_260324.xlsx`, `sample_260326.xlsx -> fs_260326.xlsx`, `sample_260407.xlsx -> fs_260407.xlsx`)까지 포함해 green이다
+- frontend 재설계 1차 단계에서는 `SpendingPage`, `AssetsPage` 본문이 기존 구현을 재사용한다. 새 shell/route 아래에서 동작하지만 시각 언어와 정보 밀도 정리는 후속 단계다.
+- Playwright CLI는 현재 환경에서 session 유지와 캐시 경로 이슈가 있어 장시간 일괄 캡처가 불안정하다. 이번 턴에서는 실제 desktop 캡처 4장을 확보한 뒤 서버/브라우저 프로세스를 모두 종료했다.
+- Playwright CLI는 현재 샌드박스에서 cache/namespace 제약으로 browser launch 자체가 실패한다. 이번 턴의 스크린샷 재수집은 Chrome headless `--no-sandbox --disable-dev-shm-usage` fallback으로 수행했다.

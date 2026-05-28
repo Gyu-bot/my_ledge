@@ -39,6 +39,31 @@ my_ledge/
 
 ---
 
+## Documentation Map
+
+새 세션이나 다른 에이전트가 이어받을 때는 아래 순서로 문서를 본다.
+
+| 문서 | 역할 | 비고 |
+|---|---|---|
+| `docs/STATUS.md` | 현재 작업 상태, 최근 완료, 진행 중, 다음 작업, 핵심 결정 로그 | 작업 시작 전 읽고, 작업 완료 후 갱신한다. backlog 전체 목록으로 쓰지 않는다. |
+| `docs/planned-work.md` | 아직 구현되지 않았지만 계획으로 유지하는 backlog / roadmap | P0/P0.5/P1/P2, Paused, Stale 항목의 기준 문서다. `STATUS.md`와 분리해 유지한다. |
+| `PRD.md` | 제품 요구사항과 장기 범위 | live 구현 여부 판단은 코드와 backend/API SSOT를 우선한다. |
+| `docs/backend-api-ssot.md` | 현재 backend/API live contract 요약 | endpoint/field 충돌 시 backend 코드 다음 우선순위다. |
+| `docs/backend-api-and-metrics-reference.md` | endpoint, metric, canonical view 계산 방식 상세 설명 | 구현자와 리뷰어용 상세 reference다. |
+| `docs/agents/README.md` | OpenClaw, hermes, Codex, Claude 등 외부 에이전트 시작점 | read/write 권한, canonical view 우선 규칙, 추천 흐름을 담는다. |
+| `docs/openclaw/**` | 기존 OpenClaw 호환 연동 문서 | agent README 이후 필요한 경우만 본다. |
+| `docs/frontend-design-tokens.md` | 현재 frontend 시각 토큰 source of truth | 실제 CSS/token 값 기준이다. |
+| `docs/frontend/components-and-design-token-inventory.md` | 현재 UI component surface와 token 연결표 | 새 컴포넌트 추가 시 같이 갱신한다. |
+| `docs/frontend/page-wireframes.md` | live route별 section 구성과 wireframe | 현재 화면 구조 기준이다. |
+| `docs/frontend-reimplementation-wireframe-functional-requirements.md` | frontend 재구현/정렬 요구사항 | current frontend 기준과 함께 참고한다. |
+| `docs/archive/**`, `docs/daily/**`, `docs/superpowers/plans/**`, `docs/superpowers/specs/**` | historical reference | 미체크 task가 남아 있어도 current backlog로 보지 않는다. 필요한 내용은 `docs/planned-work.md`로 승격한 뒤 사용한다. |
+
+`docs/STATUS.md`와 `docs/planned-work.md`는 역할이 다르므로 분리한다. `STATUS.md`는 handoff log이고, `planned-work.md`는 미구현 계획의 정리된 backlog다.
+
+`docs/STATUS.md`는 필수 handoff 파일이므로 길이를 관리한다. 상단에는 현재 상태, 최근 완료, 진행 중, 다음 작업, 핵심 결정만 유지하고, 오래된 완료 로그가 파일을 비대하게 만들면 `docs/archive/status/` 아래 날짜별 snapshot으로 옮긴 뒤 요약 링크만 남긴다.
+
+---
+
 ## Core Commands
 
 ```bash

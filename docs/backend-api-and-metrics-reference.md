@@ -917,6 +917,38 @@ Documented columns:
 - `unclassified_total`
 - `unclassified_count`
 
+### Planned canonical read model expansion
+
+These views are not live until their Alembic migrations and `CANONICAL_VIEWS` schema entries are added. They define the intended contract for the next advisor-oriented canonical layer.
+
+Direction:
+
+- My Ledge's core role is to provide canonical read models for a finance assistant, not to decide assistant personality or coaching tone.
+- Planned views should expose structured evidence fields where useful, such as `reason`, `confidence`, `assumptions`, `risk_level`, `baseline_delta`, `is_estimated`, and `needs_user_review`.
+- P1 warning/recommendation features are future consumers of the canonical layer; they should shape P0/P0.5 fields but do not need to be implemented before the canonical views.
+
+Common rules:
+
+- Use `vw_transactions_effective` semantics as the transaction source.
+- Convert expense rows with `-amount`; positive `지출` refund/cancellation rows reduce monthly expense.
+- Separate loan-linked transactions before fixed/variable breakdown to avoid double counting repayment burden as ordinary spending.
+- Keep `transfer_activity_total` separate from `net_cashflow`.
+- Keep `as_of_date`, threshold, and baseline settings in API/settings contracts when a calculation depends on runtime context.
+
+Planned P0 views:
+
+- `vw_monthly_cashflow`: monthly income, expense, non-loan expense, transfer activity, loan repayment, fixed/variable spend, unclassified expense, net cashflow, and savings rate.
+- `vw_loan_repayment_monthly`: monthly repayment totals by `loan_account_id`, display name, lender, product, loan kind, maturity date, and repayment type.
+- `vw_true_spendable_monthly`: monthly spendable amount after loan repayment and fixed commitments, with `spendable_before_variable_spend` separated from `remaining_after_variable_spend`.
+- `vw_merchant_monthly_baseline`: canonical `merchant` monthly spend/count plus trailing 3-month closed-month baseline and delta fields.
+- `vw_unclassified_work_queue`: prioritized transactions missing cost classification, fixed-cost necessity, recurring kind, or likely loan-link review. Priority combines analysis impact, amount, and recurrence likelihood.
+
+Planned P1/P2 views:
+
+- `vw_recurring_merchant_monthly`: monthly aggregate of stored `recurring_payment_kind` classifications. Interval confidence stays in API diagnostics.
+- `vw_asset_snapshot_canonical`: snapshot-level asset/liability/net-worth view after source-of-truth and double-count rules are fixed.
+- `vw_investment_allocation_snapshot`: investment allocation ratio and previous-snapshot delta by broker/product type/product.
+
 ## Major Metric Logic
 
 ### Transaction Effective Category

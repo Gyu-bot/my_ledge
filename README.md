@@ -26,6 +26,7 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 반복 결제 분류
 
 제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), 협업 규칙은 [AGENTS.md](AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](docs/STATUS.md)를 기준으로 본다.
+아직 구현되지 않았지만 계획으로 유지하는 backlog는 [docs/planned-work.md](docs/planned-work.md)에서 관리한다.
 현재 live backend/API contract는 [docs/backend-api-ssot.md](docs/backend-api-ssot.md)를 우선 참조한다.
 에이전트 연동 시에는 [docs/agents/README.md](docs/agents/README.md)를 먼저 읽고, 필요한 경우 기존 OpenClaw 호환 문서인 [docs/openclaw/README.md](docs/openclaw/README.md)를 이어서 본다.
 
@@ -280,10 +281,13 @@ npm run build
 - 제품 요구사항: [PRD.md](PRD.md)
 - 협업 규칙: [AGENTS.md](AGENTS.md)
 - 현재 진행 상태: [docs/STATUS.md](docs/STATUS.md)
+- 미구현 계획 backlog: [docs/planned-work.md](docs/planned-work.md)
 - Backend/API live contract: [docs/backend-api-ssot.md](docs/backend-api-ssot.md)
 - Backend 상세 reference: [docs/backend-api-and-metrics-reference.md](docs/backend-api-and-metrics-reference.md)
 - 에이전트용 canonical README: [docs/agents/README.md](docs/agents/README.md)
 - OpenClaw 호환 연동 문서 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
+
+`docs/STATUS.md`는 작업 handoff와 현재 상태 로그이고, `docs/planned-work.md`는 계획으로 유지하는 미구현 항목의 backlog다. 과거 plan/spec/archive 문서의 미체크 항목은 `docs/planned-work.md`에 승격되어 있지 않으면 current backlog로 보지 않는다.
 
 ## 에이전트 연동
 

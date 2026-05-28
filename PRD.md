@@ -646,7 +646,7 @@ P0 설계 규칙:
 - `savings_rate = (income - expense) / income`, `income = 0`이면 `null`
 - `category-mom`은 `previous_amount = 0`일 때 `delta_pct = null`
 - `fixed-cost-summary`는 데이터 공백을 숨기지 않고 `unclassified_total`, `unclassified_count`를 함께 노출
-- `merchant-spend` v1은 raw `description` 기준으로 시작하고, alias/정규화는 후속 단계로 분리
+- `merchant-spend` v1은 canonical `merchant` 기준으로 집계하고, alias/정규화는 후속 단계로 분리
 
 #### P1 — rule-based diagnostics
 
@@ -678,22 +678,38 @@ P2 설계 규칙:
 - 정확히 측정할 수 없는 값은 `*_est` suffix를 사용한다.
 - debt/emergency APIs는 계산에 사용한 기준과 누락 데이터를 `assumptions`로 함께 돌려준다.
 
-#### 권장 canonical aggregate layer
+#### Canonical read model 확장 계획
 
-| View | 목적 | 우선순위 |
-|---|---|---|
-| `vw_monthly_cashflow` | 월별 income/expense/transfer/net_cashflow/savings_rate canonical aggregate | 높음 |
-| `vw_category_monthly_mom` | category별 current/previous/delta aggregate | 중간 |
-| `vw_fixed_cost_monthly_summary` | fixed/variable/essential/discretionary/unclassified 집계 | 중간 |
-| `vw_merchant_monthly_spend` | merchant 기준 월별 집계 | 높음 |
-| `vw_investment_performance_history` | snapshot별 cost basis / market value / pnl history | 중간 |
+현재 live canonical view는 `vw_transactions_effective`, `vw_category_monthly_spend`, `vw_fixed_cost_monthly_summary`다. 후속 view는 raw table을 대체하지 않고, 외부 에이전트와 readonly SQL 분석이 같은 재무 해석 기준을 재사용하도록 추가한다.
+
+공통 계약:
+
+- 거래 금액은 analytics와 동일하게 수입은 양수, 지출은 `-amount`로 양수화하되, `지출` 양수 환불/취소는 해당 월 지출을 차감하는 음수 값으로 유지한다.
+- 대출 연결 거래는 일반 소비 breakdown과 겹치지 않게 먼저 분리한다. 월별 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total`을 함께 노출해 double count를 피한다.
+- `fixed_total`, `variable_total`, `essential_fixed_total`, `discretionary_fixed_total`은 기본적으로 `loan_account_id IS NULL`인 지출만 대상으로 한다.
+- `transfer_activity_total`은 현금흐름 관찰용 별도 합계이며 `net_cashflow` 계산에는 포함하지 않는다.
+- `as_of_date`, threshold, baseline 개월 수가 필요한 판단은 plain DB view에 고정하지 않고, base view + API/settings layer로 분리한다.
+- heuristic 결과는 `confidence`, `reason`, `assumptions` 중 최소 하나를 포함한다.
+
+| Priority | View | 목적 | 핵심 필드 / 주의사항 |
+|---|---|---|---|
+| P0 | `vw_monthly_cashflow` | 월별 수입/지출/이체/대출/고정비/순현금흐름 entry point | `income_total`, `expense_total`, `non_loan_expense_total`, `transfer_activity_total`, `loan_repayment_total`, `fixed_total`, `variable_total`, `unclassified_expense_total`, `net_cashflow`, `savings_rate` |
+| P0 | `vw_loan_repayment_monthly` | 대출 상환을 일반 소비와 분리 | `loan_transaction_links` 기준만 집계하고, 미연결 후보는 work queue로 분리 |
+| P0 | `vw_true_spendable_monthly` | 대출/필수 고정비 차감 후 실제 재량 여력 산출 | `spendable_before_variable_spend`와 `remaining_after_variable_spend`를 분리해 의미를 명확히 한다 |
+| P0 | `vw_merchant_monthly_baseline` | 거래처별 월 기준선과 변화량 | canonical `merchant` 기준. 정규화 전 alias 분산 한계를 `assumptions`/문서에 남긴다 |
+| P0.5 | `vw_unclassified_work_queue` | 분석 품질을 흔드는 미분류 거래 우선순위 queue | `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind`, loan link 후보 누락을 함께 표시 |
+| P1 | `vw_recurring_merchant_monthly` | 수동 반복결제 분류 결과의 월별 read surface | `recurring_payment_kind` 저장값 기준. 반복 탐지 heuristic은 API에 유지 |
+| P1 | discretionary velocity / purchase gate base view | 월중 경고와 구매 검토 후보의 feature base | `CURRENT_DATE` 의존 plain view로 고정하지 말고 `as_of_date` API parameter와 settings threshold를 우선한다 |
+| P2 | `vw_asset_snapshot_canonical` | snapshot 기준 자산/부채/순자산 표준화 | `asset_snapshots`와 `loans`/`investments` 간 source of truth 및 double count 방지 규칙을 먼저 고정 |
+| P2 | `vw_investment_allocation_snapshot` | 투자 구성과 비중 변화 | `broker`, `product_type`, `product_name`, `market_value`, `allocation_ratio`, previous snapshot delta |
 
 권장 구현 순서:
 
-1. P0 endpoint 4종 + `vw_monthly_cashflow`, `vw_merchant_monthly_spend`
-2. P1 heuristic endpoint 4종
-3. P2 asset/loan health endpoint 4종
-4. schema enrichment (`merchant_normalized`, liquidity mapping, loan repayment metadata)
+1. P0 canonical aggregate view: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`
+2. 분석 품질 보강 queue: `vw_unclassified_work_queue`
+3. P1 read surface: `vw_recurring_merchant_monthly`, velocity/purchase-gate API feature base
+4. P2 snapshot read model: `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`
+5. schema enrichment: `merchant_normalized`, liquidity mapping, loan repayment metadata, budgets/goals/preferences
 
 ---
 
@@ -927,57 +943,61 @@ CORS_ORIGINS=https://my-ledge.example.com
 
 ## 10. 마일스톤
 
-### Phase 1 — 기반 구축 (MVP)
+현재 live 구현 상태는 `docs/STATUS.md`와 `docs/backend-api-ssot.md`를 우선한다. 미구현이지만 계획으로 유지하는 작업은 `docs/planned-work.md`에서 단일 backlog로 관리한다.
 
-- [ ] DB 스키마 생성 + Alembic 초기 마이그레이션
-- [ ] 엑셀 파싱 파이프라인 (복호화 → 파싱 → 시간 커서 기반 증분 적재)
-- [ ] 업로드 API (`POST /api/v1/upload`)
-- [ ] 기본 조회 API (transactions summary, by-category)
-- [ ] canonical analysis layer 1차 (`vw_transactions_effective`, `vw_category_monthly_spend`) + 기존 조회 read path 연결
-- [ ] 거래 편집 API (PATCH, DELETE, POST, merge, bulk-update)
-- [ ] Docker Compose 구성
-- [ ] 데이터 검증: 파싱 결과 vs 원본 엑셀 크로스체크
-
-### Phase 2 — 대시보드 Core
-
-- [ ] 메인 대시보드 (요약 카드 + 월별 추이 + 도넛 차트)
-- [ ] 지출 분석 페이지 (누적 영역, 기간 분리, 파이 차트, Tree Map, 아코디언 거래 내역)
-- [ ] 자산 현황 페이지 (순자산 시계열, 투자/대출)
-- [ ] 데이터 관리 페이지 (업로드 UI + 거래 편집 테이블 + 인라인 카테고리 수정)
-
-### Phase 3 — OpenClaw 연동
-
-- [ ] readonly DB 유저 설정 + 스키마 문서 API
-- [ ] OpenClaw TOOLS.md에 my_ledge DB 접근 스킬 추가
-- [ ] OpenClaw 에이전트 → 업로드 API 연동 테스트
-
-### Phase 4 — 고급 분석 + 운영 안정화
+### Completed Baseline
 
 - [x] Phase 4A — advisor analytics foundation
   - [x] `GET /api/v1/analytics/monthly-cashflow`
   - [x] `GET /api/v1/analytics/category-mom`
   - [x] `GET /api/v1/analytics/fixed-cost-summary`
   - [x] `GET /api/v1/analytics/merchant-spend`
-  - [ ] canonical aggregate view 보강 (`vw_monthly_cashflow`, `vw_merchant_monthly_spend`)
 - [x] Phase 4B — advisor diagnostics
   - [x] `GET /api/v1/analytics/recurring-payments`
   - [x] `GET /api/v1/analytics/spending-anomalies`
   - [x] `GET /api/v1/analytics/payment-method-patterns`
   - [x] `GET /api/v1/analytics/income-stability`
-  - [ ] merchant normalization 전략 확정 (`description` only vs alias rule table)
+
+### Current Planned Work
+
+- [ ] P0 stabilization and contract hygiene
+  - 새 기능 구현으로 넘어가되 운영 배포본 smoke capture는 구현 batch acceptance check로 유지
+  - 업로드 원본 파일 최근 5개 보관 구현
+  - source verification scope 결정
+  - 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 sparse 데이터로 취급
+- [ ] P0 canonical read model expansion
+  - [ ] P0 canonical aggregate view 보강
+    - [ ] `vw_monthly_cashflow`
+    - [ ] `vw_loan_repayment_monthly`
+    - [ ] `vw_true_spendable_monthly`
+    - [ ] `vw_merchant_monthly_baseline`
+  - [ ] 분석 품질 queue view 추가 (`vw_unclassified_work_queue`)
+- [ ] P1 advisor expansion
+  - P1은 지금 구현 대상이라기보다 P0/P0.5 canonical view의 future consumer requirements로 반영
+  - [ ] 반복결제 read surface 추가 (`vw_recurring_merchant_monthly`)
+  - [ ] discretionary velocity / purchase gate는 base view와 API parameter/settings 계약으로 분리
+  - [ ] merchant normalization은 수동 alias rule 기반으로 시작
   - [ ] 카테고리 분류 기반 `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 자동 분류 계획 구체화
     - [ ] 대분류/소분류 → 후보 필드 매핑 정의
-    - [ ] 기존 수동값 보존 정책과 dry-run 결과 contract 정의
+    - [ ] 기존 수동값 보존 정책과 dry-run 후보 contract 정의
     - [ ] 사용자 승인 후 bulk 반영하는 운영 화면 계획
-- [ ] Phase 4C — asset/liability health
+- [ ] P1 asset/liability health
   - [ ] `GET /api/v1/analytics/net-worth-breakdown`
   - [ ] `GET /api/v1/analytics/investment-performance`
   - [ ] `GET /api/v1/analytics/debt-burden`
   - [ ] `GET /api/v1/analytics/emergency-fund`
   - [ ] liquidity classification / loan repayment metadata 설계 고정
-- [ ] 수입 분석 / 자산이동 페이지
-- [ ] 자동 백업 크론
-- [ ] 도메인 연결 + HTTPS
+- [ ] P1 operations/data management
+  - 백업/복구 안전장치를 전제로 bulk delete / bulk restore 허용
+  - `description_user` / `effective_description`
+  - recurring auto-classification
+- [ ] P2 product expansion
+  - Settings는 실제 사용자 기능, Token Lab은 개발/리뷰용 도구
+  - 프론트엔드는 v2 전면 재구현보다 현재 main 기준 개선 우선
+  - 수입 분석 / 자산이동 페이지
+  - 자동 백업 크론
+  - 도메인 연결 + HTTPS
+  - budgets / goals / advice preferences
 
 ---
 

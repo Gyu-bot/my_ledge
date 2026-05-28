@@ -255,9 +255,12 @@
 - `PRD.md`
   - 제품 요구사항 문서
   - 구현 반영은 하되, low-level contract는 이 문서가 더 직접적이다
-- `docs/additional_feature.md`
+- `docs/planned-work.md`
+  - 현재 미구현이지만 계획으로 유지하는 backlog 문서
+  - live contract가 아니라 실행 우선순위와 보류/장기 항목 정리 기준이다
+- `docs/archive/planning/finance-advisor-analytics-expansion.md`
   - historical planning 문서
-  - 현재 live backend/API SSOT로 사용하지 않는다
+  - 현재 live backend/API SSOT나 active backlog로 사용하지 않는다
 - `docs/frontend-reimplementation-wireframe-functional-requirements.md`
   - frontend contract 참고 문서
   - backend/API SSOT 문서는 아니다

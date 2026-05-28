@@ -1,8 +1,9 @@
 # Finance Advisor Analytics Expansion Plan
 
-> Historical planning document. Do not use this file as the current backend/API source of truth.
-> Current live contract: [docs/backend-api-ssot.md](/home/gyurin/projects/my_ledge/docs/backend-api-ssot.md)
-> Product-level requirement reference: [PRD.md](/home/gyurin/projects/my_ledge/PRD.md)
+> Historical planning document. Do not use this file as the current backend/API source of truth or active backlog.
+> Current live contract: [docs/backend-api-ssot.md](../../backend-api-ssot.md)
+> Active planned-but-unimplemented backlog: [docs/planned-work.md](../../planned-work.md)
+> Product-level requirement reference: [PRD.md](../../../PRD.md)
 
 ## 목적
 
@@ -87,7 +88,7 @@
 | `monthly-cashflow` | 바로 구현 가능 | `transactions.type`, `amount`, canonical read path로 월별 집계 가능 | `transfer`는 별도 합계로 노출하되 `net_cashflow` 계산에는 포함하지 않는다 |
 | `category-mom` | 바로 구현 가능 | effective category + 월별 지출 집계가 이미 가능 | `previous_amount=0`일 때 `delta_pct=null` 계약 고정 필요 |
 | `fixed-cost-summary` | 조건부 즉시 구현 가능 | `cost_kind`, `fixed_cost_necessity` 컬럼과 canonical view 노출이 이미 있음 | 실제 데이터 공백이 클 수 있으므로 `unclassified_*`를 반드시 함께 노출해야 한다 |
-| `merchant-spend` | 바로 구현 가능(v1) | `description` 기준 그룹핑만으로도 상위 거래처 집계 가능 | merchant 정규화 전에는 alias가 분산돼 품질이 제한된다 |
+| `merchant-spend` | 바로 구현 가능(v1) | canonical `merchant` 기준 그룹핑만으로도 상위 거래처 집계 가능 | merchant 정규화 전에는 alias가 분산돼 품질이 제한된다 |
 | `recurring-payments` | 규칙 기반 v1 구현 가능 | description/merchant 기준 그룹핑과 날짜 간격 휴리스틱으로 탐지 가능 | `merchant_normalized` 부재로 precision/recall이 낮을 수 있어 `confidence` 필드가 필요하다 |
 | `spending-anomalies` | 규칙 기반 v1 구현 가능 | merchant/category 기준 최근 N개월 baseline 계산 가능 | 점수는 추정치이므로 reason/assumptions를 응답에 포함해야 한다 |
 | `payment-method-patterns` | 바로 구현 가능 | `payment_method`, effective category, amount 모두 현재 데이터로 집계 가능 | 기존 `/transactions/payment-methods`보다 상위 카테고리 breakdown을 추가로 제공하면 충분하다 |
@@ -309,7 +310,7 @@ GET /api/v1/analytics/merchant-spend?start_date=2026-01-01&end_date=2026-03-31&t
 
 판정 아이디어:
 
-- merchant 또는 normalized description 기준 그룹핑
+- canonical `merchant` 기준 그룹핑. 정규화가 필요하면 후속 `merchant_normalized` 또는 alias rule을 추가
 - 금액 편차 허용 범위
 - 25~35일 간격이면 monthly 후보
 - 6~8일 간격이면 weekly 후보
@@ -543,23 +544,36 @@ GET /api/v1/analytics/merchant-spend?start_date=2026-01-01&end_date=2026-03-31&t
 
 API만 늘리는 것보다, 아래 canonical aggregate view가 있으면 구현과 유지보수가 쉬워진다.
 
+현재 방향:
+
+- My Ledge는 재무 어시스턴트가 사용할 canonical read model foundation을 먼저 제공한다.
+- 어시스턴트 말투/성격/코칭 강도는 별도 consumer layer에서 결정한다.
+- P1의 소비 속도 경고, purchase gate, health 진단은 지금 당장 구현할 기능이 아니라 P0/P0.5 view 설계의 future consumer requirements로 활용한다.
+
 ### 권장 추가 view
 
 - `vw_monthly_cashflow`
-  - 월별 income / expense / transfer / net_cashflow / savings_rate
-- `vw_category_monthly_mom`
-  - category별 current / previous / delta
+  - 월별 income / expense / non-loan expense / transfer activity / loan repayment / net_cashflow / savings_rate
+- `vw_loan_repayment_monthly`
+  - 대출 연결 거래를 일반 소비와 분리해 월별 상환 부담 집계
+- `vw_true_spendable_monthly`
+  - 대출 상환과 고정 지출을 뺀 실제 재량 지출 여력
+- `vw_merchant_monthly_baseline`
+  - canonical merchant 기준 월별 기준선, 최근 3개월 평균, delta
 - `vw_fixed_cost_monthly_summary`
   - fixed / variable / essential / discretionary / unclassified
-- `vw_merchant_monthly_spend`
-  - merchant 기준 월별 집계
+- `vw_unclassified_work_queue`
+  - cost/fixed/recurring/loan-link 분류 공백을 우선순위별로 노출
+- `vw_recurring_merchant_monthly`
+  - 저장된 recurring classification 결과를 월별 분석 surface로 노출
 - `vw_investment_performance_history`
   - snapshot별 cost_basis / market_value / pnl / return_rate
 
 비고:
 
 - 전부를 반드시 view로 만들 필요는 없다.
-- 다만 AI/readonly DB drill-down까지 고려하면, 적어도 `monthly_cashflow` 와 `merchant` 계열은 canonical layer가 있는 편이 좋다.
+- 다만 AI/readonly DB drill-down까지 고려하면, `monthly_cashflow`, `loan_repayment`, `merchant_baseline`, `unclassified_work_queue` 계열은 canonical layer가 있는 편이 좋다.
+- `discretionary spending velocity` 와 `purchase gate candidates` 는 `as_of_date`, baseline, threshold에 민감하므로 plain view보다 API/settings contract를 우선한다.
 
 ---
 

@@ -4,7 +4,7 @@
 
 **Goal:** Add advisor-oriented analytics endpoints that let OpenClaw explain cashflow, spending changes, recurring spend, transfer flows, snapshot deltas, and asset/liability health without re-deriving core finance calculations from raw tables.
 
-**Architecture:** Reuse the existing canonical transaction read path (`vw_transactions_effective`) as the row-level source of truth, add a small analytics service/router/schema layer for stable endpoint contracts, and introduce only the minimum new canonical aggregates needed for reuse (`vw_monthly_cashflow`, `vw_merchant_monthly_spend`, transfer-oriented read models if needed) before considering schema enrichment. Keep heuristic outputs explicitly labeled with confidence/assumptions so OpenClaw can distinguish exact aggregates from estimated diagnostics.
+**Architecture:** Reuse the existing canonical transaction read path (`vw_transactions_effective`) as the row-level source of truth, keep the live analytics service/router/schema contracts stable, and add advisor-oriented canonical aggregate views for readonly SQL and external-agent reuse. Separate exact aggregate views from heuristic or `as_of_date`-dependent diagnostics so OpenClaw can distinguish reusable finance facts from settings-driven recommendations.
 
 **Tech Stack:** FastAPI, SQLAlchemy 2.0 async, Pydantic v2, Alembic, pytest + httpx AsyncClient
 
@@ -12,10 +12,31 @@
 
 ## Feasibility Summary
 
-- **P0 (implement now):** `monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`
-- **P1 (rule-based v1):** `recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`
-- **P2 (estimated / mapping-dependent):** `net-worth-breakdown`, `investment-performance`, `liquidity-health`, `debt-health`, `snapshot-compare`
+- **P0 (live endpoints):** `monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `fixed-cost-trend`, `merchant-spend`
+- **P0 canonical view follow-up:** `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`
+- **P0.5 data-quality view:** `vw_unclassified_work_queue`
+- **P1 (live diagnostics):** `recurring-payments`, `spending-anomalies`, `payment-method-patterns`, `income-stability`
+- **P1 as future consumer requirements:** P1 warning/recommendation features are not the next implementation target. Use them to make sure P0/P0.5 canonical views expose the fields future assistant consumers need.
+- **P1 canonical/API split:** `vw_recurring_merchant_monthly` for stored recurring classifications; discretionary velocity and purchase-gate candidates stay behind API/settings contracts until `as_of_date` and threshold semantics are fixed.
+- **P2 (estimated / mapping-dependent):** `net-worth-breakdown`, `investment-performance`, `liquidity-health`, `debt-health`, `snapshot-compare`, `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`
 - **Schema enrichment deferred:** `merchant_normalized`, merchant-based fixed/variable classification rules, liquidity mapping, `monthly_payment`, `repayment_type`, budgets/goals/preferences
+
+## Product Direction Decisions
+
+- My Ledge should first provide canonical views/read models that a finance assistant can trust. Assistant personality, tone, and coaching style belong to a separate consumer layer.
+- Canonical surfaces should expose structured evidence such as `reason`, `confidence`, `assumptions`, `risk_level`, `baseline_delta`, `is_estimated`, and `needs_user_review` rather than embedding a conversational persona.
+- Upload source files should be retained as the latest 5 originals.
+- Asset, investment, and loan snapshots remain upload-driven for now; do not introduce required month-end or scheduled snapshot capture in this batch.
+- Loan repayments are separated from ordinary consumer spending.
+- True spendable monthly output should expose both pre-variable-spend availability and remaining-after-variable-spend availability.
+- Merchant baseline should include trailing 3-month averages and deltas.
+- Unclassified work queue priority is based on analysis impact, amount, and recurrence likelihood.
+- Merchant normalization starts with manual alias rules, not automatic merges.
+- Recurring auto-classification starts as dry-run candidates that require user approval before saving.
+- Settings is a real user-facing feature; Token Lab is a dev/review tool.
+- Frontend work should continue improving current main before reviving the paused v2 rewrite.
+- Bulk operations are allowed only with backup/recovery guardrails.
+- Description override, budgets, goals, and advice preferences remain in product scope.
 
 ## File Structure
 
@@ -38,7 +59,6 @@
 - `frontend/src/hooks/useAnalytics.ts`
 - `frontend/src/types/analytics.ts`
 - `PRD.md`
-- `STATUS.md`
 - `docs/STATUS.md`
 - `docs/openclaw/integration-guide.md`
 - `docs/openclaw/skill-handoff.md`
@@ -51,6 +71,10 @@
 
 ## Contract Rules For Heuristics
 
+- Transaction amount sign convention follows the live analytics layer: income is positive, expense is `-amount`, and positive `지출` refund/cancellation rows reduce monthly expense.
+- Loan-linked expense rows are separated before fixed/variable breakdown. Monthly aggregate views must expose `expense_total`, `loan_repayment_total`, and `non_loan_expense_total` so consumers do not double count repayment burden as general spending.
+- `fixed_total`, `variable_total`, `essential_fixed_total`, and `discretionary_fixed_total` exclude `loan_account_id IS NOT NULL` rows unless a view explicitly labels an overlap field.
+- `transfer_activity_total` is an activity measure and does not contribute to `net_cashflow`.
 - All derived or assumption-dependent numeric outputs use `*_est`.
 - All heuristic endpoints expose `confidence`.
 - Heuristic endpoints also expose at least one of:
@@ -70,15 +94,64 @@
 
 **Implementation notes**
 - Use `vw_transactions_effective` as the only transaction source.
-- Add `vw_monthly_cashflow` if the SQL is reused by more than one endpoint or OpenClaw drill-down.
-- Add `vw_merchant_monthly_spend` if merchant trend and recurring detection will share the same normalized aggregate path.
-- `merchant-spend` v1 groups by raw `description`.
+- `merchant-spend` v1 groups by canonical `merchant`.
 - `fixed-cost-summary` must return `unclassified_total` and `unclassified_count`.
+- Existing live endpoints may continue using the shared SQLAlchemy canonical select, but readonly SQL consumers should get equivalent DB views in Workstream 1.5.
 
 **Verification**
 - `cd backend && uv run pytest tests/services/test_analytics_service.py -k "cashflow or mom or fixed or merchant"`
 - `cd backend && uv run pytest tests/api/test_analytics_api.py -k "cashflow or mom or fixed or merchant"`
 - Validate system flow: API request -> canonical query/view -> response schema -> OpenClaw docs
+
+## Workstream 1.5: Canonical Aggregate View Expansion
+
+**Goal**
+- Promote repeated advisor calculations into documented DB views so readonly SQL users and external agents can ask monthly finance questions without re-deriving semantics from raw transactions.
+
+**Target views**
+- `vw_monthly_cashflow`
+- `vw_loan_repayment_monthly`
+- `vw_true_spendable_monthly`
+- `vw_merchant_monthly_baseline`
+- `vw_unclassified_work_queue`
+
+**Implementation notes**
+- Build every transaction-derived view from `vw_transactions_effective` or the shared select that defines it.
+- `vw_monthly_cashflow` fields:
+  - `period`
+  - `income_total`
+  - `expense_total`
+  - `non_loan_expense_total`
+  - `transfer_activity_total`
+  - `loan_repayment_total`
+  - `fixed_total`
+  - `variable_total`
+  - `essential_fixed_total`
+  - `discretionary_fixed_total`
+  - `unclassified_expense_total`
+  - `net_cashflow`
+  - `savings_rate`
+- `vw_loan_repayment_monthly` fields:
+  - `period`
+  - `loan_account_id`
+  - `loan_display_name`
+  - `loan_lender`
+  - `loan_product_name`
+  - `loan_kind`
+  - `loan_maturity_date`
+  - `repayment_type`
+  - `repayment_total`
+  - `transaction_count`
+- `vw_true_spendable_monthly` must distinguish:
+  - `spendable_before_variable_spend`: income after loan repayment and fixed commitments
+  - `remaining_after_variable_spend`: spendable amount after observed variable spending
+- `vw_merchant_monthly_baseline` should use canonical `merchant`, `effective_category_major`, and `effective_category_minor`, then expose trailing closed-month averages and deltas. If the current month is partial, the API layer should carry `as_of_date` and comparison-mode metadata rather than baking it into the view.
+- `vw_unclassified_work_queue` should prioritize recent/high-value transactions missing `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind`, or likely loan links. It should not auto-assign classifications.
+
+**Verification**
+- Add schema documentation tests proving `/api/v1/schema` lists every new view and column.
+- Add migration tests or service-level SQL tests that assert loan-linked rows are excluded from non-loan fixed/variable totals.
+- Add fixtures with refund rows (`type='지출'`, positive amount) to verify monthly expense is reduced, not inflated.
 
 ## Workstream 2: P1 Rule-Based Diagnostics
 
@@ -91,6 +164,7 @@
 **Implementation notes**
 - `payment-method-patterns` can ship immediately after P0 because it is pure aggregation.
 - `income-stability` should return both monthly series and summary stats (`avg`, `stdev`, `coefficient_of_variation`).
+- Add `vw_recurring_merchant_monthly` as a canonical read surface for stored `recurring_payment_kind` classifications. Keep interval detection and confidence scoring in the API response, because those are heuristic and threshold-sensitive.
 - `recurring-payments` should start with rule-based intervals:
   - 25-35 day gap => `monthly`
   - 6-8 day gap => `weekly`
@@ -105,6 +179,8 @@
   - transaction count expansion
   - one or more merchant outliers dominating the month
   - This should stay additive to the current response rather than replacing the baseline comparison.
+- Discretionary spending velocity should be implemented as an API/settings contract over stable aggregate inputs, not as a plain view that silently depends on `CURRENT_DATE`.
+- Purchase-gate candidates should expose feature flags (`is_new_merchant`, `is_large_oneoff`, `is_discretionary`, baseline deltas) and `purchase_gate_reason`, but thresholds should remain configurable through settings before they are treated as canonical facts.
 - All heuristic endpoints must expose at least one of `confidence`, `reason`, `assumptions`.
 
 **Verification**
@@ -193,6 +269,8 @@
 **Implementation notes**
 - `net-worth-breakdown` groups latest snapshot by `side` + `category`.
 - `investment-performance` should expose history over snapshots, not just latest totals.
+- Add `vw_asset_snapshot_canonical` only after source-of-truth rules are explicit for `asset_snapshots`, `loans`, and `investments`; do not double count investment or loan amounts that are represented in more than one imported table.
+- Add `vw_investment_allocation_snapshot` as an allocation read model over `investments.broker`, `product_type`, `product_name`, and `market_value`; sparse snapshot gaps are allowed and must be visible in delta fields.
 - `liquidity-health` should show immediate survival capacity rather than portfolio quality.
 - `debt-health` should show repayment burden and rate risk rather than raw debt size alone.
 - `snapshot-compare` should default to previous available snapshot comparison, not assume monthly spacing.
@@ -439,7 +517,7 @@
 ## Documentation Updates Required Per Implementation Batch
 
 - Update `PRD.md` for any contract or scope changes.
-- Update both `STATUS.md` and `docs/STATUS.md`.
+- Update `docs/STATUS.md`.
 - Append a new day log under `docs/daily/YYYY-MM-DD/`.
 - Update `docs/openclaw/integration-guide.md` and `docs/openclaw/skill-handoff.md` whenever analytics endpoints or assumptions change.
 
