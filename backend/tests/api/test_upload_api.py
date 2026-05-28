@@ -1,6 +1,8 @@
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from httpx import AsyncClient
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.upload_log import UploadLog
@@ -48,7 +50,12 @@ async def test_upload_returns_import_summary(
     async_client: AsyncClient,
     api_headers: dict[str, str],
     sample_workbook_bytes: bytes,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    upload_dir = tmp_path / "uploads"
+    monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
+
     response = await async_client.post(
         "/api/v1/upload",
         headers=api_headers,
@@ -66,18 +73,21 @@ async def test_upload_returns_import_summary(
     assert response.json() == {
         "status": "success",
         "upload_id": 1,
-            "transactions": {
-                "total": 2357,
-                "new": 2357,
-                "skipped": 0,
-            },
-            "snapshots": {
-                "asset_snapshots": 42,
-                "investments": 9,
-                "loans": 4,
-            },
+        "transactions": {
+            "total": 2357,
+            "new": 2357,
+            "skipped": 0,
+        },
+        "snapshots": {
+            "asset_snapshots": 42,
+            "investments": 9,
+            "loans": 4,
+        },
         "error_message": None,
     }
+    assert [path.name for path in upload_dir.iterdir()] == [
+        "000001-finance_sample.xlsx"
+    ]
 
 
 async def test_get_upload_logs_returns_latest_ten_entries(

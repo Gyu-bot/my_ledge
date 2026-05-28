@@ -38,4 +38,11 @@ describe('operations routes', () => {
 
     expect(children?.some((route) => route.path === 'operations/auto-classification')).toBe(true)
   })
+
+  it('registers the canonical views operations route', () => {
+    const root = findRoute('/')
+    const children = root?.children as Array<{ path?: string }> | undefined
+
+    expect(children?.some((route) => route.path === 'operations/canonical-views')).toBe(true)
+  })
 })

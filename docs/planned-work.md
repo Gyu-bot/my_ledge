@@ -17,12 +17,29 @@
 2026-05-28 기준 결정:
 
 - 다음 단계는 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어간다.
-- 업로드 원본 파일은 `/data/uploads/`에 최근 5개를 보관하는 방향으로 구현한다.
+- 업로드 원본 파일은 `UPLOAD_DIR` 기본값 `/data/uploads`에 최근 5개를 보관한다.
 - 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 데이터로 본다. 월말/정기 snapshot 강제 운영은 지금 하지 않는다.
 - My Ledge의 1차 역할은 재무 어시스턴트 자체가 아니라, 재무 어시스턴트가 믿고 쓸 canonical view/read model foundation을 제공하는 것이다.
 - assistant personality, 말투, 조언 강도는 My Ledge core가 아니라 별도 assistant/consumer layer에서 결정한다.
 - canonical layer는 성격을 갖지 않고 `reason`, `confidence`, `assumptions`, `risk_level`, `baseline_delta`, `is_estimated`, `needs_user_review` 같은 판단 재료를 안정적으로 제공한다.
 - 어시스턴트 해석에 필요한 주요 요약은 agent가 매번 raw data로 재계산하지 않도록 backend API 또는 canonical read surface로 고정한다.
+
+---
+
+## Recently Implemented
+
+2026-05-28 구현 완료:
+
+- 업로드 원본 파일 retention
+  - `POST /api/v1/upload` 경로에서 원본 파일을 `UPLOAD_DIR`에 저장한다.
+  - 저장 후 최신 5개만 남기고 오래된 원본 파일을 삭제한다.
+- P0/P0.5 canonical read model expansion
+  - `vw_monthly_cashflow`
+  - `vw_loan_repayment_monthly`
+  - `vw_true_spendable_monthly`
+  - `vw_merchant_monthly_baseline`
+  - `vw_unclassified_work_queue`
+  - `vw_fixed_cost_monthly_summary`는 loan-linked repayment를 ordinary fixed/variable total에서 제외하도록 정렬했다.
 
 ---
 
@@ -42,9 +59,6 @@
 
 ### 문서/운영 contract 정리
 
-- 업로드 원본 파일 retention 구현
-  - `/data/uploads/`에 최근 5개만 보관한다.
-  - 오래된 원본 파일은 새 업로드 성공 후 정리한다.
 - `verify_import_parity` 범위 결정
   - 현재 sample presence 검증 수준으로 문서화할지
   - rolling-window overlap extra-row 검증까지 확장할지 결정
@@ -61,6 +75,8 @@
 ---
 
 ## P0.5 — Canonical Read Model Expansion
+
+상태: 2026-05-28 구현 완료. 아래 내용은 live contract 요약과 향후 consumer가 지켜야 할 해석 기준이다.
 
 목적은 API를 중복 구현하는 것이 아니라, readonly SQL과 외부 에이전트가 같은 재무 해석 기준을 재사용하도록 DB read model을 안정화하는 것이다.
 
@@ -298,9 +314,7 @@ P1은 지금 당장 구현해야 하는 기능 묶음이라기보다, P0.5 canon
 ## Recommended Execution Order
 
 1. 기능 구현으로 넘어가되, P0 운영 검증과 contract 정리는 각 구현 batch의 acceptance check로 수행한다.
-2. P0.5 canonical read model expansion을 먼저 구현한다.
-3. `vw_unclassified_work_queue`로 분류 품질 queue를 만든다.
-4. P1은 feature 구현이 아니라 P0.5 view의 future consumer requirements로 계속 참조한다.
-5. merchant normalization과 recurring 자동분류를 데이터 품질 개선 묶음으로 진행한다.
-6. asset/liability health와 transfer tracking을 별도 feature batch로 진행한다.
-7. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.
+2. P1은 feature 구현이 아니라 P0.5 view의 future consumer requirements로 계속 참조한다.
+3. merchant normalization과 recurring 자동분류를 데이터 품질 개선 묶음으로 진행한다.
+4. asset/liability health와 transfer tracking을 별도 feature batch로 진행한다.
+5. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.

@@ -37,7 +37,9 @@ async def get_upload_logs(
     return UploadLogListResponse(items=items)
 
 
-@router.post("/upload", response_model=UploadResponse, dependencies=[Depends(require_api_key)])
+@router.post(
+    "/upload", response_model=UploadResponse, dependencies=[Depends(require_api_key)]
+)
 async def upload_workbook(
     file: Annotated[UploadFile, File(...)],
     snapshot_date: Annotated[date, Form(...)],
@@ -49,6 +51,8 @@ async def upload_workbook(
         filename=file.filename or "upload.xlsx",
         snapshot_date=snapshot_date,
         excel_password=get_settings().excel_password,
+        persist_upload_file=True,
+        upload_dir=get_settings().upload_dir,
     )
     return UploadResponse(
         status=result.status,

@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Phase:** 기능 구현 재개 준비. 대출 상환 매핑/자동분류/고정비 추이 기반은 구현 완료, 다음 초점은 planned backlog의 P0/P0.5다.
-- **Last Worker:** Codex (2026-05-28T12:54+0900, STATUS 다이어트 및 archive 분리)
+- **Phase:** P0/P0.5 canonical read model backend/frontend surface 구현 완료. 다음 초점은 source verification scope, merchant normalization/recurring 자동분류, asset/liability health 후보 정리다.
+- **Last Worker:** Codex (2026-05-28T21:10+0900, canonical view frontend surface)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -21,6 +21,11 @@
 ## Recent Completed
 
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
+- [x] README 기능 설명 보강: 프론트엔드 화면별 표시 항목, 주요 지표 의미, canonical view/read surface 목록 정리
+- [x] P0 upload retention 구현: `POST /api/v1/upload` 원본 파일을 `UPLOAD_DIR` 기본값 `/data/uploads`에 저장하고 최신 5개만 유지
+- [x] P0/P0.5 canonical read model 구현: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`
+- [x] Canonical view frontend surface 구현: `/operations/canonical-views`에서 `/api/v1/schema` 기반 view registry, advisor view, 분류 품질 작업 연결 표시
+- [x] `vw_fixed_cost_monthly_summary`를 loan-linked repayment 제외 기준으로 정렬
 - [x] Planned backlog 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 [planned-work.md](planned-work.md)에 반영
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
@@ -34,17 +39,16 @@
 ## In Progress
 
 - [ ] Advisor canonical read model expansion
-  - 현재 상태: P0/P1 analytics endpoint 8종은 live. 신규 canonical read model 요구사항은 [planned-work.md](planned-work.md)에 정리 완료.
-  - 다음 구현 후보: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`.
+  - 현재 상태: P0/P1 analytics endpoint 8종과 P0/P0.5 canonical DB view 5종은 live.
+  - 다음 구현 후보: `vw_recurring_merchant_monthly`, `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`.
   - 주의: 대출 연결 거래는 일반 소비 breakdown과 분리하고, 월별 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total`을 함께 노출해야 한다.
 - [ ] Operations/data-management follow-up
-  - 업로드 원본 파일 retention(`/data/uploads/` 최근 5개) 구현.
   - bulk delete / bulk restore API 및 frontend 연결.
   - `description_user` / `effective_description` 기반 거래 설명 직접 수정 기능.
 - [ ] Frontend follow-up
   - Settings page는 실제 사용자 기능으로 구현.
   - Token Lab은 개발/리뷰용 도구로만 유지.
-  - 운영 배포본 기준 smoke capture와 redirect(`/spending`, `/assets`, `/data`) 브라우저 확인.
+  - 운영 배포본 기준 smoke capture와 redirect(`/spending`, `/assets`, `/data`) 및 `/operations/canonical-views` 브라우저 확인.
 - [ ] Asset/liability health follow-up
   - `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`는 장기 기능 후보.
   - `emergency-fund` 전 cash-equivalent/liquidity tier 분류 필요.
@@ -55,15 +59,17 @@
 
 ## Next Up
 
-1. P0.5 canonical read model expansion 구현 batch 착수.
-2. `vw_unclassified_work_queue`를 분류 품질 queue로 추가.
-3. 업로드 원본 파일 recent-5 retention 구현.
-4. Settings page와 analytics settings frontend panel 구현.
-5. Merchant alias/normalization rule 방식 결정.
+1. `verify_import_parity` 범위를 sample presence로 문서화할지 rolling-window overlap extra-row 검증까지 확장할지 결정.
+2. Settings page와 analytics settings frontend panel 구현.
+3. Merchant alias/normalization rule 방식 결정.
+4. `vw_recurring_merchant_monthly` 또는 recurring 자동분류 dry-run contract 설계.
+5. asset/liability health 전에 cash-equivalent/liquidity tier 분류 방식 결정.
 
 ## Key Decisions
 
 - 2026-05-28: `docs/STATUS.md`는 handoff 요약만 유지한다. 오래된 완료 로그와 상세 결정 기록은 `docs/archive/status/`로 옮기고, 현재 파일에는 archive 링크와 최신 핵심만 남긴다.
+- 2026-05-28: `POST /api/v1/upload` 원본 파일 retention은 API upload 경로에서만 opt-in 저장한다. service helper 직접 호출은 `persist_upload_file=True`일 때만 저장해 테스트/스크립트 부작용을 줄인다.
+- 2026-05-28: P0/P0.5 canonical view는 DB view + `/schema` registry로 제공하고, API 중복 endpoint는 만들지 않는다.
 - 2026-05-28: `docs/planned-work.md`는 미구현 backlog/roadmap으로 유지하고 `docs/STATUS.md`와 분리한다.
 - 2026-05-28: My Ledge core는 재무 어시스턴트의 말투/성격을 결정하지 않는다. 재무 어시스턴트가 사용할 canonical read model foundation과 `reason`/`confidence`/`assumptions`/`risk_level` 같은 판단 재료를 제공한다.
 - 2026-05-28: 다음 작업은 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어가되, 운영 smoke와 contract 검증은 각 구현 batch의 acceptance check로 유지한다.

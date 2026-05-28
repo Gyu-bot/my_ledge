@@ -1,5 +1,15 @@
 import type { ComponentType } from 'react'
-import { Home, BarChart2, DollarSign, Lightbulb, Settings, Link2, Repeat, SlidersHorizontal } from 'lucide-react'
+import {
+  Home,
+  BarChart2,
+  DollarSign,
+  Lightbulb,
+  Settings,
+  Link2,
+  Repeat,
+  SlidersHorizontal,
+  Database,
+} from 'lucide-react'
 
 export interface NavigationItem {
   path: string
@@ -92,6 +102,17 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
     desktopNav: true,
     mobileNav: true,
     Icon: SlidersHorizontal,
+  },
+  {
+    path: '/operations/canonical-views',
+    label: '캐노니컬 뷰',
+    title: '캐노니컬 뷰',
+    breadcrumb: '운영',
+    section: 'operations',
+    sectionLabel: '운영',
+    desktopNav: true,
+    mobileNav: true,
+    Icon: Database,
   },
   {
     path: '/operations/recurring-classification',

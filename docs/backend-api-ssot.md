@@ -240,8 +240,11 @@
 
 ### Upload Retention
 
-- PRD/운영 문서에는 원본 업로드 파일을 `/data/uploads/` 에 최근 5개만 보관한다고 적혀 있었지만, **현재 backend 구현에서는 해당 보관 로직을 확인하지 못했다.**
-- 이 항목은 live contract가 아니라 운영 목표 또는 미구현 문서 항목으로 취급한다.
+- `POST /api/v1/upload` 는 import log commit 이후 원본 업로드 파일을 `UPLOAD_DIR` 에 저장한다.
+- `UPLOAD_DIR` 기본값은 `/data/uploads` 이다.
+- 저장 파일명은 `upload_logs.id` 기반 prefix와 안전화된 원본 파일명을 사용한다. 예: `000123-finance-sample.xlsx`
+- 저장 후 같은 디렉터리의 파일은 최신 5개만 남기고 오래된 파일을 삭제한다.
+- 직접 service helper를 호출하는 테스트/스크립트 경로는 `persist_upload_file=True` 를 명시한 경우에만 원본 파일을 저장한다.
 
 ### Reset / Upload Logs Semantics
 

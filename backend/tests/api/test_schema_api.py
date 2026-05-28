@@ -22,7 +22,9 @@ def test_expected_tables_exist() -> None:
 
     transactions = Base.metadata.tables["transactions"]
     app_settings = Base.metadata.tables["app_settings"]
-    category_classification_rules = Base.metadata.tables["category_classification_rules"]
+    category_classification_rules = Base.metadata.tables[
+        "category_classification_rules"
+    ]
     investments = Base.metadata.tables["investments"]
     loans = Base.metadata.tables["loans"]
     loan_accounts = Base.metadata.tables["loan_accounts"]
@@ -95,7 +97,12 @@ async def test_schema_endpoint_returns_tables(
     assert {view["name"] for view in response.json()["views"]} == {
         "vw_category_monthly_spend",
         "vw_fixed_cost_monthly_summary",
+        "vw_loan_repayment_monthly",
+        "vw_merchant_monthly_baseline",
+        "vw_monthly_cashflow",
         "vw_transactions_effective",
+        "vw_true_spendable_monthly",
+        "vw_unclassified_work_queue",
     }
 
     effective_view = next(
@@ -112,23 +119,51 @@ async def test_schema_endpoint_returns_tables(
     )
     assert any(column["name"] == "merchant" for column in effective_view["columns"])
     assert any(
-        column["name"] == "loan_repayment_type"
-        for column in effective_view["columns"]
+        column["name"] == "loan_repayment_type" for column in effective_view["columns"]
     )
     assert any(
-        column["name"] == "loan_display_name"
-        for column in effective_view["columns"]
+        column["name"] == "loan_display_name" for column in effective_view["columns"]
     )
     assert any(column["name"] == "loan_kind" for column in effective_view["columns"])
     assert any(
-        column["name"] == "loan_start_date"
-        for column in effective_view["columns"]
+        column["name"] == "loan_start_date" for column in effective_view["columns"]
     )
     assert any(
-        column["name"] == "loan_maturity_date"
-        for column in effective_view["columns"]
+        column["name"] == "loan_maturity_date" for column in effective_view["columns"]
     )
     assert any(
         column["name"] == "cost_classification_source"
         for column in effective_view["columns"]
     )
+
+    monthly_cashflow_view = next(
+        view
+        for view in response.json()["views"]
+        if view["name"] == "vw_monthly_cashflow"
+    )
+    assert monthly_cashflow_view["recommended_for_ai"] is True
+    assert {
+        "income_total",
+        "expense_total",
+        "non_loan_expense_total",
+        "loan_repayment_total",
+        "fixed_total",
+        "variable_total",
+        "net_cashflow",
+        "savings_rate",
+    }.issubset({column["name"] for column in monthly_cashflow_view["columns"]})
+
+    unclassified_queue_view = next(
+        view
+        for view in response.json()["views"]
+        if view["name"] == "vw_unclassified_work_queue"
+    )
+    assert {
+        "transaction_id",
+        "needs_cost_kind",
+        "needs_fixed_cost_necessity",
+        "needs_recurring_payment_kind",
+        "needs_loan_link_review",
+        "priority_score",
+        "priority_reason",
+    }.issubset({column["name"] for column in unclassified_queue_view["columns"]})

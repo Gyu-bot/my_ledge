@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     database_url: str = Field(validation_alias="DATABASE_URL")
     excel_password: str | None = Field(default=None, validation_alias="EXCEL_PASSWORD")
     api_key: str | None = Field(default=None, validation_alias="API_KEY")
+    upload_dir: Path = Field(
+        default=Path("/data/uploads"), validation_alias="UPLOAD_DIR"
+    )
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         validation_alias="CORS_ORIGINS",

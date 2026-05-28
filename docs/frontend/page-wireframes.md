@@ -13,6 +13,8 @@
 - `/analysis/insights`
 - `/operations/workbench`
 - `/operations/loan-mapping`
+- `/operations/auto-classification`
+- `/operations/canonical-views`
 - `/operations/recurring-classification`
 
 ### Legacy redirects
@@ -289,6 +291,42 @@
 | selected group bulk classification panel | inline edit panel | `bg-surface-section`, `border-border-subtle`, `text-info-default`, `bg-accent-dim` |
 | recurring table | table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
 | classification select | native select | `bg-surface-bar`, `border-border-subtle`, `text-text-secondary` |
+
+## Canonical Views `/operations/canonical-views`
+
+```text
+[KPI x4]
+
+[Advisor canonical views]
+
+[분류 품질 작업 연결]
+
+[Canonical view columns table]
+```
+
+### Blocks
+
+- KPI 4개:
+  - canonical view 수
+  - advisor view 수
+  - schema column 수
+  - 연결된 operations route 수
+- advisor canonical views: P0/P0.5 view 이름, 한국어 label, description, 핵심 field badge
+- 분류 품질 작업 연결: 자동분류, 대출 연결, 반복 결제 분류 route link
+- canonical view columns table: `/api/v1/schema` 의 view/column registry
+
+### Topbar meta
+
+- `N개 advisor view`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| KPI row | `KpiCard` x4 | `bg-surface-card`, `border-border`, `text-kpi`, `text-text-secondary` |
+| advisor views | `SectionCard` + divided rows | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `bg-surface-section` |
+| quality links | `SectionCard` + route links | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `text-text-ghost` |
+| columns table | `SectionCard` + compact table | `bg-surface-card`, `bg-surface-bar`, `border-border-faint`, `text-micro`, `text-caption` |
 
 ## Notes
 

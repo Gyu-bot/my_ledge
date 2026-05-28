@@ -2,6 +2,8 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
+from pathlib import Path
+import re
 
 from openpyxl import load_workbook
 from sqlalchemy import and_, delete, or_, select
@@ -15,7 +17,12 @@ from app.models.upload_log import UploadLog
 from app.parsers.decrypt import open_excel_bytes
 from app.parsers.snapshots import SnapshotParseResult, parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
-from app.services.auto_classification_service import apply_enabled_auto_classification_after_upload
+from app.services.auto_classification_service import (
+    apply_enabled_auto_classification_after_upload,
+)
+
+
+UPLOAD_RETENTION_COUNT = 5
 
 
 @dataclass(slots=True)
@@ -37,6 +44,8 @@ async def import_transactions_from_workbook(
     filename: str,
     snapshot_date: date,
     excel_password: str | None = None,
+    persist_upload_file: bool = False,
+    upload_dir: Path | None = None,
 ) -> TransactionImportResult:
     workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
     workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
@@ -54,7 +63,12 @@ async def import_transactions_from_workbook(
     try:
         parsed_rows = parse_transactions(workbook)
         tx_total = len(parsed_rows)
-        rows_to_insert, rows_to_delete, tx_new, tx_skipped = await _reconcile_transaction_rows(
+        (
+            rows_to_insert,
+            rows_to_delete,
+            tx_new,
+            tx_skipped,
+        ) = await _reconcile_transaction_rows(
             db_session,
             parsed_rows,
         )
@@ -102,6 +116,17 @@ async def import_transactions_from_workbook(
     db_session.add(upload_log)
     await db_session.commit()
 
+    if persist_upload_file:
+        if upload_dir is None:
+            raise ValueError("upload_dir is required when persist_upload_file=True")
+        _save_original_upload(
+            upload_dir=upload_dir,
+            upload_id=upload_log.id,
+            filename=filename,
+            file_bytes=file_bytes,
+        )
+        _prune_original_uploads(upload_dir=upload_dir, keep=UPLOAD_RETENTION_COUNT)
+
     return TransactionImportResult(
         upload_id=upload_log.id,
         tx_total=tx_total,
@@ -113,6 +138,35 @@ async def import_transactions_from_workbook(
         status=status,
         error_message=error_message,
     )
+
+
+def _save_original_upload(
+    *,
+    upload_dir: Path,
+    upload_id: int,
+    filename: str,
+    file_bytes: bytes,
+) -> Path:
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_path = upload_dir / f"{upload_id:06d}-{_safe_upload_filename(filename)}"
+    saved_path.write_bytes(file_bytes)
+    return saved_path
+
+
+def _safe_upload_filename(filename: str) -> str:
+    basename = Path(filename).name.strip()
+    if not basename:
+        return "upload.xlsx"
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", basename).strip(".-")
+    return safe_name or "upload.xlsx"
+
+
+def _prune_original_uploads(*, upload_dir: Path, keep: int) -> None:
+    if keep < 1:
+        return
+    saved_files = sorted(path for path in upload_dir.iterdir() if path.is_file())
+    for path in saved_files[:-keep]:
+        path.unlink()
 
 
 async def _reconcile_transaction_rows(
@@ -128,7 +182,9 @@ async def _reconcile_transaction_rows(
         window_start,
         window_end,
     )
-    rows_to_insert, rows_to_delete = _build_reconciliation_plan(parsed_rows, existing_rows)
+    rows_to_insert, rows_to_delete = _build_reconciliation_plan(
+        parsed_rows, existing_rows
+    )
     tx_new = len(rows_to_insert)
     tx_skipped = len(parsed_rows) - tx_new
     return rows_to_insert, rows_to_delete, tx_new, tx_skipped
@@ -148,7 +204,9 @@ async def _get_imported_transactions_in_window(
     return list(result.scalars().all())
 
 
-def _transaction_window_bounds(parsed_rows: list[TransactionRow]) -> tuple[datetime, datetime]:
+def _transaction_window_bounds(
+    parsed_rows: list[TransactionRow],
+) -> tuple[datetime, datetime]:
     datetimes = [datetime.combine(row["date"], row["time"]) for row in parsed_rows]
     return min(datetimes), max(datetimes)
 
@@ -168,7 +226,7 @@ def _transaction_window_clause(window_start: datetime, window_end: datetime):
                 Transaction.date == window_end.date(),
                 Transaction.time <= window_end.time(),
             ),
-        )
+        ),
     )
 
 
@@ -197,7 +255,9 @@ def _build_reconciliation_plan(
     )
     existing_by_signature: dict[tuple[object, ...], list[Transaction]] = {}
     for row in existing_rows:
-        existing_by_signature.setdefault(_transaction_comparison_signature(row), []).append(row)
+        existing_by_signature.setdefault(
+            _transaction_comparison_signature(row), []
+        ).append(row)
 
     unmatched_rows: list[TransactionRow] = []
     for row in parsed_rows:
@@ -220,11 +280,7 @@ def _build_reconciliation_plan(
             continue
         rows_to_insert.append(row)
 
-    rows_to_delete = [
-        row
-        for rows in fallback_buckets.values()
-        for row in rows
-    ]
+    rows_to_delete = [row for rows in fallback_buckets.values() for row in rows]
 
     return rows_to_insert, rows_to_delete
 
@@ -256,11 +312,7 @@ def _transaction_fallback_signature(
 
 def _seconds_since_midnight(row: TransactionRow | Transaction) -> int:
     time_value = row.time if isinstance(row, Transaction) else row["time"]
-    return (
-        time_value.hour * 3600
-        + time_value.minute * 60
-        + time_value.second
-    )
+    return time_value.hour * 3600 + time_value.minute * 60 + time_value.second
 
 
 def _build_fallback_buckets(
@@ -311,7 +363,9 @@ async def _replace_snapshots(
     await db_session.execute(
         delete(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
     )
-    await db_session.execute(delete(Investment).where(Investment.snapshot_date == snapshot_date))
+    await db_session.execute(
+        delete(Investment).where(Investment.snapshot_date == snapshot_date)
+    )
     await db_session.execute(delete(Loan).where(Loan.snapshot_date == snapshot_date))
 
     db_session.add_all(
@@ -335,7 +389,9 @@ def _resolve_status(*, tx_success: bool, snapshot_success: bool) -> str:
     return "failed"
 
 
-def normalize_snapshots_for_storage(parsed_snapshots: SnapshotParseResult) -> SnapshotParseResult:
+def normalize_snapshots_for_storage(
+    parsed_snapshots: SnapshotParseResult,
+) -> SnapshotParseResult:
     return SnapshotParseResult(
         asset_snapshots=_deduplicate_named_rows(
             parsed_snapshots.asset_snapshots,

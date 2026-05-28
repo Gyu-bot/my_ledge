@@ -678,9 +678,9 @@ P2 설계 규칙:
 - 정확히 측정할 수 없는 값은 `*_est` suffix를 사용한다.
 - debt/emergency APIs는 계산에 사용한 기준과 누락 데이터를 `assumptions`로 함께 돌려준다.
 
-#### Canonical read model 확장 계획
+#### Canonical read model 확장
 
-현재 live canonical view는 `vw_transactions_effective`, `vw_category_monthly_spend`, `vw_fixed_cost_monthly_summary`다. 후속 view는 raw table을 대체하지 않고, 외부 에이전트와 readonly SQL 분석이 같은 재무 해석 기준을 재사용하도록 추가한다.
+현재 live canonical view는 `vw_transactions_effective`, `vw_category_monthly_spend`, `vw_fixed_cost_monthly_summary`, `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`다. 이 view들은 raw table을 대체하지 않고, 외부 에이전트와 readonly SQL 분석이 같은 재무 해석 기준을 재사용하도록 제공한다.
 
 공통 계약:
 
@@ -705,11 +705,9 @@ P2 설계 규칙:
 
 권장 구현 순서:
 
-1. P0 canonical aggregate view: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`
-2. 분석 품질 보강 queue: `vw_unclassified_work_queue`
-3. P1 read surface: `vw_recurring_merchant_monthly`, velocity/purchase-gate API feature base
-4. P2 snapshot read model: `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`
-5. schema enrichment: `merchant_normalized`, liquidity mapping, loan repayment metadata, budgets/goals/preferences
+1. P1 read surface: `vw_recurring_merchant_monthly`, velocity/purchase-gate API feature base
+2. P2 snapshot read model: `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`
+3. schema enrichment: `merchant_normalized`, liquidity mapping, loan repayment metadata, budgets/goals/preferences
 
 ---
 
@@ -797,6 +795,13 @@ MVP에서는 거래 병합 UI를 제공하지 않는다.
 - **업로드 자동 적용**: 설정이 켜져 있으면 workbook 업로드 후 규칙을 자동 적용한다.
 - **반복결제와의 관계**: 반복결제 화면은 할부/매월 반복 운영 분류에 집중한다. 고정비 자동분류는 반복결제 전체에 섞지 않고, 필요 시 고정비 배지/필터로 교차 표시한다.
 - **우선순위**: 먼저 카테고리 매핑 테이블/규칙 문서화, 그 다음 dry-run API와 운영 승인 화면 순서로 구현한다.
+
+#### 6.1.9 캐노니컬 뷰 (`/operations/canonical-views`)
+
+- **schema registry 표시**: `GET /api/v1/schema` 의 canonical view 목록과 column registry를 읽기 전용으로 표시한다.
+- **advisor read model 표시**: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`를 별도 그룹으로 보여준다.
+- **작업 연결**: `vw_unclassified_work_queue`가 드러내는 데이터 품질 후속 작업을 `/operations/auto-classification`, `/operations/loan-mapping`, `/operations/recurring-classification`으로 연결한다.
+- **역할 경계**: 이 화면은 DB view row 값을 직접 조회하지 않고, backend schema contract와 운영 동선을 확인하는 surface로 둔다.
 
 ### 6.2 추가 분석 제안
 
@@ -957,21 +962,23 @@ CORS_ORIGINS=https://my-ledge.example.com
   - [x] `GET /api/v1/analytics/spending-anomalies`
   - [x] `GET /api/v1/analytics/payment-method-patterns`
   - [x] `GET /api/v1/analytics/income-stability`
+- [x] Upload original-file retention
+  - [x] `POST /api/v1/upload` stores originals in `UPLOAD_DIR` defaulting to `/data/uploads`
+  - [x] latest 5 original files are retained after each persisted upload
 
 ### Current Planned Work
 
 - [ ] P0 stabilization and contract hygiene
   - 새 기능 구현으로 넘어가되 운영 배포본 smoke capture는 구현 batch acceptance check로 유지
-  - 업로드 원본 파일 최근 5개 보관 구현
   - source verification scope 결정
   - 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 sparse 데이터로 취급
-- [ ] P0 canonical read model expansion
-  - [ ] P0 canonical aggregate view 보강
-    - [ ] `vw_monthly_cashflow`
-    - [ ] `vw_loan_repayment_monthly`
-    - [ ] `vw_true_spendable_monthly`
-    - [ ] `vw_merchant_monthly_baseline`
-  - [ ] 분석 품질 queue view 추가 (`vw_unclassified_work_queue`)
+- [x] P0/P0.5 canonical read model expansion
+  - [x] P0 canonical aggregate view 보강
+    - [x] `vw_monthly_cashflow`
+    - [x] `vw_loan_repayment_monthly`
+    - [x] `vw_true_spendable_monthly`
+    - [x] `vw_merchant_monthly_baseline`
+  - [x] 분석 품질 queue view 추가 (`vw_unclassified_work_queue`)
 - [ ] P1 advisor expansion
   - P1은 지금 구현 대상이라기보다 P0/P0.5 canonical view의 future consumer requirements로 반영
   - [ ] 반복결제 read surface 추가 (`vw_recurring_merchant_monthly`)

@@ -34,6 +34,10 @@
 | `/analysis/assets` | 자산 현황 |
 | `/analysis/insights` | 인사이트 |
 | `/operations/workbench` | 거래 작업대 |
+| `/operations/loan-mapping` | 대출 연결 |
+| `/operations/auto-classification` | 자동분류 |
+| `/operations/canonical-views` | 캐노니컬 뷰 |
+| `/operations/recurring-classification` | 반복 결제 분류 |
 
 ### Legacy redirects
 

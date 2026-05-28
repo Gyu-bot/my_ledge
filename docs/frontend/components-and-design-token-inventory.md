@@ -34,6 +34,7 @@
   - `AssetsPage`
   - `InsightsPage`
   - `WorkbenchPage`
+  - `CanonicalViewsPage`
 
 ### `AppSidebar`
 
@@ -45,6 +46,10 @@
   - `/analysis/assets`
   - `/analysis/insights`
   - `/operations/workbench`
+  - `/operations/loan-mapping`
+  - `/operations/auto-classification`
+  - `/operations/canonical-views`
+  - `/operations/recurring-classification`
 - 주요 token:
   - `bg-surface-bar`
   - `border-border`

@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from io import BytesIO
+from pathlib import Path
 
 from openpyxl import load_workbook
 from sqlalchemy import func, select
@@ -25,9 +26,15 @@ async def test_import_transactions_inserts_all_rows_on_first_upload(
         snapshot_date=date(2026, 3, 24),
     )
 
-    transaction_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    asset_snapshot_count = await db_session.scalar(select(func.count()).select_from(AssetSnapshot))
-    investment_count = await db_session.scalar(select(func.count()).select_from(Investment))
+    transaction_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    asset_snapshot_count = await db_session.scalar(
+        select(func.count()).select_from(AssetSnapshot)
+    )
+    investment_count = await db_session.scalar(
+        select(func.count()).select_from(Investment)
+    )
     loan_count = await db_session.scalar(select(func.count()).select_from(Loan))
     upload_log = await db_session.scalar(select(UploadLog))
 
@@ -46,9 +53,40 @@ async def test_import_transactions_inserts_all_rows_on_first_upload(
     assert upload_log.filename == "finance_sample.xlsx"
     assert upload_log.tx_new == 2357
     assert upload_log.status == "success"
-    first_transaction = await db_session.scalar(select(Transaction).order_by(Transaction.id.asc()))
+    first_transaction = await db_session.scalar(
+        select(Transaction).order_by(Transaction.id.asc())
+    )
     assert first_transaction is not None
     assert first_transaction.merchant == first_transaction.description
+
+
+async def test_import_transactions_retains_latest_five_original_uploads(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+    tmp_path: Path,
+) -> None:
+    upload_dir = tmp_path / "uploads"
+
+    for index in range(6):
+        await import_transactions_from_workbook(
+            db_session=db_session,
+            file_bytes=sample_workbook_bytes,
+            filename=f"finance sample {index}.xlsx",
+            snapshot_date=date(2026, 3, 24),
+            persist_upload_file=True,
+            upload_dir=upload_dir,
+        )
+
+    saved_uploads = sorted(path.name for path in upload_dir.iterdir())
+
+    assert len(saved_uploads) == 5
+    assert saved_uploads == [
+        "000002-finance-sample-1.xlsx",
+        "000003-finance-sample-2.xlsx",
+        "000004-finance-sample-3.xlsx",
+        "000005-finance-sample-4.xlsx",
+        "000006-finance-sample-5.xlsx",
+    ]
 
 
 async def test_import_transactions_skips_rows_already_loaded(
@@ -69,7 +107,9 @@ async def test_import_transactions_skips_rows_already_loaded(
         snapshot_date=date(2026, 3, 24),
     )
 
-    transaction_count = await db_session.scalar(select(func.count()).select_from(Transaction))
+    transaction_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
 
     assert second.tx_total == 2357
     assert second.tx_new == 0
@@ -117,8 +157,12 @@ async def test_import_transactions_records_partial_when_snapshot_sheet_is_missin
         snapshot_date=date(2026, 3, 24),
     )
 
-    transaction_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    asset_snapshot_count = await db_session.scalar(select(func.count()).select_from(AssetSnapshot))
+    transaction_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    asset_snapshot_count = await db_session.scalar(
+        select(func.count()).select_from(AssetSnapshot)
+    )
     upload_log = await db_session.scalar(select(UploadLog))
 
     assert result.tx_new == 2357
@@ -163,7 +207,9 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
         snapshot_date=date(2026, 3, 24),
     )
 
-    asset_snapshot_count = await db_session.scalar(select(func.count()).select_from(AssetSnapshot))
+    asset_snapshot_count = await db_session.scalar(
+        select(func.count()).select_from(AssetSnapshot)
+    )
     first_asset_amount = await db_session.scalar(
         select(AssetSnapshot.amount)
         .where(AssetSnapshot.snapshot_date == date(2026, 3, 24))
@@ -213,7 +259,9 @@ async def test_import_transactions_reconciles_window_and_keeps_history_outside_l
     assert result.tx_total == len(latest_rows)
     assert result.tx_new == 0
     assert result.tx_skipped == len(latest_rows)
-    assert len(existing_transactions) == len(historical_rows_outside_window) + len(latest_rows)
+    assert len(existing_transactions) == len(historical_rows_outside_window) + len(
+        latest_rows
+    )
 
 
 async def test_import_transactions_reconciles_across_real_workbook_chain(
@@ -256,7 +304,9 @@ async def test_import_transactions_does_not_append_duplicate_when_later_window_o
 
     old_rows = parse_transactions_from_bytes(sample_workbook_bytes)
     new_rows = parse_transactions_from_bytes(rolling_window_workbook_bytes)
-    old_row, new_row = find_logically_matching_rows_with_changed_exact_signature(old_rows, new_rows)
+    old_row, new_row = find_logically_matching_rows_with_changed_exact_signature(
+        old_rows, new_rows
+    )
 
     await import_transactions_from_workbook(
         db_session=db_session,
@@ -298,7 +348,9 @@ async def test_import_transactions_does_not_append_duplicate_when_later_window_o
     assert old_row_after_import.is_deleted is True
 
 
-def parse_transactions_from_bytes(sample_workbook_bytes: bytes) -> list[dict[str, object]]:
+def parse_transactions_from_bytes(
+    sample_workbook_bytes: bytes,
+) -> list[dict[str, object]]:
     workbook = load_workbook(BytesIO(sample_workbook_bytes), data_only=True)
     return parse_transactions(workbook)
 
@@ -400,7 +452,9 @@ def find_logically_matching_rows_with_changed_exact_signature(
             if transaction_signature(old_row) != transaction_signature(new_row):
                 return old_row, new_row
 
-    raise AssertionError("Expected at least one logical match with changed exact signature")
+    raise AssertionError(
+        "Expected at least one logical match with changed exact signature"
+    )
 
 
 def transaction_conditions(row: dict[str, object]) -> tuple[object, ...]:

@@ -905,6 +905,7 @@ Documented columns:
 ### `vw_fixed_cost_monthly_summary`
 
 Canonical monthly aggregate for fixed-cost analysis. It is intended for readonly SQL and AI drill-down use cases where the caller needs the same month-level structure shown in the spending page.
+Loan-linked repayments are excluded from ordinary fixed/variable totals.
 
 Documented columns:
 
@@ -917,9 +918,9 @@ Documented columns:
 - `unclassified_total`
 - `unclassified_count`
 
-### Planned canonical read model expansion
+### Advisor canonical read model expansion
 
-These views are not live until their Alembic migrations and `CANONICAL_VIEWS` schema entries are added. They define the intended contract for the next advisor-oriented canonical layer.
+These views are live DB read surfaces created by Alembic and registered in `CANONICAL_VIEWS` for schema documentation. They are intended for readonly SQL and external agents; they do not replace the public analytics API.
 
 Direction:
 
@@ -935,7 +936,7 @@ Common rules:
 - Keep `transfer_activity_total` separate from `net_cashflow`.
 - Keep `as_of_date`, threshold, and baseline settings in API/settings contracts when a calculation depends on runtime context.
 
-Planned P0 views:
+Live P0/P0.5 views:
 
 - `vw_monthly_cashflow`: monthly income, expense, non-loan expense, transfer activity, loan repayment, fixed/variable spend, unclassified expense, net cashflow, and savings rate.
 - `vw_loan_repayment_monthly`: monthly repayment totals by `loan_account_id`, display name, lender, product, loan kind, maturity date, and repayment type.
@@ -1151,4 +1152,4 @@ Source: `app.services.analytics_service.get_spending_anomalies`
   - `is_partial_period`
 - current frontend still contains some fallbacks for older backend contracts, especially around transaction filter options
 - analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live scope is `analytics.spending_anomalies`
-- upload file retention to `/data/uploads/` is described in planning docs, but no confirmed live implementation was verified in `upload_service.py`
+- upload file retention is live for `POST /api/v1/upload`: default `UPLOAD_DIR=/data/uploads`, keep latest 5 original files
