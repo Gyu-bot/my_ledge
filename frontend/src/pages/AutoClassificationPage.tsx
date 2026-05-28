@@ -127,12 +127,7 @@ export function AutoClassificationPage() {
   async function saveCategoryRule() {
     if (!categoryMajor.trim()) return
     try {
-      await upsertCategoryRule.mutateAsync({
-        category_major: categoryMajor.trim(),
-        category_minor: categoryMinor.trim() || null,
-        cost_kind: costKind,
-        fixed_cost_necessity: costKind === 'fixed' ? (necessity || null) : null,
-      })
+      await upsertCategoryRule.mutateAsync(buildCategoryRulePayload())
       setCategoryMajor('')
       setCategoryMinor('')
       setCostKind('variable')
@@ -143,9 +138,28 @@ export function AutoClassificationPage() {
     }
   }
 
+  function buildCategoryRulePayload() {
+    return {
+      category_major: categoryMajor.trim(),
+      category_minor: categoryMinor.trim() || null,
+      cost_kind: costKind,
+      fixed_cost_necessity: costKind === 'fixed' ? (necessity || null) : null,
+    }
+  }
+
   async function applyExistingCategoryRules() {
     try {
+      const hasPendingCategoryRule = categoryMajor.trim().length > 0
+      if (hasPendingCategoryRule) {
+        await upsertCategoryRule.mutateAsync(buildCategoryRulePayload())
+      }
       const result = await applyCategoryRules.mutateAsync()
+      if (hasPendingCategoryRule) {
+        setCategoryMajor('')
+        setCategoryMinor('')
+        setCostKind('variable')
+        setNecessity('')
+      }
       setAlert({ variant: 'success', title: '고정비 규칙 일괄 적용 완료', description: `${result.updated}건 반영` })
     } catch (e) {
       setAlert({ variant: 'error', title: '고정비 규칙 일괄 적용 실패', description: String(e) })
@@ -284,7 +298,7 @@ export function AutoClassificationPage() {
               <button
                 type="button"
                 onClick={() => void applyExistingCategoryRules()}
-                disabled={disabled || applyCategoryRules.isPending}
+                disabled={disabled || applyCategoryRules.isPending || upsertCategoryRule.isPending}
                 className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40"
               >
                 고정비 규칙 일괄 적용

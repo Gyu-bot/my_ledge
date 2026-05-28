@@ -114,13 +114,14 @@ beforeEach(() => {
   mockUseWriteAccess.mockReturnValue(true)
   mockUseTransactionFilterOptions.mockReturnValue({
     data: {
-      category_options: ['주거', '통신', '식비', '구독'],
-      category_minor_options: ['월세', '관리비', '휴대폰', '외식', 'OTT'],
+      category_options: ['주거', '통신', '식비', '구독', '보험'],
+      category_minor_options: ['월세', '관리비', '휴대폰', '외식', 'OTT', '미분류'],
       category_minor_options_by_major: {
         주거: ['월세', '관리비'],
         통신: ['휴대폰'],
         식비: ['외식'],
         구독: ['OTT'],
+        보험: ['미분류'],
       },
       payment_method_options: [],
     },
@@ -186,6 +187,28 @@ describe('AutoClassificationPage', () => {
       })
       expect(applyCategoryRulesMutate).toHaveBeenCalled()
     })
+  })
+
+  it('saves the pending category rule before bulk-applying rules', async () => {
+    wrap(<AutoClassificationPage />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: /^대분류$/ }), { target: { value: '보험' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /^비용 성격$/ }), { target: { value: 'fixed' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /^고정비 필수 여부$/ }), { target: { value: 'discretionary' } })
+    fireEvent.click(screen.getByRole('button', { name: '고정비 규칙 일괄 적용' }))
+
+    await waitFor(() => {
+      expect(upsertCategoryRuleMutate).toHaveBeenCalledWith({
+        category_major: '보험',
+        category_minor: null,
+        cost_kind: 'fixed',
+        fixed_cost_necessity: 'discretionary',
+      })
+      expect(applyCategoryRulesMutate).toHaveBeenCalled()
+    })
+    expect(upsertCategoryRuleMutate.mock.invocationCallOrder[0]).toBeLessThan(
+      applyCategoryRulesMutate.mock.invocationCallOrder[0],
+    )
   })
 
   it('uses category dropdowns and filters subcategories by selected major category', () => {

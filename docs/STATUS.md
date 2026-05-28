@@ -6,7 +6,7 @@
 ## Current State
 
 - **Phase:** P0/P0.5 canonical read model backend/frontend dashboard 구현 완료. 반복결제 카테고리 자동분류 1차 구현 완료. 다음 초점은 source verification scope, merchant normalization, asset/liability health 후보 정리다.
-- **Last Worker:** Codex (2026-05-28T23:45+0900, recurring category rules implemented)
+- **Last Worker:** Codex (2026-05-29T00:33+0900, auto-classification apply UX fixed)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -27,6 +27,7 @@
 - [x] Canonical view dashboard 구현: `/api/v1/canonical-views/dashboard`로 P0/P0.5 view 실제 row 값을 제공하고, `/operations/canonical-views`에서 월별 현금흐름/true spendable/대출 상환/거래처 baseline/분류 품질 큐를 KPI·차트·테이블로 표시
 - [x] 분류 품질 큐 반복 후보 기준 보수화: `vw_unclassified_work_queue`의 `missing_recurring_kind`는 같은 거래처 2건만으로 판단하지 않고, 서로 다른 월/날짜와 금액 안정성이 있는 경우에만 표시
 - [x] 반복결제 카테고리 자동분류 1차 구현: `recurring_category_rules`, 반복 후보/고정비 gate, `not_recurring`, `/operations/auto-classification` 규칙 UI와 `/operations/recurring-classification` 수동 선택지 반영
+- [x] 자동분류 일괄 적용 UX 수정: 고정비/변동비 규칙 폼에 입력 중인 값이 있으면 먼저 저장한 뒤 일괄 적용해 `fixed_cost_necessity` 변경이 누락되지 않도록 함
 - [x] 진행월 true spendable 예상 표시: 현재 월 수입이 최근 6개 마감월의 이상치 제외 수입 baseline의 50% 미만이면 dashboard API가 `estimated_*` 필드와 `excluded_income_periods`를 제공하고, frontend가 `예상` 태그/관측값/제외 월을 함께 표시
 - [x] `vw_fixed_cost_monthly_summary`를 loan-linked repayment 제외 기준으로 정렬
 - [x] Planned backlog 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 [planned-work.md](planned-work.md)에 반영
