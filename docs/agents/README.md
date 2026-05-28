@@ -1,15 +1,16 @@
 # Agent README
 
-OpenClaw, hermes, Codex, Claude 등 외부 에이전트가 `my_ledge`를 읽기/쓰기 대상으로 사용할 때의 시작 문서다.
+Hermes, Codex, Claude, OpenClaw 등 외부 에이전트가 `my_ledge`를 읽기/쓰기 대상으로 사용할 때의 시작 문서다.
 이 문서는 특정 에이전트 런타임이 아니라 `my_ledge`가 제공하는 안정적인 read/write surface를 설명한다.
 
 ## 먼저 읽을 것
 
 1. 현재 live backend/API contract: [docs/backend-api-ssot.md](../backend-api-ssot.md)
-2. 상세 endpoint/metric reference: [docs/backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md)
-3. 미구현 계획 backlog: [docs/planned-work.md](../planned-work.md)
-4. 기존 OpenClaw 호환 연동 문서: [docs/openclaw/README.md](../openclaw/README.md)
-5. 협업 규칙과 상태: [AGENTS.md](../../AGENTS.md), [docs/STATUS.md](../STATUS.md)
+2. API/canonical value dictionary: [docs/agents/canonical-read-surface-reference.md](canonical-read-surface-reference.md)
+3. 상세 endpoint/metric reference: [docs/backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md)
+4. 범용 에이전트 연동 문서: [docs/agent-integration/README.md](../agent-integration/README.md)
+5. 미구현 계획 backlog: [docs/planned-work.md](../planned-work.md)
+6. 협업 규칙과 상태: [AGENTS.md](../../AGENTS.md), [docs/STATUS.md](../STATUS.md)
 
 `PRD.md`와 과거 plan/spec 문서는 제품 의도와 배경을 볼 때만 사용한다.
 live endpoint나 필드 계약이 충돌하면 backend 코드와 [docs/backend-api-ssot.md](../backend-api-ssot.md)를 우선한다.
@@ -44,6 +45,11 @@ MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
 - `vw_transactions_effective`: row-level 거래 분석 표준 surface
 - `vw_category_monthly_spend`: 월별 카테고리 지출 aggregate 표준 surface
 - `vw_fixed_cost_monthly_summary`: 월별 고정비/변동비 및 필수/비필수 고정비 aggregate surface
+- `vw_monthly_cashflow`: 월별 수입/지출/이체/대출상환/저축률 surface
+- `vw_true_spendable_monthly`: 대출상환과 고정비 차감 후 실제 가용 현금 surface
+- `vw_loan_repayment_monthly`: 대출 계좌/상환 유형별 월 상환액 surface
+- `vw_merchant_monthly_baseline`: 거래처별 월 지출과 직전 active month baseline surface
+- `vw_unclassified_work_queue`: 분류 품질 개선 우선순위 queue
 
 canonical view를 우선하는 이유:
 
@@ -52,6 +58,9 @@ canonical view를 우선하는 이유:
 - `merchant`, `cost_kind`, `fixed_cost_necessity`, `recurring_payment_kind` 같은 운영 분류 필드를 같은 방식으로 노출한다.
 - 대출 상환 매핑은 nullable `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_repayment_type`, `loan_link_memo` 필드로 붙는다.
 - backend analytics와 frontend read path가 같은 해석층을 공유한다.
+
+각 값의 의미와 계산식은 [canonical-read-surface-reference.md](canonical-read-surface-reference.md)를 기준으로 해석한다.
+특히 `income_basis='estimated'`, `transfer_activity_total`, `loan_repayment_total`, `baseline_delta_pct`, `priority_score`는 raw 숫자만 보고 임의 해석하지 않는다.
 
 raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import fidelity 점검, 삭제/병합 row 확인처럼 canonical view가 일부러 숨긴 내부 상태가 필요할 때다.
 이때도 쓰기는 API로 되돌아가야 한다.
@@ -92,6 +101,7 @@ raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import f
 ## 자주 쓰는 API
 
 - schema: `GET /api/v1/schema`
+- canonical dashboard: `GET /api/v1/canonical-views/dashboard`
 - 거래 목록: `GET /api/v1/transactions`
 - 거래 필터 옵션: `GET /api/v1/transactions/filter-options`
 - 월별/주별/일별 요약: `GET /api/v1/transactions/summary`
@@ -107,10 +117,11 @@ raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import f
 - `지출`이면서 양수인 금액은 결제 취소/환불이며 지출에서 상계한다.
 - `이체`는 수입/지출 분석에서 제외하고 자산 이동으로 해석한다.
 - `monthly-cashflow.transfer`는 순이체가 아니라 `ABS(amount)` 기준 activity volume이다.
+- `canonical-views/dashboard`의 true-spendable row에서 `income_basis='estimated'`면 관측 수입과 예상 수입을 분리해 설명한다.
 - `spending-anomalies` 설정 해석 순서는 `명시적 query param > persisted setting > code default`다.
 - `POST /api/v1/data/reset`은 current state를 지우지만 `upload_logs`는 보존한다.
 - `POST /api/v1/transactions/merge`는 현재 `501 Not Implemented` stub이다.
-- 원본 업로드 파일 retention은 live backend contract가 아니라 미구현 운영 목표로 본다.
+- 원본 업로드 파일 retention은 `POST /api/v1/upload` 경로에서 live이며, 기본 `UPLOAD_DIR=/data/uploads`에 최신 5개만 보관한다.
 
 ## 실패 대응
 

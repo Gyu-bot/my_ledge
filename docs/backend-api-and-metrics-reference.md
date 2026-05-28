@@ -16,6 +16,7 @@
 5. 기타 기획 문서
 
 `docs/backend-api-ssot.md`가 live contract 요약이라면, 이 문서는 **엔지니어용 구현 설명서**다.
+에이전트가 값 의미와 계산식을 빠르게 해석해야 할 때는 [agents/canonical-read-surface-reference.md](agents/canonical-read-surface-reference.md)를 먼저 본다.
 
 ## Scope
 

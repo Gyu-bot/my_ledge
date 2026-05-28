@@ -10,6 +10,7 @@
 4. 과거 planning 문서
 
 과거 기획 문서가 이 문서와 충돌하면, 이 문서와 코드가 우선한다.
+에이전트가 API/canonical view 값의 의미와 계산식을 해석할 때는 [agents/canonical-read-surface-reference.md](agents/canonical-read-surface-reference.md)를 함께 본다.
 
 ## Scope
 

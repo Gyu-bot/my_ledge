@@ -50,8 +50,10 @@ my_ledge/
 | `PRD.md` | 제품 요구사항과 장기 범위 | live 구현 여부 판단은 코드와 backend/API SSOT를 우선한다. |
 | `docs/backend-api-ssot.md` | 현재 backend/API live contract 요약 | endpoint/field 충돌 시 backend 코드 다음 우선순위다. |
 | `docs/backend-api-and-metrics-reference.md` | endpoint, metric, canonical view 계산 방식 상세 설명 | 구현자와 리뷰어용 상세 reference다. |
-| `docs/agents/README.md` | OpenClaw, hermes, Codex, Claude 등 외부 에이전트 시작점 | read/write 권한, canonical view 우선 규칙, 추천 흐름을 담는다. |
-| `docs/openclaw/**` | 기존 OpenClaw 호환 연동 문서 | agent README 이후 필요한 경우만 본다. |
+| `docs/agents/README.md` | Hermes, Codex, Claude, OpenClaw 등 외부 에이전트 시작점 | read/write 권한, canonical view 우선 규칙, 추천 흐름을 담는다. |
+| `docs/agents/canonical-read-surface-reference.md` | 에이전트용 API/canonical view 값 사전 | 각 값의 의미, 계산식, null/비율/금액 해석 규칙을 담는다. |
+| `docs/agent-integration/**` | 범용 에이전트 운영/skill 패키징 문서 | API/DB 연결, readonly DB, skill handoff, acceptance checklist를 담는다. |
+| `docs/openclaw/README.md` | 기존 OpenClaw 링크 호환용 legacy 안내 | 새 문서는 `docs/agents/`와 `docs/agent-integration/`를 우선한다. |
 | `docs/frontend-design-tokens.md` | 현재 frontend 시각 토큰 source of truth | 실제 CSS/token 값 기준이다. |
 | `docs/frontend/components-and-design-token-inventory.md` | 현재 UI component surface와 token 연결표 | 새 컴포넌트 추가 시 같이 갱신한다. |
 | `docs/frontend/page-wireframes.md` | live route별 section 구성과 wireframe | 현재 화면 구조 기준이다. |
@@ -250,7 +252,7 @@ SELECT COALESCE(category_major_user, category_major) AS category_major,
 
 | Method | Path | 설명 |
 |---|---|---|
-| GET | `/api/v1/schema` | DB 스키마 문서 (OpenClaw용) |
+| GET | `/api/v1/schema` | DB 스키마 문서 (에이전트용) |
 
 ---
 
@@ -281,7 +283,7 @@ SELECT COALESCE(category_major_user, category_major) AS category_major,
 ```env
 # Database
 DB_PASSWORD=           # PostgreSQL 비밀번호
-DB_READONLY_PASSWORD=  # readonly 유저 비밀번호 (OpenClaw용)
+DB_READONLY_PASSWORD=  # readonly 유저 비밀번호 (외부 에이전트용)
 DATABASE_URL=          # postgresql+asyncpg://my_ledge:${DB_PASSWORD}@db:5432/my_ledge
 
 # Excel
@@ -305,7 +307,7 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 - **지출인데 양수인 건** — 결제 취소/환불. 해당 월 지출에서 상계.
 - **마이너스 통장 자산 표기** — 자유입출금 자산에 음수로 잡힐 수 있다. 실질적으로는 부채로 해석해야 한다.
 - **해외주식 평가액** — 소수점 값이 포함될 수 있다. `NUMERIC(15,2)` 사용.
-- **OpenClaw 연동** — 쓰기는 API 전용, 읽기는 PostgreSQL readonly 유저로 직접 SQL 실행 가능 (statement_timeout=30s).
+- **외부 에이전트 연동** — 쓰기는 API 전용, 읽기는 PostgreSQL readonly 유저로 직접 SQL 실행 가능 (statement_timeout=30s).
 - `snapshot_date`는 API 입력값 우선, 없으면 서버 업로드 날짜를 사용한다.
 - 업로드는 부분 성공(`partial`)을 허용한다. 한쪽 적재가 성공하면 성공분은 유지하고 실패 원인을 `upload_logs`에 남긴다.
 - 카테고리/결제수단 드롭다운은 `transactions`의 distinct 값으로 조회한다.
@@ -318,7 +320,7 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 
 ## Collaboration Protocol
 
-이 프로젝트는 **사람과 복수의 AI 에이전트(Codex, OpenClaw, Claude 등)가 협업**한다.
+이 프로젝트는 **사람과 복수의 AI 에이전트(Codex, Hermes, Claude, OpenClaw 등)가 협업**한다.
 누가 작업하든 컨텍스트가 끊기지 않도록 아래 프로토콜을 **반드시** 따른다.
 
 ### Subagent Policy
@@ -383,7 +385,7 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 - 커밋 메시지 형식: `[영역] 작업 내용 (작업자)`
   - 예: `[backend] 가계부 파싱 로직 구현 (codex)`
   - 예: `[frontend] 지출 분석 페이지 레이아웃 (민규)`
-  - 예: `[infra] docker-compose 초기 설정 (openclaw)`
+  - 예: `[infra] docker-compose 초기 설정 (agent)`
 - 영역 태그: `[backend]`, `[frontend]`, `[infra]`, `[docs]`, `[db]`
 - **설계 결정이 발생하면** Key Decisions에 날짜와 함께 기록 (무엇을, 왜, 대안은 뭐였는지)
 - 개발/검증을 위해 띄운 서버, watcher, 브라우저 자동화, 포트 포워딩, 백그라운드 프로세스는 **사용이 끝나는 즉시 종료**한다
@@ -409,7 +411,7 @@ CORS_ORIGINS=          # 프론트엔드 도메인
 main                    ← 안정 버전, 직접 커밋 금지
 ├── feat/upload-pipeline   ← Phase 1 기능
 ├── feat/dashboard-core    ← Phase 2 기능
-├── feat/openclaw-integration ← Phase 3 기능
+├── feat/agent-integration ← Phase 3 기능
 └── fix/xxx                ← 버그 수정
 ```
 

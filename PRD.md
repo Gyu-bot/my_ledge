@@ -11,22 +11,22 @@
 
 ### 1.1 프로젝트 정의
 
-my_ledge는 BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 **개인 재무 대시보드이자 OpenClaw용 advisor analytics backend**다.
-BankSalad에서 내보낸 엑셀 파일을 데이터 소스로 사용하여 지출 분석과 자산 변동 tracking을 수행하고, OpenClaw 멀티에이전트 시스템이 재무 어드바이저처럼 동작할 수 있도록 안정적인 해석용 API와 canonical read surface를 제공한다.
+my_ledge는 BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 **개인 재무 대시보드이자 범용 에이전트용 advisor analytics backend**다.
+BankSalad에서 내보낸 엑셀 파일을 데이터 소스로 사용하여 지출 분석과 자산 변동 tracking을 수행하고, Hermes, Codex, Claude, OpenClaw 같은 외부 에이전트가 재무 어드바이저처럼 동작할 수 있도록 안정적인 해석용 API와 canonical read surface를 제공한다.
 
 ### 1.2 목표
 
 1. 월별 수입/지출 추이를 카테고리별로 시각화·분석
 2. 자산(부동산, 투자, 대출 등) 변동을 시계열로 tracking
-3. OpenClaw 에이전트가 DB에 직접 접근하여 ad-hoc 심층 분석 수행 가능
+3. 외부 에이전트가 DB에 직접 접근하여 ad-hoc 심층 분석 수행 가능
 4. 셀프호스팅 환경에서 안정적으로 운영
-5. OpenClaw가 여러 raw query를 조합하지 않고도 현금흐름, 지출 변화, 반복지출, 자산/부채 건강도를 직접 읽을 수 있는 advisor analytics surface 제공
+5. 외부 에이전트가 여러 raw query를 조합하지 않고도 현금흐름, 지출 변화, 반복지출, 자산/부채 건강도를 직접 읽을 수 있는 advisor analytics surface 제공
 
 ### 1.3 비목표 (Out of Scope)
 
 - 실시간 금융 데이터 연동 (API 스크래핑, 오픈뱅킹 등)
 - 다중 사용자 지원
-- LLM을 이 서비스에 직접 통합 (분석은 OpenClaw가 수행)
+- LLM을 이 서비스에 직접 통합 (분석은 외부 에이전트/consumer layer가 수행)
 - 완전 자동화된 투자/소비 추천 엔진 (health score, personalized coaching은 후속 단계)
 - 뱅샐현황 중 2.현금흐름현황(가계부 내역과 중복), 4.보험현황
 
@@ -40,7 +40,7 @@ BankSalad에서 내보낸 엑셀 파일을 데이터 소스로 사용하여 지�
 |---|---|
 | 형식 | `.xlsx` (엑셀), 암호화됨 |
 | 출처 | BankSalad 내보내기 |
-| 업로드 방식 | 수동 업로드 또는 OpenClaw 에이전트가 파일을 받아 업로드 API 호출 |
+| 업로드 방식 | 수동 업로드 또는 외부 에이전트가 파일을 받아 업로드 API 호출 |
 | 업로드 주기 | 비정기 (수동) |
 | 암호 관리 | `.env` 환경변수 (`EXCEL_PASSWORD`) |
 | 복호화 도구 | `msoffcrypto-tool` → 복호화 후 `openpyxl`로 파싱 |
@@ -287,12 +287,12 @@ volumes:
   pgdata:
 ```
 
-### 4.3 OpenClaw 연동 아키텍처
+### 4.3 외부 에이전트 연동 아키텍처
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  OpenClaw    │     │  my_ledge    │     │  PostgreSQL  │
-│  에이전트     │     │  Backend     │     │              │
+│  External    │     │  my_ledge    │     │  PostgreSQL  │
+│  Agent       │     │  Backend     │     │              │
 │              │     │  (FastAPI)   │     │              │
 │  ┌────────┐  │     │              │     │              │
 │  │파일업로드├──┼────▶│ POST /upload │────▶│  INSERT      │
@@ -314,13 +314,13 @@ volumes:
 |---|---|---|
 | 데이터 업로드 (쓰기) | REST API 전용 | `POST /api/v1/upload` — 파일 수신 → 복호화 → 파싱 → 중복 제거 → 적재 |
 | 정형 분석 (읽기) | REST API | 월별 요약, 카테고리 합계 등 자주 쓰는 뷰. 거래 분석 계층은 canonical view (`vw_transactions_effective`, `vw_category_monthly_spend`)를 공통 read surface로 사용한다 |
-| 어드바이저 해석 (읽기) | REST API | OpenClaw가 직접 소비하는 해석용 aggregate endpoint. 월별 현금흐름, MoM 변화량, 반복지출, 자산/부채 건강도 같은 계산을 백엔드가 책임진다 |
+| 어드바이저 해석 (읽기) | REST API | 외부 에이전트가 직접 소비하는 해석용 aggregate endpoint. 월별 현금흐름, MoM 변화량, 반복지출, 자산/부채 건강도 같은 계산을 백엔드가 책임진다 |
 | Ad-hoc 분석 (읽기) | DB 직접 접근 | `readonly` PostgreSQL 유저, `statement_timeout=30s` |
 
 **DB 접근 보안:**
 - `readonly` 유저: `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;`
 - `statement_timeout`: `ALTER ROLE readonly SET statement_timeout = '30s';`
-- OpenClaw 에이전트 TOOLS.md에 스키마 문서 포함
+- 에이전트 tool/skill 문서에 schema와 canonical read surface reference 포함
 
 ---
 
@@ -620,12 +620,12 @@ GET /api/v1/loans/summary
   ?snapshot_date=2026-03-31 # optional, 생략 시 latest
 ```
 
-### 5.5 OpenClaw 전용
+### 5.5 에이전트용 schema/canonical surface
 
 ```
 GET /api/v1/schema
   # DB 스키마 문서 반환 (테이블, 컬럼, 타입, 설명)
-  # OpenClaw 에이전트가 SQL 쿼리 작성 시 참조
+  # 외부 에이전트가 SQL 쿼리 작성 시 참조
 
 GET /api/v1/canonical-views/dashboard
   # P0/P0.5 canonical view 실제 row 값을 프론트엔드 dashboard용으로 반환
@@ -638,7 +638,7 @@ GET /api/v1/canonical-views/dashboard
 
 ### 5.6 Advisor Analytics API (Live + Planned)
 
-이 레이어의 목적은 OpenClaw가 여러 raw endpoint와 SQL을 조합해 매번 계산하지 않도록, 재무 해석 결과를 백엔드에서 안정적으로 제공하는 것이다.
+이 레이어의 목적은 외부 에이전트가 여러 raw endpoint와 SQL을 조합해 매번 계산하지 않도록, 재무 해석 결과를 백엔드에서 안정적으로 제공하는 것이다.
 
 #### P0 — 현재 스키마로 바로 구현 가능한 핵심 해석 API
 
@@ -670,7 +670,7 @@ P0 설계 규칙:
 P1 설계 규칙:
 
 - heuristic 결과는 `confidence`, `reason`, `assumptions` 중 최소 하나를 응답에 포함한다.
-- OpenClaw는 P1 결과를 그대로 설명에 사용하고, drill-down이 필요할 때만 raw transaction 조회로 내려간다.
+- 외부 에이전트는 P1 결과를 그대로 설명에 사용하고, drill-down이 필요할 때만 raw transaction 조회로 내려간다.
 - `spending-anomalies` 의 기본 파라미터는 `GET/PATCH /api/v1/settings/analytics` 에 저장된 설정을 사용한다. 명시적 query parameter가 있으면 저장 설정보다 우선한다.
 - 현재 저장 가능 파라미터는 `min_delta_amount`, `anomaly_threshold`, `baseline_months` 다.
 
@@ -914,13 +914,13 @@ CORS_ORIGINS=https://my-ledge.example.com
 ### 8.3 백업
 
 - PostgreSQL: `pg_dump` 일간 크론 → ZFS 스냅샷
-- 업로드된 원본 엑셀 파일 recent-5 retention은 아직 live backend 구현에서 확인되지 않았다. 운영 목표로만 유지한다.
+- 업로드된 원본 엑셀 파일 recent-5 retention은 `POST /api/v1/upload` 경로에서 live다. 기본 `UPLOAD_DIR=/data/uploads`에 최신 5개만 보관한다.
 
 ---
 
 ## 9. 개발 규칙 (AGENTS.md 호환)
 
-코딩 에이전트 (Codex, OpenClaw 등)가 참조하는 개발 규칙:
+코딩 에이전트 (Codex, Hermes, Claude, OpenClaw 등)가 참조하는 개발 규칙:
 
 ### 9.1 공통
 

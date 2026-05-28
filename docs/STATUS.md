@@ -6,7 +6,7 @@
 ## Current State
 
 - **Phase:** P0/P0.5 canonical read model backend/frontend dashboard 구현 완료. 반복결제 카테고리 자동분류 1차 구현 완료. 다음 초점은 source verification scope, merchant normalization, asset/liability health 후보 정리다.
-- **Last Worker:** Codex (2026-05-29T00:33+0900, auto-classification apply UX fixed)
+- **Last Worker:** Codex (2026-05-29T00:52+0900, 범용 에이전트 canonical value reference 및 OpenClaw legacy path 정리)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -21,6 +21,7 @@
 ## Recent Completed
 
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
+- [x] 범용 에이전트 문서 정리: API/canonical view 값 의미와 계산식을 [agents/canonical-read-surface-reference.md](agents/canonical-read-surface-reference.md)에 추가하고, 운영/skill handoff 문서를 [agent-integration/](agent-integration/)로 이동
 - [x] README 기능 설명 보강: 프론트엔드 화면별 표시 항목, 주요 지표 의미, canonical view/read surface 목록 정리
 - [x] P0 upload retention 구현: `POST /api/v1/upload` 원본 파일을 `UPLOAD_DIR` 기본값 `/data/uploads`에 저장하고 최신 5개만 유지
 - [x] P0/P0.5 canonical read model 구현: `vw_monthly_cashflow`, `vw_loan_repayment_monthly`, `vw_true_spendable_monthly`, `vw_merchant_monthly_baseline`, `vw_unclassified_work_queue`

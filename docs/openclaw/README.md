@@ -1,10 +1,9 @@
-# Agent Integration Docs
+# Legacy OpenClaw Path
 
-OpenClaw/hermes 및 기타 에이전트가 `my_ledge`를 읽기/쓰기 대상으로 연결할 때 필요한 문서를 모아둔 디렉터리다.
-디렉터리 이름은 기존 OpenClaw 연동 경로와 호환성을 위해 유지한다.
+이 디렉터리는 과거 OpenClaw 연동 링크 호환성을 위해 남긴 legacy path다.
+현재 `my_ledge`의 에이전트 대상은 OpenClaw 전용이 아니라 Hermes, Codex, Claude, OpenClaw 등 범용 에이전트다.
 
-새 에이전트 세션의 시작점은 [docs/agents/README.md](../agents/README.md)다.
-이 디렉터리는 기존 OpenClaw 문서를 확장한 세부 운영/skill handoff 참고 문서로 사용한다.
+새 문서는 아래 경로를 기준으로 본다.
 
 권장 읽기 순서:
 
@@ -12,14 +11,15 @@ OpenClaw/hermes 및 기타 에이전트가 `my_ledge`를 읽기/쓰기 대상으
    - 에이전트 공통 권한 모델
    - canonical view 우선 규칙
    - 주요 API와 작업 흐름
-2. [integration-guide.md](integration-guide.md)
-   - 현재 backend/API 구조
-   - readonly DB 접근 규칙
-   - 인증, 주요 endpoint, 예시 호출
-3. [skill-handoff.md](skill-handoff.md)
-   - OpenClaw/hermes 쪽에서 실제 skill/tool로 패키징할 때 필요한 입력값
-   - 권장 tool flow
-   - acceptance checklist
+2. [../agents/canonical-read-surface-reference.md](../agents/canonical-read-surface-reference.md)
+   - canonical view/API 값 의미와 계산식
+   - 에이전트 답변 시 주의사항
+3. [../agent-integration/README.md](../agent-integration/README.md)
+   - 범용 에이전트 연동 문서 인덱스
+4. [../agent-integration/integration-guide.md](../agent-integration/integration-guide.md)
+   - API/DB 연결, 인증, readonly DB 규칙
+5. [../agent-integration/skill-handoff.md](../agent-integration/skill-handoff.md)
+   - 각 에이전트 runtime에서 skill/tool로 패키징할 때 필요한 규칙
 
 참고 문서:
 
@@ -28,5 +28,5 @@ OpenClaw/hermes 및 기타 에이전트가 `my_ledge`를 읽기/쓰기 대상으
 - 현재 구현/검증 상태: [docs/STATUS.md](../STATUS.md)
 - live backend/API contract: [docs/backend-api-ssot.md](../backend-api-ssot.md)
 
-이 디렉터리의 목적은 `my_ledge` 저장소 관점에서 연동 계약을 명확히 남기는 것이다.
-실제 에이전트 skill/tool 생성, 설치, 배포는 각 에이전트 쪽 저장소/운영 환경에서 별도로 수행한다.
+이 디렉터리에는 새 세부 문서를 추가하지 않는다.
+기존 외부 링크가 이 경로를 가리킬 때 새 범용 문서로 안내하기 위한 compatibility shim으로만 유지한다.

@@ -2,7 +2,7 @@
 
 BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 대시보드다.
 거래 내역은 증분 import로 누적 적재하고, 자산/투자/대출 스냅샷은 시계열로 관리한다.
-읽기 분석은 API와 canonical view를 통해 제공하고, OpenClaw/hermes 같은 외부 에이전트는 readonly DB + API를 함께 사용한다.
+읽기 분석은 API와 canonical view를 통해 제공하고, Hermes, Codex, Claude, OpenClaw 같은 외부 에이전트는 readonly DB + API를 함께 사용한다.
 
 ## 현재 범위
 
@@ -28,7 +28,7 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
 제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), 협업 규칙은 [AGENTS.md](AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](docs/STATUS.md)를 기준으로 본다.
 아직 구현되지 않았지만 계획으로 유지하는 backlog는 [docs/planned-work.md](docs/planned-work.md)에서 관리한다.
 현재 live backend/API contract는 [docs/backend-api-ssot.md](docs/backend-api-ssot.md)를 우선 참조한다.
-에이전트 연동 시에는 [docs/agents/README.md](docs/agents/README.md)를 먼저 읽고, 필요한 경우 기존 OpenClaw 호환 문서인 [docs/openclaw/README.md](docs/openclaw/README.md)를 이어서 본다.
+에이전트 연동 시에는 [docs/agents/README.md](docs/agents/README.md)와 [docs/agents/canonical-read-surface-reference.md](docs/agents/canonical-read-surface-reference.md)를 먼저 읽고, 운영/skill 패키징은 [docs/agent-integration/README.md](docs/agent-integration/README.md)를 이어서 본다.
 
 ## 무엇을 할 수 있나
 
@@ -44,7 +44,7 @@ My Ledge는 BankSalad 엑셀 파일을 개인 재무 분석용 DB로 바꾸고, 
 | 대출 연결 | 지출 거래 중 대출 상환 성격의 거래를 안정적인 대출 계좌에 직접 연결 | 연결/미연결 후보, 대출 기관/상품/표시명, 신규일/만기일, 상환 유형(원금/이자/원리금/미정), 연결 메모 |
 | 자동분류 | 카테고리 기반 고정비/변동비 규칙, 반복결제 카테고리 규칙, 거래처 기반 대출 연결 규칙 관리 | 업로드 후 자동 적용 토글, 기존 데이터 일괄 적용 결과, category rule 목록, recurring category rule 목록, loan merchant rule 목록 |
 | 반복 결제 분류 | 거래처별 반복 결제 후보를 수동으로 `할부`, `매월 반복`, `반복 아님`으로 분류 | 반복 후보 그룹, 평균 금액, 발생 횟수, interval/confidence, 그룹 내 거래 id, 저장된 분류 상태 |
-| 에이전트/SQL 분석 | OpenClaw/hermes 같은 외부 에이전트가 readonly DB와 API를 함께 사용 | raw table schema, canonical view schema, analytics endpoint, stable loan-account mapping field |
+| 에이전트/SQL 분석 | Hermes, Codex, Claude, OpenClaw 같은 외부 에이전트가 readonly DB와 API를 함께 사용 | raw table schema, canonical view schema, canonical value dictionary, analytics endpoint, stable loan-account mapping field |
 
 ## 프론트엔드 화면과 주요 지표
 
@@ -157,7 +157,7 @@ CORS_ORIGINS=
 권장:
 
 - `DB_PASSWORD`: PostgreSQL 앱 계정 비밀번호
-- `DB_READONLY_PASSWORD`: OpenClaw/hermes 등 readonly DB 접근용 비밀번호
+- `DB_READONLY_PASSWORD`: Hermes, Codex, Claude, OpenClaw 등 readonly DB 접근용 비밀번호
 - `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증용 비밀값
 - `API_KEY`: backend write API 인증용 비밀값이며, compose/frontend container 시작 시 `runtime-config.js`로도 같은 값이 주입된다
 - `EXCEL_PASSWORD`: 실제 BankSalad 암호화 파일을 사용할 경우 필요
@@ -205,7 +205,7 @@ docker compose exec db sh /docker-entrypoint-initdb.d/01-create-readonly-role.sh
 
 ### 5. 에이전트 연동에 전달할 값
 
-운영 서버에서 OpenClaw, hermes, 기타 분석/운영 에이전트에 넘겨야 하는 최소 정보:
+운영 서버에서 Hermes, Codex, Claude, OpenClaw 등 분석/운영 에이전트에 넘겨야 하는 최소 정보:
 
 ```env
 MY_LEDGE_API_BASE_URL=http://<server>:8000/api/v1
@@ -221,9 +221,10 @@ MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
 함께 전달할 문서:
 
 - [docs/agents/README.md](docs/agents/README.md)
-- [docs/openclaw/README.md](docs/openclaw/README.md)
-- [docs/openclaw/integration-guide.md](docs/openclaw/integration-guide.md)
-- [docs/openclaw/skill-handoff.md](docs/openclaw/skill-handoff.md)
+- [docs/agents/canonical-read-surface-reference.md](docs/agents/canonical-read-surface-reference.md)
+- [docs/agent-integration/README.md](docs/agent-integration/README.md)
+- [docs/agent-integration/integration-guide.md](docs/agent-integration/integration-guide.md)
+- [docs/agent-integration/skill-handoff.md](docs/agent-integration/skill-handoff.md)
 
 ### 6. 업데이트 절차
 
@@ -294,7 +295,7 @@ CORS_ORIGINS=
 
 - `API_KEY`: 업로드, 스키마 조회, 거래 편집 API 인증에 사용
 - `API_KEY`: compose 배포 시 frontend container 시작 시점의 `runtime-config.js`에도 같은 값이 자동 주입된다
-- `DB_READONLY_PASSWORD`: OpenClaw/hermes 등 외부 에이전트의 readonly DB 접근에 사용
+- `DB_READONLY_PASSWORD`: 외부 에이전트의 readonly DB 접근에 사용
 - `EXCEL_PASSWORD`: 실제 암호화된 BankSalad 파일 복호화에 사용
 
 ## PostgreSQL readonly 계정
@@ -357,19 +358,22 @@ npm run build
 - Backend/API live contract: [docs/backend-api-ssot.md](docs/backend-api-ssot.md)
 - Backend 상세 reference: [docs/backend-api-and-metrics-reference.md](docs/backend-api-and-metrics-reference.md)
 - 에이전트용 canonical README: [docs/agents/README.md](docs/agents/README.md)
-- OpenClaw 호환 연동 문서 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
+- 에이전트용 canonical/API 값 사전: [docs/agents/canonical-read-surface-reference.md](docs/agents/canonical-read-surface-reference.md)
+- 범용 에이전트 연동 문서 인덱스: [docs/agent-integration/README.md](docs/agent-integration/README.md)
+- Legacy OpenClaw 호환 안내: [docs/openclaw/README.md](docs/openclaw/README.md)
 
 `docs/STATUS.md`는 작업 handoff와 현재 상태 로그이고, `docs/planned-work.md`는 계획으로 유지하는 미구현 항목의 backlog다. 과거 plan/spec/archive 문서의 미체크 항목은 `docs/planned-work.md`에 승격되어 있지 않으면 current backlog로 보지 않는다.
 
 ## 에이전트 연동
 
-OpenClaw/hermes 및 기타 에이전트는 읽기에는 API 또는 PostgreSQL readonly 계정을, 쓰기에는 API만 사용한다.
+Hermes, Codex, Claude, OpenClaw 등 외부 에이전트는 읽기에는 API 또는 PostgreSQL readonly 계정을, 쓰기에는 API만 사용한다.
 거래 분석은 raw `transactions`보다 canonical view와 analytics endpoint를 우선한다.
 
 - 시작점: [docs/agents/README.md](docs/agents/README.md)
-- OpenClaw 호환 인덱스: [docs/openclaw/README.md](docs/openclaw/README.md)
-- 운영/연동 규약: [docs/openclaw/integration-guide.md](docs/openclaw/integration-guide.md)
-- skill 패키징 handoff: [docs/openclaw/skill-handoff.md](docs/openclaw/skill-handoff.md)
+- 값 의미/계산식 reference: [docs/agents/canonical-read-surface-reference.md](docs/agents/canonical-read-surface-reference.md)
+- 운영/연동 규약: [docs/agent-integration/integration-guide.md](docs/agent-integration/integration-guide.md)
+- skill 패키징 handoff: [docs/agent-integration/skill-handoff.md](docs/agent-integration/skill-handoff.md)
+- OpenClaw legacy path: [docs/openclaw/README.md](docs/openclaw/README.md)
 
 이 저장소에서는 에이전트 skill 자체를 배포하지 않는다.
 대신 에이전트 런타임에서 skill/tool을 패키징할 수 있도록 필요한 API, DB, canonical view, 운영 규약, 예시 흐름을 문서로 제공한다.
