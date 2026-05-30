@@ -701,7 +701,7 @@ export function InstallmentsPage() {
               <input
                 aria-label="후보 검색어"
                 className={`${inputCls} w-44`}
-                placeholder="거래처·원본 설명 검색"
+                placeholder="거래처·원본 설명·메모 검색"
                 value={filterDraft.search}
                 onChange={(event) => setFilterDraft((current) => ({ ...current, search: event.target.value }))}
               />

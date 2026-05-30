@@ -140,6 +140,12 @@ beforeEach(() => {
 })
 
 describe('LoanMappingPage', () => {
+  it('labels the search box as searching merchant, original description, memo, and account fields', () => {
+    wrap(<LoanMappingPage />)
+
+    expect(screen.getByPlaceholderText('분석용 거래처·원본 설명·메모·계좌 검색')).toBeInTheDocument()
+  })
+
   it('shows the current loan account for linked expense transactions', () => {
     wrap(<LoanMappingPage />)
 

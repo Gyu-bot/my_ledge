@@ -16,6 +16,7 @@ from app.services.loan_mapping_service import (
     bulk_upsert_transaction_loan_links,
     delete_transaction_loan_link,
     get_transaction_loan_link,
+    list_loan_transaction_mappings,
     list_loan_accounts,
     update_loan_account_metadata,
     upsert_transaction_loan_link,
@@ -183,6 +184,34 @@ async def test_update_loan_account_metadata_saves_display_name_and_kind(
     accounts = await list_loan_accounts(db_session)
     assert accounts.items[0].display_name == "우리집 주담대"
     assert accounts.items[0].loan_kind == "equal_principal_interest"
+
+
+async def test_list_loan_transaction_mappings_search_matches_transaction_memo(
+    db_session: AsyncSession,
+) -> None:
+    matching = _transaction()
+    matching.memo = "상환 확인 필요"
+    other = _transaction()
+    other.description = "카카오뱅크 대출이자"
+    other.merchant = "카카오뱅크"
+    other.memo = "다른 메모"
+    db_session.add_all([matching, other])
+    await db_session.commit()
+
+    response = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search="상환 확인",
+        linked="all",
+        loan_account_id=None,
+        repayment_type=None,
+        page=1,
+        per_page=40,
+    )
+
+    assert response.total == 1
+    assert response.items[0].memo == "상환 확인 필요"
 
 
 async def test_bulk_upsert_transaction_loan_links_maps_many_transactions_to_one_account(

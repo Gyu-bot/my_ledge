@@ -127,6 +127,12 @@ beforeEach(() => {
 })
 
 describe('InstallmentsPage', () => {
+  it('labels the candidate search box as searching merchant, original description, and memo', () => {
+    wrap(<InstallmentsPage />)
+
+    expect(screen.getByPlaceholderText('거래처·원본 설명·메모 검색')).toBeInTheDocument()
+  })
+
   it('renders plan management, transaction linking, and forecast sections', () => {
     wrap(<InstallmentsPage />)
 
