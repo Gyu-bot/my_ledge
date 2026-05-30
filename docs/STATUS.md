@@ -6,8 +6,8 @@
 ## Current State
 
 - **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
-- **Last Worker:** Codex (2026-05-31T16:35+0900, 할부 연계·구매게이트 정리·자산 설정 분리 구현)
-- **Branch:** main
+- **Last Worker:** Codex (2026-05-31T02:41+0900, GitHub Actions CI workflow 추가)
+- **Branch:** codex/add-github-ci
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
 ## Start Here
@@ -20,6 +20,7 @@
 
 ## Recent Completed
 
+- [x] GitHub Actions CI workflow 추가: PR/push/workflow_dispatch에서 backend `uv` 기반 ruff/원격 재현 가능 pytest와 frontend npm 기반 lint/typecheck/test/build를 실행한다.
 - [x] 대출 월상환 자동 추정·저장 backend 구현: 수동 `PATCH /api/v1/loans/{loan_id}/repayment-metadata`는 `monthly_payment_source` / `repayment_method_source`를 `manual`로 저장하고, 대출 연결 단건/일괄 저장 및 snapshot import 후 latest loan snapshot에 최근 관측월 median 기반 `monthly_payment`와 mixed-link 기반 `repayment_method='principal_interest'`를 자동 보강
 - [x] 구매게이트 정리: 고정비/필수/대출 연결/필요성 미분류 거래를 제외하고, 같은 거래의 여러 사유는 `transaction:{id}` 후보 1줄과 `candidate_types[]`/`reasons[]`로 통합
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
