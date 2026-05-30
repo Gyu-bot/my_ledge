@@ -32,4 +32,13 @@ async def patch_analytics_settings_endpoint(
     return await patch_analytics_settings(
         db_session,
         spending_anomalies=payload.spending_anomalies.model_dump(exclude_unset=True),
+        discretionary_velocity=payload.discretionary_velocity.model_dump(
+            exclude_unset=True,
+        ),
+        purchase_gate=payload.purchase_gate.model_dump(exclude_unset=True),
+        recurring_dry_run=payload.recurring_dry_run.model_dump(exclude_unset=True),
+        asset_liability_health=payload.asset_liability_health.model_dump(
+            exclude_unset=True,
+        ),
+        bulk_operations=payload.bulk_operations.model_dump(exclude_unset=True),
     )

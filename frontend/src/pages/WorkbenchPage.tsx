@@ -9,11 +9,13 @@ import {
   useTransactionList, useTransactionFilterOptions,
   useUpdateTransaction, useDeleteTransaction, useRestoreTransaction,
   useBulkUpdateTransactions,
+  useBulkDeletePreview, useBulkDeleteTransactions,
+  useBulkRestorePreview, useBulkRestoreTransactions,
 } from '../hooks/useTransactions'
 import { useUploadLogs, useUploadFile, useResetData } from '../hooks/useUpload'
 import { useWriteAccess } from '../hooks/useWriteAccess'
 import { useChromeContext } from '../components/layout/chromeContext'
-import type { TransactionResponse } from '../types/transaction'
+import type { TransactionBulkMutationPreview, TransactionResponse } from '../types/transaction'
 import type { DataResetScope } from '../types/upload'
 import { formatKRW } from '../lib/utils'
 
@@ -68,6 +70,12 @@ export function WorkbenchPage() {
 
   // Bulk edit draft
   const [bulkDraft, setBulkDraft] = useState<EditDraft>({})
+  const [bulkActionPreview, setBulkActionPreview] = useState<{
+    action: 'delete' | 'restore'
+    preview: TransactionBulkMutationPreview
+    ids: number[]
+  } | null>(null)
+  const [lastBulkDeletedIds, setLastBulkDeletedIds] = useState<number[]>([])
 
   // Accordions
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -111,6 +119,10 @@ export function WorkbenchPage() {
   const deleteMutation = useDeleteTransaction()
   const restoreMutation = useRestoreTransaction()
   const bulkMutation = useBulkUpdateTransactions()
+  const bulkDeletePreviewMutation = useBulkDeletePreview()
+  const bulkDeleteMutation = useBulkDeleteTransactions()
+  const bulkRestorePreviewMutation = useBulkRestorePreview()
+  const bulkRestoreMutation = useBulkRestoreTransactions()
   const uploadMutation = useUploadFile()
   const resetMutation = useResetData()
 
@@ -129,8 +141,9 @@ export function WorkbenchPage() {
   function resetFilter() { setFilterDraft(DEFAULT_FILTER); setAppliedFilter(DEFAULT_FILTER); setPage(1); setSelectedIds(new Set()) }
 
   function toggleSelect(tx: TransactionResponse) {
-    if (tx.is_deleted) return
+    if (tx.is_deleted && !appliedFilter.include_deleted) return
     if (editingId !== null) return  // 편집 중이면 선택 불가
+    setBulkActionPreview(null)
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(tx.id)) { next.delete(tx.id) } else { next.add(tx.id) }
@@ -215,9 +228,51 @@ export function WorkbenchPage() {
       const result = await bulkMutation.mutateAsync(data)
       setSelectedIds(new Set())
       setBulkDraft({})
+      setBulkActionPreview(null)
       setAlert({ variant: 'success', title: `${result.updated}건 일괄 수정 완료` })
     } catch (e) {
       setAlert({ variant: 'error', title: '일괄 수정 실패', description: String(e) })
+    }
+  }
+
+  async function previewBulkAction(action: 'delete' | 'restore') {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    try {
+      const preview = action === 'delete'
+        ? await bulkDeletePreviewMutation.mutateAsync({ ids })
+        : await bulkRestorePreviewMutation.mutateAsync({ ids })
+      setBulkActionPreview({ action, preview, ids })
+    } catch (e) {
+      setAlert({ variant: 'error', title: action === 'delete' ? '삭제 미리보기 실패' : '복원 미리보기 실패', description: String(e) })
+    }
+  }
+
+  async function executeBulkAction() {
+    if (!bulkActionPreview) return
+    const ids = bulkActionPreview.ids
+    try {
+      const result = bulkActionPreview.action === 'delete'
+        ? await bulkDeleteMutation.mutateAsync({ ids })
+        : await bulkRestoreMutation.mutateAsync({ ids })
+      const label = bulkActionPreview.action === 'delete' ? '삭제' : '복원'
+      setLastBulkDeletedIds(bulkActionPreview.action === 'delete' ? ids : [])
+      setSelectedIds(new Set())
+      setBulkActionPreview(null)
+      setAlert({ variant: 'success', title: `${result.updated}건 일괄 ${label} 완료` })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '일괄 작업 실패', description: String(e) })
+    }
+  }
+
+  async function restoreLastBulkDelete() {
+    if (lastBulkDeletedIds.length === 0) return
+    try {
+      const result = await bulkRestoreMutation.mutateAsync({ ids: lastBulkDeletedIds })
+      setLastBulkDeletedIds([])
+      setAlert({ variant: 'success', title: `${result.updated}건 방금 삭제한 항목 복원 완료` })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '방금 삭제한 항목 복원 실패', description: String(e) })
     }
   }
 
@@ -247,11 +302,14 @@ export function WorkbenchPage() {
   const isReadOnly = !hasWrite
   const hasSelection = selectedIds.size > 0
   const visibleSelectableIds = txList.data?.items
-    .filter((tx) => !tx.is_deleted)
+    .filter((tx) => !tx.is_deleted || appliedFilter.include_deleted)
     .map((tx) => tx.id) ?? []
   const allVisibleSelected = visibleSelectableIds.length > 0
     && visibleSelectableIds.every((id) => selectedIds.has(id))
   const someVisibleSelected = visibleSelectableIds.some((id) => selectedIds.has(id))
+  const selectedTransactions = txList.data?.items.filter((tx) => selectedIds.has(tx.id)) ?? []
+  const hasActiveSelection = selectedTransactions.some((tx) => !tx.is_deleted)
+  const hasDeletedSelection = selectedTransactions.some((tx) => tx.is_deleted)
 
   useEffect(() => {
     if (selectPageCheckboxRef.current) {
@@ -313,6 +371,7 @@ export function WorkbenchPage() {
   function toggleSelectVisible() {
     if (editingId !== null || visibleSelectableIds.length === 0) return
 
+    setBulkActionPreview(null)
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (allVisibleSelected) {
@@ -333,6 +392,8 @@ export function WorkbenchPage() {
           variant={alert.variant}
           title={alert.title}
           description={alert.description}
+          actionLabel={lastBulkDeletedIds.length > 0 && alert.variant === 'success' ? '방금 삭제한 항목 복원' : undefined}
+          onAction={lastBulkDeletedIds.length > 0 && alert.variant === 'success' ? restoreLastBulkDelete : undefined}
           onDismiss={() => setAlert(null)}
         />
       )}
@@ -457,9 +518,27 @@ export function WorkbenchPage() {
             </div>
             <div className="flex gap-2">
               <button onClick={applyBulk} disabled={isReadOnly} className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40">일괄 적용</button>
-              <button onClick={() => { setSelectedIds(new Set()); setBulkDraft({}) }} className="text-caption px-3 py-1.5 border border-border-faint text-text-ghost rounded-md">선택 해제</button>
+              <button onClick={() => previewBulkAction('delete')} disabled={isReadOnly || !hasActiveSelection} className="text-caption px-3 py-1.5 border border-danger-muted text-danger rounded-md disabled:opacity-40">삭제 preview</button>
+              <button onClick={() => previewBulkAction('restore')} disabled={isReadOnly || !hasDeletedSelection} className="text-caption px-3 py-1.5 border border-border-strong text-text-muted rounded-md disabled:opacity-40">복원 preview</button>
+              <button onClick={() => { setSelectedIds(new Set()); setBulkDraft({}); setBulkActionPreview(null) }} className="text-caption px-3 py-1.5 border border-border-faint text-text-ghost rounded-md">선택 해제</button>
             </div>
           </div>
+          {bulkActionPreview && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border-subtle bg-surface-card px-3 py-2">
+              <div className="text-caption text-text-muted">
+                <span className="font-semibold text-text-secondary">
+                  {bulkActionPreview.action === 'delete' ? '삭제' : '복원'} preview
+                </span>
+                {' · '}
+                {bulkActionPreview.preview.count}건 · {bulkActionPreview.preview.period_start ?? '—'}~{bulkActionPreview.preview.period_end ?? '—'}
+                {' · '}
+                ₩{formatKRW(bulkActionPreview.preview.expense_total)}
+                {' · '}
+                {bulkActionPreview.preview.representative_merchants.join(', ') || '대표 거래처 없음'}
+              </div>
+              <button onClick={executeBulkAction} disabled={isReadOnly} className="text-caption px-3 py-1.5 bg-danger-dim border border-danger-muted text-danger rounded-md disabled:opacity-40">preview대로 실행</button>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
           {(['분석용 거래처', '대분류', '소분류', '고정/변동', '필수/재량', '메모'] as const).map((label) => {
             const key: keyof EditDraft = label === '분석용 거래처' ? 'merchant' : label === '대분류' ? 'category_major_user' : label === '소분류' ? 'category_minor_user' : label === '고정/변동' ? 'cost_kind' : label === '필수/재량' ? 'spend_necessity' : 'memo'
@@ -584,7 +663,7 @@ export function WorkbenchPage() {
                    return (
                     <tr key={tx.id} className={rowClass}>
                        <td className="px-2 py-2">
-                         {!tx.is_deleted && !isEditing && (
+                         {(!tx.is_deleted || appliedFilter.include_deleted) && !isEditing && (
                            <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx)} className="w-3 h-3 accent-accent" />
                          )}
                        </td>

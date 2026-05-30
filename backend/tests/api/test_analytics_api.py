@@ -22,6 +22,7 @@ def _transaction(
     category_minor_user: str | None = None,
     cost_kind: str | None = None,
     fixed_cost_necessity: str | None = None,
+    spend_necessity: str | None = None,
     recurring_payment_kind: str | None = None,
     is_deleted: bool = False,
     merged_into_id: int | None = None,
@@ -42,6 +43,7 @@ def _transaction(
         payment_method=payment_method,
         cost_kind=cost_kind,
         fixed_cost_necessity=fixed_cost_necessity,
+        spend_necessity=spend_necessity,
         recurring_payment_kind=recurring_payment_kind,
         is_deleted=is_deleted,
         merged_into_id=merged_into_id,
@@ -49,6 +51,261 @@ def _transaction(
         created_at=now,
         updated_at=now,
     )
+
+
+async def test_discretionary_velocity_endpoint_reports_month_progress_against_baseline(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    baseline_rows = [
+        (date(2026, 1, 5), -100_000),
+        (date(2026, 2, 5), -100_000),
+        (date(2026, 3, 5), -100_000),
+    ]
+    for index, (tx_date, amount) in enumerate(baseline_rows, start=1):
+        db_session.add(
+            _transaction(
+                tx_date=tx_date,
+                tx_time=time(10, index),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description=f"기준 재량 {index}",
+                amount=amount,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            )
+        )
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 4, 10),
+                tx_time=time(11, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="이번 달 재량",
+                amount=-80_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 11),
+                tx_time=time(12, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor="장보기",
+                description="필수 변동비",
+                amount=-40_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="essential",
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 12),
+                tx_time=time(13, 0),
+                tx_type="지출",
+                category_major="기타",
+                category_minor=None,
+                description="미분류 지출",
+                amount=-20_000,
+                payment_method="카드",
+                cost_kind="variable",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/discretionary-velocity",
+        params={"as_of_date": "2026-04-15"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "period": "2026-04",
+        "as_of_date": "2026-04-15",
+        "month_progress_ratio": 0.5,
+        "discretionary_spend": 80000,
+        "baseline_monthly_spend": 100000,
+        "baseline_spend_at_same_progress": 50000,
+        "velocity_ratio": 1.6,
+        "risk_level": "high",
+        "confidence": "medium",
+        "classification_coverage_ratio": 0.8571,
+        "unclassified_spend": 20000,
+        "income_basis": None,
+        "reasons": [
+            "재량 지출 속도가 baseline 대비 1.60x입니다.",
+        ],
+        "assumptions": [
+            "최근 6개 마감월 중 데이터가 있는 월의 재량 지출을 사용합니다.",
+            "baseline_spend_at_same_progress는 마감월 월평균에 월 진행률을 곱한 값입니다.",
+        ],
+    }
+
+
+async def test_purchase_gate_candidates_endpoint_returns_large_and_new_merchant_signals(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="교통",
+                category_minor="택시",
+                description="기존 거래처",
+                merchant="기존상점",
+                amount=-40_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="새 거래처 큰 지출",
+                merchant="새상점",
+                amount=-120_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/purchase-gate-candidates",
+        params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 2
+    assert [item["candidate_type"] for item in payload["items"]] == [
+        "large_oneoff",
+        "new_merchant",
+    ]
+    assert payload["items"][0]["merchant"] == "새상점"
+    assert payload["items"][0]["amount"] == 120000
+    assert payload["items"][0]["candidate_key"].startswith("large_oneoff:")
+    assert payload["items"][0]["review_status"] == "pending"
+    assert payload["items"][0]["signals"]["threshold"] == 100000
+    assert payload["items"][1]["signals"]["lookback_months"] == 6
+
+
+async def test_purchase_gate_candidates_include_spike_types_and_saved_review_status(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    api_headers: dict[str, str],
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="평소 쇼핑",
+                merchant="기존상점",
+                amount=-50_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="평소 쇼핑",
+                merchant="기존상점",
+                amount=-50_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="평소 쇼핑",
+                merchant="기존상점",
+                amount=-50_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 12),
+                tx_time=time(11, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="이번 달 급증",
+                merchant="기존상점",
+                amount=-150_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/purchase-gate-candidates",
+        params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    candidate_types = {item["candidate_type"] for item in payload["items"]}
+    assert "merchant_spike" in candidate_types
+    assert "discretionary_spike" in candidate_types
+
+    merchant_spike = next(
+        item for item in payload["items"] if item["candidate_type"] == "merchant_spike"
+    )
+    assert merchant_spike["signals"]["merchant_baseline_avg"] == 50000
+    assert merchant_spike["signals"]["merchant_current_total"] == 150000
+
+    patch_response = await async_client.patch(
+        f"/api/v1/analytics/purchase-gate-candidates/{merchant_spike['candidate_key']}/review",
+        headers=api_headers,
+        json={"review_status": "reviewed"},
+    )
+
+    assert patch_response.status_code == 200
+    assert patch_response.json()["review_status"] == "reviewed"
+
+    reviewed_response = await async_client.get(
+        "/api/v1/analytics/purchase-gate-candidates",
+        params={
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "review_status": "reviewed",
+        },
+    )
+
+    assert reviewed_response.status_code == 200
+    reviewed_payload = reviewed_response.json()
+    assert reviewed_payload["total"] == 1
+    assert reviewed_payload["items"][0]["candidate_key"] == merchant_spike["candidate_key"]
+    assert reviewed_payload["items"][0]["review_status"] == "reviewed"
 
 
 async def test_monthly_cashflow_endpoint_returns_monthly_series(

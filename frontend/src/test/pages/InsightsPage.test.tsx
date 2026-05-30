@@ -7,6 +7,8 @@ import { InsightsPage } from '../../pages/InsightsPage'
 const useMerchantSpendMock = vi.fn()
 const useCategoryMoMMock = vi.fn()
 const useRecurringPaymentsMock = vi.fn()
+const useDiscretionaryVelocityMock = vi.fn()
+const usePurchaseGateCandidatesMock = vi.fn()
 
 vi.mock('../../hooks/useAnalytics', () => ({
   useMonthlyCashflow: () => ({
@@ -23,6 +25,8 @@ vi.mock('../../hooks/useAnalytics', () => ({
   useSpendingAnomalies: (...args: unknown[]) => useSpendingAnomaliesMock(...args),
   useMerchantSpend: (params: unknown) => useMerchantSpendMock(params),
   useCategoryMoM: (params: unknown) => useCategoryMoMMock(params),
+  useDiscretionaryVelocity: (...args: unknown[]) => useDiscretionaryVelocityMock(...args),
+  usePurchaseGateCandidates: (...args: unknown[]) => usePurchaseGateCandidatesMock(...args),
 }))
 
 const useSpendingAnomaliesMock = vi.fn()
@@ -48,6 +52,8 @@ describe('InsightsPage', () => {
     useCategoryMoMMock.mockImplementation(() => ({ data: { items: [] }, isLoading: false }))
     useRecurringPaymentsMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
     useSpendingAnomaliesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
+    useDiscretionaryVelocityMock.mockImplementation(() => ({ data: undefined, isLoading: false }))
+    usePurchaseGateCandidatesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
   })
 
   afterEach(() => {
@@ -156,5 +162,73 @@ describe('InsightsPage', () => {
     expect(screen.getByText('매월 반복')).toBeInTheDocument()
     expect(screen.getByText('매월 2 · 미분류 0')).toBeInTheDocument()
     expect(screen.queryByLabelText('통신사 반복결제 분류')).not.toBeInTheDocument()
+  })
+
+  it('renders discretionary spending velocity as a quiet signal', () => {
+    useDiscretionaryVelocityMock.mockImplementation(() => ({
+      data: {
+        period: '2026-04',
+        as_of_date: '2026-04-08',
+        month_progress_ratio: 0.27,
+        discretionary_spend: 210000,
+        baseline_spend_at_same_progress: 180000,
+        velocity_ratio: 1.17,
+        risk_level: 'warning',
+        confidence: 0.82,
+        reasons: ['재량 지출이 진행률 대비 기준선보다 빠릅니다.'],
+        assumptions: ['최근 6개 마감월 기준선'],
+        unclassified_spend: 30000,
+        classification_coverage_ratio: 0.74,
+        income_basis: 'observed',
+      },
+      isLoading: false,
+    }))
+
+    wrap(<InsightsPage />)
+
+    expect(screen.getByText('재량 지출 속도')).toBeInTheDocument()
+    expect(screen.getByText('1.17x')).toBeInTheDocument()
+    expect(screen.getByText('조용한 참고 신호')).toBeInTheDocument()
+    expect(screen.getByText('분류 커버리지 74.0%')).toBeInTheDocument()
+  })
+
+  it('renders purchase gate candidates without presenting a buy decision', () => {
+    usePurchaseGateCandidatesMock.mockImplementation(() => ({
+      data: {
+        total: 1,
+        assumptions: '구매 허용/금지가 아니라 리뷰 후보만 제공합니다.',
+        page: 1,
+        per_page: 5,
+        items: [
+          {
+            candidate_type: 'new_merchant',
+            transaction_id: 42,
+            candidate_key: 'new_merchant:42',
+            merchant: '새거래처',
+            date: '2026-04-07',
+            amount: 145000,
+            category: '생활',
+            signals: { new_merchant: true, threshold_amount: 100000 },
+            risk_level: 'watch',
+            review_priority: 'medium',
+            confidence: 'medium',
+            suggested_review_window: '14일',
+            review_status: 'pending',
+            reasons: ['새 거래처의 큰 재량 지출 후보입니다.'],
+            assumptions: ['기본 기준 100,000원'],
+          },
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<InsightsPage />)
+
+    expect(screen.getByText('구매 게이트 후보')).toBeInTheDocument()
+    expect(screen.getByText('새거래처')).toBeInTheDocument()
+    expect(screen.getByText('신규 거래처')).toBeInTheDocument()
+    expect(screen.getByText('리뷰 후보')).toBeInTheDocument()
+    expect(screen.getByText('new_merchant: true')).toBeInTheDocument()
+    expect(screen.queryByText(/구매 허용|구매 금지/)).not.toBeInTheDocument()
   })
 })

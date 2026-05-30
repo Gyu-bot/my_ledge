@@ -5,9 +5,9 @@
 
 ## Current State
 
-- **Phase:** P1 advisor surface 1-4 구현 완료. 지출 필수/재량 축 일반화, merchant normalization, 반복 거래처 월별 view, 유동성/부채 health API와 frontend 노출이 live. 투자 분석과 자산이동/이체 tracking은 후순위로 보류.
-- **Last Worker:** Codex (2026-05-30T21:38+0900, description override 제외 및 brand icon 추가)
-- **Branch:** main
+- **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
+- **Last Worker:** Codex (2026-05-30T22:50+0900, P2 제외 구현 batch 최종 검증)
+- **Branch:** codex-complete-pre-p2-work
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
 ## Start Here
@@ -42,6 +42,10 @@
 - [x] Advisor 다음 구현 기본값 정리: 재량 지출 속도, 구매 게이트, 반복결제 dry-run, 현금성 자산 tier, 대출 월상환액 보강, bulk 안전장치와 settings 조정 항목을 [planned-work.md](planned-work.md)에 반영
 - [x] `description_user` / `effective_description` 계획 제외: 원본 설명은 `description`, 분석명은 `merchant`, 사용자 부가 설명은 `memo`로 유지
 - [x] Sidebar/favicon 공용 brand mark 추가: 이미지 생성 툴로 만든 `frontend/public/brand-mark.png`를 favicon과 desktop sidebar 상단 아이콘에 연결
+- [x] 반복결제 dry-run 승인 흐름 frontend 연결: `/operations/recurring-classification`에서 후보 근거/매칭 거래/apply scope를 확인하고 그룹 단위로 승인 적용
+- [x] P1 advisor/operations batch 구현: discretionary velocity, purchase gate candidates/review state, recurring dry-run apply scope, bulk delete/restore, asset liquidity/loan repayment metadata, `vw_asset_snapshot_canonical`과 관련 frontend 연결
+- [x] P2 제외 구현 batch hardening: 구매 게이트 frontend/backend contract 정렬, same-date snapshot 재업로드 시 자산/대출 사용자 메타데이터 보존, 최신 asset row만 편집 UI에 노출, `liquidity_tier='immediate'` cash-equivalent 의미 정렬, bulk delete undo와 preview 대상 고정, topbar/redirect/bulk 회귀 테스트 보강
+- [x] 검증 완료: backend 전체 pytest 134 passed, backend ruff, frontend vitest 109 passed, frontend lint/typecheck, Codex 인앱 브라우저 local smoke(`/spending`, `/assets`, `/data`, insights, recurring classification, workbench)
 - [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
@@ -54,32 +58,13 @@
 
 ## In Progress
 
-- [ ] Advisor canonical read model expansion
-  - 현재 상태: P0/P1 analytics endpoint와 P0/P0.5/P1 canonical DB view 6종은 live.
-  - 완료: 지출 `spend_necessity` 축, `vw_recurring_merchant_monthly`, 유동성/부채 health read surface.
-  - 다음 구현 후보: discretionary spending velocity, purchase gate candidates, 반복분류 dry-run/승인 흐름, `vw_asset_snapshot_canonical`.
-  - 주의: 대출 연결 거래는 일반 소비 breakdown과 분리하고, 월별 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total`을 함께 노출해야 한다.
-  - 투자 성과/배분/수익률은 증권사 API 이후 P2로 미룬다. 자산이동/이체 tracking도 우선순위 최후순위다.
-- [ ] Operations/data-management follow-up
-  - bulk delete / bulk restore API 및 frontend 연결.
-- [ ] Frontend follow-up
-  - Settings page는 실제 사용자 기능으로 구현.
-  - Token Lab은 개발/리뷰용 도구로만 유지.
-  - 운영 배포본 기준 smoke capture와 redirect(`/spending`, `/assets`, `/data`) 및 `/operations/canonical-views` 브라우저 확인.
-- [ ] Asset/liability health follow-up
-  - `net-worth-breakdown`, `liquidity-health` 1차 API와 화면 노출은 완료.
-  - 후속: cash-equivalent/liquidity tier 사용자 검토 UI와 대출별 `monthly_payment` 출처 보강.
-- [ ] Frontend v2 full reimplementation
-  - `feat/frontend-v2` 브랜치 기준 Task 1-6 완료 상태였으나 현재는 보류.
-  - 현재 main frontend 개선을 우선한다.
+- 없음. P2 제외 구현 batch는 local regression과 browser smoke까지 완료했다.
 
 ## Next Up
 
-1. discretionary spending velocity API/settings contract 설계 및 frontend 노출. 기본값은 최근 6개 마감월 baseline, `warning=1.2x`, `high=1.5x`, 최소 분류 커버리지 `0.7`.
-2. purchase gate candidate API와 review UI 설계. 기본값은 큰 지출 `100,000원`, 새 거래처 lookback 6개월, cooldown 14일.
-3. 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 쓰는 dry-run/승인 흐름 설계.
-4. cash-equivalent/liquidity tier와 대출 `monthly_payment` 사용자 보강 UI.
-5. bulk delete/restore 등 operations 후속. 투자 분석과 자산이동/이체 tracking은 P2 뒤쪽으로 보류.
+1. P2 범위로 남긴 항목만 재개한다: Settings page, frontend v2 full reimplementation, 투자 분석, 자산이동/이체 tracking.
+2. 운영 배포본 screenshot capture는 별도 환경 검증 항목으로만 남긴다. local DOM smoke와 console error 확인은 완료했다.
+3. 구매 게이트 별도 review 화면이 필요해지면 `memo`/`reviewed_at`/`cooldown_until` 같은 확장 상태를 그때 추가한다.
 
 ## Key Decisions
 
@@ -104,6 +89,8 @@
 - 2026-05-30: 현재 구현된 canonical/API surface에서도 `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`은 최종 재무 조언이 아니라 계산/후보/데이터 품질 신호로 해석한다. 에이전트가 안정/위험/구매 가능 label을 붙이면 자체 가정과 사용자 맥락 기반 해석임을 밝혀야 한다.
 - 2026-05-30: `description_user` / `effective_description`은 구현하지 않는다. 원본 설명은 `description`, 분석/집계용 거래처명은 `merchant`, 사용자 부가 설명은 `memo`로 충분하다고 본다.
 - 2026-05-30: 다음 advisor 기능 기본값은 보수적으로 시작하고 settings로 조정 가능하게 한다. 재량 지출 속도는 최근 6개 마감월 baseline, `1.2x/1.5x`, coverage `0.7`; 구매 게이트는 100,000원, 새 거래처 6개월, cooldown 14일; 반복결제 dry-run 자동 적용은 기본 OFF다.
+- 2026-05-30: 반복결제 dry-run 기본 적용 범위는 실제 기존 row를 바꾸는 `all_matching`으로 둔다. `future_only`는 별도 future-rule 저장 모델이 생기기 전까지 기존 거래를 변경하지 않는 명시적 no-op 선택지다.
+- 2026-05-30: same-date snapshot 재업로드는 파싱 row를 교체하되, 같은 안정 row identity의 `asset_snapshots.liquidity_tier` / `is_cash_equivalent`와 `loans.monthly_payment` / `repayment_method` 사용자 확인값은 보존한다.
 - 2026-05-30: 투자 분석은 증권사 API 이후, 자산이동/이체 tracking은 최후순위 P2로 미룬다.
 - 2026-05-25: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다.
 - 2026-05-25: 반복결제의 `할부` / `매월 반복` 구분은 거래 단위 nullable `transactions.recurring_payment_kind`로 먼저 저장하고, 별도 `/operations/recurring-classification` 화면에서 관리한다.
@@ -113,7 +100,7 @@
 ## Known Issues
 
 - 거래처 정규화는 alias rule을 적용한 이후부터 품질이 좋아진다. 기존 raw `merchant` 표기는 사용자가 규칙을 적용하기 전까지 남아 있을 수 있다. 이미 `merchant != description`인 row는 자동 정규화가 덮어쓰지 않는다.
-- `asset_snapshots`의 현금성 분류 기준은 컬럼은 생겼지만 기존 데이터에는 비어 있을 수 있어, 초기 emergency fund 계산은 service heuristic과 assumptions에 의존한다.
+- `asset_snapshots`의 현금성 분류 기준이 비어 있는 기존 데이터는 초기 emergency fund 계산에서 service heuristic과 assumptions에 의존한다. 사용자가 `immediate` / `near_liquid` / `illiquid`와 cash-equivalent를 저장하면 해당 값이 우선한다.
 - `loans.monthly_payment` 컬럼은 생겼지만 기존 데이터에는 비어 있을 수 있어 debt burden은 사용자 보강 전까지 낮은 confidence가 될 수 있다.
 - 현재 실데이터 기준 대출원금상환은 raw `type='이체'`가 아니라 `type='지출'`, `category_major='금융'`에 섞여 있다. transfer tracking 구현은 expense-side 재분류를 반드시 포함해야 한다.
 - 대출상환은 사용자 의도상 고정비 지출로도 해석될 수 있으므로 MVP에서는 raw `지출`을 `이체`로 바꾸지 않는다. 별도 transfer/debt movement slice는 파생 레이어로만 제공한다.

@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
-import type { CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery } from '../types/analytics'
+import type {
+  CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
+  DiscretionaryVelocityQuery, PurchaseGateCandidatesQuery,
+} from '../types/analytics'
 
 export function useMonthlyCashflow(months = 6) {
   return useQuery({
@@ -57,5 +60,19 @@ export function useSpendingAnomalies(params: SpendingAnomaliesQuery = {}) {
   return useQuery({
     queryKey: ['analytics', 'spendingAnomalies', params],
     queryFn: () => analyticsApi.spendingAnomalies(params),
+  })
+}
+
+export function useDiscretionaryVelocity(params: DiscretionaryVelocityQuery = {}) {
+  return useQuery({
+    queryKey: ['analytics', 'discretionaryVelocity', params],
+    queryFn: () => analyticsApi.discretionaryVelocity(params),
+  })
+}
+
+export function usePurchaseGateCandidates(params: PurchaseGateCandidatesQuery = { status: 'pending', limit: 5 }) {
+  return useQuery({
+    queryKey: ['analytics', 'purchaseGateCandidates', params],
+    queryFn: () => analyticsApi.purchaseGateCandidates(params),
   })
 }

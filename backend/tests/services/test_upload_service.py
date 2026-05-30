@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 
@@ -189,6 +190,26 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
     )
     assert first_result.status == "success"
 
+    existing_asset = await db_session.scalar(
+        select(AssetSnapshot)
+        .where(AssetSnapshot.snapshot_date == date(2026, 3, 24))
+        .where(AssetSnapshot.side == "asset")
+        .where(AssetSnapshot.product_name == "KB국민ONE통장-저축예금")
+    )
+    existing_loan = await db_session.scalar(
+        select(Loan)
+        .where(Loan.snapshot_date == date(2026, 3, 24))
+        .limit(1)
+    )
+    assert existing_asset is not None
+    assert existing_loan is not None
+    existing_asset.liquidity_tier = "immediate"
+    existing_asset.is_cash_equivalent = True
+    existing_loan.monthly_payment = Decimal("650000.00")
+    existing_loan.repayment_method = "principal_interest"
+    existing_loan_key = (existing_loan.lender, existing_loan.product_name)
+    await db_session.commit()
+
     workbook = load_workbook(BytesIO(sample_workbook_bytes), data_only=True)
     worksheet = workbook["뱅샐현황"]
     asset_row_index = next(
@@ -216,12 +237,30 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
         .where(AssetSnapshot.side == "asset")
         .where(AssetSnapshot.product_name == "KB국민ONE통장-저축예금")
     )
+    replaced_asset = await db_session.scalar(
+        select(AssetSnapshot)
+        .where(AssetSnapshot.snapshot_date == date(2026, 3, 24))
+        .where(AssetSnapshot.side == "asset")
+        .where(AssetSnapshot.product_name == "KB국민ONE통장-저축예금")
+    )
+    replaced_loan = await db_session.scalar(
+        select(Loan)
+        .where(Loan.snapshot_date == date(2026, 3, 24))
+        .where(Loan.lender == existing_loan_key[0])
+        .where(Loan.product_name == existing_loan_key[1])
+    )
 
     assert second_result.tx_new == 0
     assert second_result.asset_snapshot_count == 42
     assert second_result.status == "success"
     assert asset_snapshot_count == 42
     assert first_asset_amount == 123456789
+    assert replaced_asset is not None
+    assert replaced_asset.liquidity_tier == "immediate"
+    assert replaced_asset.is_cash_equivalent is True
+    assert replaced_loan is not None
+    assert replaced_loan.monthly_payment == Decimal("650000.00")
+    assert replaced_loan.repayment_method == "principal_interest"
 
 
 async def test_import_transactions_reconciles_window_and_keeps_history_outside_latest_range(

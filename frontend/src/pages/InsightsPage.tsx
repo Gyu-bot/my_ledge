@@ -9,10 +9,15 @@ import {
   useMonthlyCashflow, useIncomeStability,
   useRecurringPayments, useSpendingAnomalies,
   useMerchantSpend, useCategoryMoM,
+  useDiscretionaryVelocity, usePurchaseGateCandidates,
 } from '../hooks/useAnalytics'
 import { useChromeContext } from '../components/layout/chromeContext'
 import { formatKRW, formatKRWCompact, formatPct } from '../lib/utils'
-import type { RecurringPaymentItem } from '../types/analytics'
+import type {
+  AnalyticsRiskLevel,
+  PurchaseGateCandidateItem,
+  RecurringPaymentItem,
+} from '../types/analytics'
 
 interface InsightItem {
   icon: string
@@ -44,6 +49,26 @@ function recurringKindSummary(item: RecurringPaymentItem) {
   ].filter(Boolean).join(' · ')
 }
 
+function riskLabel(value: AnalyticsRiskLevel) {
+  if (value === 'high' || value === 'critical') return '높음'
+  if (value === 'warning') return '주의'
+  if (value === 'watch') return '관찰'
+  return '낮음'
+}
+
+function riskBadgeClass(value: AnalyticsRiskLevel) {
+  if (value === 'high' || value === 'critical') return VARIANT_BADGE.danger
+  if (value === 'warning' || value === 'watch') return VARIANT_BADGE.warn
+  return VARIANT_BADGE.ok
+}
+
+function purchaseGateTypeLabel(value: PurchaseGateCandidateItem['candidate_type']) {
+  if (value === 'large_oneoff') return '큰 일회성'
+  if (value === 'new_merchant') return '신규 거래처'
+  if (value === 'merchant_spike') return '거래처 급증'
+  return '재량 급증'
+}
+
 export function InsightsPage() {
   const cashflow = useMonthlyCashflow(6)
   const incomeStability = useIncomeStability()
@@ -66,6 +91,8 @@ export function InsightsPage() {
       ? { page: anomalyPage, per_page: 10, end_date: partialEndDate }
       : { page: anomalyPage, per_page: 10 },
   )
+  const discretionaryVelocity = useDiscretionaryVelocity({ as_of_date: partialEndDate })
+  const purchaseGateCandidates = usePurchaseGateCandidates({ status: 'pending', limit: 5 })
   const merchants = useMerchantSpend({ months: merchantMonths, limit: 5 })
   const categoryMoM = useCategoryMoM({
     start_month: allMonths[Math.max(0, allMonths.indexOf(categoryBaseMonth) - 1)],
@@ -139,6 +166,104 @@ export function InsightsPage() {
           </div>
         )}
       </SectionCard>
+
+      {/* Advisor 후보 신호 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <SectionCard title="재량 지출 속도" meta="조용한 참고 신호">
+          {discretionaryVelocity.isLoading ? <LoadingState /> :
+           discretionaryVelocity.data ? (
+             <div className="flex flex-col gap-3">
+               <div className="flex items-start justify-between gap-3">
+                 <div>
+                   <div className="text-kpi font-bold text-text-primary">
+                     {discretionaryVelocity.data.velocity_ratio == null
+                       ? '—'
+                       : `${discretionaryVelocity.data.velocity_ratio.toFixed(2)}x`}
+                   </div>
+                   <div className="text-caption text-text-faint">
+                     {discretionaryVelocity.data.period} · {discretionaryVelocity.data.as_of_date} 기준
+                   </div>
+                 </div>
+                 <span className={`text-nano px-1.5 py-0.5 rounded shrink-0 ${riskBadgeClass(discretionaryVelocity.data.risk_level)}`}>
+                   {riskLabel(discretionaryVelocity.data.risk_level)}
+                 </span>
+               </div>
+               <div className="grid grid-cols-2 gap-2 text-caption">
+                 <div className="bg-surface-bar border border-border rounded p-2">
+                   <div className="text-micro text-text-ghost mb-1">현재 재량 지출</div>
+                   <div className="font-semibold text-text-primary">₩ {formatKRW(discretionaryVelocity.data.discretionary_spend)}</div>
+                 </div>
+                 <div className="bg-surface-bar border border-border rounded p-2">
+                   <div className="text-micro text-text-ghost mb-1">진행률 기준선</div>
+                   <div className="font-semibold text-text-primary">₩ {formatKRW(discretionaryVelocity.data.baseline_spend_at_same_progress)}</div>
+                 </div>
+               </div>
+               <div className="flex flex-wrap gap-2 text-micro text-text-muted">
+                 <span className="bg-surface-bar border border-border-subtle rounded-full px-2 py-0.5">
+                   월 진행률 {formatPct(discretionaryVelocity.data.month_progress_ratio * 100)}
+                 </span>
+                 <span className="bg-surface-bar border border-border-subtle rounded-full px-2 py-0.5">
+                   분류 커버리지 {formatPct(discretionaryVelocity.data.classification_coverage_ratio * 100)}
+                 </span>
+                 <span className="bg-surface-bar border border-border-subtle rounded-full px-2 py-0.5">
+                   confidence {formatPct(discretionaryVelocity.data.confidence * 100)}
+                 </span>
+               </div>
+               {discretionaryVelocity.data.reasons[0] && (
+                 <div className="text-caption text-text-faint leading-relaxed">
+                   {discretionaryVelocity.data.reasons[0]}
+                 </div>
+               )}
+             </div>
+           ) : <EmptyState message="재량 지출 속도 데이터가 없습니다" />}
+        </SectionCard>
+
+        <SectionCard
+          title="구매 게이트 후보"
+          meta={`${purchaseGateCandidates.data?.total ?? 0}건`}
+          description="리뷰 후보만 표시하며 최종 구매 판단은 에이전트와 사용자 맥락에 맡깁니다."
+        >
+          {purchaseGateCandidates.isLoading ? <LoadingState /> :
+           purchaseGateCandidates.data && purchaseGateCandidates.data.items.length > 0 ? (
+             <div className="flex flex-col divide-y divide-border-subtle">
+               {purchaseGateCandidates.data.items.map((item) => {
+                 const signals = Object.entries(item.signals).slice(0, 2)
+                 return (
+                 <div key={item.candidate_key} className="py-2 first:pt-0 last:pb-0">
+                   <div className="flex items-start justify-between gap-3">
+                     <div className="min-w-0">
+                       <div className="text-caption font-semibold text-text-primary truncate">
+                         {item.merchant || `거래 #${item.transaction_id}`}
+                       </div>
+                       <div className="text-micro text-text-faint mt-0.5">
+                         {item.date} · ₩ {formatKRW(item.amount)}
+                       </div>
+                     </div>
+                     <span className={`text-nano px-1.5 py-0.5 rounded shrink-0 ${riskBadgeClass(item.risk_level)}`}>
+                       {riskLabel(item.risk_level)}
+                     </span>
+                   </div>
+                   <div className="flex flex-wrap gap-1.5 mt-2">
+                     <span className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
+                       {purchaseGateTypeLabel(item.candidate_type)}
+                     </span>
+                     <span className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
+                       리뷰 후보
+                     </span>
+                     {signals.map(([key, value]) => (
+                       <span key={key} className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
+                         {key}: {String(value)}
+                       </span>
+                     ))}
+                   </div>
+                   {item.reasons[0] && <div className="text-micro text-text-faint mt-2">{item.reasons[0]}</div>}
+                 </div>
+                 )
+               })}
+             </div>
+           ) : <EmptyState message="리뷰할 구매 게이트 후보가 없습니다" />}
+        </SectionCard>
+      </div>
 
       {/* 반복 결제 + 이상 지출 */}
       <div className="grid md:grid-cols-2 gap-4">

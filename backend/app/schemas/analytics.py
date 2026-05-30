@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -153,3 +154,66 @@ class SpendingAnomaliesResponse(BaseModel):
     reference_date: date
     is_partial_period: bool
     assumptions: str
+
+
+class DiscretionaryVelocityResponse(BaseModel):
+    period: str
+    as_of_date: date
+    month_progress_ratio: float
+    discretionary_spend: int
+    baseline_monthly_spend: int
+    baseline_spend_at_same_progress: int
+    velocity_ratio: float | None
+    risk_level: str
+    confidence: str
+    classification_coverage_ratio: float | None
+    unclassified_spend: int
+    income_basis: str | None
+    reasons: list[str]
+    assumptions: list[str]
+
+
+class PurchaseGateCandidateItem(BaseModel):
+    candidate_type: str
+    transaction_id: int
+    candidate_key: str
+    date: date
+    merchant: str
+    amount: int
+    category: str
+    signals: dict[str, int | float | str | bool]
+    risk_level: str
+    review_priority: str
+    confidence: str
+    suggested_review_window: str
+    reasons: list[str]
+    assumptions: list[str]
+    review_status: str
+
+
+class PurchaseGateCandidatesResponse(BaseModel):
+    total: int
+    page: int
+    per_page: int
+    items: list[PurchaseGateCandidateItem]
+    assumptions: list[str]
+
+
+PurchaseGateReviewStatus = Literal[
+    "pending",
+    "reviewed",
+    "ignored",
+    "snoozed",
+    "dismissed",
+]
+
+
+class PurchaseGateReviewPatchRequest(BaseModel):
+    review_status: PurchaseGateReviewStatus
+
+
+class PurchaseGateReviewResponse(BaseModel):
+    candidate_key: str
+    candidate_type: str
+    transaction_id: int
+    review_status: PurchaseGateReviewStatus

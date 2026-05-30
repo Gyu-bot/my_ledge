@@ -4,30 +4,41 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.security import require_api_key
 from app.schemas.analytics import (
     CategoryMoMResponse,
+    DiscretionaryVelocityResponse,
     FixedCostSummaryResponse,
     FixedCostTrendResponse,
     IncomeStabilityResponse,
     MerchantSpendResponse,
     MonthlyCashflowResponse,
     PaymentMethodPatternsResponse,
+    PurchaseGateCandidatesResponse,
+    PurchaseGateReviewPatchRequest,
+    PurchaseGateReviewResponse,
     RecurringPaymentsResponse,
     SpendingAnomaliesResponse,
 )
 from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
 from app.services.analytics_service import (
     get_category_mom,
+    get_discretionary_velocity,
     get_fixed_cost_summary,
     get_fixed_cost_trend,
     get_income_stability,
     get_merchant_spend,
     get_monthly_cashflow,
     get_payment_method_patterns,
+    get_purchase_gate_candidates,
     get_recurring_payments,
     get_spending_anomalies,
+    update_purchase_gate_candidate_review,
 )
-from app.services.settings_service import resolve_spending_anomalies_settings
+from app.services.settings_service import (
+    get_analytics_settings,
+    resolve_spending_anomalies_settings,
+)
 
 router = APIRouter()
 
@@ -178,4 +189,61 @@ async def get_analytics_spending_anomalies(
         min_delta_amount=resolved_settings.min_delta_amount,
         page=page,
         per_page=per_page,
+    )
+
+
+@router.get(
+    "/analytics/discretionary-velocity",
+    response_model=DiscretionaryVelocityResponse,
+)
+async def get_analytics_discretionary_velocity(
+    as_of_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> DiscretionaryVelocityResponse:
+    settings = await get_analytics_settings(db_session)
+    return await get_discretionary_velocity(
+        db_session,
+        as_of_date=as_of_date,
+        settings=settings.effective.discretionary_velocity,
+    )
+
+
+@router.get(
+    "/analytics/purchase-gate-candidates",
+    response_model=PurchaseGateCandidatesResponse,
+)
+async def get_analytics_purchase_gate_candidates(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    review_status: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=10, ge=1, le=100),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> PurchaseGateCandidatesResponse:
+    settings = await get_analytics_settings(db_session)
+    return await get_purchase_gate_candidates(
+        db_session,
+        start_date=start_date,
+        end_date=end_date,
+        settings=settings.effective.purchase_gate,
+        review_status=review_status,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.patch(
+    "/analytics/purchase-gate-candidates/{candidate_key}/review",
+    response_model=PurchaseGateReviewResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_analytics_purchase_gate_candidate_review(
+    candidate_key: str,
+    payload: PurchaseGateReviewPatchRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> PurchaseGateReviewResponse:
+    return await update_purchase_gate_candidate_review(
+        db_session,
+        candidate_key=candidate_key,
+        payload=payload,
     )

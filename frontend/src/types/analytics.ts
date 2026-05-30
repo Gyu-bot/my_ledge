@@ -145,3 +145,70 @@ export interface SpendingAnomaliesQuery {
   per_page?: number
   end_date?: string
 }
+
+export type AnalyticsRiskLevel = 'low' | 'watch' | 'warning' | 'high' | 'critical'
+
+export interface DiscretionaryVelocityResponse {
+  period: string
+  as_of_date: string
+  month_progress_ratio: number
+  discretionary_spend: number
+  baseline_spend_at_same_progress: number
+  velocity_ratio: number | null
+  risk_level: AnalyticsRiskLevel
+  review_priority?: number | null
+  confidence: number
+  reasons: string[]
+  assumptions: string[]
+  unclassified_spend: number
+  classification_coverage_ratio: number
+  income_basis?: 'observed' | 'estimated' | string | null
+}
+
+export interface DiscretionaryVelocityQuery {
+  as_of_date?: string
+}
+
+export type PurchaseGateCandidateType =
+  | 'large_oneoff'
+  | 'new_merchant'
+  | 'merchant_spike'
+  | 'discretionary_spike'
+
+export type PurchaseGateCandidateStatus =
+  | 'pending'
+  | 'reviewed'
+  | 'ignored'
+  | 'snoozed'
+  | 'dismissed'
+
+export interface PurchaseGateCandidateItem {
+  candidate_type: PurchaseGateCandidateType
+  transaction_id: number
+  candidate_key: string
+  date: string
+  merchant: string
+  amount: number
+  category: string
+  signals: Record<string, number | string | boolean>
+  risk_level: AnalyticsRiskLevel
+  review_priority: string
+  confidence: string
+  suggested_review_window: string
+  review_status: PurchaseGateCandidateStatus
+  reasons: string[]
+  assumptions: string[]
+}
+
+export interface PurchaseGateCandidatesResponse {
+  total: number
+  page: number
+  per_page: number
+  items: PurchaseGateCandidateItem[]
+  assumptions: string[]
+}
+
+export interface PurchaseGateCandidatesQuery {
+  status?: PurchaseGateCandidateStatus
+  limit?: number
+}

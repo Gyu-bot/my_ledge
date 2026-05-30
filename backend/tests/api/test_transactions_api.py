@@ -646,6 +646,87 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert stored.is_deleted is False
 
 
+async def test_bulk_delete_and_restore_preview_and_execute_soft_delete_rows(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    rows = [
+        _transaction(
+            tx_date=date(2026, 3, 10),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="식비",
+            category_minor="외식",
+            description="점심",
+            merchant="식당",
+            amount=-12000,
+            payment_method="카드",
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 11),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="생활",
+            category_minor="쇼핑",
+            description="쇼핑",
+            merchant="마트",
+            amount=-30000,
+            payment_method="카드",
+        ),
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+    ids = [row.id for row in rows]
+
+    preview = await async_client.post(
+        "/api/v1/transactions/bulk-delete/preview",
+        headers=api_headers,
+        json={"ids": ids},
+    )
+    assert preview.status_code == 200
+    assert preview.json() == {
+        "count": 2,
+        "period_start": "2026-03-10",
+        "period_end": "2026-03-11",
+        "expense_total": 42000,
+        "representative_merchants": ["마트", "식당"],
+    }
+
+    deleted = await async_client.post(
+        "/api/v1/transactions/bulk-delete",
+        headers=api_headers,
+        json={"ids": ids},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["updated"] == 2
+    assert deleted.json()["preview"]["count"] == 2
+    stored_rows = (
+        await db_session.execute(select(Transaction).where(Transaction.id.in_(ids)))
+    ).scalars().all()
+    assert {row.is_deleted for row in stored_rows} == {True}
+
+    restore_preview = await async_client.post(
+        "/api/v1/transactions/bulk-restore/preview",
+        headers=api_headers,
+        json={"ids": ids},
+    )
+    assert restore_preview.status_code == 200
+    assert restore_preview.json()["count"] == 2
+
+    restored = await async_client.post(
+        "/api/v1/transactions/bulk-restore",
+        headers=api_headers,
+        json={"ids": ids},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["updated"] == 2
+    stored_rows = (
+        await db_session.execute(select(Transaction).where(Transaction.id.in_(ids)))
+    ).scalars().all()
+    assert {row.is_deleted for row in stored_rows} == {False}
+
+
 async def test_merge_endpoint_returns_501(
     async_client: AsyncClient,
     api_headers: dict[str, str],

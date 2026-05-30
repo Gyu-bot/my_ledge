@@ -2,7 +2,9 @@ from enum import StrEnum
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class AssetSnapshotTotalsResponse(BaseModel):
@@ -43,8 +45,25 @@ class AssetLiabilityHealthResponse(BaseModel):
     assumptions: list[str]
 
 
+class AssetLiquidityPatchRequest(BaseModel):
+    liquidity_tier: Literal["immediate", "near_liquid", "illiquid"] | None = None
+    is_cash_equivalent: bool | None = None
+
+
+class AssetSnapshotItemResponse(BaseModel):
+    id: int
+    snapshot_date: date
+    side: str
+    category: str
+    product_name: str
+    amount: Decimal
+    liquidity_tier: str | None
+    is_cash_equivalent: bool | None
+
+
 class AssetSnapshotsResponse(BaseModel):
     items: list[AssetSnapshotTotalsResponse]
+    asset_items: list[AssetSnapshotItemResponse] = Field(default_factory=list)
 
 
 class SnapshotComparisonMode(StrEnum):
@@ -104,14 +123,36 @@ class InvestmentSummaryResponse(BaseModel):
 
 
 class LoanItemResponse(BaseModel):
+    id: int | None = None
     loan_type: str | None
     lender: str
     product_name: str
     principal: Decimal | None
     balance: Decimal | None
     interest_rate: Decimal | None
+    monthly_payment: Decimal | None = None
+    repayment_method: str | None = None
     start_date: date | None
     maturity_date: date | None
+
+
+class LoanRepaymentMetadataPatchRequest(BaseModel):
+    monthly_payment: Decimal | None = Field(default=None, ge=0)
+    repayment_method: Literal[
+        "principal_interest",
+        "principal_equal",
+        "interest_only",
+        "unknown",
+    ] | None = None
+
+
+class LoanRepaymentMetadataResponse(BaseModel):
+    id: int
+    snapshot_date: date
+    lender: str
+    product_name: str
+    monthly_payment: Decimal | None
+    repayment_method: str | None
 
 
 class LoanTotalsResponse(BaseModel):

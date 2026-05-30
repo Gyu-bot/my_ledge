@@ -4,6 +4,8 @@ import type {
   MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse, FixedCostTrendResponse,
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
   SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
+  DiscretionaryVelocityResponse, DiscretionaryVelocityQuery,
+  PurchaseGateCandidatesResponse, PurchaseGateCandidatesQuery,
 } from '../types/analytics'
 
 function buildQuery(params: object): string {
@@ -73,4 +75,16 @@ export const analyticsApi = {
 
   spendingAnomalies: (params: SpendingAnomaliesQuery = {}) =>
     apiFetch<SpendingAnomaliesResponse>(`/analytics/spending-anomalies${buildQuery(params)}`),
+
+  discretionaryVelocity: (params: DiscretionaryVelocityQuery = {}) =>
+    apiFetch<DiscretionaryVelocityResponse>(`/analytics/discretionary-velocity${buildQuery(params)}`),
+
+  purchaseGateCandidates: (params: PurchaseGateCandidatesQuery = {}) => {
+    const { status, limit, ...rest } = params
+    return apiFetch<PurchaseGateCandidatesResponse>(`/analytics/purchase-gate-candidates${buildQuery({
+      ...rest,
+      review_status: status,
+      per_page: limit,
+    })}`)
+  },
 }

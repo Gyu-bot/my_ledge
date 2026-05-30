@@ -140,6 +140,23 @@ class TransactionBulkUpdateResponse(BaseModel):
     updated: int
 
 
+class TransactionBulkMutationRequest(BaseModel):
+    ids: list[int] = Field(min_length=1)
+
+
+class TransactionBulkMutationPreview(BaseModel):
+    count: int
+    period_start: date | None
+    period_end: date | None
+    expense_total: int
+    representative_merchants: list[str]
+
+
+class TransactionBulkMutationResponse(BaseModel):
+    updated: int
+    preview: TransactionBulkMutationPreview
+
+
 class MergeTargetRequest(BaseModel):
     date: date
     time: time

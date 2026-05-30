@@ -2,6 +2,7 @@ import calendar
 from datetime import date
 from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,11 +14,15 @@ from app.schemas.asset import (
     AssetSnapshotComparisonDeltaResponse,
     AssetSnapshotComparisonResponse,
     AssetLiabilityHealthResponse,
+    AssetLiquidityPatchRequest,
+    AssetSnapshotItemResponse,
     AssetSnapshotsResponse,
     InvestmentItemResponse,
     InvestmentSummaryResponse,
     InvestmentTotalsResponse,
     LoanItemResponse,
+    LoanRepaymentMetadataPatchRequest,
+    LoanRepaymentMetadataResponse,
     LoanSummaryResponse,
     LoanTotalsResponse,
     NetWorthHistoryResponse,
@@ -30,7 +35,8 @@ from app.schemas.asset import (
 
 async def list_asset_snapshots(db_session: AsyncSession) -> AssetSnapshotsResponse:
     items = await _load_asset_snapshot_totals(db_session)
-    return AssetSnapshotsResponse(items=items)
+    asset_items = await _load_asset_snapshot_items(db_session)
+    return AssetSnapshotsResponse(items=items, asset_items=asset_items)
 
 
 async def get_asset_snapshot_comparison(
@@ -128,6 +134,28 @@ async def _load_asset_snapshot_totals(db_session: AsyncSession) -> list[AssetSna
             )
         )
     return items
+
+
+async def _load_asset_snapshot_items(db_session: AsyncSession) -> list[AssetSnapshotItemResponse]:
+    latest_snapshot_date = await db_session.scalar(
+        select(func.max(AssetSnapshot.snapshot_date)).where(AssetSnapshot.side == "asset")
+    )
+    if latest_snapshot_date is None:
+        return []
+    result = await db_session.execute(
+        select(AssetSnapshot)
+        .where(AssetSnapshot.side == "asset")
+        .where(AssetSnapshot.snapshot_date == latest_snapshot_date)
+        .order_by(
+            AssetSnapshot.category.asc(),
+            AssetSnapshot.product_name.asc(),
+            AssetSnapshot.id.asc(),
+        )
+    )
+    return [
+        AssetSnapshotItemResponse.model_validate(row, from_attributes=True)
+        for row in result.scalars()
+    ]
 
 
 async def get_net_worth_history(db_session: AsyncSession) -> NetWorthHistoryResponse:
@@ -264,6 +292,44 @@ async def get_asset_liability_health(
         confidence=confidence,
         assumptions=assumptions,
     )
+
+
+async def patch_asset_liquidity(
+    db_session: AsyncSession,
+    asset_snapshot_id: int,
+    payload: AssetLiquidityPatchRequest,
+) -> AssetSnapshotItemResponse:
+    asset = await db_session.get(AssetSnapshot, asset_snapshot_id)
+    if asset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset snapshot not found.",
+        )
+    update_fields = payload.model_dump(exclude_unset=True)
+    for field, value in update_fields.items():
+        setattr(asset, field, value)
+    await db_session.commit()
+    await db_session.refresh(asset)
+    return AssetSnapshotItemResponse.model_validate(asset, from_attributes=True)
+
+
+async def patch_loan_repayment_metadata(
+    db_session: AsyncSession,
+    loan_id: int,
+    payload: LoanRepaymentMetadataPatchRequest,
+) -> LoanRepaymentMetadataResponse:
+    loan = await db_session.get(Loan, loan_id)
+    if loan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Loan snapshot not found.",
+        )
+    update_fields = payload.model_dump(exclude_unset=True)
+    for field, value in update_fields.items():
+        setattr(loan, field, value)
+    await db_session.commit()
+    await db_session.refresh(loan)
+    return LoanRepaymentMetadataResponse.model_validate(loan, from_attributes=True)
 
 
 async def get_investment_summary(
@@ -422,9 +488,9 @@ def _safe_ratio(numerator: Decimal, denominator: Decimal) -> float | None:
 def _is_cash_equivalent_asset(asset: AssetSnapshot) -> bool:
     if asset.is_cash_equivalent is not None:
         return asset.is_cash_equivalent
-    if asset.liquidity_tier in {"cash", "cash_equivalent"}:
+    if asset.liquidity_tier in {"cash", "cash_equivalent", "immediate"}:
         return True
-    if asset.liquidity_tier in {"locked", "illiquid"}:
+    if asset.liquidity_tier in {"near_liquid", "locked", "illiquid"}:
         return False
     text = f"{asset.category} {asset.product_name}".casefold()
     cash_markers = ("현금", "예금", "입출금", "cma", "파킹", "보통예금")

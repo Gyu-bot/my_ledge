@@ -7,6 +7,18 @@ function findRoute(path: string) {
 }
 
 describe('legacy route fallbacks', () => {
+  it.each([
+    ['/spending', '/analysis/spending'],
+    ['/assets', '/analysis/assets'],
+    ['/data', '/operations/workbench'],
+  ])('defines an explicit %s redirect', (path, destination) => {
+    const route = findRoute(path)
+
+    expect(route).toBeDefined()
+    expect(isValidElement(route?.element)).toBe(true)
+    expect((route?.element as { props?: { to?: string } }).props?.to).toBe(destination)
+  })
+
   it('defines an explicit /income redirect to overview', () => {
     const route = findRoute('/income')
 

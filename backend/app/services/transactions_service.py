@@ -17,6 +17,9 @@ from app.schemas.transaction import (
     PaymentMethodSummaryResponse,
     TransactionBulkUpdateRequest,
     TransactionBulkUpdateResponse,
+    TransactionBulkMutationPreview,
+    TransactionBulkMutationRequest,
+    TransactionBulkMutationResponse,
     TransactionCreateRequest,
     TransactionFilterOptionsResponse,
     TransactionGroupBy,
@@ -377,6 +380,52 @@ async def restore_transaction(
     return _serialize_transaction_model(transaction)
 
 
+async def preview_bulk_transaction_mutation(
+    db_session: AsyncSession,
+    payload: TransactionBulkMutationRequest,
+    *,
+    target_deleted_state: bool,
+) -> TransactionBulkMutationPreview:
+    transactions = await _load_bulk_mutation_targets(
+        db_session,
+        payload,
+        target_deleted_state=target_deleted_state,
+    )
+    return _build_bulk_mutation_preview(transactions)
+
+
+async def bulk_delete_transactions(
+    db_session: AsyncSession,
+    payload: TransactionBulkMutationRequest,
+) -> TransactionBulkMutationResponse:
+    transactions = await _load_bulk_mutation_targets(
+        db_session,
+        payload,
+        target_deleted_state=True,
+    )
+    preview = _build_bulk_mutation_preview(transactions)
+    for transaction in transactions:
+        transaction.is_deleted = True
+    await db_session.commit()
+    return TransactionBulkMutationResponse(updated=len(transactions), preview=preview)
+
+
+async def bulk_restore_transactions(
+    db_session: AsyncSession,
+    payload: TransactionBulkMutationRequest,
+) -> TransactionBulkMutationResponse:
+    transactions = await _load_bulk_mutation_targets(
+        db_session,
+        payload,
+        target_deleted_state=False,
+    )
+    preview = _build_bulk_mutation_preview(transactions)
+    for transaction in transactions:
+        transaction.is_deleted = False
+    await db_session.commit()
+    return TransactionBulkMutationResponse(updated=len(transactions), preview=preview)
+
+
 async def bulk_update_transactions(
     db_session: AsyncSession,
     payload: TransactionBulkUpdateRequest,
@@ -425,6 +474,54 @@ async def bulk_update_transactions(
             setattr(transaction, field, value)
     await db_session.commit()
     return TransactionBulkUpdateResponse(updated=len(transactions))
+
+
+async def _load_bulk_mutation_targets(
+    db_session: AsyncSession,
+    payload: TransactionBulkMutationRequest,
+    *,
+    target_deleted_state: bool,
+) -> list[Transaction]:
+    result = await db_session.execute(
+        select(Transaction)
+        .where(Transaction.id.in_(payload.ids))
+        .where(Transaction.is_deleted.is_(not target_deleted_state))
+        .order_by(Transaction.date.asc(), Transaction.time.asc(), Transaction.id.asc())
+    )
+    return list(result.scalars().all())
+
+
+def _build_bulk_mutation_preview(
+    transactions: list[Transaction],
+) -> TransactionBulkMutationPreview:
+    if not transactions:
+        return TransactionBulkMutationPreview(
+            count=0,
+            period_start=None,
+            period_end=None,
+            expense_total=0,
+            representative_merchants=[],
+        )
+    dates = [transaction.date for transaction in transactions]
+    merchant_totals: dict[str, int] = defaultdict(int)
+    expense_total = 0
+    for transaction in transactions:
+        amount = -transaction.amount if transaction.type == "지출" else 0
+        expense_total += amount
+        merchant_totals[transaction.merchant or transaction.description] += amount
+    representative_merchants = [
+        merchant for merchant, _amount in sorted(
+            merchant_totals.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:5]
+    ]
+    return TransactionBulkMutationPreview(
+        count=len(transactions),
+        period_start=min(dates),
+        period_end=max(dates),
+        expense_total=expense_total,
+        representative_merchants=representative_merchants,
+    )
 
 
 async def _load_filtered_transactions(

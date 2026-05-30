@@ -6,6 +6,9 @@ import type {
   TransactionFilterOptionsResponse,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
+  TransactionBulkMutationRequest,
+  TransactionBulkMutationPreview,
+  TransactionBulkMutationResponse,
   LoanAccountCandidate,
   LoanAccountMetadataUpdateRequest,
   LoanAccountsResponse,
@@ -32,6 +35,8 @@ import type {
   RecurringCategoryRuleRequest,
   RecurringCategoryRuleListResponse,
   RecurringCategoryRuleResponse,
+  RecurringDryRunApplyRequest,
+  RecurringDryRunResponse,
   AutoClassificationApplyResponse,
 } from '../types/transaction'
 
@@ -104,6 +109,34 @@ export const transactionApi = {
   bulkUpdate: (data: TransactionBulkUpdateRequest) =>
     apiFetch<{ updated: number }>('/transactions/bulk-update', {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  bulkDeletePreview: (data: TransactionBulkMutationRequest) =>
+    apiFetch<TransactionBulkMutationPreview>('/transactions/bulk-delete/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  bulkDelete: (data: TransactionBulkMutationRequest) =>
+    apiFetch<TransactionBulkMutationResponse>('/transactions/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  bulkRestorePreview: (data: TransactionBulkMutationRequest) =>
+    apiFetch<TransactionBulkMutationPreview>('/transactions/bulk-restore/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  bulkRestore: (data: TransactionBulkMutationRequest) =>
+    apiFetch<TransactionBulkMutationResponse>('/transactions/bulk-restore', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
@@ -196,6 +229,16 @@ export const transactionApi = {
   applyRecurringCategoryRules: () =>
     apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/recurring-category-rules', {
       method: 'POST',
+    }),
+
+  recurringCategoryRulesDryRun: () =>
+    apiFetch<RecurringDryRunResponse>('/auto-classification/recurring-category-rules/dry-run'),
+
+  applyRecurringDryRun: (data: RecurringDryRunApplyRequest) =>
+    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/recurring-dry-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     }),
 
   categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>

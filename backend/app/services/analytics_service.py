@@ -2,13 +2,16 @@ import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
+from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.purchase_gate_review import PurchaseGateReview
 from app.schemas.analytics import (
     CategoryMoMItem,
     CategoryMoMResponse,
+    DiscretionaryVelocityResponse,
     FixedCostSummaryResponse,
     FixedCostTrendItem,
     FixedCostTrendResponse,
@@ -20,11 +23,16 @@ from app.schemas.analytics import (
     MonthlyCashflowResponse,
     PaymentMethodPatternItem,
     PaymentMethodPatternsResponse,
+    PurchaseGateCandidateItem,
+    PurchaseGateCandidatesResponse,
+    PurchaseGateReviewPatchRequest,
+    PurchaseGateReviewResponse,
     RecurringPaymentItem,
     RecurringPaymentsResponse,
     SpendingAnomalyItem,
     SpendingAnomaliesResponse,
 )
+from app.schemas.settings import DiscretionaryVelocitySettings, PurchaseGateSettings
 from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
 from app.services.canonical_views import build_transactions_effective_select
 
@@ -629,6 +637,333 @@ async def get_spending_anomalies(
     )
 
 
+async def get_discretionary_velocity(
+    db_session: AsyncSession,
+    *,
+    as_of_date: date | None,
+    settings: DiscretionaryVelocitySettings,
+) -> DiscretionaryVelocityResponse:
+    ref_date = as_of_date or date.today()
+    period = _month_key(ref_date)
+    month_start = date(ref_date.year, ref_date.month, 1)
+    month_end = _last_day_of_month(ref_date)
+    month_progress_ratio = round(ref_date.day / month_end.day, 4)
+    baseline_start = _add_months(month_start, -settings.baseline_months)
+
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=baseline_start,
+        end_date=ref_date,
+        tx_type="지출",
+    )
+
+    baseline_monthly: dict[str, int] = defaultdict(int)
+    current_discretionary_spend = 0
+    current_total_classifiable_spend = 0
+    current_classified_spend = 0
+    current_unclassified_spend = 0
+
+    excluded_categories = set(settings.excluded_category_names)
+    excluded_merchants = set(settings.excluded_merchants)
+    for row in rows:
+        if row["loan_account_id"] is not None:
+            continue
+        merchant = row["merchant"] or row["description"] or "미분류"
+        category = row["effective_category_major"] or "미분류"
+        if merchant in excluded_merchants or category in excluded_categories:
+            continue
+        amount = max(0, -row["amount"])
+        if amount == 0:
+            continue
+
+        row_period = _month_key(row["date"])
+        is_discretionary = row["spend_necessity"] == "discretionary"
+        is_classified = row["spend_necessity"] in {"essential", "discretionary"}
+
+        if row_period == period:
+            current_total_classifiable_spend += amount
+            if is_classified:
+                current_classified_spend += amount
+            else:
+                current_unclassified_spend += amount
+            if is_discretionary:
+                current_discretionary_spend += amount
+        elif is_discretionary:
+            baseline_monthly[row_period] += amount
+
+    baseline_values = _exclude_outlier_amounts(list(baseline_monthly.values()))
+    baseline_monthly_spend = (
+        round(sum(baseline_values) / len(baseline_values))
+        if baseline_values
+        else 0
+    )
+    baseline_spend_at_same_progress = round(
+        baseline_monthly_spend * month_progress_ratio
+    )
+    velocity_ratio = _safe_ratio(
+        current_discretionary_spend,
+        baseline_spend_at_same_progress,
+    )
+    classification_coverage_ratio = _safe_ratio(
+        current_classified_spend,
+        current_total_classifiable_spend,
+    )
+
+    if classification_coverage_ratio is not None and (
+        classification_coverage_ratio < settings.minimum_classification_coverage
+    ):
+        risk_level = "needs_classification"
+        confidence = "low"
+        reasons = ["분류 커버리지가 낮아 재량 지출 속도 해석 신뢰도가 낮습니다."]
+    elif velocity_ratio is None:
+        risk_level = "unknown"
+        confidence = "low"
+        reasons = ["비교 가능한 재량 지출 baseline이 없습니다."]
+    elif velocity_ratio >= settings.high_velocity_ratio:
+        risk_level = "high"
+        confidence = "medium"
+        reasons = [f"재량 지출 속도가 baseline 대비 {velocity_ratio:.2f}x입니다."]
+    elif velocity_ratio >= settings.warning_velocity_ratio:
+        risk_level = "warning"
+        confidence = "medium"
+        reasons = [f"재량 지출 속도가 baseline 대비 {velocity_ratio:.2f}x입니다."]
+    else:
+        risk_level = "normal"
+        confidence = "medium"
+        reasons = [f"재량 지출 속도가 baseline 대비 {velocity_ratio:.2f}x입니다."]
+
+    return DiscretionaryVelocityResponse(
+        period=period,
+        as_of_date=ref_date,
+        month_progress_ratio=month_progress_ratio,
+        discretionary_spend=current_discretionary_spend,
+        baseline_monthly_spend=baseline_monthly_spend,
+        baseline_spend_at_same_progress=baseline_spend_at_same_progress,
+        velocity_ratio=velocity_ratio,
+        risk_level=risk_level,
+        confidence=confidence,
+        classification_coverage_ratio=classification_coverage_ratio,
+        unclassified_spend=current_unclassified_spend,
+        income_basis=None,
+        reasons=reasons,
+        assumptions=[
+            f"최근 {settings.baseline_months}개 마감월 중 데이터가 있는 월의 재량 지출을 사용합니다.",
+            "baseline_spend_at_same_progress는 마감월 월평균에 월 진행률을 곱한 값입니다.",
+        ],
+    )
+
+
+async def get_purchase_gate_candidates(
+    db_session: AsyncSession,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    settings: PurchaseGateSettings,
+    review_status: str | None = None,
+    page: int = 1,
+    per_page: int = 10,
+) -> PurchaseGateCandidatesResponse:
+    ref_end = end_date or date.today()
+    ref_start = start_date or date(ref_end.year, ref_end.month, 1)
+    lookback_start = _add_months(ref_start, -settings.new_merchant_lookback_months)
+    rows = await _load_analytics_transactions(
+        db_session,
+        start_date=lookback_start,
+        end_date=ref_end,
+        tx_type="지출",
+    )
+
+    current_rows = [
+        row for row in rows
+        if ref_start <= row["date"] <= ref_end and row["loan_account_id"] is None
+    ]
+    prior_merchants = {
+        row["merchant"] or row["description"] or "미분류"
+        for row in rows
+        if row["date"] < ref_start and row["loan_account_id"] is None
+    }
+    prior_merchant_monthly: dict[tuple[str, str], int] = defaultdict(int)
+    prior_discretionary_monthly: dict[tuple[str, str], int] = defaultdict(int)
+    current_merchant_total: dict[str, int] = defaultdict(int)
+    current_discretionary_category_total: dict[str, int] = defaultdict(int)
+
+    for row in rows:
+        if row["loan_account_id"] is not None:
+            continue
+        merchant = row["merchant"] or row["description"] or "미분류"
+        category = row["effective_category_major"] or "미분류"
+        amount = max(0, -row["amount"])
+        if amount == 0:
+            continue
+        row_period = _month_key(row["date"])
+        if ref_start <= row["date"] <= ref_end:
+            current_merchant_total[merchant] += amount
+            if row["spend_necessity"] == "discretionary":
+                current_discretionary_category_total[category] += amount
+        elif row["date"] < ref_start:
+            prior_merchant_monthly[(merchant, row_period)] += amount
+            if row["spend_necessity"] == "discretionary":
+                prior_discretionary_monthly[(category, row_period)] += amount
+
+    enabled = set(settings.enabled_candidate_types)
+    excluded_categories = set(settings.excluded_category_names)
+    excluded_merchants = set(settings.excluded_merchants)
+    items: list[PurchaseGateCandidateItem] = []
+
+    for row in current_rows:
+        merchant = row["merchant"] or row["description"] or "미분류"
+        category = row["effective_category_major"] or "미분류"
+        if merchant in excluded_merchants or category in excluded_categories:
+            continue
+        amount = max(0, -row["amount"])
+        if amount < settings.min_candidate_amount:
+            continue
+        base = {
+            "transaction_id": row["id"],
+            "date": row["date"],
+            "merchant": merchant,
+            "amount": amount,
+            "category": category,
+        }
+        if "large_oneoff" in enabled and amount >= settings.large_purchase_threshold:
+            items.append(
+                _purchase_candidate_item(
+                    candidate_type="large_oneoff",
+                    base=base,
+                    signals={"threshold": settings.large_purchase_threshold},
+                    risk_level="warning",
+                    reasons=[f"{amount:,}원 지출이 큰 지출 기준을 넘었습니다."],
+                    settings=settings,
+                )
+            )
+        if "new_merchant" in enabled and merchant not in prior_merchants:
+            items.append(
+                _purchase_candidate_item(
+                    candidate_type="new_merchant",
+                    base=base,
+                    signals={"lookback_months": settings.new_merchant_lookback_months},
+                    risk_level="warning",
+                    reasons=[f"최근 {settings.new_merchant_lookback_months}개월 내 처음 등장한 거래처입니다."],
+                    settings=settings,
+                )
+            )
+        merchant_baseline = _monthly_average(
+            amount
+            for (baseline_merchant, _), amount in prior_merchant_monthly.items()
+            if baseline_merchant == merchant
+        )
+        merchant_current = current_merchant_total[merchant]
+        merchant_spike_ratio = _safe_ratio(merchant_current, merchant_baseline)
+        if (
+            "merchant_spike" in enabled
+            and merchant_baseline > 0
+            and merchant_spike_ratio is not None
+            and merchant_spike_ratio >= settings.merchant_spike_ratio
+        ):
+            items.append(
+                _purchase_candidate_item(
+                    candidate_type="merchant_spike",
+                    base=base,
+                    signals={
+                        "merchant_baseline_avg": merchant_baseline,
+                        "merchant_current_total": merchant_current,
+                        "spike_ratio": merchant_spike_ratio,
+                        "threshold_ratio": settings.merchant_spike_ratio,
+                    },
+                    risk_level="warning",
+                    reasons=[f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."],
+                    settings=settings,
+                )
+            )
+        discretionary_baseline = _monthly_average(
+            amount
+            for (baseline_category, _), amount in prior_discretionary_monthly.items()
+            if baseline_category == category
+        )
+        discretionary_current = current_discretionary_category_total[category]
+        discretionary_spike_ratio = _safe_ratio(
+            discretionary_current,
+            discretionary_baseline,
+        )
+        if (
+            "discretionary_spike" in enabled
+            and row["spend_necessity"] == "discretionary"
+            and discretionary_baseline > 0
+            and discretionary_spike_ratio is not None
+            and discretionary_spike_ratio >= settings.discretionary_spike_ratio
+        ):
+            items.append(
+                _purchase_candidate_item(
+                    candidate_type="discretionary_spike",
+                    base=base,
+                    signals={
+                        "discretionary_baseline_avg": discretionary_baseline,
+                        "discretionary_current_total": discretionary_current,
+                        "spike_ratio": discretionary_spike_ratio,
+                        "threshold_ratio": settings.discretionary_spike_ratio,
+                    },
+                    risk_level="warning",
+                    reasons=[f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."],
+                    settings=settings,
+                )
+            )
+
+    review_map = await _load_purchase_gate_review_statuses(
+        db_session,
+        [item.candidate_key for item in items],
+    )
+    for item in items:
+        item.review_status = review_map.get(item.candidate_key, "pending")
+    if review_status is not None:
+        items = [item for item in items if item.review_status == review_status]
+
+    items.sort(key=lambda item: (-item.amount, item.candidate_type, item.merchant))
+    paged_items, total, resolved_page = _paginate_items(items, page=page, per_page=per_page)
+    return PurchaseGateCandidatesResponse(
+        total=total,
+        page=resolved_page,
+        per_page=per_page,
+        items=paged_items,
+        assumptions=[
+            "후보는 구매 금지/허용 판단이 아니라 사용자 검토 queue입니다.",
+            f"기본 cooldown은 {settings.review_cooldown_days}일입니다.",
+        ],
+    )
+
+
+async def update_purchase_gate_candidate_review(
+    db_session: AsyncSession,
+    *,
+    candidate_key: str,
+    payload: PurchaseGateReviewPatchRequest,
+) -> PurchaseGateReviewResponse:
+    candidate_type, transaction_id = _parse_candidate_key(candidate_key)
+    result = await db_session.execute(
+        select(PurchaseGateReview).where(
+            PurchaseGateReview.candidate_key == candidate_key
+        )
+    )
+    review = result.scalar_one_or_none()
+    if review is None:
+        review = PurchaseGateReview(
+            candidate_key=candidate_key,
+            candidate_type=candidate_type,
+            transaction_id=transaction_id,
+            review_status=payload.review_status,
+        )
+        db_session.add(review)
+    else:
+        review.review_status = payload.review_status
+    await db_session.commit()
+    await db_session.refresh(review)
+    return PurchaseGateReviewResponse(
+        candidate_key=review.candidate_key,
+        candidate_type=review.candidate_type,
+        transaction_id=review.transaction_id,
+        review_status=review.review_status,
+    )
+
+
 async def _load_analytics_transactions(
     db_session: AsyncSession,
     *,
@@ -745,6 +1080,98 @@ def _previous_period(period: str) -> str:
     if month_int == 1:
         return f"{year_int - 1:04d}-12"
     return f"{year_int:04d}-{month_int - 1:02d}"
+
+
+def _add_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, _last_day_of_month(date(year, month, 1)).day)
+    return date(year, month, day)
+
+
+def _exclude_outlier_amounts(values: list[int]) -> list[int]:
+    if len(values) < 3:
+        return values
+    ordered = sorted(values)
+    median = ordered[len(ordered) // 2]
+    if median <= 0:
+        return values
+    filtered = [
+        value for value in values
+        if abs(value - median) / median <= 0.3
+    ]
+    return filtered or values
+
+
+def _monthly_average(values: object) -> int:
+    amounts = list(values)
+    if not amounts:
+        return 0
+    return round(sum(amounts) / len(amounts))
+
+
+async def _load_purchase_gate_review_statuses(
+    db_session: AsyncSession,
+    candidate_keys: list[str],
+) -> dict[str, str]:
+    if not candidate_keys:
+        return {}
+    result = await db_session.execute(
+        select(PurchaseGateReview).where(
+            PurchaseGateReview.candidate_key.in_(candidate_keys)
+        )
+    )
+    return {
+        review.candidate_key: review.review_status
+        for review in result.scalars().all()
+    }
+
+
+def _parse_candidate_key(candidate_key: str) -> tuple[str, int]:
+    candidate_type, separator, transaction_id_text = candidate_key.partition(":")
+    if not separator or not candidate_type:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="candidate_key must use '<candidate_type>:<transaction_id>'",
+        )
+    try:
+        transaction_id = int(transaction_id_text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="candidate_key transaction id must be an integer",
+        ) from exc
+    return candidate_type, transaction_id
+
+
+def _purchase_candidate_item(
+    *,
+    candidate_type: str,
+    base: dict[str, object],
+    signals: dict[str, int | float | str | bool],
+    risk_level: str,
+    reasons: list[str],
+    settings: PurchaseGateSettings,
+) -> PurchaseGateCandidateItem:
+    transaction_id = int(base["transaction_id"])
+    return PurchaseGateCandidateItem(
+        candidate_type=candidate_type,
+        transaction_id=transaction_id,
+        candidate_key=f"{candidate_type}:{transaction_id}",
+        date=base["date"],
+        merchant=str(base["merchant"]),
+        amount=int(base["amount"]),
+        category=str(base["category"]),
+        signals=signals,
+        risk_level=risk_level,
+        review_priority=risk_level,
+        confidence="medium",
+        suggested_review_window=f"{settings.review_cooldown_days}d",
+        reasons=reasons,
+        assumptions=["My Ledge는 후보와 근거만 제공하고 최종 구매 판단은 하지 않습니다."],
+        review_status="pending",
+    )
 
 
 def _resolved_recurring_payment_kind(kind_counts: dict[str, int]) -> str | None:

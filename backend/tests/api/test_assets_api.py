@@ -5,6 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.loan import Loan
 from app.services import assets_service
 from app.services.upload_service import import_transactions_from_workbook
 
@@ -18,16 +19,26 @@ async def test_asset_snapshots_returns_daily_totals(
     response = await async_client.get("/api/v1/assets/snapshots")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "items": [
-                {
-                    "snapshot_date": "2026-03-24",
-                    "asset_total": "344207571.54",
-                    "liability_total": "222317572.00",
-                    "net_worth": "121889999.54",
-                }
-            ]
+    payload = response.json()
+    assert payload["items"] == [
+        {
+            "snapshot_date": "2026-03-24",
+            "asset_total": "344207571.54",
+            "liability_total": "222317572.00",
+            "net_worth": "121889999.54",
         }
+    ]
+    assert payload["asset_items"]
+    assert {
+        "id",
+        "snapshot_date",
+        "side",
+        "category",
+        "product_name",
+        "amount",
+        "liquidity_tier",
+        "is_cash_equivalent",
+    }.issubset(payload["asset_items"][0])
 
 
 async def test_net_worth_history_returns_series(
@@ -117,6 +128,9 @@ async def test_asset_endpoints_return_multi_snapshot_history_and_latest_defaults
         "2026-03-26",
         "2026-04-07",
     ]
+    assert {
+        item["snapshot_date"] for item in snapshots_response.json()["asset_items"]
+    } == {"2026-04-07"}
 
     assert history_response.status_code == 200
     assert [item["snapshot_date"] for item in history_response.json()["items"]] == [
@@ -327,3 +341,55 @@ async def test_asset_snapshot_compare_smoke_on_real_workbook_chain(
     assert payload["comparison_days"] == 12
     assert payload["can_compare"] is True
     assert payload["comparison_label"] == "부분 기간"
+
+
+async def test_patch_asset_liquidity_and_loan_repayment_metadata(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    asset = AssetSnapshot(
+        snapshot_date=date(2026, 4, 30),
+        side="asset",
+        category="예금",
+        product_name="파킹통장",
+        amount="1000000.00",
+    )
+    loan = Loan(
+        snapshot_date=date(2026, 4, 30),
+        lender="국민은행",
+        product_name="주담대",
+        balance="100000000.00",
+    )
+    db_session.add_all([asset, loan])
+    await db_session.commit()
+
+    asset_response = await async_client.patch(
+        f"/api/v1/assets/snapshots/{asset.id}/liquidity",
+        headers=api_headers,
+        json={"liquidity_tier": "immediate", "is_cash_equivalent": True},
+    )
+    assert asset_response.status_code == 200
+    assert asset_response.json()["liquidity_tier"] == "immediate"
+    assert asset_response.json()["is_cash_equivalent"] is True
+
+    loan_response = await async_client.patch(
+        f"/api/v1/loans/{loan.id}/repayment-metadata",
+        headers=api_headers,
+        json={"monthly_payment": "650000.00", "repayment_method": "principal_interest"},
+    )
+    assert loan_response.status_code == 200
+    assert loan_response.json()["monthly_payment"] == "650000.00"
+    assert loan_response.json()["repayment_method"] == "principal_interest"
+
+    health = await async_client.get(
+        "/api/v1/analytics/liquidity-health",
+        params={
+            "snapshot_date": "2026-04-30",
+            "monthly_required_spend": 500000,
+            "monthly_income": 3000000,
+        },
+    )
+    assert health.status_code == 200
+    assert health.json()["cash_equivalent_total"] == "1000000.00"
+    assert health.json()["monthly_debt_payment"] == "650000.00"

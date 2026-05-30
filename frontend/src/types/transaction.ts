@@ -103,6 +103,23 @@ export interface TransactionBulkUpdateRequest {
   memo?: string | null
 }
 
+export interface TransactionBulkMutationRequest {
+  ids: number[]
+}
+
+export interface TransactionBulkMutationPreview {
+  count: number
+  period_start: string | null
+  period_end: string | null
+  expense_total: number
+  representative_merchants: string[]
+}
+
+export interface TransactionBulkMutationResponse {
+  updated: number
+  preview: TransactionBulkMutationPreview
+}
+
 export type LoanRepaymentType = 'principal' | 'interest' | 'mixed' | 'unknown'
 export type LoanMerchantRuleMatchField = 'merchant' | 'description'
 export type LoanKind =
@@ -316,6 +333,34 @@ export interface RecurringCategoryRuleResponse extends RecurringCategoryRuleRequ
 
 export interface RecurringCategoryRuleListResponse {
   items: RecurringCategoryRuleResponse[]
+}
+
+export type RecurringDryRunApplyScope = 'future_only' | 'all_matching'
+
+export interface RecurringDryRunMatchedTransaction {
+  id: number
+  date: string
+  amount: number
+}
+
+export interface RecurringDryRunItem {
+  merchant: string
+  proposed_kind: RecurringPaymentKind
+  confidence: number
+  matched_transactions: RecurringDryRunMatchedTransaction[]
+  reason: string
+  category_hint: string
+  apply_scope_options: RecurringDryRunApplyScope[]
+}
+
+export interface RecurringDryRunResponse {
+  items: RecurringDryRunItem[]
+}
+
+export interface RecurringDryRunApplyRequest {
+  merchant: string
+  proposed_kind: RecurringPaymentKind
+  apply_scope: RecurringDryRunApplyScope
 }
 
 export interface AutoClassificationApplyResponse {

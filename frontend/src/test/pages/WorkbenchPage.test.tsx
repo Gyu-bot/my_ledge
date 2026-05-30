@@ -14,6 +14,10 @@ const mockUseTransactionList = vi.fn<(params?: TransactionListParams) => { data:
 const mockUseWriteAccess = vi.fn<() => boolean>()
 const updateTransactionMock = vi.fn()
 const bulkUpdateTransactionsMock = vi.fn()
+const bulkDeletePreviewMock = vi.fn()
+const bulkDeleteTransactionsMock = vi.fn()
+const bulkRestorePreviewMock = vi.fn()
+const bulkRestoreTransactionsMock = vi.fn()
 
 function buildTransaction(overrides: Partial<TransactionResponse>): TransactionResponse {
   return {
@@ -68,6 +72,10 @@ vi.mock('../../hooks/useTransactions', () => ({
   useDeleteTransaction: () => ({ mutateAsync: vi.fn() }),
   useRestoreTransaction: () => ({ mutateAsync: vi.fn() }),
   useBulkUpdateTransactions: () => ({ mutateAsync: bulkUpdateTransactionsMock }),
+  useBulkDeletePreview: () => ({ mutateAsync: bulkDeletePreviewMock }),
+  useBulkDeleteTransactions: () => ({ mutateAsync: bulkDeleteTransactionsMock }),
+  useBulkRestorePreview: () => ({ mutateAsync: bulkRestorePreviewMock }),
+  useBulkRestoreTransactions: () => ({ mutateAsync: bulkRestoreTransactionsMock }),
 }))
 
 vi.mock('../../hooks/useUpload', () => ({
@@ -101,6 +109,26 @@ beforeEach(() => {
   updateTransactionMock.mockResolvedValue({ id: 1 })
   bulkUpdateTransactionsMock.mockReset()
   bulkUpdateTransactionsMock.mockResolvedValue({ updated: 1 })
+  bulkDeletePreviewMock.mockReset()
+  bulkDeletePreviewMock.mockResolvedValue({
+    count: 1,
+    period_start: '2026-04-01',
+    period_end: '2026-04-01',
+    expense_total: 12000,
+    representative_merchants: ['기본 거래처'],
+  })
+  bulkDeleteTransactionsMock.mockReset()
+  bulkDeleteTransactionsMock.mockResolvedValue({ updated: 1, preview: {} })
+  bulkRestorePreviewMock.mockReset()
+  bulkRestorePreviewMock.mockResolvedValue({
+    count: 1,
+    period_start: '2026-04-01',
+    period_end: '2026-04-01',
+    expense_total: 12000,
+    representative_merchants: ['삭제 거래처'],
+  })
+  bulkRestoreTransactionsMock.mockReset()
+  bulkRestoreTransactionsMock.mockResolvedValue({ updated: 1, preview: {} })
   mockUseTransactionList.mockImplementation(() => ({
     data: { total: 1, page: 1, per_page: 20, items: [] },
     isLoading: false,
@@ -313,5 +341,99 @@ describe('WorkbenchPage', () => {
 
     expect(screen.getAllByRole('option', { name: '배달' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('option', { name: '외식' }).length).toBeGreaterThan(0)
+  })
+
+  it('previews and executes bulk delete for selected active rows', async () => {
+    mockUseWriteAccess.mockReturnValue(true)
+    mockUseTransactionList.mockImplementation(() => ({
+      data: {
+        total: 1,
+        page: 1,
+        per_page: 40,
+        items: [
+          buildTransaction({
+            id: 41,
+            description: '삭제 대상',
+            merchant: '편의점',
+            amount: -18000,
+          }),
+        ],
+      },
+      isLoading: false,
+    }))
+    bulkDeletePreviewMock.mockResolvedValue({
+      count: 1,
+      period_start: '2026-04-01',
+      period_end: '2026-04-01',
+      expense_total: 18000,
+      representative_merchants: ['편의점'],
+    })
+
+    wrap(<WorkbenchPage />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '삭제 preview' }))
+
+    await waitFor(() => {
+      expect(bulkDeletePreviewMock).toHaveBeenCalledWith({ ids: [41] })
+    })
+    expect(screen.getAllByText(/삭제 preview/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/편의점/).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'preview대로 실행' }))
+
+    await waitFor(() => {
+      expect(bulkDeleteTransactionsMock).toHaveBeenCalledWith({ ids: [41] })
+    })
+    expect(await screen.findByText('1건 일괄 삭제 완료')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '방금 삭제한 항목 복원' }))
+
+    await waitFor(() => {
+      expect(bulkRestoreTransactionsMock).toHaveBeenCalledWith({ ids: [41] })
+    })
+    expect(await screen.findByText('1건 방금 삭제한 항목 복원 완료')).toBeInTheDocument()
+  })
+
+  it('previews and executes bulk restore for selected deleted rows', async () => {
+    mockUseWriteAccess.mockReturnValue(true)
+    mockUseTransactionList.mockImplementation(() => ({
+      data: {
+        total: 1,
+        page: 1,
+        per_page: 40,
+        items: [
+          buildTransaction({
+            id: 42,
+            description: '복원 대상',
+            merchant: '삭제 거래처',
+            amount: -22000,
+            is_deleted: true,
+          }),
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<WorkbenchPage />)
+
+    fireEvent.click(screen.getByLabelText('삭제 포함'))
+    fireEvent.click(screen.getByRole('button', { name: '적용' }))
+    expect(mockUseTransactionList.mock.lastCall?.[0]).toMatchObject({ include_deleted: true })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '복원 preview' }))
+
+    await waitFor(() => {
+      expect(bulkRestorePreviewMock).toHaveBeenCalledWith({ ids: [42] })
+    })
+    expect(screen.getAllByText(/복원 preview/).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'preview대로 실행' }))
+
+    await waitFor(() => {
+      expect(bulkRestoreTransactionsMock).toHaveBeenCalledWith({ ids: [42] })
+    })
+    expect(await screen.findByText('1건 일괄 복원 완료')).toBeInTheDocument()
   })
 })

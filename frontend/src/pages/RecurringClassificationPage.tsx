@@ -5,10 +5,15 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { Pagination } from '../components/ui/Pagination'
 import { useChromeContext } from '../components/layout/chromeContext'
 import { useRecurringPayments } from '../hooks/useAnalytics'
-import { useBulkUpdateTransactions } from '../hooks/useTransactions'
+import {
+  useApplyRecurringDryRun,
+  useBulkUpdateTransactions,
+  useRecurringCategoryRulesDryRun,
+} from '../hooks/useTransactions'
 import { useWriteAccess } from '../hooks/useWriteAccess'
-import { formatKRW } from '../lib/utils'
+import { formatKRW, formatPct } from '../lib/utils'
 import type { RecurringPaymentItem } from '../types/analytics'
+import type { RecurringDryRunApplyScope, RecurringDryRunItem } from '../types/transaction'
 
 type RecurringKind = RecurringPaymentItem['recurring_payment_kind']
 type BulkRecurringKind = '' | 'unclassified' | 'installment' | 'monthly_recurring' | 'not_recurring'
@@ -31,6 +36,19 @@ function recurringKindSummary(item: RecurringPaymentItem) {
   ].filter(Boolean).join(' · ')
 }
 
+function defaultDryRunScope(item: RecurringDryRunItem): RecurringDryRunApplyScope {
+  if (item.apply_scope_options.includes('all_matching')) return 'all_matching'
+  return item.apply_scope_options[0] ?? 'future_only'
+}
+
+function orderedDryRunScopes(item: RecurringDryRunItem): RecurringDryRunApplyScope[] {
+  return [...item.apply_scope_options].sort((left, right) => {
+    if (left === 'all_matching') return -1
+    if (right === 'all_matching') return 1
+    return left.localeCompare(right)
+  })
+}
+
 export function RecurringClassificationPage() {
   const hasWrite = useWriteAccess()
   const { setMetaBadge } = useChromeContext()
@@ -39,9 +57,12 @@ export function RecurringClassificationPage() {
   const [overrides, setOverrides] = useState<Record<string, RecurringKind>>({})
   const [selectedMerchants, setSelectedMerchants] = useState<Set<string>>(new Set())
   const [bulkKind, setBulkKind] = useState<BulkRecurringKind>('')
+  const [dryRunScopes, setDryRunScopes] = useState<Record<string, RecurringDryRunApplyScope>>({})
   const [alert, setAlert] = useState<{ variant: 'success' | 'error'; title: string; description?: string } | null>(null)
   const recurring = useRecurringPayments(page, PAGE_SIZE)
+  const recurringDryRun = useRecurringCategoryRulesDryRun()
   const bulkMutation = useBulkUpdateTransactions()
+  const applyDryRunMutation = useApplyRecurringDryRun()
 
   useEffect(() => {
     const total = recurring.data?.total ?? 0
@@ -143,6 +164,24 @@ export function RecurringClassificationPage() {
     }
   }
 
+  async function applyDryRun(item: RecurringDryRunItem) {
+    const applyScope = dryRunScopes[item.merchant] ?? defaultDryRunScope(item)
+    try {
+      const result = await applyDryRunMutation.mutateAsync({
+        merchant: item.merchant,
+        proposed_kind: item.proposed_kind,
+        apply_scope: applyScope,
+      })
+      setAlert({
+        variant: 'success',
+        title: `${item.merchant} dry-run 적용 완료`,
+        description: `${result.updated}건 반영`,
+      })
+    } catch (e) {
+      setAlert({ variant: 'error', title: 'dry-run 승인 적용 실패', description: String(e) })
+    }
+  }
+
   const inputCls = 'text-caption text-text-secondary bg-surface-bar border border-border-subtle rounded-md px-2.5 py-1.5 disabled:opacity-50'
   const selectedCount = selectedMerchants.size
 
@@ -164,6 +203,89 @@ export function RecurringClassificationPage() {
           description="API 키가 없어 반복 결제 분류 저장이 비활성화됩니다."
         />
       )}
+
+      <div className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-border-faint">
+          <div>
+            <span className="text-label font-semibold text-text-secondary">dry-run 승인 후보</span>
+            <div className="text-micro text-text-ghost mt-0.5">반복 카테고리 규칙이 미분류 반복 거래에 제안하는 변경을 그룹 단위로 검토합니다.</div>
+          </div>
+          <span className="text-micro text-text-muted bg-surface-bar border border-border-subtle px-2 py-0.5 rounded-full">
+            {recurringDryRun.data?.items.length ?? 0}개 후보
+          </span>
+        </div>
+
+        {recurringDryRun.isLoading ? <LoadingState /> :
+          recurringDryRun.data && recurringDryRun.data.items.length > 0 ? (
+            <div className="divide-y divide-border-faint">
+              {recurringDryRun.data.items.map((item) => {
+                const selectedScope = dryRunScopes[item.merchant] ?? defaultDryRunScope(item)
+                const scopeOptions = orderedDryRunScopes(item)
+                return (
+                  <div key={item.merchant} className="px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-caption font-semibold text-text-primary">{item.merchant}</span>
+                          <span className="text-nano bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">
+                            {recurringKindLabel(item.proposed_kind)}
+                          </span>
+                          <span className="text-micro text-text-ghost">
+                            confidence {formatPct(item.confidence * 100)}
+                          </span>
+                        </div>
+                        <div className="text-micro text-text-muted mt-1">{item.reason}</div>
+                        <div className="text-micro text-text-ghost mt-1">카테고리 힌트 {item.category_hint}</div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1.5">
+                          <span className="text-caption text-text-faint">적용 범위</span>
+                          <select
+                            aria-label={`${item.merchant} dry-run 적용 범위`}
+                            className={`${inputCls} py-1`}
+                            value={selectedScope}
+                            disabled={!hasWrite || applyDryRunMutation.isPending}
+                            onChange={(event) => {
+                              setDryRunScopes((current) => ({
+                                ...current,
+                                [item.merchant]: event.target.value as RecurringDryRunApplyScope,
+                              }))
+                            }}
+                          >
+                            {scopeOptions.map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void applyDryRun(item)}
+                          disabled={!hasWrite || applyDryRunMutation.isPending || item.matched_transactions.length === 0}
+                          className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40"
+                        >
+                          {item.merchant} dry-run 승인 적용
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.matched_transactions.map((tx) => (
+                        <span
+                          key={tx.id}
+                          className="text-micro text-text-muted bg-surface-bar border border-border-subtle px-2 py-0.5 rounded"
+                        >
+                          {tx.date} · ₩ {formatKRW(tx.amount)}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-micro text-text-ghost mt-2">
+                      {scopeOptions.join(' / ')}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : <EmptyState message="dry-run 승인 후보가 없습니다" />}
+      </div>
 
       {selectedCount > 0 && (
         <div className="px-4 py-3 bg-surface-section border border-border-subtle rounded-card">

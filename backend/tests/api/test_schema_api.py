@@ -19,6 +19,7 @@ def test_expected_tables_exist() -> None:
         "loan_accounts",
         "loan_merchant_rules",
         "loan_transaction_links",
+        "purchase_gate_reviews",
         "upload_logs",
     }
 
@@ -104,6 +105,7 @@ async def test_schema_endpoint_returns_tables(
     assert "transactions" in {table["name"] for table in response.json()["tables"]}
     assert {view["name"] for view in response.json()["views"]} == {
         "vw_category_monthly_spend",
+        "vw_asset_snapshot_canonical",
         "vw_fixed_cost_monthly_summary",
         "vw_loan_repayment_monthly",
             "vw_merchant_monthly_baseline",
@@ -161,6 +163,22 @@ async def test_schema_endpoint_returns_tables(
         "net_cashflow",
         "savings_rate",
     }.issubset({column["name"] for column in monthly_cashflow_view["columns"]})
+
+    asset_snapshot_view = next(
+        view
+        for view in response.json()["views"]
+        if view["name"] == "vw_asset_snapshot_canonical"
+    )
+    assert {
+        "snapshot_date",
+        "asset_total",
+        "liability_total",
+        "net_worth",
+        "cash_equivalent_total",
+        "near_liquid_total",
+        "loan_balance_total",
+        "monthly_debt_payment_total",
+    }.issubset({column["name"] for column in asset_snapshot_view["columns"]})
 
     unclassified_queue_view = next(
         view

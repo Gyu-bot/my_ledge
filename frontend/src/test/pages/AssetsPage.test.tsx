@@ -1,8 +1,16 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { AssetsPage } from '../../pages/AssetsPage'
+
+const mockUseWriteAccess = vi.fn<() => boolean>()
+const patchAssetLiquidityMock = vi.fn()
+const patchLoanRepaymentMetadataMock = vi.fn()
+
+vi.mock('../../hooks/useWriteAccess', () => ({
+  useWriteAccess: () => mockUseWriteAccess(),
+}))
 
 vi.mock('../../hooks/useAssets', () => ({
   useAssetSnapshots: () => ({
@@ -13,6 +21,34 @@ vi.mock('../../hooks/useAssets', () => ({
           asset_total: '1300.00',
           liability_total: '250.00',
           net_worth: '1050.00',
+        },
+      ],
+      asset_items: [
+        {
+          id: 101,
+          snapshot_date: '2026-04-07',
+          side: 'asset',
+          category: '예금',
+          product_name: '생활비 통장',
+          amount: '300.00',
+          asset_total: '1300.00',
+          liability_total: '250.00',
+          net_worth: '1050.00',
+          liquidity_tier: 'immediate',
+          is_cash_equivalent: true,
+        },
+        {
+          id: 102,
+          snapshot_date: '2026-04-07',
+          side: 'asset',
+          category: '부동산',
+          product_name: '거주 주택',
+          amount: '1000.00',
+          asset_total: '1300.00',
+          liability_total: '250.00',
+          net_worth: '1050.00',
+          liquidity_tier: 'illiquid',
+          is_cash_equivalent: false,
         },
       ],
     },
@@ -91,12 +127,34 @@ vi.mock('../../hooks/useAssets', () => ({
   useLoanSummary: () => ({
     data: {
       snapshot_date: '2026-04-07',
-      items: [],
+      items: [
+        {
+          id: 201,
+          loan_type: '주택담보대출',
+          lender: '국민은행',
+          product_name: '우리집 주담대',
+          principal: '500.00',
+          balance: '250.00',
+          interest_rate: '3.50',
+          monthly_payment: '50.00',
+          repayment_method: 'principal_interest',
+          start_date: '2021-06-01',
+          maturity_date: '2051-05-31',
+        },
+      ],
       totals: { principal: '500.00', balance: '250.00' },
     },
     isLoading: false,
     error: null,
     refetch: vi.fn(),
+  }),
+  usePatchAssetLiquidity: () => ({
+    mutateAsync: patchAssetLiquidityMock,
+    isPending: false,
+  }),
+  usePatchLoanRepaymentMetadata: () => ({
+    mutateAsync: patchLoanRepaymentMetadataMock,
+    isPending: false,
   }),
 }))
 
@@ -121,6 +179,30 @@ function wrap(ui: React.ReactNode) {
   )
 }
 
+beforeEach(() => {
+  mockUseWriteAccess.mockReturnValue(true)
+  patchAssetLiquidityMock.mockReset()
+  patchAssetLiquidityMock.mockResolvedValue({
+    id: 101,
+    snapshot_date: '2026-04-07',
+    side: 'asset',
+    category: '예금',
+    product_name: '생활비 통장',
+    amount: '300.00',
+    liquidity_tier: 'near_liquid',
+    is_cash_equivalent: false,
+  })
+  patchLoanRepaymentMetadataMock.mockReset()
+  patchLoanRepaymentMetadataMock.mockResolvedValue({
+    id: 201,
+    snapshot_date: '2026-04-07',
+    lender: '국민은행',
+    product_name: '우리집 주담대',
+    monthly_payment: '75.00',
+    repayment_method: 'principal_equal',
+  })
+})
+
 describe('AssetsPage', () => {
   it('keeps snapshot comparison copy on summary badges but not on KPI subtext', () => {
     const { container } = wrap(<AssetsPage />)
@@ -130,5 +212,61 @@ describe('AssetsPage', () => {
     expect(kpiSubs).toHaveLength(1)
     expect(kpiSubs[0]?.textContent).toBe('비상금 3.0개월')
     expect(screen.getByText('유동성 Health')).toBeInTheDocument()
+  })
+
+  it('saves editable liquidity metadata for each asset snapshot row', async () => {
+    wrap(<AssetsPage />)
+
+    fireEvent.change(screen.getByLabelText('생활비 통장 유동성 등급'), {
+      target: { value: 'near_liquid' },
+    })
+    fireEvent.click(screen.getByLabelText('생활비 통장 현금성 자산'))
+    fireEvent.click(screen.getByRole('button', { name: '생활비 통장 유동성 저장' }))
+
+    await waitFor(() => {
+      expect(patchAssetLiquidityMock).toHaveBeenCalledWith({
+        id: 101,
+        data: {
+          liquidity_tier: 'near_liquid',
+          is_cash_equivalent: false,
+        },
+      })
+    })
+  })
+
+  it('saves editable monthly payment and repayment method for each loan row', async () => {
+    wrap(<AssetsPage />)
+
+    fireEvent.change(screen.getByLabelText('우리집 주담대 월상환액'), {
+      target: { value: '75' },
+    })
+    fireEvent.change(screen.getByLabelText('우리집 주담대 상환 방식'), {
+      target: { value: 'principal_equal' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '우리집 주담대 상환 메타 저장' }))
+
+    await waitFor(() => {
+      expect(patchLoanRepaymentMetadataMock).toHaveBeenCalledWith({
+        id: 201,
+        data: {
+          monthly_payment: '75',
+          repayment_method: 'principal_equal',
+        },
+      })
+    })
+  })
+
+  it('disables asset and loan metadata editing when write access is unavailable', () => {
+    mockUseWriteAccess.mockReturnValue(false)
+
+    wrap(<AssetsPage />)
+
+    expect(screen.getByText('읽기 전용 모드')).toBeInTheDocument()
+    expect(screen.getByLabelText('생활비 통장 유동성 등급')).toBeDisabled()
+    expect(screen.getByLabelText('생활비 통장 현금성 자산')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '생활비 통장 유동성 저장' })).toBeDisabled()
+    expect(screen.getByLabelText('우리집 주담대 월상환액')).toBeDisabled()
+    expect(screen.getByLabelText('우리집 주담대 상환 방식')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '우리집 주담대 상환 메타 저장' })).toBeDisabled()
   })
 })

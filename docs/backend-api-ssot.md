@@ -46,9 +46,15 @@
   - `GET /api/v1/auto-classification/recurring-category-rules`
   - `POST /api/v1/auto-classification/recurring-category-rules`
   - `DELETE /api/v1/auto-classification/recurring-category-rules/{id}`
+  - `GET /api/v1/auto-classification/recurring-category-rules/dry-run`
   - `POST /api/v1/auto-classification/apply/recurring-category-rules`
+  - `POST /api/v1/auto-classification/apply/recurring-dry-run`
   - `POST /api/v1/transactions`
   - `PATCH /api/v1/transactions/bulk-update`
+  - `POST /api/v1/transactions/bulk-delete/preview`
+  - `POST /api/v1/transactions/bulk-delete`
+  - `POST /api/v1/transactions/bulk-restore/preview`
+  - `POST /api/v1/transactions/bulk-restore`
   - `PATCH /api/v1/transactions/{id}`
   - `DELETE /api/v1/transactions/{id}`
   - `POST /api/v1/transactions/{id}/restore`
@@ -57,6 +63,9 @@
   - `DELETE /api/v1/transactions/{id}/loan-link`
   - `PUT /api/v1/transactions/loan-links/bulk`
   - `PATCH /api/v1/loan-accounts`
+  - `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
+  - `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
+  - `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
   - `POST /api/v1/data/reset`
 
 ## Live Endpoints
@@ -115,6 +124,10 @@
 |---|---|---|---|
 | `POST` | `/api/v1/transactions` | live | manual transaction create |
 | `PATCH` | `/api/v1/transactions/bulk-update` | live | merchant/category/cost kind/spend necessity/fixed necessity/recurring payment kind/memo |
+| `POST` | `/api/v1/transactions/bulk-delete/preview` | live | API key required, preview count/period/expense/representative merchants before soft delete |
+| `POST` | `/api/v1/transactions/bulk-delete` | live | API key required, soft delete selected active rows and return preview summary |
+| `POST` | `/api/v1/transactions/bulk-restore/preview` | live | API key required, preview selected deleted rows before restore |
+| `POST` | `/api/v1/transactions/bulk-restore` | live | API key required, restore selected deleted rows and return preview summary |
 | `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/spend necessity/fixed necessity/recurring payment kind/memo |
 | `DELETE` | `/api/v1/transactions/{id}` | live | soft delete |
 | `POST` | `/api/v1/transactions/{id}/restore` | live | restore soft-deleted row |
@@ -129,7 +142,7 @@
 
 | Method | Path | Status | Notes |
 |---|---|---|---|
-| `GET` | `/api/v1/assets/snapshots` | live | query param 없음, snapshot totals list |
+| `GET` | `/api/v1/assets/snapshots` | live | query param 없음, `items` snapshot totals + latest snapshot `asset_items` editable asset rows |
 | `GET` | `/api/v1/assets/net-worth-history` | live | query param 없음 |
 | `GET` | `/api/v1/assets/snapshot-compare` | live | `comparison_mode` optional, default `latest_available_vs_previous_available` |
 | `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest |
@@ -137,6 +150,8 @@
 | `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots |
 | `GET` | `/api/v1/analytics/net-worth-breakdown` | live | optional `snapshot_date`; latest if omitted |
 | `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income` |
+| `PATCH` | `/api/v1/assets/snapshots/{asset_snapshot_id}/liquidity` | live | API key required, update `liquidity_tier` and `is_cash_equivalent` |
+| `PATCH` | `/api/v1/loans/{loan_id}/repayment-metadata` | live | API key required, update `monthly_payment` and `repayment_method` |
 
 ### Advisor Analytics
 
@@ -151,6 +166,9 @@
 | `GET` | `/api/v1/analytics/income-stability` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/recurring-payments` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/spending-anomalies` | live | P1 shipped |
+| `GET` | `/api/v1/analytics/discretionary-velocity` | live | discretionary spend pace against closed-month prorated baseline |
+| `GET` | `/api/v1/analytics/purchase-gate-candidates` | live | large/new/spike review candidates; optional `review_status` |
+| `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist candidate review status |
 
 ## Key Contract Notes
 
@@ -193,6 +211,8 @@
   - `not_recurring`: explicitly reviewed non-recurring merchant activity
 - `GET /api/v1/analytics/recurring-payments` groups by merchant and returns transaction ids plus classification counts. The operations recurring-classification screen uses those ids for bulk updates; insights surfaces display the saved result only.
 - Category-based recurring-payment classification is live via `recurring_category_rules`. It only fills unclassified `recurring_payment_kind` values for transactions whose merchant passes the recurring-candidate gate or whose `cost_kind='fixed'`; explicit manual/previous values are preserved.
+- `GET /api/v1/auto-classification/recurring-category-rules/dry-run` returns group proposals with `merchant`, `proposed_kind`, `confidence`, `matched_transactions`, `reason`, `category_hint`, and `apply_scope_options`.
+- `POST /api/v1/auto-classification/apply/recurring-dry-run` applies one proposal. The default `apply_scope` is `all_matching`, which backfills matching existing rows; `future_only` stores no historical row mutation and is an explicit no-op for current rows until a future-rule store exists.
 
 ### Auto Classification
 
@@ -227,14 +247,17 @@
 ### Analytics Settings
 
 - `GET /api/v1/settings/analytics` 와 `PATCH /api/v1/settings/analytics` 는 `X-API-Key` 인증이 필요하다.
-- 현재 persisted setting 범위는 `spending_anomalies` 다.
+- persisted setting 범위는 `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations` 다.
 - 응답은 `defaults`, `saved`, `effective` 를 나눠 반환한다.
-- 지원 필드:
+- `spending_anomalies` 지원 필드:
   - `min_delta_amount` default `100000`
   - `anomaly_threshold` default `0.5`
   - `baseline_months` default `3`
 - `PATCH` 에서 값을 지정하면 저장되고, `null` 로 보내면 해당 저장값을 삭제해 code default로 되돌린다.
 - `GET /api/v1/analytics/spending-anomalies` 의 설정 해석 순서는 `명시적 query param > persisted setting > code default` 다.
+- `discretionary_velocity` 기본값은 `baseline_months=6`, `warning_velocity_ratio=1.2`, `high_velocity_ratio=1.5`, `minimum_classification_coverage=0.7`.
+- `purchase_gate` 기본값은 큰 지출 `100000`, 새 거래처 lookback 6개월, spike ratio `merchant=2.0`, `discretionary=1.5`, review cooldown 14일.
+- `bulk_operations`는 preview/confirmation 기본 ON, `max_bulk_rows_without_extra_confirmation=100`.
 
 ### Investment / Loan Summary
 

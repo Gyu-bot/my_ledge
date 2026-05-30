@@ -1,5 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { assetApi } from '../api/assets'
+import type {
+  AssetLiquidityPatchRequest,
+  LoanRepaymentMetadataPatchRequest,
+} from '../types/asset'
 
 export const assetKeys = {
   snapshots: () => ['assets', 'snapshots'] as const,
@@ -37,4 +41,26 @@ export function useInvestmentSummary() {
 
 export function useLoanSummary() {
   return useQuery({ queryKey: assetKeys.loans(), queryFn: assetApi.loans })
+}
+
+export function usePatchAssetLiquidity() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: AssetLiquidityPatchRequest }) =>
+      assetApi.patchAssetLiquidity(id, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['assets'] })
+    },
+  })
+}
+
+export function usePatchLoanRepaymentMetadata() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: LoanRepaymentMetadataPatchRequest }) =>
+      assetApi.patchLoanRepaymentMetadata(id, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['assets'] })
+    },
+  })
 }

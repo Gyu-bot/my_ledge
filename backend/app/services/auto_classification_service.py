@@ -31,6 +31,10 @@ from app.schemas.auto_classification import (
     RecurringCategoryRuleListResponse,
     RecurringCategoryRuleRequest,
     RecurringCategoryRuleResponse,
+    RecurringDryRunApplyRequest,
+    RecurringDryRunItem,
+    RecurringDryRunMatchedTransaction,
+    RecurringDryRunResponse,
 )
 
 
@@ -459,6 +463,72 @@ async def apply_recurring_category_rules(
     return ApplyResult(updated=updated)
 
 
+async def dry_run_recurring_category_rules(
+    db_session: AsyncSession,
+) -> RecurringDryRunResponse:
+    rules = await _load_recurring_category_rules(db_session)
+    if not rules:
+        return RecurringDryRunResponse(items=[])
+    transactions = await _load_unclassified_recurring_transactions(db_session)
+    recurring_candidates = _recurring_candidate_merchants(transactions)
+    grouped: dict[str, list[Transaction]] = defaultdict(list)
+    for transaction in transactions:
+        rule = _match_recurring_category_rule(transaction, rules)
+        if rule is None:
+            continue
+        if transaction.merchant not in recurring_candidates and transaction.cost_kind != "fixed":
+            continue
+        grouped[transaction.merchant].append(transaction)
+
+    items: list[RecurringDryRunItem] = []
+    for merchant, rows in grouped.items():
+        rows.sort(key=lambda row: (row.date, row.time, row.id))
+        first_rule = _match_recurring_category_rule(rows[0], rules)
+        if first_rule is None:
+            continue
+        category_hint = rows[0].category_major_user or rows[0].category_major
+        amounts = [abs(row.amount) for row in rows]
+        confidence = round(max(0.5, 1.0 - _coefficient_of_variation(amounts)), 4)
+        items.append(
+            RecurringDryRunItem(
+                merchant=merchant,
+                proposed_kind=first_rule.recurring_payment_kind,
+                confidence=confidence,
+                matched_transactions=[
+                    RecurringDryRunMatchedTransaction(
+                        id=row.id,
+                        date=row.date.isoformat(),
+                        amount=row.amount,
+                    )
+                    for row in rows
+                ],
+                reason="반복 후보 조건과 카테고리 힌트가 일치합니다.",
+                category_hint=category_hint,
+                apply_scope_options=["all_matching", "future_only"],
+            )
+        )
+    items.sort(key=lambda item: (-item.confidence, item.merchant))
+    return RecurringDryRunResponse(items=items)
+
+
+async def apply_recurring_dry_run(
+    db_session: AsyncSession,
+    payload: RecurringDryRunApplyRequest,
+) -> ApplyResult:
+    if payload.apply_scope == "future_only":
+        return ApplyResult(updated=0)
+
+    transactions = await _load_unclassified_recurring_transactions(db_session)
+    updated = 0
+    for transaction in transactions:
+        if transaction.merchant != payload.merchant:
+            continue
+        transaction.recurring_payment_kind = payload.proposed_kind
+        updated += 1
+    await db_session.commit()
+    return ApplyResult(updated=updated)
+
+
 async def apply_enabled_auto_classification_after_upload(
     db_session: AsyncSession,
 ) -> None:
@@ -469,6 +539,20 @@ async def apply_enabled_auto_classification_after_upload(
         await apply_loan_merchant_rules(db_session)
     if settings.apply_recurring_rules_on_upload:
         await apply_recurring_category_rules(db_session)
+
+
+async def _load_unclassified_recurring_transactions(
+    db_session: AsyncSession,
+) -> list[Transaction]:
+    result = await db_session.execute(
+        select(Transaction)
+        .where(Transaction.type == "지출")
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .where(Transaction.recurring_payment_kind.is_(None))
+        .order_by(Transaction.date.asc(), Transaction.time.asc(), Transaction.id.asc())
+    )
+    return list(result.scalars().all())
 
 
 async def _load_category_rule(

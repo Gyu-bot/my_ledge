@@ -11,6 +11,9 @@ from app.schemas.transaction import (
     PaymentMethodSummaryResponse,
     TransactionBulkUpdateRequest,
     TransactionBulkUpdateResponse,
+    TransactionBulkMutationPreview,
+    TransactionBulkMutationRequest,
+    TransactionBulkMutationResponse,
     TransactionCategoryLevel,
     TransactionCostKindFilter,
     TransactionCreateRequest,
@@ -29,10 +32,13 @@ from app.schemas.transaction import (
     TransactionUpdateRequest,
 )
 from app.services.transactions_service import (
+    bulk_delete_transactions,
+    bulk_restore_transactions,
     bulk_update_transactions,
     create_transaction,
     list_transaction_filter_options,
     list_transactions,
+    preview_bulk_transaction_mutation,
     restore_transaction,
     soft_delete_transaction,
     summarize_by_category,
@@ -186,6 +192,62 @@ async def bulk_update_transaction_categories(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> TransactionBulkUpdateResponse:
     return await bulk_update_transactions(db_session, payload)
+
+
+@router.post(
+    "/transactions/bulk-delete/preview",
+    response_model=TransactionBulkMutationPreview,
+    dependencies=[Depends(require_api_key)],
+)
+async def preview_bulk_delete_transactions(
+    payload: TransactionBulkMutationRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> TransactionBulkMutationPreview:
+    return await preview_bulk_transaction_mutation(
+        db_session,
+        payload,
+        target_deleted_state=True,
+    )
+
+
+@router.post(
+    "/transactions/bulk-delete",
+    response_model=TransactionBulkMutationResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def post_bulk_delete_transactions(
+    payload: TransactionBulkMutationRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> TransactionBulkMutationResponse:
+    return await bulk_delete_transactions(db_session, payload)
+
+
+@router.post(
+    "/transactions/bulk-restore/preview",
+    response_model=TransactionBulkMutationPreview,
+    dependencies=[Depends(require_api_key)],
+)
+async def preview_bulk_restore_transactions(
+    payload: TransactionBulkMutationRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> TransactionBulkMutationPreview:
+    return await preview_bulk_transaction_mutation(
+        db_session,
+        payload,
+        target_deleted_state=False,
+    )
+
+
+@router.post(
+    "/transactions/bulk-restore",
+    response_model=TransactionBulkMutationResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def post_bulk_restore_transactions(
+    payload: TransactionBulkMutationRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> TransactionBulkMutationResponse:
+    return await bulk_restore_transactions(db_session, payload)
 
 
 @router.patch(

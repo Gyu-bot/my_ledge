@@ -359,6 +359,32 @@ async def _replace_snapshots(
     parsed_snapshots: SnapshotParseResult,
 ) -> None:
     normalized_snapshots = normalize_snapshots_for_storage(parsed_snapshots)
+    existing_assets = (
+        await db_session.execute(
+            select(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
+        )
+    ).scalars().all()
+    existing_loans = (
+        await db_session.execute(
+            select(Loan).where(Loan.snapshot_date == snapshot_date)
+        )
+    ).scalars().all()
+    asset_metadata = {
+        (row.side, row.category, row.product_name): {
+            "liquidity_tier": row.liquidity_tier,
+            "is_cash_equivalent": row.is_cash_equivalent,
+        }
+        for row in existing_assets
+        if row.liquidity_tier is not None or row.is_cash_equivalent is not None
+    }
+    loan_metadata = {
+        (row.lender, row.product_name): {
+            "monthly_payment": row.monthly_payment,
+            "repayment_method": row.repayment_method,
+        }
+        for row in existing_loans
+        if row.monthly_payment is not None or row.repayment_method is not None
+    }
 
     await db_session.execute(
         delete(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
@@ -368,17 +394,28 @@ async def _replace_snapshots(
     )
     await db_session.execute(delete(Loan).where(Loan.snapshot_date == snapshot_date))
 
-    db_session.add_all(
-        AssetSnapshot(snapshot_date=snapshot_date, **row)
-        for row in normalized_snapshots.asset_snapshots
-    )
+    asset_rows = []
+    for row in normalized_snapshots.asset_snapshots:
+        stored_row = dict(row)
+        metadata = asset_metadata.get(
+            (str(stored_row["side"]), str(stored_row["category"]), str(stored_row["product_name"]))
+        )
+        if metadata:
+            stored_row.update(metadata)
+        asset_rows.append(AssetSnapshot(snapshot_date=snapshot_date, **stored_row))
+    db_session.add_all(asset_rows)
     db_session.add_all(
         Investment(snapshot_date=snapshot_date, **row)
         for row in normalized_snapshots.investments
     )
-    db_session.add_all(
-        Loan(snapshot_date=snapshot_date, **row) for row in normalized_snapshots.loans
-    )
+    loan_rows = []
+    for row in normalized_snapshots.loans:
+        stored_row = dict(row)
+        metadata = loan_metadata.get((str(stored_row["lender"]), str(stored_row["product_name"])))
+        if metadata:
+            stored_row.update(metadata)
+        loan_rows.append(Loan(snapshot_date=snapshot_date, **stored_row))
+    db_session.add_all(loan_rows)
 
 
 def _resolve_status(*, tx_success: bool, snapshot_success: bool) -> str:

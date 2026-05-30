@@ -1,6 +1,6 @@
 # Planned Work
 
-이 문서는 현재 코드에는 아직 없지만 문서나 계획에 남아 있는 작업을 한 곳에 모은 backlog다.
+이 문서는 남은 backlog와 최근 구현된 roadmap 항목의 현재 기준을 한 곳에 모은 문서다.
 
 우선순위 기준:
 
@@ -45,7 +45,7 @@
 - `risk_level` 또는 `review_priority` 같은 데이터 신호 강도 산출.
 - `confidence`, `assumptions`, `classification_coverage_ratio`, `unclassified_*`처럼 값의 신뢰도를 판단할 수 있는 재료 제공.
 - threshold/settings 저장과 적용. 에이전트별 memory에 정책값을 흩뜨리지 않는다.
-- 후보 review workflow 상태 저장. 예: `pending`, `reviewed`, `ignored`, `snoozed`, `approved`, `dismissed`, `memo`, `reviewed_at`, `cooldown_until`.
+- 후보 review workflow 상태 저장. 1차 live 상태값은 `pending`, `reviewed`, `ignored`, `snoozed`, `dismissed`다. `approved`는 구매 허용처럼 보일 수 있어 제외했고, `memo`/`reviewed_at`/`cooldown_until`은 별도 review 화면을 만들 때 확장한다.
 
 ### My Ledge가 하지 않는 것
 
@@ -113,9 +113,9 @@
 
 ### 문서/운영 contract 정리
 
-- `verify_import_parity` 범위 결정
-  - 현재 sample presence 검증 수준으로 문서화할지
-  - rolling-window overlap extra-row 검증까지 확장할지 결정
+- `verify_import_parity` 범위 결정 — live decision
+  - 현재 범위는 transaction sample presence + snapshot missing/extra row 검증으로 유지한다.
+  - rolling-window overlap extra-row 검증은 운영 fixture 비용이 큰 별도 hardening으로 남기며, 현재 P0 완료 조건에는 넣지 않는다.
 - 자산/투자/대출 snapshot coverage 운영 방식 결정
   - 결정: 우선 업로드될 때만 쌓이는 sparse snapshot으로 본다.
   - 월별/마감일 기준 snapshot 확보는 지금 운영 절차로 강제하지 않는다.
@@ -191,7 +191,7 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 - `vw_recurring_merchant_monthly` — live
   - 저장된 `recurring_payment_kind` 수동 분류 결과의 월별 read surface
   - 반복 탐지 confidence와 interval 판단은 API diagnostic에 유지
-- discretionary spending velocity
+- discretionary spending velocity — live
   - 월 진행률 대비 재량 지출 속도 경고
   - 처음에는 강한 제동이 아니라 조용한 참고 신호로 제공한다.
   - `as_of_date`, baseline, threshold가 필요하므로 API/settings contract로 설계
@@ -206,7 +206,7 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
   - 응답에는 `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level` 또는 `review_priority`, `confidence`, `reasons`, `assumptions`를 포함한다.
   - 분류 품질이 낮을 때 해석이 흔들리지 않도록 `unclassified_spend`, `classification_coverage_ratio`를 포함한다.
   - 진행월 수입이 estimated라면 `income_basis`나 assumptions로 명시한다.
-- purchase gate candidates
+- purchase gate candidates — live
   - 큰 일회성 지출, 새 거래처, discretionary spike 후보 추출
   - 처음에는 구매 차단이 아니라 후보 탐지/리뷰 흐름으로 시작한다.
   - 후보 기준은 큰 금액, 새 거래처, 평소 대비 급증을 조합한다.
@@ -218,7 +218,7 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
   - API는 "구매 금지/허용"이 아니라 `candidate_type`, `transaction_id`, `candidate_key`, `signals`, `risk_level` 또는 `review_priority`, `confidence`, `suggested_review_window`, `reasons`, `assumptions`를 제공한다.
   - `candidate_key`는 review 상태 저장을 위해 안정적으로 만들어야 한다. 1차 후보는 `(candidate_type, transaction_id)` 기반으로 충분하다.
   - 후보 상태 저장은 My Ledge 책임이다. 1차 상태값은 `pending`, `reviewed`, `ignored`, `snoozed`, `dismissed`로 둔다. `approved`는 구매 허용처럼 보일 수 있어 초기 상태값에서 제외한다.
-  - 기본 cooldown은 14일로 시작한다.
+  - 기본 cooldown은 14일로 시작한다. 현재 live 구현은 settings/assumptions와 review state 저장까지 제공하며, `cooldown_until` 기반 자동 숨김은 후속 review 화면에서 확장한다.
   - frontend는 처음에는 `/analysis/insights`에 후보 카드로 노출하고, 후보가 많아지면 별도 review 화면으로 분리한다.
   - 최종 구매 조언, 보류 권유, 대체안 제안, 말투/개입 강도는 에이전트가 맡는다.
 
@@ -257,7 +257,7 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
     - `weekly_interval_days_min`: default `6`
     - `weekly_interval_days_max`: default `8`
     - `minimum_confidence`: default `0.5`
-    - `default_apply_scope`: default `future_only`
+    - `default_apply_scope`: default `all_matching`
     - `upload_auto_apply`: default `false`
   - `asset_liability_health`
     - `emergency_fund_included_tiers`: default `immediate`
@@ -276,6 +276,8 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 
 - `GET /api/v1/analytics/net-worth-breakdown` — live
 - `GET /api/v1/analytics/liquidity-health` — live
+- `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity` — live
+- `PATCH /api/v1/loans/{loan_id}/repayment-metadata` — live
 - 별도 `debt-burden` endpoint는 만들지 않고, 현재는 `liquidity-health` 응답의 `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`로 부채 부담을 함께 제공한다.
 
 주의:
@@ -298,7 +300,8 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 ### Snapshot Read Models
 
 - `vw_asset_snapshot_canonical`
-  - `asset_snapshots`, `loans` 중심의 source-of-truth와 double-count 방지 규칙을 먼저 고정해야 함
+  - live
+  - `asset_snapshots`, `loans` 중심의 source-of-truth와 double-count 방지 규칙을 우선 고정
   - 투자 snapshot은 총액 참고값으로만 취급하고, 상품별 성과/배분 view는 P2로 미룸
 
 ### Data Model Foundations
@@ -352,26 +355,22 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 
 - category -> `cost_kind` / `fixed_cost_necessity` 자동분류 규칙
 - merchant -> loan account 자동연결 규칙
-
-미구현:
-
-- `recurring_payment_kind` 자동분류
-- 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 쓰는 dry-run contract
-- 자동 저장하지 않고 dry-run 후보를 먼저 보여준다.
-- 기본 승인 단위는 거래처 그룹 단위로 둔다.
-- dry-run 응답에는 `merchant`, `proposed_kind`, `confidence`, `matched_transactions`, `reason`, `category_hint`, `apply_scope_options`를 포함한다.
-- 사용자가 승인할 때 적용 범위를 고른다.
-  - 과거 유사 거래까지 적용
-  - 앞으로 들어오는 거래에만 적용
-- 업로드 후 자동 적용은 기본 OFF로 시작하고 settings에서 켤 수 있게 한다.
-- 사용자가 승인한 뒤 bulk 반영하는 운영 화면
+- `recurring_payment_kind` 자동분류 dry-run/승인 흐름
+  - 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 쓰는 dry-run contract
+  - 자동 저장하지 않고 dry-run 후보를 먼저 보여준다.
+  - 기본 승인 단위는 거래처 그룹 단위로 둔다.
+  - dry-run 응답에는 `merchant`, `proposed_kind`, `confidence`, `matched_transactions`, `reason`, `category_hint`, `apply_scope_options`를 포함한다.
+  - 사용자가 승인할 때 적용 범위를 고른다.
+    - `all_matching`: 과거 유사 거래까지 적용
+    - `future_only`: 기존 거래는 변경하지 않는다. 별도 future-rule 저장 모델은 아직 두지 않으므로 사용자가 명시 선택한 no-op 승인으로 취급한다.
+  - 업로드 후 자동 적용은 기본 OFF로 시작하고 settings에서 켤 수 있게 한다.
 
 ### Bulk Operations
 
-- bulk delete / bulk restore API 및 frontend 연결
+- bulk delete / bulk restore API 및 frontend 연결 — live
 - bulk 기능은 허용하되, 백업/복구 안전장치를 전제로 한다.
 - 실행 전 preview를 필수로 둔다.
-- 확인 모달에는 대상 건수, 기간, 총액, 대표 거래처를 표시한다.
+- inline 확인 preview에는 대상 건수, 기간, 총액, 대표 거래처를 표시한다.
 - delete는 soft delete만 수행한다.
 - 실행 후 toast와 "방금 삭제한 항목 복원" 액션을 제공한다.
 - restore는 delete보다 가볍게 처리하되, 대상 건수와 기간은 확인한다.
@@ -471,9 +470,7 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 
 ## Recommended Execution Order
 
-1. 기능 구현으로 넘어가되, P0 운영 검증과 contract 정리는 각 구현 batch의 acceptance check로 수행한다.
-2. 투자 분석과 자산이동/이체 tracking은 뒤로 미룬다.
-3. 다음 batch는 discretionary spending velocity와 purchase gate candidates를 우선 검토한다.
-4. recurring 자동분류 dry-run/승인 흐름을 별도 batch로 진행한다.
-5. bulk delete/restore 같은 operations 후속을 진행한다.
-6. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.
+1. P2 제외 P1 advisor/operations 구현은 live contract와 frontend 연결까지 완료했다.
+2. 다음은 운영 실데이터 smoke, screenshot capture, undo/polish 같은 사용성 후속을 acceptance check로 처리한다.
+3. 투자 분석과 자산이동/이체 tracking은 뒤로 미룬다.
+4. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.

@@ -539,10 +539,20 @@
     - `asset_total`
     - `liability_total`
     - `net_worth`
+  - `asset_items[]`
+    - `id`
+    - `snapshot_date`
+    - `side`
+    - `category`
+    - `product_name`
+    - `amount`
+    - `liquidity_tier`
+    - `is_cash_equivalent`
 - Calculation:
   - groups `asset_snapshots` by `snapshot_date`
   - sums `side="asset"` and `side="liability"` separately
   - `net_worth = asset_total - liability_total`
+  - `asset_items` is the editable asset-row surface for liquidity and cash-equivalent review; it is limited to latest `side="asset"` rows and does not replace the date-level `items` totals.
 
 #### `GET /api/v1/assets/net-worth-history`
 
@@ -635,9 +645,29 @@
   - `assumptions[]`
 - Notes:
   - cash equivalents use `asset_snapshots.is_cash_equivalent=true` first
+  - when `is_cash_equivalent` is null, `liquidity_tier='immediate'` counts as cash-equivalent; `near_liquid` and `illiquid` do not count in the base emergency-fund months
   - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption
+  - same-date snapshot re-import preserves user-confirmed `liquidity_tier` / `is_cash_equivalent` and loan repayment metadata by stable snapshot row identity
   - monthly debt payment uses `loans.monthly_payment` when available; otherwise it remains an assumption-backed estimate surface
   - if required spend or income is omitted, emergency/debt ratios can be `null`
+
+#### `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
+
+- Auth: API key required
+- Purpose: save user-confirmed asset liquidity metadata for emergency-fund calculations
+- Request:
+  - `liquidity_tier`: `immediate`, `near_liquid`, `illiquid`, or `null`
+  - `is_cash_equivalent`: boolean or `null`
+- Response model: `AssetSnapshotItemResponse`
+
+#### `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
+
+- Auth: API key required
+- Purpose: save user-confirmed debt-payment metadata for liquidity/debt burden calculations
+- Request:
+  - `monthly_payment`: decimal `>= 0` or `null`
+  - `repayment_method`: `principal_interest`, `principal_equal`, `interest_only`, `unknown`, or `null`
+- Response model: `LoanRepaymentMetadataResponse`
 
 #### `GET /api/v1/investments/summary`
 
@@ -884,29 +914,49 @@
   - if partial date provided, baseline months use same day cutoff
   - setting precedence is explicit query param, then persisted analytics setting, then code default
 
+#### `GET /api/v1/analytics/discretionary-velocity`
+
+- Purpose: compare current-month discretionary spend pace with a prorated closed-month baseline.
+- Query params:
+  - `as_of_date` optional; omitted uses server date
+- Response includes `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_monthly_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level`, `confidence`, `classification_coverage_ratio`, `unclassified_spend`, `reasons[]`, and `assumptions[]`.
+- Calculation excludes loan-linked repayments and uses `spend_necessity='discretionary'`; classification coverage below the configured minimum lowers confidence instead of producing a strong warning.
+
+#### `GET /api/v1/analytics/purchase-gate-candidates`
+
+- Purpose: expose review candidates for unusually notable discretionary purchases without deciding whether a purchase is allowed.
+- Query params:
+  - `start_date`, `end_date`
+  - `review_status`
+  - `page`, `per_page`
+- Candidate types: `large_oneoff`, `new_merchant`, `merchant_spike`, `discretionary_spike`.
+- Response items include `candidate_key`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, and `review_status`.
+
+#### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
+
+- Auth: API key required
+- Purpose: persist review state for a stable purchase candidate key.
+- Request: `review_status` as `pending`, `reviewed`, `ignored`, `snoozed`, or `dismissed`.
+- Response: saved `candidate_key`, `candidate_type`, `transaction_id`, and `review_status`.
+  - `snoozed` is currently persisted as review state; cooldown days are exposed in settings/assumptions but do not create a separate hidden expiry filter yet.
+
 #### `GET /api/v1/settings/analytics`
 
 - Auth: API key required
 - Purpose: read backend-tunable analytics settings for diagnostics
 - Response model: `AnalyticsSettingsResponse`
 - Response shape:
-  - `defaults.spending_anomalies`
-    - `min_delta_amount`
-    - `anomaly_threshold`
-    - `baseline_months`
-  - `saved.spending_anomalies`
-    - nullable saved values
-  - `effective.spending_anomalies`
-    - values currently used when a request does not pass an explicit override
+  - `defaults`, `saved`, and `effective`
+  - sections: `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`
+  - `saved` values are nullable; `effective` is saved-over-default and is what backend analytics use when requests do not pass explicit overrides
 
 #### `PATCH /api/v1/settings/analytics`
 
 - Auth: API key required
 - Purpose: persist backend-tunable analytics settings
 - Request body:
-  - `spending_anomalies.min_delta_amount` integer, `>= 0`, nullable to reset
-  - `spending_anomalies.anomaly_threshold` number, `>= 0`, nullable to reset
-  - `spending_anomalies.baseline_months` integer, `1..12`, nullable to reset
+  - any supported setting section may be partially patched
+  - sending `null` for a persisted value resets that key to code default
 - Response model: `AnalyticsSettingsResponse`
 
 #### `GET /api/v1/auto-classification/settings`

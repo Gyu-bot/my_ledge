@@ -19,16 +19,20 @@ from app.schemas.auto_classification import (
     RecurringCategoryRuleListResponse,
     RecurringCategoryRuleRequest,
     RecurringCategoryRuleResponse,
+    RecurringDryRunApplyRequest,
+    RecurringDryRunResponse,
 )
 from app.services.auto_classification_service import (
     apply_category_classification_rules,
     apply_loan_merchant_rules,
     apply_merchant_alias_rules,
     apply_recurring_category_rules,
+    apply_recurring_dry_run,
     delete_category_classification_rule,
     delete_loan_merchant_rule,
     delete_merchant_alias_rule,
     delete_recurring_category_rule,
+    dry_run_recurring_category_rules,
     get_auto_classification_settings,
     list_category_classification_rules,
     list_loan_merchant_rules,
@@ -214,6 +218,16 @@ async def post_recurring_category_rule(
     return await upsert_recurring_category_rule(db_session, payload)
 
 
+@router.get(
+    "/recurring-category-rules/dry-run",
+    response_model=RecurringDryRunResponse,
+)
+async def get_recurring_category_rules_dry_run(
+    db_session: AsyncSession = Depends(get_db_session),
+) -> RecurringDryRunResponse:
+    return await dry_run_recurring_category_rules(db_session)
+
+
 @router.delete(
     "/recurring-category-rules/{rule_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -234,4 +248,16 @@ async def apply_recurring_rules(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> AutoClassificationApplyResponse:
     result = await apply_recurring_category_rules(db_session)
+    return AutoClassificationApplyResponse(updated=result.updated)
+
+
+@router.post(
+    "/apply/recurring-dry-run",
+    response_model=AutoClassificationApplyResponse,
+)
+async def apply_recurring_dry_run_endpoint(
+    payload: RecurringDryRunApplyRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> AutoClassificationApplyResponse:
+    result = await apply_recurring_dry_run(db_session, payload)
     return AutoClassificationApplyResponse(updated=result.updated)

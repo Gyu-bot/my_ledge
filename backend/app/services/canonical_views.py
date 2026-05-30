@@ -151,6 +151,35 @@ def build_transactions_effective_select(
 
 CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
     SchemaViewDefinition(
+        name="vw_asset_snapshot_canonical",
+        description=(
+            "Canonical asset/liability snapshot read model. Aggregates asset snapshots "
+            "with loan snapshot debt metadata by snapshot_date and exposes liquidity "
+            "tiers, cash-equivalent totals, loan balances, and confirmed monthly debt "
+            "payments without investment-product performance assumptions."
+        ),
+        recommended_for_ai=True,
+        columns=(
+            SchemaColumnDefinition("snapshot_date", Date(), nullable=False),
+            SchemaColumnDefinition("asset_total", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition("liability_total", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition("net_worth", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition(
+                "cash_equivalent_total", Numeric(15, 2), nullable=False
+            ),
+            SchemaColumnDefinition("near_liquid_total", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition("illiquid_total", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition("loan_balance_total", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition(
+                "monthly_debt_payment_total",
+                Numeric(15, 2),
+                nullable=False,
+            ),
+            SchemaColumnDefinition("asset_row_count", Integer(), nullable=False),
+            SchemaColumnDefinition("loan_row_count", Integer(), nullable=False),
+        ),
+    ),
+    SchemaViewDefinition(
         name="vw_category_monthly_spend",
         description=(
             "Canonical monthly spend aggregate. Uses effective categories and excludes "

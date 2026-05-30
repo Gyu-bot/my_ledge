@@ -151,7 +151,7 @@
 
 [순자산 추이]
 
-[투자 요약]            [대출 요약]
+[유동성 Health]       [대출 요약]
 ```
 
 ### Blocks
@@ -160,10 +160,10 @@
   - 순자산
   - 총자산
   - 총부채
-  - 투자 평가액
+  - 현금성 자산
 - 순자산 추이
-- 투자 요약
-- 대출 요약
+- 유동성 Health: 순자산 구성, 자산별 `liquidity_tier` / 현금성 여부 저장
+- 대출 요약: 대출별 `monthly_payment` / `repayment_method` 저장
 
 ### Topbar meta
 
@@ -175,8 +175,8 @@
 | --- | --- | --- |
 | KPI row | `KpiCard` x4 | `bg-surface-card`, `border-border`, `text-kpi`, `text-text-secondary`, delta accent/danger |
 | net-worth chart | `SectionCard` + `LineAreaChart` | `bg-surface-card`, `border-border`, `CHART_ACCENT`, shared tooltip contract |
-| investment summary | `SectionCard` + `HorizontalBarList` | `bg-surface-card`, `border-border`, `text-text-secondary`, accent/info tones |
-| loan summary | `SectionCard` + summary cards + compact table | `bg-surface-card`, `border-border`, `text-text-primary`, `text-danger`, table text tokens without separators |
+| liquidity health | `SectionCard` + summary cards + `HorizontalBarList` + inline row editors | `bg-surface-card`, `border-border`, `text-text-secondary`, accent/info tones |
+| loan summary | `SectionCard` + summary cards + compact table + inline row editors | `bg-surface-card`, `border-border`, `text-text-primary`, `text-danger`, table text tokens without separators |
 
 ## Insights `/analysis/insights`
 
@@ -184,6 +184,8 @@
 [KPI x3]
 
 [핵심 인사이트]
+
+[재량 지출 속도]      [구매 게이트 후보]
 
 [반복 결제]            [이상 지출]
 
@@ -197,6 +199,8 @@
   - 수입 변동성
   - 이상 지출 카테고리 수
 - 핵심 인사이트
+- 재량 지출 속도: 월 진행률 대비 재량 지출 baseline 비교
+- 구매 게이트 후보: 큰 일회성/새 거래처/거래처 급증/재량 급증 후보와 review status
 - 반복 결제: 거래처별 반복 후보와 저장된 `할부` / `매월 반복` 분류 결과를 읽기 전용으로 표시
 - 이상 지출
 - 거래처 소비 Top 5
@@ -212,6 +216,7 @@
 | --- | --- | --- |
 | KPI row | `KpiCard` x3 | `bg-surface-card`, `border-border`, `text-kpi`, accent/danger |
 | insight list | `SectionCard` + variant badge | `bg-surface-card`, `border-border`, `text-text-primary`, `text-nano`, accent/danger/warn surfaces |
+| velocity / purchase gate | `SectionCard` + compact candidate rows | `bg-surface-card`, `border-border`, `text-text-secondary`, `text-warn`, `text-danger` |
 | recurring / anomaly tables | `SectionCard` + table + `Pagination` | `bg-surface-card`, `border-border`, `text-text-primary`, `text-text-muted`, `text-pagination`, no row separators |
 | merchant top 5 | `SectionCard` + control + `HorizontalBarList` | `bg-surface-card`, `border-border`, `text-text-secondary`, `border-border-strong` |
 | category mom | `SectionCard` + control + `MoMBarList` | `bg-surface-card`, `border-border`, `CHART_DANGER`, `CHART_ACCENT` |
@@ -223,7 +228,7 @@
 
 [filter bar]
 
-[bulk edit panel]   (selection 있을 때만)
+[bulk edit / delete / restore panel]   (selection 있을 때만)
 
 [transaction table + pagination]
 
@@ -236,7 +241,7 @@
 
 - write access alert
 - filter bar
-- bulk edit panel: 거래처/카테고리/고정비/필수여부/메모만 수정
+- bulk edit panel: 거래처/카테고리/고정비/필수여부/메모 수정, delete/restore preview 후 실행
 - transaction table: 반복분류는 읽기 전용 표시
 - upload accordion
 - upload history accordion
@@ -264,6 +269,8 @@
 
 [summary]
 
+[dry-run approval candidates]
+
 [selected group bulk classification panel]
 
 [recurring payment candidate table + classification select + pagination]
@@ -273,6 +280,7 @@
 
 - write access alert
 - summary
+- dry-run approval candidates: 카테고리 기반 반복결제 제안, confidence, 매칭 거래, 적용 범위
 - selected group bulk classification panel
 - recurring payment candidate table
 - group classification select: `미분류`, `할부`, `매월 반복`, `반복 아님`
@@ -288,6 +296,7 @@
 | --- | --- | --- |
 | write access alert | `AlertBanner` | warn state surface and text tokens |
 | summary | inline shell | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `text-text-ghost` |
+| dry-run approval candidates | row list + native select + action button | `bg-surface-card`, `border-border-faint`, `bg-accent-dim`, `text-accent` |
 | selected group bulk classification panel | inline edit panel | `bg-surface-section`, `border-border-subtle`, `text-info-default`, `bg-accent-dim` |
 | recurring table | table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
 | classification select | native select | `bg-surface-bar`, `border-border-subtle`, `text-text-secondary` |

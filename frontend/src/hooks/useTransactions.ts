@@ -4,6 +4,7 @@ import type {
   TransactionListParams,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
+  TransactionBulkMutationRequest,
   LoanAccountMetadataUpdateRequest,
   LoanTransactionLinkBulkRequest,
   LoanTransactionMappingParams,
@@ -15,6 +16,7 @@ import type {
   MerchantAliasRuleRequest,
   LoanMerchantRuleRequest,
   RecurringCategoryRuleRequest,
+  RecurringDryRunApplyRequest,
 } from '../types/transaction'
 
 export const txKeys = {
@@ -28,6 +30,7 @@ export const txKeys = {
   merchantAliasRules: () => ['transactions', 'merchantAliasRules'] as const,
   loanMerchantRules: () => ['transactions', 'loanMerchantRules'] as const,
   recurringCategoryRules: () => ['transactions', 'recurringCategoryRules'] as const,
+  recurringCategoryRulesDryRun: () => ['transactions', 'recurringCategoryRulesDryRun'] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
@@ -97,6 +100,13 @@ export function useRecurringCategoryRules() {
   return useQuery({
     queryKey: txKeys.recurringCategoryRules(),
     queryFn: transactionApi.recurringCategoryRules,
+  })
+}
+
+export function useRecurringCategoryRulesDryRun() {
+  return useQuery({
+    queryKey: txKeys.recurringCategoryRulesDryRun(),
+    queryFn: transactionApi.recurringCategoryRulesDryRun,
   })
 }
 
@@ -170,6 +180,42 @@ export function useBulkUpdateTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TransactionBulkUpdateRequest) => transactionApi.bulkUpdate(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
+  })
+}
+
+export function useBulkDeletePreview() {
+  return useMutation({
+    mutationFn: (data: TransactionBulkMutationRequest) =>
+      transactionApi.bulkDeletePreview(data),
+  })
+}
+
+export function useBulkDeleteTransactions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: TransactionBulkMutationRequest) => transactionApi.bulkDelete(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
+  })
+}
+
+export function useBulkRestorePreview() {
+  return useMutation({
+    mutationFn: (data: TransactionBulkMutationRequest) =>
+      transactionApi.bulkRestorePreview(data),
+  })
+}
+
+export function useBulkRestoreTransactions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: TransactionBulkMutationRequest) => transactionApi.bulkRestore(data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['transactions'] })
       void qc.invalidateQueries({ queryKey: ['analytics'] })
@@ -279,6 +325,18 @@ export function useApplyRecurringCategoryRules() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['transactions'] })
       void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
+  })
+}
+
+export function useApplyRecurringDryRun() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: RecurringDryRunApplyRequest) => transactionApi.applyRecurringDryRun(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+      void qc.invalidateQueries({ queryKey: txKeys.recurringCategoryRulesDryRun() })
     },
   })
 }

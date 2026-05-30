@@ -5,13 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.security import require_api_key
 from app.schemas.asset import (
     AssetLiabilityHealthResponse,
+    AssetLiquidityPatchRequest,
+    AssetSnapshotItemResponse,
     NetWorthBreakdownResponse,
     AssetSnapshotComparisonResponse,
     AssetSnapshotsResponse,
     InvestmentSummaryResponse,
     LoanSummaryResponse,
+    LoanRepaymentMetadataPatchRequest,
+    LoanRepaymentMetadataResponse,
     NetWorthHistoryResponse,
     SnapshotComparisonMode,
 )
@@ -23,6 +28,8 @@ from app.services.assets_service import (
     get_net_worth_breakdown,
     get_net_worth_history,
     list_asset_snapshots,
+    patch_asset_liquidity,
+    patch_loan_repayment_metadata,
 )
 
 router = APIRouter()
@@ -95,6 +102,19 @@ async def get_assets_snapshot_compare(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.patch(
+    "/assets/snapshots/{asset_snapshot_id}/liquidity",
+    response_model=AssetSnapshotItemResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_asset_snapshot_liquidity(
+    asset_snapshot_id: int,
+    payload: AssetLiquidityPatchRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> AssetSnapshotItemResponse:
+    return await patch_asset_liquidity(db_session, asset_snapshot_id, payload)
+
+
 @router.get("/investments/summary", response_model=InvestmentSummaryResponse)
 async def get_investments_summary(
     snapshot_date: date | None = Query(default=None),
@@ -109,3 +129,16 @@ async def get_loans_summary(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> LoanSummaryResponse:
     return await get_loan_summary(db_session, snapshot_date)
+
+
+@router.patch(
+    "/loans/{loan_id}/repayment-metadata",
+    response_model=LoanRepaymentMetadataResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_loan_repayment_metadata_endpoint(
+    loan_id: int,
+    payload: LoanRepaymentMetadataPatchRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LoanRepaymentMetadataResponse:
+    return await patch_loan_repayment_metadata(db_session, loan_id, payload)

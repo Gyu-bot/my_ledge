@@ -7,6 +7,7 @@ import { RecurringClassificationPage } from '../../pages/RecurringClassification
 const useRecurringPaymentsMock = vi.fn()
 const useWriteAccessMock = vi.fn()
 let bulkUpdateTransactionsMock = vi.fn()
+let applyRecurringDryRunMock = vi.fn()
 
 vi.mock('../../hooks/useAnalytics', () => ({
   useRecurringPayments: (...args: unknown[]) => useRecurringPaymentsMock(...args),
@@ -14,6 +15,26 @@ vi.mock('../../hooks/useAnalytics', () => ({
 
 vi.mock('../../hooks/useTransactions', () => ({
   useBulkUpdateTransactions: () => ({ mutateAsync: bulkUpdateTransactionsMock, isPending: false }),
+  useRecurringCategoryRulesDryRun: () => ({
+    data: {
+      items: [
+        {
+          merchant: '왓챠',
+          proposed_kind: 'monthly_recurring',
+          confidence: 1,
+          matched_transactions: [
+            { id: 31, date: '2026-01-05', amount: -12000 },
+            { id: 32, date: '2026-02-05', amount: -12000 },
+          ],
+          reason: '반복 후보 조건과 카테고리 힌트가 일치합니다.',
+          category_hint: '구독',
+          apply_scope_options: ['all_matching', 'future_only'],
+        },
+      ],
+    },
+    isLoading: false,
+  }),
+  useApplyRecurringDryRun: () => ({ mutateAsync: applyRecurringDryRunMock, isPending: false }),
 }))
 
 vi.mock('../../hooks/useWriteAccess', () => ({
@@ -36,6 +57,7 @@ function wrap(ui: React.ReactNode) {
 beforeEach(() => {
   useWriteAccessMock.mockReturnValue(true)
   bulkUpdateTransactionsMock = vi.fn().mockResolvedValue({ updated: 2 })
+  applyRecurringDryRunMock = vi.fn().mockResolvedValue({ updated: 2 })
   useRecurringPaymentsMock.mockReturnValue({
     data: {
       total: 1,
@@ -133,6 +155,34 @@ describe('RecurringClassificationPage', () => {
     })
   })
 
+  it('shows recurring dry-run proposals and applies the selected scope', async () => {
+    wrap(<RecurringClassificationPage />)
+
+    expect(screen.getByText('dry-run 승인 후보')).toBeInTheDocument()
+    expect(screen.getByText('왓챠')).toBeInTheDocument()
+    expect(screen.getAllByText('매월 반복').length).toBeGreaterThan(0)
+    expect(screen.getByText('confidence 100.0%')).toBeInTheDocument()
+    expect(screen.getByText('카테고리 힌트 구독')).toBeInTheDocument()
+    expect(screen.getByText('반복 후보 조건과 카테고리 힌트가 일치합니다.')).toBeInTheDocument()
+    expect(screen.getByText('2026-01-05 · ₩ 12,000')).toBeInTheDocument()
+    expect(screen.getByText('all_matching / future_only')).toBeInTheDocument()
+    expect(screen.getByLabelText('왓챠 dry-run 적용 범위')).toHaveValue('all_matching')
+
+    fireEvent.change(screen.getByLabelText('왓챠 dry-run 적용 범위'), {
+      target: { value: 'all_matching' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '왓챠 dry-run 승인 적용' }))
+
+    await waitFor(() => {
+      expect(applyRecurringDryRunMock).toHaveBeenCalledWith({
+        merchant: '왓챠',
+        proposed_kind: 'monthly_recurring',
+        apply_scope: 'all_matching',
+      })
+    })
+    expect(await screen.findByText('왓챠 dry-run 적용 완료')).toBeInTheDocument()
+  })
+
   it('disables classification controls in read-only mode', () => {
     useWriteAccessMock.mockReturnValue(false)
 
@@ -141,5 +191,6 @@ describe('RecurringClassificationPage', () => {
     expect(screen.getByText('읽기 전용 모드')).toBeInTheDocument()
     expect(screen.getByLabelText('통신사 반복결제 분류')).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '왓챠 dry-run 승인 적용' })).toBeDisabled()
   })
 })

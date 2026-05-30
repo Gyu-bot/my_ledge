@@ -1,8 +1,38 @@
 export interface AssetSnapshotTotals {
+  id?: number
   snapshot_date: string
+  side?: 'asset' | 'liability' | string
+  category?: string | null
+  product_name?: string | null
+  amount?: string | null
   asset_total: string    // Decimal as string
   liability_total: string
   net_worth: string
+  liquidity_tier?: LiquidityTier | null
+  is_cash_equivalent?: boolean | null
+}
+
+export interface AssetSnapshotsResponse {
+  items: AssetSnapshotTotals[]
+  asset_items: AssetSnapshotItemResponse[]
+}
+
+export type LiquidityTier = 'immediate' | 'near_liquid' | 'illiquid'
+
+export interface AssetLiquidityPatchRequest {
+  liquidity_tier: LiquidityTier | null
+  is_cash_equivalent: boolean | null
+}
+
+export interface AssetSnapshotItemResponse {
+  id: number
+  snapshot_date: string
+  side: string
+  category: string
+  product_name: string
+  amount: string
+  liquidity_tier: LiquidityTier | null
+  is_cash_equivalent: boolean | null
 }
 
 export type SnapshotComparisonMode =
@@ -56,14 +86,37 @@ export interface InvestmentSummaryResponse {
 }
 
 export interface LoanItem {
+  id?: number | null
   loan_type: string | null
   lender: string
   product_name: string
   principal: string | null
   balance: string | null
   interest_rate: string | null
+  monthly_payment?: string | null
+  repayment_method?: LoanRepaymentMethod | null
   start_date: string | null
   maturity_date: string | null
+}
+
+export type LoanRepaymentMethod =
+  | 'principal_interest'
+  | 'principal_equal'
+  | 'interest_only'
+  | 'unknown'
+
+export interface LoanRepaymentMetadataPatchRequest {
+  monthly_payment: string | null
+  repayment_method: LoanRepaymentMethod | null
+}
+
+export interface LoanRepaymentMetadataResponse {
+  id: number
+  snapshot_date: string
+  lender: string
+  product_name: string
+  monthly_payment: string | null
+  repayment_method: LoanRepaymentMethod | null
 }
 
 export interface LoanSummaryResponse {

@@ -12,6 +12,7 @@ from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
+from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
 
@@ -27,6 +28,7 @@ __all__ = [
     "LoanMerchantRule",
     "LoanTransactionLink",
     "MerchantAliasRule",
+    "PurchaseGateReview",
     "RecurringCategoryRule",
     "TimestampMixin",
     "Transaction",

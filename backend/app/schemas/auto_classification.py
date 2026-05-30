@@ -115,5 +115,31 @@ class RecurringCategoryRuleListResponse(BaseModel):
     items: list[RecurringCategoryRuleResponse]
 
 
+class RecurringDryRunMatchedTransaction(BaseModel):
+    id: int
+    date: str
+    amount: int
+
+
+class RecurringDryRunItem(BaseModel):
+    merchant: str
+    proposed_kind: RecurringPaymentKind
+    confidence: float
+    matched_transactions: list[RecurringDryRunMatchedTransaction]
+    reason: str
+    category_hint: str
+    apply_scope_options: list[str]
+
+
+class RecurringDryRunResponse(BaseModel):
+    items: list[RecurringDryRunItem]
+
+
+class RecurringDryRunApplyRequest(BaseModel):
+    merchant: str = Field(min_length=1, max_length=500)
+    proposed_kind: RecurringPaymentKind
+    apply_scope: Literal["all_matching", "future_only"] = "all_matching"
+
+
 class AutoClassificationApplyResponse(BaseModel):
     updated: int
