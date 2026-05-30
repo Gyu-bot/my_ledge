@@ -37,7 +37,9 @@
 | 대출 상환 부담 | `vw_loan_repayment_monthly` | `GET /api/v1/loan-transaction-links` |
 | 실제 가용 현금 | `vw_true_spendable_monthly` | dashboard endpoint의 estimated enrichment |
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
+| 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
 | 분류 품질 개선 대상 | `vw_unclassified_work_queue` | operations APIs |
+| 유동성/부채 health | `GET /api/v1/analytics/liquidity-health` | `GET /api/v1/analytics/net-worth-breakdown` |
 | schema 탐색 | `GET /api/v1/schema` | 이 문서와 backend reference |
 
 ## `GET /api/v1/canonical-views/dashboard`
@@ -60,6 +62,7 @@ Response groups:
 | `true_spendable_monthly[]` | `vw_true_spendable_monthly` + API enrichment | 대출 상환과 고정 지출을 뺀 실제 가용 현금. 진행월 수입이 아직 관측되지 않았을 때 예상 수입 필드를 추가할 수 있다. |
 | `loan_repayment_monthly[]` | `vw_loan_repayment_monthly` | 대출 계좌와 상환 유형별 월 상환액. |
 | `merchant_monthly_baseline[]` | `vw_merchant_monthly_baseline` | 거래처별 월 지출과 직전 3개 active month baseline 대비 변화. |
+| `recurring_merchant_monthly[]` | `vw_recurring_merchant_monthly` | 저장된 반복결제 분류별 거래처 월 지출. |
 | `unclassified_work_queue[]` | `vw_unclassified_work_queue` | 분석 신뢰도를 낮추는 미분류/검토 필요 거래 우선순위. |
 
 진행월 예상 수입 enrichment:
@@ -91,11 +94,12 @@ Response groups:
 | `category_major_user`, `category_minor_user` | 사용자가 수정한 카테고리. 없으면 `null`. |
 | `effective_category_major` | `coalesce(category_major_user, category_major)`. |
 | `effective_category_minor` | `coalesce(category_minor_user, category_minor)`. |
-| `description` | 원본 거래 설명. |
-| `merchant` | 분석용 거래처명. 기본은 `description`에서 시작하고 사용자가 수정할 수 있다. |
+| `description` | 원본 거래 설명. BankSalad import 원문이며 자동분류 대출 규칙에서 `match_field='description'`을 선택하면 이 값을 exact match한다. |
+| `merchant` | 분석용 거래처명. 기본은 `description`에서 시작하고 사용자가 수정하거나 alias rule로 정규화할 수 있다. alias rule은 원본 `description`을 매칭해 이 값을 갱신하며, 이미 `merchant != description`인 row는 보존한다. 대출 규칙에서 `match_field='merchant'`를 선택하면 이 값을 exact match한다. |
 | `amount`, `currency`, `payment_method` | 원본 금액, 통화, 결제수단. |
 | `cost_kind` | `fixed`, `variable`, 또는 `null`. 고정비/변동비 분류다. |
-| `fixed_cost_necessity` | `essential`, `discretionary`, 또는 `null`. 고정비일 때 필수/비필수 성격이다. |
+| `fixed_cost_necessity` | `essential`, `discretionary`, 또는 `null`. 고정비 전용 legacy/호환 필드다. |
+| `spend_necessity` | `essential`, `discretionary`, 또는 `null`. 고정/변동과 무관한 필수/재량 축이다. 재량 지출 계산은 이 값을 우선한다. |
 | `cost_classification_source` | `manual`, `auto`, 또는 `null`. 비용 성격 분류 출처다. |
 | `recurring_payment_kind` | `installment`, `monthly_recurring`, `not_recurring`, 또는 `null`. 반복결제 수동/규칙 분류 결과다. |
 | `memo` | 사용자 메모. |
@@ -127,6 +131,10 @@ Response groups:
 | `variable_total` | 일반 지출 중 `cost_kind='variable'`인 금액 합계. 대출 상환 제외. |
 | `essential_fixed_total` | 일반 고정비 중 `fixed_cost_necessity='essential'`. |
 | `discretionary_fixed_total` | 일반 고정비 중 `fixed_cost_necessity='discretionary'`. |
+| `essential_variable_total` | 일반 변동비 중 `spend_necessity='essential'`. 식비/교통처럼 변동하지만 필수인 지출을 분리한다. |
+| `discretionary_variable_total` | 일반 변동비 중 `spend_necessity='discretionary'`. |
+| `required_spend_total` | `essential_fixed_total + essential_variable_total + loan_repayment_total`. |
+| `discretionary_spend_total` | `discretionary_fixed_total + discretionary_variable_total`. |
 | `unclassified_expense_total` | 일반 지출 중 `cost_kind is null`인 금액 합계. |
 | `net_cashflow` | `income_total - expense_total`. 대출 상환은 expense에 이미 포함된다. |
 | `savings_rate` | `net_cashflow / income_total`. 수입이 0이면 `null`. |
@@ -142,6 +150,8 @@ Response groups:
 | `loan_repayment_total` | 대출 상환 총액. |
 | `fixed_commitment_total` | 일반 고정비 총액. 현재는 `vw_monthly_cashflow.fixed_total`. |
 | `variable_total` | 일반 변동비 총액. |
+| `required_variable_total` | 변동비 중 `spend_necessity='essential'`. |
+| `discretionary_variable_total` | 변동비 중 `spend_necessity='discretionary'`. |
 | `spendable_before_variable_spend` | `income_total - loan_repayment_total - fixed_commitment_total`. |
 | `remaining_after_variable_spend` | `income_total - loan_repayment_total - fixed_commitment_total - variable_total`. |
 
@@ -183,7 +193,7 @@ Response groups:
 | 컬럼 | 의미/계산 |
 |---|---|
 | `period` | `YYYY-MM`. |
-| `merchant` | canonical 거래처명. 아직 alias/정규화 모델은 없다. |
+| `merchant` | canonical 거래처명. `merchant_alias_rules`를 적용하면 정규화된 값이 들어간다. |
 | `effective_category_major`, `effective_category_minor` | 사용자 수정 우선 카테고리. |
 | `monthly_spend` | 일반 지출의 `-amount` 월합계. 대출 연결 상환 제외. |
 | `transaction_count` | 해당 월/거래처/category group 거래 건수. |
@@ -193,6 +203,19 @@ Response groups:
 | `baseline_delta_pct` | `baseline_delta / trailing_3_month_avg`. baseline이 없거나 0이면 `null`. |
 
 주의: 없는 달을 0으로 채우는 rolling calendar baseline이 아니라, 해당 거래처/category가 발생한 active month 기준 window다.
+
+### `vw_recurring_merchant_monthly`
+
+저장된 반복결제 분류 결과를 월별로 읽는 surface다. 반복 후보 탐지 자체는 `/analytics/recurring-payments`가 담당하고, 이 view는 이미 저장된 `recurring_payment_kind`를 기준으로 한다.
+
+| 컬럼 | 의미/계산 |
+|---|---|
+| `period` | `YYYY-MM`. |
+| `merchant` | 정규화 규칙이 적용된 canonical 거래처명. |
+| `recurring_payment_kind` | `installment`, `monthly_recurring`, `not_recurring`. |
+| `monthly_spend` | 해당 월/거래처/반복분류의 일반 지출 합계. 대출 연결 상환 제외. |
+| `transaction_count` | 해당 group 거래 건수. |
+| `first_date`, `last_date` | group 내 최초/최종 거래일. |
 
 ### `vw_unclassified_work_queue`
 
@@ -204,6 +227,7 @@ Response groups:
 | `amount_abs` | `abs(amount)`. 우선순위 점수에 사용한다. |
 | `needs_cost_kind` | 일반 지출인데 `cost_kind`가 비어 있음. |
 | `needs_fixed_cost_necessity` | `cost_kind='fixed'`인데 `fixed_cost_necessity`가 비어 있음. |
+| `needs_spend_necessity` | 일반 지출인데 `spend_necessity`가 비어 있음. |
 | `needs_recurring_payment_kind` | 반복/고정 성격인데 `recurring_payment_kind`가 비어 있음. 현재 반복 후보는 최소 2개 월, 최소 2개 거래일, 거래처 금액 CV `<= 0.5` 또는 fixed cost 조건을 본다. |
 | `needs_loan_link_review` | 금융/대출/상환/이자/원리금 키워드 또는 금융 카테고리인데 대출 연결 검토가 필요한 일반 지출. |
 | `merchant_expense_count` | 같은 거래처의 일반 지출 건수. |
@@ -228,19 +252,23 @@ Response groups:
 |---|---|---|
 | `/analytics/monthly-cashflow` | `income`, `expense`, `transfer`, `net_cashflow`, `savings_rate` | 월별 수입/지출/이체 활동량과 저축률. `transfer`는 `abs(amount)` 활동량이다. |
 | `/analytics/category-mom` | `current_amount`, `previous_amount`, `delta_amount`, `delta_pct` | 선택 window의 마지막 월과 직전 달을 category별 비교한다. |
-| `/analytics/fixed-cost-summary` | `expense_total`, `fixed_total`, `variable_total`, `fixed_ratio`, `essential_fixed_total`, `discretionary_fixed_total`, `unclassified_total`, `unclassified_count` | 기간 전체의 고정비/변동비/미분류 구조. |
+| `/analytics/fixed-cost-summary` | `expense_total`, `fixed_total`, `variable_total`, `fixed_ratio`, `essential_fixed_total`, `discretionary_fixed_total`, `essential_variable_total`, `discretionary_variable_total`, `required_spend_total`, `discretionary_spend_total`, `unclassified_total`, `unclassified_count` | 기간 전체의 고정비/변동비/필수/재량/미분류 구조. |
 | `/analytics/fixed-cost-trend` | monthly fixed/variable/essential/discretionary/unclassified fields | 월별 고정비 구조 추이. |
 | `/analytics/merchant-spend` | `merchant`, `amount`, `count`, `avg_amount`, `last_seen_at` | 거래처별 총액, 빈도, 평균 금액, 마지막 거래일. |
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
 | `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공하고 안정/불안정 label은 frontend 해석이다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. |
+| `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. |
+| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 부채 부담 추정. 입력/분류가 부족하면 confidence와 assumptions를 확인한다. |
 
 ## 에이전트 답변 시 주의사항
 
 - 진행월 값에 `income_basis='estimated'`가 붙으면 “관측값”과 “예상값”을 분리해 말한다.
 - 대출 상환은 일반 소비와 분리한다. 같은 금액을 고정비와 대출 부담에 이중으로 더하지 않는다.
-- `merchant`는 아직 정규화되지 않았다. 같은 실거래처가 여러 표기로 갈라질 수 있다.
+- `fixed_cost_necessity`는 고정비 호환 필드이고, 필수/재량 분석은 `spend_necessity`를 우선한다.
+- `merchant`는 alias rule 적용 전에는 같은 실거래처가 여러 표기로 갈라질 수 있다. 거래처 분석 전 `/operations/auto-classification`의 거래처 정규화 규칙 적용 여부를 확인한다. 정규화 규칙은 raw `description`을 기준으로 `merchant`를 채우며, 수동 수정으로 보이는 `merchant != description` row는 덮어쓰지 않는다. 원본 문구 기준으로 대출 상환을 잡아야 하면 `description` 기준 대출 매칭 규칙을 사용한다.
+- 자산이동/이체 별도 tracking은 뒤로 미뤘다. 현재는 월별 현금흐름의 `transfer_activity_total`만 보조 값으로 쓴다.
 - `not_recurring`은 “반복 아님으로 검토됨”이지 “거래가 사라짐”이 아니다.
 - `unclassified_work_queue`는 지출 규모가 큰 미분류 거래를 우선 노출하므로, 전체 오류 목록이 아니라 개선 우선순위다.
 - backend가 label을 제공하지 않는 지표에 임의 등급을 붙일 때는 자체 가정임을 밝힌다.

@@ -331,7 +331,7 @@ export function SpendingPage() {
 
       {/* 6. 거래처 Treemap */}
       <SectionCard
-        title="거래처별 지출 비중"
+        title="분석용 거래처별 지출 비중"
         meta={breakdownMeta}
       >
         {merchantTreemap.isLoading ? <LoadingState /> :
@@ -379,7 +379,7 @@ export function SpendingPage() {
                    <table className="w-full border-collapse text-caption">
                      <thead>
                        <tr>
-                         {['날짜', '거래처', '카테고리', '금액'].map((h) => (
+                         {['날짜', '분석용 거래처', '카테고리', '금액'].map((h) => (
                            <th key={h} className="text-micro text-text-ghost px-3 py-2 text-left">{h}</th>
                          ))}
                        </tr>

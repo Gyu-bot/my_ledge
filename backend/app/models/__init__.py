@@ -3,6 +3,7 @@ from app.models.auto_classification import (
     AutoClassificationSettings,
     CategoryClassificationRule,
     LoanMerchantRule,
+    MerchantAliasRule,
     RecurringCategoryRule,
 )
 from app.models.asset_snapshot import AssetSnapshot
@@ -25,6 +26,7 @@ __all__ = [
     "LoanAccount",
     "LoanMerchantRule",
     "LoanTransactionLink",
+    "MerchantAliasRule",
     "RecurringCategoryRule",
     "TimestampMixin",
     "Transaction",

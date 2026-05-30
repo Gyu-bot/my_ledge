@@ -37,6 +37,10 @@ class FixedCostSummaryResponse(BaseModel):
     fixed_ratio: float | None
     essential_fixed_total: int
     discretionary_fixed_total: int
+    essential_variable_total: int
+    discretionary_variable_total: int
+    required_spend_total: int
+    discretionary_spend_total: int
     unclassified_total: int
     unclassified_count: int
 
@@ -48,6 +52,10 @@ class FixedCostTrendItem(BaseModel):
     variable_total: int
     essential_fixed_total: int
     discretionary_fixed_total: int
+    essential_variable_total: int
+    discretionary_variable_total: int
+    required_spend_total: int
+    discretionary_spend_total: int
     unclassified_total: int
     unclassified_count: int
     fixed_ratio: float | None

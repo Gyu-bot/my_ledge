@@ -39,6 +39,10 @@
   - `POST /api/v1/auto-classification/loan-merchant-rules`
   - `DELETE /api/v1/auto-classification/loan-merchant-rules/{id}`
   - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
+  - `GET /api/v1/auto-classification/merchant-alias-rules`
+  - `POST /api/v1/auto-classification/merchant-alias-rules`
+  - `DELETE /api/v1/auto-classification/merchant-alias-rules/{id}`
+  - `POST /api/v1/auto-classification/apply/merchant-alias-rules`
   - `GET /api/v1/auto-classification/recurring-category-rules`
   - `POST /api/v1/auto-classification/recurring-category-rules`
   - `DELETE /api/v1/auto-classification/recurring-category-rules/{id}`
@@ -80,10 +84,14 @@
 | `POST` | `/api/v1/auto-classification/category-rules` | live | API key required, upsert a category rule |
 | `DELETE` | `/api/v1/auto-classification/category-rules/{id}` | live | API key required |
 | `POST` | `/api/v1/auto-classification/apply/category-rules` | live | API key required, apply rules to non-manual transactions |
-| `GET` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, exact merchant-to-loan rules |
-| `POST` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, upsert a merchant rule |
+| `GET` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, exact merchant/description-to-loan rules |
+| `POST` | `/api/v1/auto-classification/loan-merchant-rules` | live | API key required, upsert a loan match rule |
 | `DELETE` | `/api/v1/auto-classification/loan-merchant-rules/{id}` | live | API key required |
 | `POST` | `/api/v1/auto-classification/apply/loan-merchant-rules` | live | API key required, auto-link non-manual loan mappings |
+| `GET` | `/api/v1/auto-classification/merchant-alias-rules` | live | API key required, merchant alias normalization rules |
+| `POST` | `/api/v1/auto-classification/merchant-alias-rules` | live | API key required, upsert an alias-pattern rule |
+| `DELETE` | `/api/v1/auto-classification/merchant-alias-rules/{id}` | live | API key required |
+| `POST` | `/api/v1/auto-classification/apply/merchant-alias-rules` | live | API key required, normalize transaction merchants |
 | `GET` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, category-to-recurring-kind rules |
 | `POST` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, upsert a recurring category rule |
 | `DELETE` | `/api/v1/auto-classification/recurring-category-rules/{id}` | live | API key required |
@@ -106,8 +114,8 @@
 | Method | Path | Status | Notes |
 |---|---|---|---|
 | `POST` | `/api/v1/transactions` | live | manual transaction create |
-| `PATCH` | `/api/v1/transactions/bulk-update` | live | merchant/category/cost kind/fixed necessity/recurring payment kind/memo |
-| `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/fixed necessity/recurring payment kind/memo |
+| `PATCH` | `/api/v1/transactions/bulk-update` | live | merchant/category/cost kind/spend necessity/fixed necessity/recurring payment kind/memo |
+| `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/spend necessity/fixed necessity/recurring payment kind/memo |
 | `DELETE` | `/api/v1/transactions/{id}` | live | soft delete |
 | `POST` | `/api/v1/transactions/{id}/restore` | live | restore soft-deleted row |
 | `GET` | `/api/v1/transactions/{id}/loan-link` | live | transaction-to-loan repayment mapping |
@@ -127,6 +135,8 @@
 | `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest |
 | `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest |
 | `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots |
+| `GET` | `/api/v1/analytics/net-worth-breakdown` | live | optional `snapshot_date`; latest if omitted |
+| `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income` |
 
 ### Advisor Analytics
 
@@ -135,7 +145,7 @@
 | `GET` | `/api/v1/analytics/monthly-cashflow` | live | P0 |
 | `GET` | `/api/v1/analytics/category-mom` | live | P0 |
 | `GET` | `/api/v1/analytics/fixed-cost-summary` | live | P0 |
-| `GET` | `/api/v1/analytics/fixed-cost-trend` | live | monthly fixed/variable and essential/discretionary fixed-cost trend |
+| `GET` | `/api/v1/analytics/fixed-cost-trend` | live | monthly fixed/variable and essential/discretionary spend trend |
 | `GET` | `/api/v1/analytics/merchant-spend` | live | P0 |
 | `GET` | `/api/v1/analytics/payment-method-patterns` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/income-stability` | live | P1 shipped |
@@ -155,6 +165,7 @@
   - `payment_method`
   - `cost_kind`
   - `fixed_cost_necessity`
+  - `spend_necessity`
   - `cost_classification_source`
   - `recurring_payment_kind`
   - `is_edited`
@@ -167,6 +178,7 @@
   - `merchant`
   - `cost_kind`
   - `fixed_cost_necessity`
+  - `spend_necessity`
   - `recurring_payment_kind`
   - `effective_category_major`
   - `effective_category_minor`
@@ -186,11 +198,25 @@
 
 - Category rules live in `category_classification_rules`.
 - Category rules match effective category values, so `category_major_user/category_minor_user` take precedence over imported categories.
-- Applying category rules writes `transactions.cost_kind`, `transactions.fixed_cost_necessity`, and `transactions.cost_classification_source='auto'`.
+- Applying category rules writes `transactions.cost_kind`, `transactions.fixed_cost_necessity` for fixed rules, `transactions.spend_necessity`, and `transactions.cost_classification_source='auto'`.
 - User edits through transaction update/bulk-update write `cost_classification_source='manual'`; later auto-apply never overwrites those manual rows.
-- Loan merchant rules live in `loan_merchant_rules` and exact-match `transactions.merchant`.
+- Loan merchant rules live in `loan_merchant_rules` and exact-match either `transactions.merchant` or `transactions.description` according to `match_field`.
+- `match_field='merchant'` means the analysis/canonical merchant value, which can be normalized by merchant alias rules or edited by the user. `match_field='description'` means the imported raw transaction description.
+- `loan_merchant_rules` are unique by `(match_field, merchant)`. The `merchant` column stores the exact match value for the selected field.
+- If both a merchant-based and description-based rule match the same transaction, the merchant-based rule wins.
 - Applying loan merchant rules creates or updates only missing/auto loan links. Existing `loan_transaction_links.source='manual'` rows are preserved.
+- Merchant alias rules live in `merchant_alias_rules`. Applying them does a case-insensitive contains match on raw `transactions.description` and writes the canonical `normalized_merchant` into `transactions.merchant`.
+- Merchant alias application only updates rows whose `merchant == description`, so user-edited analysis merchants are preserved by default.
 - Upload auto-apply toggles live in `auto_classification_settings`; when enabled, upload success runs the matching rule application after transaction import.
+
+### Spend Necessity
+
+- `cost_kind` and `spend_necessity` are independent axes:
+  - `cost_kind`: repeatability/predictability (`fixed` or `variable`)
+  - `spend_necessity`: need/control axis (`essential` or `discretionary`)
+- `fixed_cost_necessity` remains a compatibility field for fixed costs. New summary surfaces use `spend_necessity` for both fixed and variable expenses.
+- Required spend is interpreted as `essential_fixed_total + essential_variable_total + loan_repayment_total`.
+- Discretionary spend is interpreted as `discretionary_fixed_total + discretionary_variable_total`.
 
 ### Snapshot Import Behavior
 

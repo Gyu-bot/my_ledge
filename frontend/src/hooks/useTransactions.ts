@@ -12,6 +12,7 @@ import type {
   MerchantTreemapNode,
   AutoClassificationSettingsPatchRequest,
   CategoryClassificationRuleRequest,
+  MerchantAliasRuleRequest,
   LoanMerchantRuleRequest,
   RecurringCategoryRuleRequest,
 } from '../types/transaction'
@@ -24,6 +25,7 @@ export const txKeys = {
     ['transactions', 'loanTransactionMappings', params] as const,
   autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
   categoryClassificationRules: () => ['transactions', 'categoryClassificationRules'] as const,
+  merchantAliasRules: () => ['transactions', 'merchantAliasRules'] as const,
   loanMerchantRules: () => ['transactions', 'loanMerchantRules'] as const,
   recurringCategoryRules: () => ['transactions', 'recurringCategoryRules'] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
@@ -81,6 +83,13 @@ export function useLoanMerchantRules() {
   return useQuery({
     queryKey: txKeys.loanMerchantRules(),
     queryFn: transactionApi.loanMerchantRules,
+  })
+}
+
+export function useMerchantAliasRules() {
+  return useQuery({
+    queryKey: txKeys.merchantAliasRules(),
+    queryFn: transactionApi.merchantAliasRules,
   })
 }
 
@@ -213,6 +222,26 @@ export function useApplyCategoryClassificationRules() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['transactions'] })
       void qc.invalidateQueries({ queryKey: ['analytics'] })
+    },
+  })
+}
+
+export function useUpsertMerchantAliasRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: MerchantAliasRuleRequest) =>
+      transactionApi.upsertMerchantAliasRule(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.merchantAliasRules() }),
+  })
+}
+
+export function useApplyMerchantAliasRules() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => transactionApi.applyMerchantAliasRules(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['canonicalViews'] })
     },
   })
 }

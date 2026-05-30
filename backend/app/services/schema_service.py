@@ -21,8 +21,12 @@ RAW_TABLE_DESCRIPTIONS = {
         "to transactions only when the cost classification source is not manual."
     ),
     "loan_merchant_rules": (
-        "User-configurable exact merchant-to-loan-account rules for automatic loan "
-        "repayment linking."
+        "User-configurable exact merchant/description-to-loan-account rules for "
+        "automatic loan repayment linking."
+    ),
+    "merchant_alias_rules": (
+        "User-configurable raw-description alias patterns that write normalized "
+        "analysis merchant values into transactions.merchant."
     ),
     "transactions": (
         "Raw transaction rows from imports and manual edits. Read directly for audit, "

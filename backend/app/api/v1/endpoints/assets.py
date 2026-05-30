@@ -1,10 +1,13 @@
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.schemas.asset import (
+    AssetLiabilityHealthResponse,
+    NetWorthBreakdownResponse,
     AssetSnapshotComparisonResponse,
     AssetSnapshotsResponse,
     InvestmentSummaryResponse,
@@ -13,9 +16,11 @@ from app.schemas.asset import (
     SnapshotComparisonMode,
 )
 from app.services.assets_service import (
+    get_asset_liability_health,
     get_asset_snapshot_comparison,
     get_investment_summary,
     get_loan_summary,
+    get_net_worth_breakdown,
     get_net_worth_history,
     list_asset_snapshots,
 )
@@ -35,6 +40,31 @@ async def get_asset_net_worth_history(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> NetWorthHistoryResponse:
     return await get_net_worth_history(db_session)
+
+
+@router.get("/analytics/net-worth-breakdown", response_model=NetWorthBreakdownResponse)
+async def get_analytics_net_worth_breakdown(
+    snapshot_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> NetWorthBreakdownResponse:
+    return await get_net_worth_breakdown(db_session, snapshot_date)
+
+
+@router.get("/analytics/liquidity-health", response_model=AssetLiabilityHealthResponse)
+async def get_analytics_liquidity_health(
+    snapshot_date: date | None = Query(default=None),
+    monthly_required_spend: float | None = Query(default=None, ge=0),
+    monthly_income: float | None = Query(default=None, ge=0),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> AssetLiabilityHealthResponse:
+    return await get_asset_liability_health(
+        db_session,
+        snapshot_date=snapshot_date,
+        monthly_required_spend=(
+            None if monthly_required_spend is None else Decimal(str(monthly_required_spend))
+        ),
+        monthly_income=None if monthly_income is None else Decimal(str(monthly_income)),
+    )
 
 
 @router.get("/assets/snapshot-compare", response_model=AssetSnapshotComparisonResponse)

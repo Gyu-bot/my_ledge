@@ -9,6 +9,10 @@ export interface CanonicalMonthlyCashflowItem {
   variable_total: number
   essential_fixed_total: number
   discretionary_fixed_total: number
+  essential_variable_total: number
+  discretionary_variable_total: number
+  required_spend_total: number
+  discretionary_spend_total: number
   unclassified_expense_total: number
   net_cashflow: number
   savings_rate: number | null
@@ -21,6 +25,8 @@ export interface CanonicalTrueSpendableMonthlyItem {
   loan_repayment_total: number
   fixed_commitment_total: number
   variable_total: number
+  required_variable_total: number
+  discretionary_variable_total: number
   spendable_before_variable_spend: number
   remaining_after_variable_spend: number
   income_basis: 'observed' | 'estimated'
@@ -59,6 +65,16 @@ export interface CanonicalMerchantMonthlyBaselineItem {
   baseline_delta_pct: number | null
 }
 
+export interface CanonicalRecurringMerchantMonthlyItem {
+  period: string
+  merchant: string
+  recurring_payment_kind: string
+  monthly_spend: number
+  transaction_count: number
+  first_date: string
+  last_date: string
+}
+
 export interface CanonicalUnclassifiedWorkQueueItem {
   transaction_id: number
   date: string
@@ -70,6 +86,7 @@ export interface CanonicalUnclassifiedWorkQueueItem {
   amount_abs: number
   needs_cost_kind: boolean
   needs_fixed_cost_necessity: boolean
+  needs_spend_necessity: boolean
   needs_recurring_payment_kind: boolean
   needs_loan_link_review: boolean
   merchant_expense_count: number
@@ -82,5 +99,6 @@ export interface CanonicalViewsDashboardResponse {
   true_spendable_monthly: CanonicalTrueSpendableMonthlyItem[]
   loan_repayment_monthly: CanonicalLoanRepaymentMonthlyItem[]
   merchant_monthly_baseline: CanonicalMerchantMonthlyBaselineItem[]
+  recurring_merchant_monthly: CanonicalRecurringMerchantMonthlyItem[]
   unclassified_work_queue: CanonicalUnclassifiedWorkQueueItem[]
 }

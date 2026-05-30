@@ -274,7 +274,7 @@ export function LoanMappingPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className={`${inputCls} w-40`}
-            placeholder="거래처·설명·계좌 검색"
+            placeholder="분석용 거래처·원본 설명·계좌 검색"
             value={filterDraft.search}
             onChange={(e) => setFilterDraft((filter) => ({ ...filter, search: e.target.value }))}
           />
@@ -506,7 +506,7 @@ export function LoanMappingPage() {
                         className="w-3 h-3 accent-accent"
                       />
                     </th>
-                    {['날짜', '설명', '거래처', '분류', '연결 대출', '상환', '금액'].map((header) => (
+                    {['날짜', '원본 설명', '분석용 거래처', '분류', '연결 대출', '상환', '금액'].map((header) => (
                       <th key={header} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{header}</th>
                     ))}
                   </tr>

@@ -10,6 +10,7 @@ def test_expected_tables_exist() -> None:
         "app_settings",
         "auto_classification_settings",
         "category_classification_rules",
+        "merchant_alias_rules",
         "recurring_category_rules",
         "transactions",
         "asset_snapshots",
@@ -76,7 +77,7 @@ def test_expected_tables_exist() -> None:
         tuple(column.name for column in constraint.columns)
         for constraint in loan_merchant_rules.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
-    } == {("merchant",)}
+    } == {("match_field", "merchant")}
     assert loan_transaction_links.c.transaction_id.foreign_keys
     assert loan_transaction_links.c.loan_account_id.foreign_keys
     assert {
@@ -105,9 +106,10 @@ async def test_schema_endpoint_returns_tables(
         "vw_category_monthly_spend",
         "vw_fixed_cost_monthly_summary",
         "vw_loan_repayment_monthly",
-        "vw_merchant_monthly_baseline",
-        "vw_monthly_cashflow",
-        "vw_transactions_effective",
+            "vw_merchant_monthly_baseline",
+            "vw_monthly_cashflow",
+            "vw_recurring_merchant_monthly",
+            "vw_transactions_effective",
         "vw_true_spendable_monthly",
         "vw_unclassified_work_queue",
     }

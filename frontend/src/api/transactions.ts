@@ -23,6 +23,9 @@ import type {
   CategoryClassificationRuleRequest,
   CategoryClassificationRuleListResponse,
   CategoryClassificationRuleResponse,
+  MerchantAliasRuleRequest,
+  MerchantAliasRuleListResponse,
+  MerchantAliasRuleResponse,
   LoanMerchantRuleRequest,
   LoanMerchantRuleListResponse,
   LoanMerchantRuleResponse,
@@ -147,6 +150,21 @@ export const transactionApi = {
 
   applyCategoryClassificationRules: () =>
     apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/category-rules', {
+      method: 'POST',
+    }),
+
+  merchantAliasRules: () =>
+    apiFetch<MerchantAliasRuleListResponse>('/auto-classification/merchant-alias-rules'),
+
+  upsertMerchantAliasRule: (data: MerchantAliasRuleRequest) =>
+    apiFetch<MerchantAliasRuleResponse>('/auto-classification/merchant-alias-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  applyMerchantAliasRules: () =>
+    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/merchant-alias-rules', {
       method: 'POST',
     }),
 

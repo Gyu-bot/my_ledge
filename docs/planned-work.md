@@ -14,7 +14,7 @@
 
 ## Product Direction Decisions
 
-2026-05-28 기준 결정:
+2026-05-30 기준 결정:
 
 - 다음 단계는 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어간다.
 - 업로드 원본 파일은 `UPLOAD_DIR` 기본값 `/data/uploads`에 최근 5개를 보관한다.
@@ -23,6 +23,8 @@
 - assistant personality, 말투, 조언 강도는 My Ledge core가 아니라 별도 assistant/consumer layer에서 결정한다.
 - canonical layer는 성격을 갖지 않고 `reason`, `confidence`, `assumptions`, `risk_level`, `baseline_delta`, `is_estimated`, `needs_user_review` 같은 판단 재료를 안정적으로 제공한다.
 - 어시스턴트 해석에 필요한 주요 요약은 agent가 매번 raw data로 재계산하지 않도록 backend API 또는 canonical read surface로 고정한다.
+- 투자 성과/상품 배분/수익률 분석은 증권사 API 연동 이후로 미룬다.
+- 자산이동/이체 tracking은 현재 사용자 가치가 낮으므로 우선순위를 가장 뒤로 미룬다. `transfer_activity_total` 같은 기존 현금흐름 보조 값만 유지하고 별도 transfer 화면/API는 P2 뒤쪽으로 둔다.
 
 ---
 
@@ -44,6 +46,16 @@
   - `recurring_category_rules`와 `/api/v1/auto-classification/recurring-category-rules`를 추가했다.
   - 기존 `recurring_payment_kind`를 덮지 않고, 반복 후보 또는 고정비 거래에만 카테고리 기반 반복결제 성격을 채운다.
   - `/operations/auto-classification`에서 저장, 일괄 적용, 업로드 후 자동 적용을 제공한다.
+
+2026-05-30 구현 완료:
+
+- P1 advisor surface 1-4
+  - 모든 일반 지출에 적용 가능한 `spend_necessity` 축을 추가했다. `cost_kind`는 고정/변동, `spend_necessity`는 필수/재량을 의미한다.
+  - `category_classification_rules`가 `spend_necessity`를 저장/적용하고, `/operations/auto-classification`과 `/operations/workbench`에서 필수/재량을 볼 수 있다.
+  - `merchant_alias_rules`와 거래처 정규화 API/UI를 추가했다.
+  - `vw_recurring_merchant_monthly`와 canonical dashboard 반복 거래처 섹션을 추가했다.
+  - `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health`와 자산 화면 유동성 Health 섹션을 추가했다.
+  - 투자 성과/배분 UI는 증권사 API 이후 보강한다는 안내만 남기고 우선순위에서 내렸다.
 
 ---
 
@@ -130,19 +142,23 @@
 
 ---
 
-## P1 — Advisor Analytics And Finance Assistant Expansion
+## P1 — Next Implementation: Advisor Analytics And Finance Assistant Expansion
 
-P1은 지금 당장 구현해야 하는 기능 묶음이라기보다, P0.5 canonical view를 설계할 때 빠뜨리면 안 되는 future consumer requirements다. 즉 P1의 경고/추천/코칭 문구를 지금 만들지는 않되, P0.5 view가 나중에 P1 판단을 계산할 수 있는 재료를 제공해야 한다.
+P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린다. 목표는 조언 문구를 먼저 만드는 것이 아니라, advisor가 계산을 재사용할 수 있도록 고정/변동과 필수/재량을 독립 축으로 정리하고, 반복/속도/구매후보/유동성/부채 read surface를 안정화하는 것이다.
+
+투자 관련 분석은 증권사 API가 준비된 뒤 보강한다. 현재 업로드 snapshot의 투자 값은 순자산 계산에서 필요하면 총액 수준의 참고값으로만 쓰고, 투자 성과/상품 배분/수익률 판단은 P2로 미룬다.
 
 ### Recurring / Velocity / Purchase Gate
 
-- `vw_recurring_merchant_monthly`
+- `vw_recurring_merchant_monthly` — live
   - 저장된 `recurring_payment_kind` 수동 분류 결과의 월별 read surface
   - 반복 탐지 confidence와 interval 판단은 API diagnostic에 유지
 - discretionary spending velocity
   - 월 진행률 대비 재량 지출 속도 경고
   - 처음에는 강한 제동이 아니라 조용한 참고 신호로 제공한다.
   - `as_of_date`, baseline, threshold가 필요하므로 API/settings contract로 설계
+  - 재량 지출은 `cost_kind='variable'` 전체가 아니라 `spend_necessity='discretionary'`인 지출을 기준으로 계산한다.
+  - 필수 변동비는 재량 속도 경고에서 제외한다.
 - purchase gate candidates
   - 큰 일회성 지출, 새 거래처, discretionary spike 후보 추출
   - 처음에는 구매 차단이 아니라 후보 탐지/리뷰 흐름으로 시작한다.
@@ -151,40 +167,49 @@ P1은 지금 당장 구현해야 하는 기능 묶음이라기보다, P0.5 canon
 
 ### Asset / Liability Health
 
-- `GET /api/v1/analytics/net-worth-breakdown`
-- `GET /api/v1/analytics/investment-performance`
-- `GET /api/v1/analytics/debt-burden` 또는 `debt-health`
-- `GET /api/v1/analytics/emergency-fund` 또는 `liquidity-health`
+- `GET /api/v1/analytics/net-worth-breakdown` — live
+- `GET /api/v1/analytics/liquidity-health` — live
+- 별도 `debt-burden` endpoint는 만들지 않고, 현재는 `liquidity-health` 응답의 `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`로 부채 부담을 함께 제공한다.
 
 주의:
 
 - `GET /api/v1/assets/snapshot-compare`는 이미 live다. 과거 계획의 `/analytics/snapshot-compare`는 중복 구현하지 말고 live assets namespace와 정렬한다.
 - 정확하지 않은 값은 `*_est`, `confidence`, `assumptions`를 포함한다.
 - liquidity 계산 전 cash-equivalent 분류 기준이 필요하다.
-- `emergency-fund` / `liquidity-health` 계산 전 `is_cash_equivalent` 또는 `liquidity_tier` 같은 현금성 자산 분류 기준을 확정한다.
+- `emergency-fund` / `liquidity-health`는 `is_cash_equivalent` 또는 `liquidity_tier`를 우선 사용하고, 기존 데이터가 비어 있으면 보수적 추정과 assumptions를 제공한다.
 - `debt-burden` / `debt-health` 정확도를 높이려면 대출별 `monthly_payment`와 상환 스케줄/상환 방식 출처가 필요하다. 이 값이 없으면 추정 필드만 제공한다.
+- 투자 성과/상품 배분/수익률은 증권사 API 연동 이후 P2에서 다룬다.
 
 ### Snapshot Read Models
 
 - `vw_asset_snapshot_canonical`
-  - `asset_snapshots`, `loans`, `investments` 간 source-of-truth와 double-count 방지 규칙을 먼저 고정해야 함
-- `vw_investment_allocation_snapshot`
-  - broker/product type/product 기준 allocation ratio와 previous-snapshot delta
+  - `asset_snapshots`, `loans` 중심의 source-of-truth와 double-count 방지 규칙을 먼저 고정해야 함
+  - 투자 snapshot은 총액 참고값으로만 취급하고, 상품별 성과/배분 view는 P2로 미룸
 
 ### Data Model Foundations
 
-- cash-equivalent / liquidity tier 분류
+- expense necessity axis — live
+  - 현재 `fixed_cost_necessity`는 고정비에만 필수/재량을 붙이므로 변동비 필수 지출을 표현하지 못한다.
+  - canonical 축은 `spend_necessity`로 두고 `essential` / `discretionary`를 모든 일반 지출에 적용한다.
+  - `cost_kind`는 반복성/예측성(`fixed` / `variable`)만 표현하고, `spend_necessity`는 필요성/통제가능성을 표현한다.
+  - `fixed_cost_necessity`는 기존 API/UI 호환 필드로 남기되, 장기적으로는 `spend_necessity`에서 파생하거나 migration한다.
+  - 재량 지출 계산은 `discretionary_fixed_total + discretionary_variable_total`을 기본으로 한다.
+  - 필수 지출 계산은 `essential_fixed_total + essential_variable_total + loan_repayment_total`을 기본으로 한다.
+- cash-equivalent / liquidity tier 분류 — live foundation
   - 대상: 예금, 자유입출금, CMA, 증권 예수금처럼 비상금 계산에 포함할 수 있는 자산
-  - 우선은 자동 판정보다 사용자 확인 가능한 규칙/매핑으로 시작한다.
-- loan repayment metadata
+  - `asset_snapshots.liquidity_tier`, `asset_snapshots.is_cash_equivalent`를 저장한다. 값이 없으면 service가 자산 타입/카테고리명으로 보수적으로 추정하고 `confidence`/`assumptions`에 남긴다.
+- loan repayment metadata — live foundation
   - 대상: `monthly_payment`, 상환 방식, 상환 스케줄 출처
   - 대출 snapshot balance/rate/date만으로 계산한 DTI/DSR은 추정치로만 표시한다.
+  - `loans.monthly_payment`, `loans.repayment_method`를 저장한다. 월상환액이 없으면 `liquidity-health`는 monthly debt payment를 0으로 두고 assumptions에 남긴다.
 
 ### Transfer Tracking MVP
 
 - `GET /api/v1/transfers/summary`
 - `GET /api/v1/transfers`
 - `GET /api/v1/transfers/unmatched`
+
+상태: 사용자 요청으로 P2 뒤쪽으로 이동. 지금은 별도 구현하지 않는다.
 
 범위:
 
@@ -198,10 +223,13 @@ P1은 지금 당장 구현해야 하는 기능 묶음이라기보다, P0.5 canon
 
 ### Merchant Normalization
 
-- `merchant_normalized` 컬럼 또는 `merchant_alias_rules` 테이블 결정
-- 결정: 자동 병합보다 수동 alias rule 기반으로 시작한다.
-- 실제 데이터 기준 alias 병합/일괄 편집 방식 결정
-- merchant baseline, recurring, anomaly 품질 향상을 위한 선행 작업
+상태: live.
+
+- `merchant_alias_rules` 테이블 기반으로 시작한다.
+- 원본 설명(`description`)의 포함 패턴(`alias_pattern`)을 분석용 거래처(`merchant`)의 canonical 거래처명(`normalized_merchant`)으로 일괄 반영한다.
+- `merchant != description`인 row는 사용자가 이미 분석용 거래처를 수정한 것으로 보고 자동 정규화에서 보존한다.
+- `/operations/auto-classification`에서 저장/일괄 적용한다.
+- merchant baseline, recurring, anomaly 품질 향상을 위한 선행 작업이다.
 
 ### Classification Automation
 
@@ -286,8 +314,15 @@ P1은 지금 당장 구현해야 하는 기능 묶음이라기보다, P0.5 canon
 
 ## P2 — Product Expansion
 
+- 증권사 API 연동 이후 투자 분석 보강
+  - `GET /api/v1/analytics/investment-performance`
+  - `vw_investment_allocation_snapshot`
+  - broker/product type/product 기준 allocation ratio와 previous-snapshot delta
+  - 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution
 - 수입 분석 페이지
-- 자산이동 페이지
+- 자산이동/이체 tracking 및 화면
+  - 현재 우선순위는 가장 뒤쪽이다.
+  - 구현 전까지는 `vw_monthly_cashflow.transfer_activity_total`만 보조 값으로 유지한다.
 - 자동 백업 크론
 - 도메인 연결 + HTTPS
 - budgets / financial goals / advice preferences
@@ -319,7 +354,8 @@ P1은 지금 당장 구현해야 하는 기능 묶음이라기보다, P0.5 canon
 ## Recommended Execution Order
 
 1. 기능 구현으로 넘어가되, P0 운영 검증과 contract 정리는 각 구현 batch의 acceptance check로 수행한다.
-2. P1은 feature 구현이 아니라 P0.5 view의 future consumer requirements로 계속 참조한다.
-3. merchant normalization과 recurring 자동분류를 데이터 품질 개선 묶음으로 진행한다.
-4. asset/liability health와 transfer tracking을 별도 feature batch로 진행한다.
-5. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.
+2. 투자 분석과 자산이동/이체 tracking은 뒤로 미룬다.
+3. 다음 batch는 discretionary spending velocity와 purchase gate candidates를 우선 검토한다.
+4. recurring 자동분류 dry-run/승인 흐름을 별도 batch로 진행한다.
+5. bulk delete/restore, description override 같은 operations 후속을 진행한다.
+6. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.

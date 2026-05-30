@@ -19,6 +19,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1100000 AS variable_total,
                 1000000 AS essential_fixed_total,
                 500000 AS discretionary_fixed_total,
+                200000 AS essential_variable_total,
+                900000 AS discretionary_variable_total,
+                1200000 AS required_spend_total,
+                1400000 AS discretionary_spend_total,
                 300000 AS unclassified_expense_total,
                 3000000 AS net_cashflow,
                 0.5 AS savings_rate
@@ -34,6 +38,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1250000,
                 1150000,
                 500000,
+                250000,
+                1000000,
+                1400000,
+                1500000,
                 300000,
                 3900000,
                 0.5417
@@ -49,6 +57,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1200000 AS variable_total,
                 1100000 AS essential_fixed_total,
                 500000 AS discretionary_fixed_total,
+                200000 AS essential_variable_total,
+                1000000 AS discretionary_variable_total,
+                1300000 AS required_spend_total,
+                1500000 AS discretionary_spend_total,
                 300000 AS unclassified_expense_total,
                 1800000 AS net_cashflow,
                 0.36 AS savings_rate
@@ -64,6 +76,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1200000,
                 1100000,
                 500000,
+                200000,
+                1000000,
+                1300000,
+                1500000,
                 300000,
                 7034941,
                 0.6873
@@ -79,6 +95,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1200000,
                 1100000,
                 500000,
+                200000,
+                1000000,
+                1300000,
+                1500000,
                 300000,
                 3812341,
                 0.5436
@@ -94,6 +114,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1200000,
                 1100000,
                 500000,
+                200000,
+                1000000,
+                1300000,
+                1500000,
                 300000,
                 3842935,
                 0.5456
@@ -109,6 +133,10 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 1300000,
                 1200000,
                 500000,
+                300000,
+                1000000,
+                1500000,
+                1500000,
                 200000,
                 -3498479,
                 -2300.1189
@@ -125,6 +153,8 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 500000 AS loan_repayment_total,
                 1700000 AS fixed_commitment_total,
                 1300000 AS variable_total,
+                300000 AS required_variable_total,
+                1000000 AS discretionary_variable_total,
                 -2198479 AS spendable_before_variable_spend,
                 -3498479 AS remaining_after_variable_spend
             """
@@ -169,6 +199,21 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
     await db_session.execute(
         text(
             """
+            CREATE VIEW vw_recurring_merchant_monthly AS
+            SELECT
+                '2026-05' AS period,
+                '쿠팡' AS merchant,
+                'monthly_recurring' AS recurring_payment_kind,
+                220000 AS monthly_spend,
+                2 AS transaction_count,
+                '2026-05-10' AS first_date,
+                '2026-05-20' AS last_date
+            """
+        )
+    )
+    await db_session.execute(
+        text(
+            """
             CREATE VIEW vw_unclassified_work_queue AS
             SELECT
                 42 AS transaction_id,
@@ -181,6 +226,7 @@ async def _create_sample_canonical_views(db_session: AsyncSession) -> None:
                 500000 AS amount_abs,
                 1 AS needs_cost_kind,
                 NULL AS needs_fixed_cost_necessity,
+                1 AS needs_spend_necessity,
                 1 AS needs_recurring_payment_kind,
                 1 AS needs_loan_link_review,
                 2 AS merchant_expense_count,
@@ -214,10 +260,13 @@ async def test_canonical_dashboard_returns_view_rows(
     body = response.json()
     assert body["monthly_cashflow"][-1]["period"] == "2026-05"
     assert body["monthly_cashflow"][-1]["loan_repayment_total"] == 500000
+    assert body["monthly_cashflow"][-1]["discretionary_variable_total"] == 1000000
     assert body["monthly_cashflow"][-1]["income_total"] == 1521
     assert body["true_spendable_monthly"][0]["remaining_after_variable_spend"] == -3498479
+    assert body["true_spendable_monthly"][0]["discretionary_variable_total"] == 1000000
     assert body["loan_repayment_monthly"][0]["loan_display_name"] == "국민 주담대"
     assert body["merchant_monthly_baseline"][0]["baseline_delta"] == 130000.0
+    assert body["recurring_merchant_monthly"][0]["merchant"] == "쿠팡"
     assert body["unclassified_work_queue"][0]["transaction_id"] == 42
     assert body["unclassified_work_queue"][0]["needs_fixed_cost_necessity"] is False
     assert body["unclassified_work_queue"][0]["needs_loan_link_review"] is True

@@ -52,6 +52,18 @@ const schema: SchemaDocumentResponse = {
         { name: 'income_total', type: 'INTEGER', nullable: false },
         { name: 'loan_repayment_total', type: 'INTEGER', nullable: false },
         { name: 'non_loan_expense_total', type: 'INTEGER', nullable: false },
+        { name: 'discretionary_spend_total', type: 'INTEGER', nullable: false },
+      ],
+    },
+    {
+      name: 'vw_recurring_merchant_monthly',
+      kind: 'view',
+      description: 'Canonical recurring merchant aggregate.',
+      recommended_for_ai: true,
+      columns: [
+        { name: 'period', type: 'TEXT', nullable: false },
+        { name: 'merchant', type: 'TEXT', nullable: false },
+        { name: 'monthly_spend', type: 'INTEGER', nullable: false },
       ],
     },
     {
@@ -81,6 +93,10 @@ const canonicalDashboard = {
       variable_total: 1200000,
       essential_fixed_total: 1100000,
       discretionary_fixed_total: 500000,
+      essential_variable_total: 700000,
+      discretionary_variable_total: 500000,
+      required_spend_total: 1800000,
+      discretionary_spend_total: 1000000,
       unclassified_expense_total: 300000,
       net_cashflow: 1800000,
       savings_rate: 0.36,
@@ -96,6 +112,10 @@ const canonicalDashboard = {
       variable_total: 1300000,
       essential_fixed_total: 1200000,
       discretionary_fixed_total: 500000,
+      essential_variable_total: 800000,
+      discretionary_variable_total: 500000,
+      required_spend_total: 2000000,
+      discretionary_spend_total: 1000000,
       unclassified_expense_total: 200000,
       net_cashflow: -1700000,
       savings_rate: 0.3269,
@@ -109,6 +129,8 @@ const canonicalDashboard = {
       loan_repayment_total: 500000,
       fixed_commitment_total: 1700000,
       variable_total: 1300000,
+      required_variable_total: 800000,
+      discretionary_variable_total: 500000,
       spendable_before_variable_spend: -2198479,
       remaining_after_variable_spend: -3498479,
       income_basis: 'estimated',
@@ -149,6 +171,17 @@ const canonicalDashboard = {
       baseline_delta_pct: 0.5909,
     },
   ],
+  recurring_merchant_monthly: [
+    {
+      period: '2026-05',
+      merchant: '넷플릭스',
+      effective_category_major: '구독',
+      effective_category_minor: 'OTT',
+      recurring_payment_kind: 'monthly_recurring',
+      monthly_spend: 17000,
+      transaction_count: 1,
+    },
+  ],
   unclassified_work_queue: [
     {
       transaction_id: 42,
@@ -161,6 +194,7 @@ const canonicalDashboard = {
       amount_abs: 500000,
       needs_cost_kind: true,
       needs_fixed_cost_necessity: false,
+      needs_spend_necessity: true,
       needs_recurring_payment_kind: true,
       needs_loan_link_review: true,
       merchant_expense_count: 2,
@@ -200,6 +234,7 @@ describe('CanonicalViewsPage', () => {
     expect(screen.getByText('2026-02')).toBeInTheDocument()
     expect(screen.getByText('국민 주담대')).toBeInTheDocument()
     expect(screen.getByText('쿠팡')).toBeInTheDocument()
+    expect(screen.getByText('넷플릭스')).toBeInTheDocument()
     expect(screen.getByText('대출상환')).toBeInTheDocument()
     expect(screen.getByText('loan_link_review')).toBeInTheDocument()
   })

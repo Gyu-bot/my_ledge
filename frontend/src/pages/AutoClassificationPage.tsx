@@ -6,20 +6,23 @@ import { useChromeContext } from '../components/layout/chromeContext'
 import {
   useApplyCategoryClassificationRules,
   useApplyLoanMerchantRules,
+  useApplyMerchantAliasRules,
   useApplyRecurringCategoryRules,
   useAutoClassificationSettings,
   useCategoryClassificationRules,
   useLoanAccounts,
   useLoanMerchantRules,
+  useMerchantAliasRules,
   usePatchAutoClassificationSettings,
   useRecurringCategoryRules,
   useTransactionFilterOptions,
   useUpsertCategoryClassificationRule,
   useUpsertLoanMerchantRule,
+  useUpsertMerchantAliasRule,
   useUpsertRecurringCategoryRule,
 } from '../hooks/useTransactions'
 import { useWriteAccess } from '../hooks/useWriteAccess'
-import type { LoanRepaymentType, RecurringPaymentKind } from '../types/transaction'
+import type { LoanMerchantRuleMatchField, LoanRepaymentType, RecurringPaymentKind } from '../types/transaction'
 
 type CostKind = 'fixed' | 'variable'
 type Necessity = '' | 'essential' | 'discretionary'
@@ -39,6 +42,11 @@ const RECURRING_KIND_LABEL: Record<RecurringPaymentKind, string> = {
   not_recurring: '반복 아님',
 }
 
+const LOAN_MATCH_FIELD_LABEL: Record<LoanMerchantRuleMatchField, string> = {
+  merchant: '분석용 거래처',
+  description: '원본 설명',
+}
+
 export function AutoClassificationPage() {
   const hasWrite = useWriteAccess()
   const { setMetaBadge } = useChromeContext()
@@ -46,6 +54,7 @@ export function AutoClassificationPage() {
   const filterOptions = useTransactionFilterOptions()
   const categoryRules = useCategoryClassificationRules()
   const loanRules = useLoanMerchantRules()
+  const merchantAliasRules = useMerchantAliasRules()
   const recurringRules = useRecurringCategoryRules()
   const loanAccounts = useLoanAccounts()
   const patchSettings = usePatchAutoClassificationSettings()
@@ -53,6 +62,8 @@ export function AutoClassificationPage() {
   const applyCategoryRules = useApplyCategoryClassificationRules()
   const upsertLoanRule = useUpsertLoanMerchantRule()
   const applyLoanRules = useApplyLoanMerchantRules()
+  const upsertMerchantAliasRule = useUpsertMerchantAliasRule()
+  const applyMerchantAliasRules = useApplyMerchantAliasRules()
   const upsertRecurringRule = useUpsertRecurringCategoryRule()
   const applyRecurringRules = useApplyRecurringCategoryRules()
 
@@ -61,6 +72,9 @@ export function AutoClassificationPage() {
   const [costKind, setCostKind] = useState<CostKind>('variable')
   const [necessity, setNecessity] = useState<Necessity>('')
   const [merchant, setMerchant] = useState('')
+  const [loanMatchField, setLoanMatchField] = useState<LoanMerchantRuleMatchField>('merchant')
+  const [aliasPattern, setAliasPattern] = useState('')
+  const [normalizedMerchant, setNormalizedMerchant] = useState('')
   const [loanAccountId, setLoanAccountId] = useState('')
   const [repaymentType, setRepaymentType] = useState<LoanRepaymentType>('mixed')
   const [loanMemo, setLoanMemo] = useState('')
@@ -103,6 +117,7 @@ export function AutoClassificationPage() {
   useEffect(() => {
     const total = (categoryRules.data?.items.length ?? 0)
       + (loanRules.data?.items.length ?? 0)
+      + (merchantAliasRules.data?.items.length ?? 0)
       + (recurringRules.data?.items.length ?? 0)
     setMetaBadge(
       <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
@@ -110,7 +125,7 @@ export function AutoClassificationPage() {
       </span>,
     )
     return () => setMetaBadge(null)
-  }, [categoryRules.data, loanRules.data, recurringRules.data, setMetaBadge])
+  }, [categoryRules.data, loanRules.data, merchantAliasRules.data, recurringRules.data, setMetaBadge])
 
   async function toggleSetting(
     field: 'apply_cost_rules_on_upload' | 'apply_loan_rules_on_upload' | 'apply_recurring_rules_on_upload',
@@ -144,6 +159,7 @@ export function AutoClassificationPage() {
       category_minor: categoryMinor.trim() || null,
       cost_kind: costKind,
       fixed_cost_necessity: costKind === 'fixed' ? (necessity || null) : null,
+      spend_necessity: necessity || null,
     }
   }
 
@@ -172,11 +188,13 @@ export function AutoClassificationPage() {
     try {
       await upsertLoanRule.mutateAsync({
         merchant: merchant.trim(),
+        match_field: loanMatchField,
         loan_account_id: parsedLoanAccountId,
         repayment_type: repaymentType,
         memo: loanMemo.trim() || null,
       })
       setMerchant('')
+      setLoanMatchField('merchant')
       setLoanAccountId('')
       setRepaymentType('mixed')
       setLoanMemo('')
@@ -192,6 +210,30 @@ export function AutoClassificationPage() {
       setAlert({ variant: 'success', title: '대출 거래처 규칙 일괄 적용 완료', description: `${result.updated}건 반영` })
     } catch (e) {
       setAlert({ variant: 'error', title: '대출 거래처 규칙 일괄 적용 실패', description: String(e) })
+    }
+  }
+
+  async function saveMerchantAliasRule() {
+    if (!aliasPattern.trim() || !normalizedMerchant.trim()) return
+    try {
+      await upsertMerchantAliasRule.mutateAsync({
+        alias_pattern: aliasPattern.trim(),
+        normalized_merchant: normalizedMerchant.trim(),
+      })
+      setAliasPattern('')
+      setNormalizedMerchant('')
+      setAlert({ variant: 'success', title: '거래처 정규화 규칙 저장 완료' })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '거래처 정규화 규칙 저장 실패', description: String(e) })
+    }
+  }
+
+  async function applyExistingMerchantAliasRules() {
+    try {
+      const result = await applyMerchantAliasRules.mutateAsync()
+      setAlert({ variant: 'success', title: '거래처 정규화 일괄 적용 완료', description: `${result.updated}건 반영` })
+    } catch (e) {
+      setAlert({ variant: 'error', title: '거래처 정규화 일괄 적용 실패', description: String(e) })
     }
   }
 
@@ -221,7 +263,7 @@ export function AutoClassificationPage() {
     }
   }
 
-  const isLoading = settings.isLoading || categoryRules.isLoading || loanRules.isLoading || recurringRules.isLoading
+  const isLoading = settings.isLoading || categoryRules.isLoading || loanRules.isLoading || merchantAliasRules.isLoading || recurringRules.isLoading
   const disabled = !hasWrite
 
   return (
@@ -292,8 +334,8 @@ export function AutoClassificationPage() {
           <section className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-faint">
               <div>
-                <span className="text-label font-semibold text-text-secondary">고정비/변동비 규칙</span>
-                <div className="text-micro text-text-ghost mt-0.5">대분류와 소분류 기준으로 비용 성격을 저장합니다.</div>
+                <span className="text-label font-semibold text-text-secondary">고정비/변동비 · 필수/재량 규칙</span>
+                <div className="text-micro text-text-ghost mt-0.5">대분류와 소분류 기준으로 반복성 축과 필요성 축을 저장합니다.</div>
               </div>
               <button
                 type="button"
@@ -346,8 +388,8 @@ export function AutoClassificationPage() {
                 </select>
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-micro text-text-faint">고정비 필수 여부</span>
-                <select aria-label="고정비 필수 여부" className={INPUT_CLS} value={necessity} disabled={costKind !== 'fixed'} onChange={(event) => setNecessity(event.target.value as Necessity)}>
+                <span className="text-micro text-text-faint">필수/재량</span>
+                <select aria-label="필수/재량" className={INPUT_CLS} value={necessity} onChange={(event) => setNecessity(event.target.value as Necessity)}>
                   <option value="">미지정</option>
                   <option value="essential">필수</option>
                   <option value="discretionary">비필수</option>
@@ -359,7 +401,7 @@ export function AutoClassificationPage() {
                 disabled={disabled || !categoryMajor.trim() || upsertCategoryRule.isPending}
                 className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
               >
-                고정비 규칙 저장
+                분류 규칙 저장
               </button>
             </div>
 
@@ -370,7 +412,7 @@ export function AutoClassificationPage() {
                     <tr>
                       <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">카테고리</th>
                       <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">분류</th>
-                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">필수 여부</th>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">필수/재량</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -380,13 +422,68 @@ export function AutoClassificationPage() {
                           {rule.category_major}{rule.category_minor ? ` / ${rule.category_minor}` : ''}
                         </td>
                         <td className="px-4 py-2 text-text-muted">{rule.cost_kind === 'fixed' ? '고정비' : '변동비'}</td>
-                        <td className="px-4 py-2 text-text-muted">{rule.fixed_cost_necessity === 'essential' ? '필수' : rule.fixed_cost_necessity === 'discretionary' ? '비필수' : '-'}</td>
+                        <td className="px-4 py-2 text-text-muted">{rule.spend_necessity === 'essential' ? '필수' : rule.spend_necessity === 'discretionary' ? '재량' : '-'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : <EmptyState message="등록된 고정비 규칙이 없습니다." />}
+          </section>
+
+          <section className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border-faint">
+              <div>
+                <span className="text-label font-semibold text-text-secondary">거래처 정규화 규칙</span>
+                <div className="text-micro text-text-ghost mt-0.5">원본 설명에 포함된 패턴을 분석용 거래처로 정리합니다. 이미 수정된 분석용 거래처는 보존합니다.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void applyExistingMerchantAliasRules()}
+                disabled={disabled || applyMerchantAliasRules.isPending}
+                className="text-caption px-3 py-1.5 bg-accent-dim border border-accent text-accent rounded-md disabled:opacity-40"
+              >
+                거래처 정규화 일괄 적용
+              </button>
+            </div>
+            <div className="px-4 py-3 flex flex-wrap items-end gap-2 border-b border-border-faint">
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">포함 패턴</span>
+                <input aria-label="거래처 포함 패턴" className={`${INPUT_CLS} w-36`} value={aliasPattern} onChange={(event) => setAliasPattern(event.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">정규 거래처</span>
+                <input aria-label="정규 거래처" className={`${INPUT_CLS} w-36`} value={normalizedMerchant} onChange={(event) => setNormalizedMerchant(event.target.value)} />
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveMerchantAliasRule()}
+                disabled={disabled || !aliasPattern.trim() || !normalizedMerchant.trim() || upsertMerchantAliasRule.isPending}
+                className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
+              >
+                정규화 규칙 저장
+              </button>
+            </div>
+            {merchantAliasRules.data && merchantAliasRules.data.items.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-caption" style={{ tableLayout: 'fixed' }}>
+                  <thead>
+                    <tr>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">포함 패턴</th>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">정규 거래처</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {merchantAliasRules.data.items.map((rule) => (
+                      <tr key={rule.id} className="border-t border-border-faint">
+                        <td className="px-4 py-2 text-text-secondary truncate">{rule.alias_pattern}</td>
+                        <td className="px-4 py-2 text-text-muted truncate">{rule.normalized_merchant}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <EmptyState message="등록된 거래처 정규화 규칙이 없습니다." />}
           </section>
 
           <section className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
@@ -488,8 +585,8 @@ export function AutoClassificationPage() {
           <section className="bg-surface-card border border-border-subtle rounded-card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-faint">
               <div>
-                <span className="text-label font-semibold text-text-secondary">대출 거래처 규칙</span>
-                <div className="text-micro text-text-ghost mt-0.5">거래처명이 정확히 일치하는 지출 거래를 대출 계좌와 연결합니다.</div>
+                <span className="text-label font-semibold text-text-secondary">대출 매칭 규칙</span>
+                <div className="text-micro text-text-ghost mt-0.5">분석용 거래처 또는 원본 설명이 정확히 일치하는 지출 거래를 대출 계좌와 연결합니다.</div>
               </div>
               <button
                 type="button"
@@ -497,14 +594,21 @@ export function AutoClassificationPage() {
                 disabled={disabled || applyLoanRules.isPending}
                 className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
               >
-                대출 거래처 규칙 일괄 적용
+                대출 매칭 규칙 일괄 적용
               </button>
             </div>
 
             <div className="px-4 py-3 flex flex-wrap items-end gap-2 border-b border-border-faint">
               <label className="flex flex-col gap-1">
-                <span className="text-micro text-text-faint">거래처명</span>
-                <input aria-label="거래처명" className={`${INPUT_CLS} w-36`} value={merchant} onChange={(event) => setMerchant(event.target.value)} />
+                <span className="text-micro text-text-faint">매칭 기준</span>
+                <select aria-label="대출 규칙 매칭 기준" className={`${INPUT_CLS} w-36`} value={loanMatchField} onChange={(event) => setLoanMatchField(event.target.value as LoanMerchantRuleMatchField)}>
+                  <option value="merchant">분석용 거래처</option>
+                  <option value="description">원본 설명</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">매칭 값</span>
+                <input aria-label="대출 규칙 매칭 값" className={`${INPUT_CLS} w-44`} value={merchant} onChange={(event) => setMerchant(event.target.value)} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-micro text-text-faint">대출 계좌</span>
@@ -536,7 +640,7 @@ export function AutoClassificationPage() {
                 disabled={disabled || !merchant.trim() || !loanAccountId || upsertLoanRule.isPending}
                 className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
               >
-                대출 거래처 규칙 저장
+                대출 매칭 규칙 저장
               </button>
             </div>
 
@@ -545,7 +649,8 @@ export function AutoClassificationPage() {
                 <table className="w-full border-collapse text-caption" style={{ tableLayout: 'fixed' }}>
                   <thead>
                     <tr>
-                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">거래처</th>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">기준</th>
+                      <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">매칭 값</th>
                       <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">대출 계좌</th>
                       <th className="text-micro text-text-ghost px-4 py-2 text-left font-medium">상환 성격</th>
                     </tr>
@@ -553,6 +658,7 @@ export function AutoClassificationPage() {
                   <tbody>
                     {loanRules.data.items.map((rule) => (
                       <tr key={rule.id} className="border-t border-border-faint">
+                        <td className="px-4 py-2 text-text-muted">{LOAN_MATCH_FIELD_LABEL[rule.match_field]}</td>
                         <td className="px-4 py-2 text-text-secondary truncate">{rule.merchant}</td>
                         <td className="px-4 py-2 text-text-muted truncate">{rule.display_name}</td>
                         <td className="px-4 py-2 text-text-muted">{REPAYMENT_LABEL[rule.repayment_type]}</td>
@@ -561,7 +667,7 @@ export function AutoClassificationPage() {
                   </tbody>
                 </table>
               </div>
-            ) : <EmptyState message="등록된 대출 거래처 규칙이 없습니다." />}
+            ) : <EmptyState message="등록된 대출 매칭 규칙이 없습니다." />}
           </section>
         </>
       )}

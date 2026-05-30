@@ -12,6 +12,37 @@ class AssetSnapshotTotalsResponse(BaseModel):
     net_worth: Decimal
 
 
+class NetWorthBreakdownItemResponse(BaseModel):
+    side: str
+    category: str
+    amount: Decimal
+    ratio: float | None
+
+
+class NetWorthBreakdownResponse(BaseModel):
+    snapshot_date: date | None
+    asset_total: Decimal
+    liability_total: Decimal
+    net_worth: Decimal
+    items: list[NetWorthBreakdownItemResponse]
+
+
+class AssetLiabilityHealthResponse(BaseModel):
+    snapshot_date: date | None
+    cash_equivalent_total: Decimal
+    asset_total: Decimal
+    liability_total: Decimal
+    net_worth: Decimal
+    monthly_required_spend: Decimal
+    emergency_fund_months: float | None
+    monthly_debt_payment: Decimal
+    monthly_income: Decimal
+    debt_payment_ratio: float | None
+    debt_to_asset_ratio: float | None
+    confidence: str
+    assumptions: list[str]
+
+
 class AssetSnapshotsResponse(BaseModel):
     items: list[AssetSnapshotTotalsResponse]
 

@@ -29,6 +29,8 @@
   - `data_management.py`
   - `transactions.py`
   - `assets.py`
+  - `auto_classification.py`
+  - `canonical_views.py`
   - `loan_mapping.py`
   - `analytics.py`
 
@@ -46,6 +48,7 @@
 ### `X-API-Key` 필요
 
 - `GET /api/v1/schema`
+- `GET /api/v1/canonical-views/dashboard`
 - `GET /api/v1/auto-classification/settings`
 - `PATCH /api/v1/auto-classification/settings`
 - `GET /api/v1/auto-classification/category-rules`
@@ -56,6 +59,10 @@
 - `POST /api/v1/auto-classification/loan-merchant-rules`
 - `DELETE /api/v1/auto-classification/loan-merchant-rules/{rule_id}`
 - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
+- `GET /api/v1/auto-classification/merchant-alias-rules`
+- `POST /api/v1/auto-classification/merchant-alias-rules`
+- `DELETE /api/v1/auto-classification/merchant-alias-rules/{rule_id}`
+- `POST /api/v1/auto-classification/apply/merchant-alias-rules`
 - `GET /api/v1/auto-classification/recurring-category-rules`
 - `POST /api/v1/auto-classification/recurring-category-rules`
 - `DELETE /api/v1/auto-classification/recurring-category-rules/{rule_id}`
@@ -114,6 +121,7 @@
   - `true_spendable_monthly[]`: rows from `vw_true_spendable_monthly`, enriched with optional current-month income estimates
   - `loan_repayment_monthly[]`: recent rows from `vw_loan_repayment_monthly`
   - `merchant_monthly_baseline[]`: top recent rows from `vw_merchant_monthly_baseline`
+  - `recurring_merchant_monthly[]`: recent rows from `vw_recurring_merchant_monthly`
   - `unclassified_work_queue[]`: top priority rows from `vw_unclassified_work_queue`
 - Notes:
   - view names are hardcoded in the service; this endpoint is not an arbitrary SQL execution surface
@@ -583,6 +591,54 @@
   - `is_partial=true` when current snapshot is not month-end and mode is not closed-month mode
   - `is_stale=true` when current snapshot is older than 35 days from today
 
+#### `GET /api/v1/analytics/net-worth-breakdown`
+
+- Purpose: snapshot-level asset/liability/net-worth composition
+- Query params:
+  - `snapshot_date` optional; omitted uses latest snapshot
+- Response model: `NetWorthBreakdownResponse`
+- Response shape:
+  - `snapshot_date`
+  - `asset_total`
+  - `liability_total`
+  - `net_worth`
+  - `items[]`
+    - `side`: `asset` or `liability`
+    - `category`
+    - `amount`
+    - `ratio`
+- Notes:
+  - groups `asset_snapshots` by side/category
+  - investment details remain summary-only until brokerage API support
+
+#### `GET /api/v1/analytics/liquidity-health`
+
+- Purpose: cash-equivalent liquidity and debt burden read surface
+- Query params:
+  - `snapshot_date` optional; omitted uses latest snapshot
+  - `monthly_required_spend` optional decimal
+  - `monthly_income` optional decimal
+- Response model: `AssetLiabilityHealthResponse`
+- Response shape:
+  - `snapshot_date`
+  - `cash_equivalent_total`
+  - `asset_total`
+  - `liability_total`
+  - `net_worth`
+  - `monthly_required_spend`
+  - `emergency_fund_months`
+  - `monthly_debt_payment`
+  - `monthly_income`
+  - `debt_payment_ratio`
+  - `debt_to_asset_ratio`
+  - `confidence`
+  - `assumptions[]`
+- Notes:
+  - cash equivalents use `asset_snapshots.is_cash_equivalent=true` first
+  - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption
+  - monthly debt payment uses `loans.monthly_payment` when available; otherwise it remains an assumption-backed estimate surface
+  - if required spend or income is omitted, emergency/debt ratios can be `null`
+
 #### `GET /api/v1/investments/summary`
 
 - Purpose: latest or requested investment snapshot
@@ -876,6 +932,7 @@
   - `DELETE /api/v1/auto-classification/category-rules/{rule_id}`
   - `POST /api/v1/auto-classification/apply/category-rules`
 - Rule fields: `category_major`, optional `category_minor`, `cost_kind`, optional `fixed_cost_necessity`
+- Rule fields also accept optional `spend_necessity`. `fixed_cost_necessity` is only valid for `cost_kind='fixed'`; `spend_necessity` is valid for fixed and variable costs.
 - Apply behavior: matches effective category values and updates only rows whose `cost_classification_source` is not `manual`
 
 #### Loan Merchant Auto-Link Rules
@@ -885,8 +942,24 @@
   - `POST /api/v1/auto-classification/loan-merchant-rules`
   - `DELETE /api/v1/auto-classification/loan-merchant-rules/{rule_id}`
   - `POST /api/v1/auto-classification/apply/loan-merchant-rules`
-- Rule fields: exact `merchant`, `loan_account_id`, `repayment_type`, optional `memo`
+- Rule fields: `match_field`, exact `merchant`, `loan_account_id`, `repayment_type`, optional `memo`
+- `match_field` accepts:
+  - `merchant`: match against `transactions.merchant`, the analysis/canonical merchant value that may be normalized or user-edited
+  - `description`: match against `transactions.description`, the imported raw transaction description
+- The `merchant` field stores the exact match value for whichever `match_field` is selected. Rules are unique by `(match_field, merchant)`.
 - Apply behavior: creates or updates only missing/auto loan links; `loan_transaction_links.source='manual'` is preserved
+- If both merchant and description rules match a transaction, the merchant rule takes precedence.
+
+#### Merchant Alias Normalization Rules
+
+- Endpoints:
+  - `GET /api/v1/auto-classification/merchant-alias-rules`
+  - `POST /api/v1/auto-classification/merchant-alias-rules`
+  - `DELETE /api/v1/auto-classification/merchant-alias-rules/{rule_id}`
+  - `POST /api/v1/auto-classification/apply/merchant-alias-rules`
+- Rule fields: `alias_pattern`, `normalized_merchant`
+- Apply behavior: case-insensitive contains match against raw `transactions.description`; matched rows write `normalized_merchant` into `transactions.merchant`
+- Rows whose `merchant != description` are treated as already user-edited or previously normalized analysis merchants and are preserved by default.
 
 #### Recurring Category Auto-Classification Rules
 
@@ -913,13 +986,13 @@ Columns:
   - `category_major_user`, `category_minor_user`
   - `description`, `merchant`
   - `amount`, `currency`, `payment_method`
-  - `cost_kind`, `fixed_cost_necessity`, `cost_classification_source`, `memo`
+  - `cost_kind`, `fixed_cost_necessity`, `spend_necessity`, `cost_classification_source`, `memo`
   - nullable loan mapping fields: `loan_account_id`, `loan_lender`, `loan_product_name`, `loan_display_name`, `loan_kind`, `loan_start_date`, `loan_maturity_date`, `loan_repayment_type`, `loan_link_memo`
   - `is_deleted`, `merged_into_id`, `source`, `created_at`, `updated_at`
 - derived fields:
   - `effective_category_major = coalesce(category_major_user, category_major)`
   - `effective_category_minor = coalesce(category_minor_user, category_minor)`
-  - `is_edited = category user override OR merchant != description OR memo is not null`
+  - `is_edited = category user override OR merchant != description OR memo is not null OR cost/spend/recurring classification is present`
 
 Filtering behavior:
 
@@ -967,29 +1040,30 @@ Direction:
 
 - My Ledge's core role is to provide canonical read models for a finance assistant, not to decide assistant personality or coaching tone.
 - Planned views should expose structured evidence fields where useful, such as `reason`, `confidence`, `assumptions`, `risk_level`, `baseline_delta`, `is_estimated`, and `needs_user_review`.
-- P1 warning/recommendation features are future consumers of the canonical layer; they should shape P0/P0.5 fields but do not need to be implemented before the canonical views.
+- P1 warning/recommendation features are the next implementation priority except investment performance/allocation work, which is deferred until brokerage API data is available.
 
 Common rules:
 
 - Use `vw_transactions_effective` semantics as the transaction source.
 - Convert expense rows with `-amount`; positive `지출` refund/cancellation rows reduce monthly expense.
 - Separate loan-linked transactions before fixed/variable breakdown to avoid double counting repayment burden as ordinary spending.
+- Treat fixed/variable and essential/discretionary as independent axes. `cost_kind` is the repeatability/predictability axis; `spend_necessity` is the essential/discretionary axis for both fixed and variable expenses. Existing `fixed_cost_necessity` remains a fixed-cost compatibility field.
 - Keep `transfer_activity_total` separate from `net_cashflow`.
 - Keep `as_of_date`, threshold, and baseline settings in API/settings contracts when a calculation depends on runtime context.
 
 Live P0/P0.5 views:
 
-- `vw_monthly_cashflow`: monthly income, expense, non-loan expense, transfer activity, loan repayment, fixed/variable spend, unclassified expense, net cashflow, and savings rate.
+- `vw_monthly_cashflow`: monthly income, expense, non-loan expense, transfer activity, loan repayment, fixed/variable spend, essential/discretionary spend, unclassified expense, net cashflow, and savings rate.
 - `vw_loan_repayment_monthly`: monthly repayment totals by `loan_account_id`, display name, lender, product, loan kind, maturity date, and repayment type.
-- `vw_true_spendable_monthly`: monthly spendable amount after loan repayment and fixed commitments, with `spendable_before_variable_spend` separated from `remaining_after_variable_spend`.
+- `vw_true_spendable_monthly`: monthly spendable amount after loan repayment and fixed commitments, with required/discretionary variable spend exposed separately.
 - `vw_merchant_monthly_baseline`: canonical `merchant` monthly spend/count plus trailing 3-month closed-month baseline and delta fields.
-- `vw_unclassified_work_queue`: prioritized transactions missing cost classification, fixed-cost necessity, monthly recurring kind, or likely loan-link review. Recurring review requires a monthly signal, not just two transactions at the same merchant: at least 2 active months, at least 2 active dates, and merchant amount coefficient of variation `<= 0.5`. Same-day split purchases are therefore not recurring-classification candidates. Priority combines analysis impact, amount, and recurrence likelihood.
+- `vw_recurring_merchant_monthly`: monthly aggregate of stored `recurring_payment_kind` classifications. Interval confidence stays in API diagnostics.
+- `vw_unclassified_work_queue`: prioritized transactions missing cost classification, spend necessity, fixed-cost necessity, monthly recurring kind, or likely loan-link review. Recurring review requires a monthly signal, not just two transactions at the same merchant: at least 2 active months, at least 2 active dates, and merchant amount coefficient of variation `<= 0.5`. Same-day split purchases are therefore not recurring-classification candidates. Priority combines analysis impact, amount, and recurrence likelihood.
 
 Planned P1/P2 views:
 
-- `vw_recurring_merchant_monthly`: monthly aggregate of stored `recurring_payment_kind` classifications. Interval confidence stays in API diagnostics.
-- `vw_asset_snapshot_canonical`: snapshot-level asset/liability/net-worth view after source-of-truth and double-count rules are fixed.
-- `vw_investment_allocation_snapshot`: investment allocation ratio and previous-snapshot delta by broker/product type/product.
+- `vw_asset_snapshot_canonical`: snapshot-level asset/liability/net-worth view after source-of-truth and double-count rules are fixed. Investment detail should remain opaque/summary-only until brokerage API support lands.
+- Deferred investment work: `vw_investment_allocation_snapshot`, investment performance, product allocation, and cashflow-aware returns move to P2 after brokerage API integration.
 
 ## Major Metric Logic
 
@@ -1085,8 +1159,11 @@ Source: `app.services.analytics_service.get_fixed_cost_summary`
 - `cost_kind == fixed` goes to fixed bucket
 - `fixed_cost_necessity` further splits fixed into essential/discretionary
 - `cost_kind == variable` goes to variable bucket
+- `spend_necessity` splits fixed and variable spend into essential/discretionary totals
+- `required_spend_total = essential_fixed_total + essential_variable_total`
+- `discretionary_spend_total = discretionary_fixed_total + discretionary_variable_total`
 - missing classification goes to unclassified bucket
-- Automatic fixed/variable and essential/discretionary classification is not live yet; current write path is manual.
+- Category auto-classification can fill `cost_kind`, fixed-cost compatibility necessity, and general `spend_necessity`; user edits mark the row manual.
 
 ### Merchant Spend
 

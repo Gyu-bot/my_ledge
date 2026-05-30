@@ -227,7 +227,7 @@ export function RecurringClassificationPage() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-faint">
           <div>
             <span className="text-label font-semibold text-text-secondary">반복 결제 후보 목록</span>
-            <div className="text-micro text-text-ghost mt-0.5">거래처 그룹 단위로 해당 거래 전체에 같은 반복 결제 성격을 저장합니다.</div>
+            <div className="text-micro text-text-ghost mt-0.5">분석용 거래처 그룹 단위로 해당 거래 전체에 같은 반복 결제 성격을 저장합니다.</div>
           </div>
           <span className="text-micro text-text-muted bg-surface-bar border border-border-subtle px-2 py-0.5 rounded-full">
             {page} / {Math.max(1, Math.ceil((recurring.data?.total ?? 0) / PAGE_SIZE))} 페이지
@@ -261,7 +261,7 @@ export function RecurringClassificationPage() {
                         className="w-3 h-3 accent-accent disabled:opacity-40"
                       />
                     </th>
-                    {['거래처', '카테고리', '주기', '평균금액', '횟수', '현재 결과', '분류 변경'].map((header) => (
+                    {['분석용 거래처', '카테고리', '주기', '평균금액', '횟수', '현재 결과', '분류 변경'].map((header) => (
                       <th key={header} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{header}</th>
                     ))}
                   </tr>

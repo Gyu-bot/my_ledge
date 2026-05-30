@@ -5,6 +5,8 @@ export const assetKeys = {
   snapshots: () => ['assets', 'snapshots'] as const,
   netWorthHistory: () => ['assets', 'netWorthHistory'] as const,
   snapshotCompare: () => ['assets', 'snapshotCompare'] as const,
+  netWorthBreakdown: () => ['assets', 'netWorthBreakdown'] as const,
+  liquidityHealth: () => ['assets', 'liquidityHealth'] as const,
   investments: () => ['assets', 'investments'] as const,
   loans: () => ['assets', 'loans'] as const,
 }
@@ -19,6 +21,14 @@ export function useNetWorthHistory() {
 
 export function useAssetSnapshotCompare() {
   return useQuery({ queryKey: assetKeys.snapshotCompare(), queryFn: assetApi.snapshotCompare })
+}
+
+export function useNetWorthBreakdown() {
+  return useQuery({ queryKey: assetKeys.netWorthBreakdown(), queryFn: assetApi.netWorthBreakdown })
+}
+
+export function useLiquidityHealth() {
+  return useQuery({ queryKey: assetKeys.liquidityHealth(), queryFn: assetApi.liquidityHealth })
 }
 
 export function useInvestmentSummary() {

@@ -6,16 +6,17 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { LineAreaChart } from '../components/charts/LineAreaChart'
 import { HorizontalBarList } from '../components/charts/HorizontalBarList'
-import { useAssetSnapshotCompare, useAssetSnapshots, useNetWorthHistory, useInvestmentSummary, useLoanSummary } from '../hooks/useAssets'
+import { useAssetSnapshotCompare, useAssetSnapshots, useNetWorthHistory, useLoanSummary, useLiquidityHealth, useNetWorthBreakdown } from '../hooks/useAssets'
 import { useChromeContext } from '../components/layout/chromeContext'
-import { formatKRWCompact, formatPct } from '../lib/utils'
+import { formatKRWCompact } from '../lib/utils'
 
 export function AssetsPage() {
   const snapshots = useAssetSnapshots()
   const netWorthHistory = useNetWorthHistory()
   const comparison = useAssetSnapshotCompare()
-  const investments = useInvestmentSummary()
   const loans = useLoanSummary()
+  const liquidityHealth = useLiquidityHealth()
+  const netWorthBreakdown = useNetWorthBreakdown()
   const { setMetaBadge } = useChromeContext()
 
   const latest = snapshots.data?.items?.[snapshots.data.items.length - 1]
@@ -52,11 +53,9 @@ export function AssetsPage() {
   const netWorth = latest ? parseFloat(latest.net_worth) : null
   const assetTotal = latest ? parseFloat(latest.asset_total) : null
   const liabilityTotal = latest ? parseFloat(latest.liability_total) : null
-  const investMarketValue = investments.data ? parseFloat(investments.data.totals.market_value) : null
-  const investCostBasis = investments.data ? parseFloat(investments.data.totals.cost_basis) : null
-  const investReturnPct = investMarketValue != null && investCostBasis != null && investCostBasis > 0
-    ? ((investMarketValue - investCostBasis) / investCostBasis) * 100
-    : null
+  const cashEquivalentTotal = liquidityHealth.data ? parseFloat(liquidityHealth.data.cash_equivalent_total) : null
+  const emergencyMonths = liquidityHealth.data?.emergency_fund_months ?? null
+  const monthlyDebtPayment = liquidityHealth.data ? parseFloat(liquidityHealth.data.monthly_debt_payment) : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -72,9 +71,9 @@ export function AssetsPage() {
         <KpiCard label="총부채" value={liabilityTotal != null ? `₩ ${formatKRWCompact(liabilityTotal)}` : '—'}
           className="border-t-2 border-t-danger"
           />
-        <KpiCard label="투자 평가액" value={investMarketValue != null ? `₩ ${formatKRWCompact(investMarketValue)}` : '—'}
-          sub={investReturnPct != null ? `원금 대비 ${investReturnPct > 0 ? '+' : ''}${formatPct(investReturnPct)}` : ''}
-          subVariant={investReturnPct != null && investReturnPct > 0 ? 'up' : 'down'} />
+        <KpiCard label="현금성 자산" value={cashEquivalentTotal != null ? `₩ ${formatKRWCompact(cashEquivalentTotal)}` : '—'}
+          sub={emergencyMonths != null ? `비상금 ${emergencyMonths.toFixed(1)}개월` : liquidityHealth.data?.confidence ?? ''}
+          subVariant={(emergencyMonths ?? 0) >= 3 ? 'up' : 'down'} />
       </div>
 
       {/* 순자산 추이 */}
@@ -86,27 +85,27 @@ export function AssetsPage() {
          ) : <EmptyState />}
       </SectionCard>
 
-      {/* 투자 + 대출 */}
+      {/* 유동성 + 대출 */}
       <div className="grid md:grid-cols-2 gap-4">
 
-        {/* 투자 요약 */}
+        {/* 유동성 요약 */}
         <SectionCard
-          title="투자 요약"
+          title="유동성 Health"
           badge={comparisonMeta ? (
             <span className={`text-micro px-2 py-0.5 rounded-full border ${compareBadgeTone}`}>
               {comparisonMeta}
             </span>
-          ) : investments.data?.snapshot_date ?? undefined}
+          ) : liquidityHealth.data?.snapshot_date ?? undefined}
         >
-          {investments.isLoading ? <LoadingState /> :
-           investments.error ? <ErrorState onRetry={() => investments.refetch()} /> :
-           investments.data ? (
+          {liquidityHealth.isLoading || netWorthBreakdown.isLoading ? <LoadingState /> :
+           liquidityHealth.error || netWorthBreakdown.error ? <ErrorState onRetry={() => { void liquidityHealth.refetch(); void netWorthBreakdown.refetch() }} /> :
+           liquidityHealth.data ? (
              <>
                <div className="grid grid-cols-3 gap-2.5 mb-4">
                  {[
-                   { label: '총 원금', value: `₩ ${formatKRWCompact(investCostBasis ?? 0)}`, color: 'text-text-primary' },
-                   { label: '평가액', value: `₩ ${formatKRWCompact(investMarketValue ?? 0)}`, color: 'text-info-bright' },
-                   { label: '수익률', value: formatPct(investReturnPct), color: (investReturnPct ?? 0) > 0 ? 'text-accent' : 'text-danger' },
+                   { label: '현금성', value: `₩ ${formatKRWCompact(cashEquivalentTotal ?? 0)}`, color: 'text-info-bright' },
+                   { label: '비상금', value: emergencyMonths != null ? `${emergencyMonths.toFixed(1)}개월` : '—', color: (emergencyMonths ?? 0) >= 3 ? 'text-accent' : 'text-danger' },
+                   { label: '월부채', value: `₩ ${formatKRWCompact(monthlyDebtPayment ?? 0)}`, color: 'text-danger' },
                  ].map((s) => (
                    <div key={s.label} className="bg-surface-bar border border-border rounded-lg p-2.5">
                      <div className="text-micro text-text-faint mb-1">{s.label}</div>
@@ -114,16 +113,19 @@ export function AssetsPage() {
                    </div>
                  ))}
                </div>
-               <div className="text-caption text-text-faint mb-2">포트폴리오 비중</div>
+               <div className="text-caption text-text-faint mb-2">순자산 구성</div>
                <HorizontalBarList
-                 items={investments.data.items.map((item) => ({
-                   label: item.broker,
-                   amount: parseFloat(item.market_value ?? '0'),
+                 items={(netWorthBreakdown.data?.items ?? []).map((item) => ({
+                   label: item.side === 'asset' ? item.category : `부채 · ${item.category}`,
+                   amount: Math.abs(parseFloat(item.amount)),
                  }))}
-                 maxAmount={investMarketValue ?? undefined}
+                 maxAmount={Math.max(assetTotal ?? 0, liabilityTotal ?? 0)}
                />
+               <div className="mt-3 text-micro text-text-ghost">
+                 투자 상세 성과/배분은 증권사 API 연동 이후 보강합니다.
+               </div>
              </>
-           ) : <EmptyState message="투자 데이터가 없습니다" />}
+           ) : <EmptyState message="유동성 데이터가 없습니다" />}
         </SectionCard>
 
         {/* 대출 요약 */}

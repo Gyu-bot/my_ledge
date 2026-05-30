@@ -146,6 +146,8 @@ async def get_fixed_cost_summary(
     variable_total = 0
     essential_fixed_total = 0
     discretionary_fixed_total = 0
+    essential_variable_total = 0
+    discretionary_variable_total = 0
     unclassified_total = 0
     unclassified_count = 0
 
@@ -161,6 +163,10 @@ async def get_fixed_cost_summary(
                 discretionary_fixed_total += amount
         elif cost_kind == "variable":
             variable_total += amount
+            if row["spend_necessity"] == "essential":
+                essential_variable_total += amount
+            elif row["spend_necessity"] == "discretionary":
+                discretionary_variable_total += amount
         else:
             unclassified_total += amount
             unclassified_count += 1
@@ -172,6 +178,12 @@ async def get_fixed_cost_summary(
         fixed_ratio=_safe_ratio(fixed_total, expense_total),
         essential_fixed_total=essential_fixed_total,
         discretionary_fixed_total=discretionary_fixed_total,
+        essential_variable_total=essential_variable_total,
+        discretionary_variable_total=discretionary_variable_total,
+        required_spend_total=essential_fixed_total + essential_variable_total,
+        discretionary_spend_total=(
+            discretionary_fixed_total + discretionary_variable_total
+        ),
         unclassified_total=unclassified_total,
         unclassified_count=unclassified_count,
     )
@@ -197,6 +209,8 @@ async def get_fixed_cost_trend(
             "variable_total": 0,
             "essential_fixed_total": 0,
             "discretionary_fixed_total": 0,
+            "essential_variable_total": 0,
+            "discretionary_variable_total": 0,
             "unclassified_total": 0,
             "unclassified_count": 0,
         }
@@ -214,6 +228,10 @@ async def get_fixed_cost_trend(
                 grouped[period]["discretionary_fixed_total"] += amount
         elif cost_kind == "variable":
             grouped[period]["variable_total"] += amount
+            if row["spend_necessity"] == "essential":
+                grouped[period]["essential_variable_total"] += amount
+            elif row["spend_necessity"] == "discretionary":
+                grouped[period]["discretionary_variable_total"] += amount
         else:
             grouped[period]["unclassified_total"] += amount
             grouped[period]["unclassified_count"] += 1
@@ -227,6 +245,16 @@ async def get_fixed_cost_trend(
                 variable_total=values["variable_total"],
                 essential_fixed_total=values["essential_fixed_total"],
                 discretionary_fixed_total=values["discretionary_fixed_total"],
+                essential_variable_total=values["essential_variable_total"],
+                discretionary_variable_total=values["discretionary_variable_total"],
+                required_spend_total=(
+                    values["essential_fixed_total"]
+                    + values["essential_variable_total"]
+                ),
+                discretionary_spend_total=(
+                    values["discretionary_fixed_total"]
+                    + values["discretionary_variable_total"]
+                ),
                 unclassified_total=values["unclassified_total"],
                 unclassified_count=values["unclassified_count"],
                 fixed_ratio=_safe_ratio(values["fixed_total"], values["expense_total"]),

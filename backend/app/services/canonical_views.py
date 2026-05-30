@@ -44,6 +44,7 @@ def transaction_is_edited_clause() -> ColumnElement[bool]:
         Transaction.category_minor_user.is_not(None),
         Transaction.merchant != Transaction.description,
         Transaction.cost_classification_source == "manual",
+        Transaction.spend_necessity.is_not(None),
         Transaction.recurring_payment_kind.is_not(None),
         Transaction.memo.is_not(None),
     )
@@ -101,6 +102,7 @@ def build_transactions_effective_select(
             Transaction.payment_method.label("payment_method"),
             Transaction.cost_kind.label("cost_kind"),
             Transaction.fixed_cost_necessity.label("fixed_cost_necessity"),
+            Transaction.spend_necessity.label("spend_necessity"),
             Transaction.cost_classification_source.label("cost_classification_source"),
             Transaction.recurring_payment_kind.label("recurring_payment_kind"),
             Transaction.memo.label("memo"),
@@ -178,6 +180,16 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("essential_fixed_total", Integer(), nullable=False),
             SchemaColumnDefinition(
                 "discretionary_fixed_total", Integer(), nullable=False
+            ),
+            SchemaColumnDefinition(
+                "essential_variable_total", Integer(), nullable=False
+            ),
+            SchemaColumnDefinition(
+                "discretionary_variable_total", Integer(), nullable=False
+            ),
+            SchemaColumnDefinition("required_spend_total", Integer(), nullable=False),
+            SchemaColumnDefinition(
+                "discretionary_spend_total", Integer(), nullable=False
             ),
             SchemaColumnDefinition("unclassified_total", Integer(), nullable=False),
             SchemaColumnDefinition("unclassified_count", Integer(), nullable=False),
@@ -269,6 +281,26 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
                 nullable=False,
             ),
             SchemaColumnDefinition(
+                "essential_variable_total",
+                Integer(),
+                nullable=False,
+            ),
+            SchemaColumnDefinition(
+                "discretionary_variable_total",
+                Integer(),
+                nullable=False,
+            ),
+            SchemaColumnDefinition(
+                "required_spend_total",
+                Integer(),
+                nullable=False,
+            ),
+            SchemaColumnDefinition(
+                "discretionary_spend_total",
+                Integer(),
+                nullable=False,
+            ),
+            SchemaColumnDefinition(
                 "unclassified_expense_total", Integer(), nullable=False
             ),
             SchemaColumnDefinition("net_cashflow", Integer(), nullable=False),
@@ -315,6 +347,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition(
                 "fixed_cost_necessity", String(length=20), nullable=True
             ),
+            SchemaColumnDefinition("spend_necessity", String(length=20), nullable=True),
             SchemaColumnDefinition(
                 "cost_classification_source", String(length=20), nullable=True
             ),
@@ -364,6 +397,12 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("fixed_commitment_total", Integer(), nullable=False),
             SchemaColumnDefinition("variable_total", Integer(), nullable=False),
             SchemaColumnDefinition(
+                "required_variable_total", Integer(), nullable=False
+            ),
+            SchemaColumnDefinition(
+                "discretionary_variable_total", Integer(), nullable=False
+            ),
+            SchemaColumnDefinition(
                 "spendable_before_variable_spend",
                 Integer(),
                 nullable=False,
@@ -404,6 +443,11 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
                 nullable=False,
             ),
             SchemaColumnDefinition(
+                "needs_spend_necessity",
+                Boolean(),
+                nullable=False,
+            ),
+            SchemaColumnDefinition(
                 "needs_recurring_payment_kind",
                 Boolean(),
                 nullable=False,
@@ -414,6 +458,25 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition(
                 "priority_reason", String(length=40), nullable=False
             ),
+        ),
+    ),
+    SchemaViewDefinition(
+        name="vw_recurring_merchant_monthly",
+        description=(
+            "Canonical monthly recurring merchant aggregate. Uses normalized "
+            "merchant values and stored recurring payment classifications."
+        ),
+        recommended_for_ai=True,
+        columns=(
+            SchemaColumnDefinition("period", String(length=7), nullable=False),
+            SchemaColumnDefinition("merchant", String(length=500), nullable=False),
+            SchemaColumnDefinition(
+                "recurring_payment_kind", String(length=30), nullable=False
+            ),
+            SchemaColumnDefinition("monthly_spend", Integer(), nullable=False),
+            SchemaColumnDefinition("transaction_count", Integer(), nullable=False),
+            SchemaColumnDefinition("first_date", Date(), nullable=False),
+            SchemaColumnDefinition("last_date", Date(), nullable=False),
         ),
     ),
 )

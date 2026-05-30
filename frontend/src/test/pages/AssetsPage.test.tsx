@@ -59,11 +59,30 @@ vi.mock('../../hooks/useAssets', () => ({
     error: null,
     refetch: vi.fn(),
   }),
-  useInvestmentSummary: () => ({
+  useLiquidityHealth: () => ({
     data: {
       snapshot_date: '2026-04-07',
-      items: [],
-      totals: { cost_basis: '1000.00', market_value: '1200.00' },
+      cash_equivalent_total: '300.00',
+      liquid_asset_total: '300.00',
+      monthly_required_spend: '100.00',
+      emergency_fund_months: 3,
+      monthly_debt_payment: '50.00',
+      monthly_income: '500.00',
+      debt_payment_to_income_ratio: 0.1,
+      confidence: 'high',
+      assumptions: [],
+    },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useNetWorthBreakdown: () => ({
+    data: {
+      snapshot_date: '2026-04-07',
+      items: [
+        { side: 'asset', category: '현금성', amount: '300.00', share_of_total: 0.23 },
+        { side: 'liability', category: '대출', amount: '250.00', share_of_total: 1 },
+      ],
     },
     isLoading: false,
     error: null,
@@ -109,6 +128,7 @@ describe('AssetsPage', () => {
     expect(screen.getAllByText('2026-03-31 대비 · 7일')).toHaveLength(2)
     const kpiSubs = container.querySelectorAll('[data-testid="kpi-sub"]')
     expect(kpiSubs).toHaveLength(1)
-    expect(kpiSubs[0]?.textContent).toBe('원금 대비 +20.0%')
+    expect(kpiSubs[0]?.textContent).toBe('비상금 3.0개월')
+    expect(screen.getByText('유동성 Health')).toBeInTheDocument()
   })
 })

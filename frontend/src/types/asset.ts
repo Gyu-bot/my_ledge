@@ -71,3 +71,34 @@ export interface LoanSummaryResponse {
   items: LoanItem[]
   totals: { principal: string; balance: string }
 }
+
+export interface NetWorthBreakdownItem {
+  side: string
+  category: string
+  amount: string
+  ratio: number | null
+}
+
+export interface NetWorthBreakdownResponse {
+  snapshot_date: string | null
+  asset_total: string
+  liability_total: string
+  net_worth: string
+  items: NetWorthBreakdownItem[]
+}
+
+export interface AssetLiabilityHealthResponse {
+  snapshot_date: string | null
+  cash_equivalent_total: string
+  asset_total: string
+  liability_total: string
+  net_worth: string
+  monthly_required_spend: string
+  emergency_fund_months: number | null
+  monthly_debt_payment: string
+  monthly_income: string
+  debt_payment_ratio: number | null
+  debt_to_asset_ratio: number | null
+  confidence: string
+  assumptions: string[]
+}

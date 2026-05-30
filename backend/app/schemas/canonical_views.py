@@ -15,6 +15,10 @@ class CanonicalMonthlyCashflowItem(BaseModel):
     variable_total: int
     essential_fixed_total: int
     discretionary_fixed_total: int
+    essential_variable_total: int
+    discretionary_variable_total: int
+    required_spend_total: int
+    discretionary_spend_total: int
     unclassified_expense_total: int
     net_cashflow: int
     savings_rate: float | None
@@ -27,6 +31,8 @@ class CanonicalTrueSpendableMonthlyItem(BaseModel):
     loan_repayment_total: int
     fixed_commitment_total: int
     variable_total: int
+    required_variable_total: int
+    discretionary_variable_total: int
     spendable_before_variable_spend: int
     remaining_after_variable_spend: int
     income_basis: Literal["observed", "estimated"] = "observed"
@@ -71,6 +77,16 @@ class CanonicalMerchantMonthlyBaselineItem(BaseModel):
     baseline_delta_pct: float | None
 
 
+class CanonicalRecurringMerchantMonthlyItem(BaseModel):
+    period: str
+    merchant: str
+    recurring_payment_kind: str
+    monthly_spend: int
+    transaction_count: int
+    first_date: date
+    last_date: date
+
+
 class CanonicalUnclassifiedWorkQueueItem(BaseModel):
     transaction_id: int
     date: date
@@ -82,6 +98,7 @@ class CanonicalUnclassifiedWorkQueueItem(BaseModel):
     amount_abs: int
     needs_cost_kind: bool
     needs_fixed_cost_necessity: bool
+    needs_spend_necessity: bool = False
     needs_recurring_payment_kind: bool
     needs_loan_link_review: bool
     merchant_expense_count: int
@@ -94,4 +111,5 @@ class CanonicalViewsDashboardResponse(BaseModel):
     true_spendable_monthly: list[CanonicalTrueSpendableMonthlyItem]
     loan_repayment_monthly: list[CanonicalLoanRepaymentMonthlyItem]
     merchant_monthly_baseline: list[CanonicalMerchantMonthlyBaselineItem]
+    recurring_merchant_monthly: list[CanonicalRecurringMerchantMonthlyItem]
     unclassified_work_queue: list[CanonicalUnclassifiedWorkQueueItem]

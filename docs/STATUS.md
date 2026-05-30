@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Phase:** P0/P0.5 canonical read model backend/frontend dashboard 구현 완료. 반복결제 카테고리 자동분류 1차 구현 완료. 다음 초점은 source verification scope, merchant normalization, asset/liability health 후보 정리다.
-- **Last Worker:** Codex (2026-05-29T00:52+0900, 범용 에이전트 canonical value reference 및 OpenClaw legacy path 정리)
+- **Phase:** P1 advisor surface 1-4 구현 완료. 지출 필수/재량 축 일반화, merchant normalization, 반복 거래처 월별 view, 유동성/부채 health API와 frontend 노출이 live. 투자 분석과 자산이동/이체 tracking은 후순위로 보류.
+- **Last Worker:** Codex (2026-05-30T20:21+0900, 거래처 정규화 description 기준 적용 및 수동 merchant 보존)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -32,6 +32,12 @@
 - [x] 진행월 true spendable 예상 표시: 현재 월 수입이 최근 6개 마감월의 이상치 제외 수입 baseline의 50% 미만이면 dashboard API가 `estimated_*` 필드와 `excluded_income_periods`를 제공하고, frontend가 `예상` 태그/관측값/제외 월을 함께 표시
 - [x] `vw_fixed_cost_monthly_summary`를 loan-linked repayment 제외 기준으로 정렬
 - [x] Planned backlog 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 [planned-work.md](planned-work.md)에 반영
+- [x] P1 1-4 구현: `spend_necessity`, `merchant_alias_rules`, `vw_recurring_merchant_monthly`, `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health`
+- [x] P1 frontend 노출: `/operations/workbench` 필수/재량 편집/필터, `/operations/auto-classification` 거래처 정규화/필수·재량 규칙, `/operations/canonical-views` 반복 거래처, `/analysis/assets` 유동성 Health
+- [x] 대출 매칭 규칙 기준 선택 구현: `/operations/auto-classification`에서 분석용 거래처(`merchant`) 또는 원본 설명(`description`)을 선택해 대출 상환 자동 연결 규칙을 저장/적용
+- [x] 프론트엔드 거래처 표기 정리: 작업대/대출 연결/지출/인사이트/반복분류 화면에서 `merchant`는 분석용 거래처, `description`은 원본 설명으로 구분
+- [x] 거래처 정규화 기준 보정: alias rule은 원본 설명(`description`)을 매칭해 분석용 거래처(`merchant`)에 반영하고, `merchant != description`인 수동 수정 추정 row는 보존
+- [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
 - [x] Canonical read model 확장 요구사항 정리: P0/P0.5/P1/P2 view 후보, 대출 상환 double-count 방지, true spendable, merchant baseline, unclassified work queue, as_of/threshold API 분리 원칙 반영
@@ -44,9 +50,11 @@
 ## In Progress
 
 - [ ] Advisor canonical read model expansion
-  - 현재 상태: P0/P1 analytics endpoint 8종과 P0/P0.5 canonical DB view 5종은 live.
-  - 다음 구현 후보: `vw_recurring_merchant_monthly`, `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`.
+  - 현재 상태: P0/P1 analytics endpoint와 P0/P0.5/P1 canonical DB view 6종은 live.
+  - 완료: 지출 `spend_necessity` 축, `vw_recurring_merchant_monthly`, 유동성/부채 health read surface.
+  - 다음 구현 후보: discretionary spending velocity, purchase gate candidates, 반복분류 dry-run/승인 흐름, `vw_asset_snapshot_canonical`.
   - 주의: 대출 연결 거래는 일반 소비 breakdown과 분리하고, 월별 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total`을 함께 노출해야 한다.
+  - 투자 성과/배분/수익률은 증권사 API 이후 P2로 미룬다. 자산이동/이체 tracking도 우선순위 최후순위다.
 - [ ] Operations/data-management follow-up
   - bulk delete / bulk restore API 및 frontend 연결.
   - `description_user` / `effective_description` 기반 거래 설명 직접 수정 기능.
@@ -55,20 +63,19 @@
   - Token Lab은 개발/리뷰용 도구로만 유지.
   - 운영 배포본 기준 smoke capture와 redirect(`/spending`, `/assets`, `/data`) 및 `/operations/canonical-views` 브라우저 확인.
 - [ ] Asset/liability health follow-up
-  - `net-worth-breakdown`, `investment-performance`, `debt-burden`, `emergency-fund`는 장기 기능 후보.
-  - `emergency-fund` 전 cash-equivalent/liquidity tier 분류 필요.
-  - `debt-burden` 정확도를 높이려면 대출별 `monthly_payment`/상환 스케줄 출처 필요.
+  - `net-worth-breakdown`, `liquidity-health` 1차 API와 화면 노출은 완료.
+  - 후속: cash-equivalent/liquidity tier 사용자 검토 UI와 대출별 `monthly_payment` 출처 보강.
 - [ ] Frontend v2 full reimplementation
   - `feat/frontend-v2` 브랜치 기준 Task 1-6 완료 상태였으나 현재는 보류.
   - 현재 main frontend 개선을 우선한다.
 
 ## Next Up
 
-1. `verify_import_parity` 범위를 sample presence로 문서화할지 rolling-window overlap extra-row 검증까지 확장할지 결정.
-2. Settings page와 analytics settings frontend panel 구현.
-3. Merchant alias/normalization rule 방식 결정.
-4. `vw_recurring_merchant_monthly` read surface 설계.
-5. asset/liability health 전에 cash-equivalent/liquidity tier 분류 방식 결정.
+1. discretionary spending velocity API/settings contract 설계 및 frontend 노출.
+2. purchase gate candidate API와 review UI 설계.
+3. 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 쓰는 dry-run/승인 흐름 설계.
+4. cash-equivalent/liquidity tier와 대출 `monthly_payment` 사용자 보강 UI.
+5. bulk delete/restore, description override 등 operations 후속. 투자 분석과 자산이동/이체 tracking은 P2 뒤쪽으로 보류.
 
 ## Key Decisions
 
@@ -85,6 +92,11 @@
 - 2026-05-28: 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 sparse 데이터로 본다.
 - 2026-05-27: Advisor canonical 확장은 API 중복 구현이 아니라 readonly SQL/외부 에이전트용 read model 안정화로 본다.
 - 2026-05-27: 월별 현금흐름 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total`을 함께 노출해 대출 상환과 일반 소비의 double count를 막는다.
+- 2026-05-30: `cost_kind`는 고정/변동 축, `spend_necessity`는 필수/재량 축으로 분리한다. `fixed_cost_necessity`는 고정비 호환 필드로 유지한다.
+- 2026-05-30: merchant normalization은 자동 병합이 아니라 `merchant_alias_rules` 포함 패턴 기반 일괄 정규화로 시작한다.
+- 2026-05-30: merchant normalization의 매칭 기준은 raw `description`이다. 결과는 `merchant`에 쓰고, `merchant != description`인 row는 수동 수정 또는 기존 정규화로 보고 덮어쓰지 않는다.
+- 2026-05-30: 대출 매칭 규칙은 `match_field='merchant'|'description'`으로 기준을 명시한다. `merchant`는 분석용/정규화 가능 값이고 `description`은 raw import 원문이다.
+- 2026-05-30: 투자 분석은 증권사 API 이후, 자산이동/이체 tracking은 최후순위 P2로 미룬다.
 - 2026-05-25: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다.
 - 2026-05-25: 반복결제의 `할부` / `매월 반복` 구분은 거래 단위 nullable `transactions.recurring_payment_kind`로 먼저 저장하고, 별도 `/operations/recurring-classification` 화면에서 관리한다.
 - 2026-04-07: backend/API live contract의 문서상 SSOT는 [backend-api-ssot.md](backend-api-ssot.md)로 둔다.
@@ -92,9 +104,9 @@
 
 ## Known Issues
 
-- `merchant_normalized` 부재로 merchant 분석 v1은 raw `merchant` 입력 품질에 영향을 받는다.
-- `asset_snapshots`에는 현금성 분류 기준이 없어 emergency fund 계산은 초기에는 규칙/매핑 의존이다.
-- `loans`에는 월 상환액이 없어 debt burden은 추정치(`*_est`) 계약으로만 제공 가능하다.
+- 거래처 정규화는 alias rule을 적용한 이후부터 품질이 좋아진다. 기존 raw `merchant` 표기는 사용자가 규칙을 적용하기 전까지 남아 있을 수 있다. 이미 `merchant != description`인 row는 자동 정규화가 덮어쓰지 않는다.
+- `asset_snapshots`의 현금성 분류 기준은 컬럼은 생겼지만 기존 데이터에는 비어 있을 수 있어, 초기 emergency fund 계산은 service heuristic과 assumptions에 의존한다.
+- `loans.monthly_payment` 컬럼은 생겼지만 기존 데이터에는 비어 있을 수 있어 debt burden은 사용자 보강 전까지 낮은 confidence가 될 수 있다.
 - 현재 실데이터 기준 대출원금상환은 raw `type='이체'`가 아니라 `type='지출'`, `category_major='금융'`에 섞여 있다. transfer tracking 구현은 expense-side 재분류를 반드시 포함해야 한다.
 - 대출상환은 사용자 의도상 고정비 지출로도 해석될 수 있으므로 MVP에서는 raw `지출`을 `이체`로 바꾸지 않는다. 별도 transfer/debt movement slice는 파생 레이어로만 제공한다.
 - 현재 지출 실데이터에서 `cost_kind`, `fixed_cost_necessity`가 비어 있으면 fixed-cost/essential/discretionary 진단 효용이 낮다. `vw_unclassified_work_queue`가 이 품질 문제를 먼저 드러내야 한다.

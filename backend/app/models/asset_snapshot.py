@@ -24,6 +24,8 @@ class AssetSnapshot(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     product_name: Mapped[str] = mapped_column(String(200), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+    liquidity_tier: Mapped[str | None] = mapped_column(String(30))
+    is_cash_equivalent: Mapped[bool | None] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

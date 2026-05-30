@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.loan import Loan
 from app.schemas.asset import SnapshotComparisonMode
 from app.services import assets_service
 
@@ -190,3 +191,57 @@ async def test_get_asset_snapshot_comparison_supports_selected_snapshot_pair(
     assert result.baseline.snapshot_date == date(2026, 3, 24)
     assert result.comparison_days == 14
     assert result.can_compare is True
+
+
+async def test_get_asset_liability_health_reports_liquidity_and_debt_burden(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            AssetSnapshot(
+                snapshot_date=date(2026, 4, 30),
+                side="asset",
+                category="예금",
+                product_name="생활비 통장",
+                amount=Decimal("3000000.00"),
+            ),
+            AssetSnapshot(
+                snapshot_date=date(2026, 4, 30),
+                side="asset",
+                category="부동산",
+                product_name="전세보증금",
+                amount=Decimal("10000000.00"),
+                liquidity_tier="locked",
+                is_cash_equivalent=False,
+            ),
+            AssetSnapshot(
+                snapshot_date=date(2026, 4, 30),
+                side="liability",
+                category="대출",
+                product_name="주담대",
+                amount=Decimal("5000000.00"),
+            ),
+            Loan(
+                snapshot_date=date(2026, 4, 30),
+                lender="국민은행",
+                product_name="주담대",
+                principal=Decimal("6000000.00"),
+                balance=Decimal("5000000.00"),
+                monthly_payment=Decimal("500000.00"),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await assets_service.get_asset_liability_health(
+        db_session,
+        monthly_required_spend=Decimal("1000000.00"),
+        monthly_income=Decimal("4000000.00"),
+    )
+
+    assert result.snapshot_date == date(2026, 4, 30)
+    assert result.cash_equivalent_total == Decimal("3000000.00")
+    assert result.emergency_fund_months == 3.0
+    assert result.monthly_debt_payment == Decimal("500000.00")
+    assert result.debt_payment_ratio == 0.125
+    assert result.debt_to_asset_ratio == 0.3846

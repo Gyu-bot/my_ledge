@@ -34,6 +34,7 @@ function buildTransaction(overrides: Partial<TransactionResponse>): TransactionR
     payment_method: '카드',
     cost_kind: null,
     fixed_cost_necessity: null,
+    spend_necessity: null,
     cost_classification_source: null,
     recurring_payment_kind: null,
     memo: null,
@@ -182,7 +183,7 @@ describe('WorkbenchPage', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
 
     expect(screen.getAllByText('배달').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('combobox')).toHaveLength(11)
+    expect(screen.getAllByRole('combobox')).toHaveLength(12)
     expect(screen.getAllByRole('option', { name: '식비' }).length).toBeGreaterThan(0)
   })
 
@@ -210,7 +211,7 @@ describe('WorkbenchPage', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
 
     expect(screen.getByText('선택한 행에 같은 값을 일괄 적용합니다.')).toBeInTheDocument()
-    expect(screen.getAllByRole('combobox')).toHaveLength(11)
+    expect(screen.getAllByRole('combobox')).toHaveLength(12)
     fireEvent.click(screen.getByRole('button', { name: '일괄 적용' }))
 
     await waitFor(() => {
@@ -264,12 +265,14 @@ describe('WorkbenchPage', () => {
 
     fireEvent.change(screen.getByLabelText('고정비/변동비 필터'), { target: { value: 'fixed' } })
     fireEvent.change(screen.getByLabelText('고정비 필수 여부 필터'), { target: { value: 'essential' } })
+    fireEvent.change(screen.getByLabelText('필수/재량 필터'), { target: { value: 'discretionary' } })
     fireEvent.change(screen.getByLabelText('반복결제 분류 필터'), { target: { value: 'installment' } })
     fireEvent.click(screen.getByRole('button', { name: '적용' }))
 
     expect(mockUseTransactionList.mock.lastCall?.[0]).toMatchObject({
       cost_kind: 'fixed',
       fixed_cost_necessity: 'essential',
+      spend_necessity: 'discretionary',
       recurring_payment_kind: 'installment',
     })
   })

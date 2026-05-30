@@ -19,19 +19,41 @@ class CategoryClassificationRule(TimestampMixin, Base):
     category_minor: Mapped[str | None] = mapped_column(String(50))
     cost_kind: Mapped[str] = mapped_column(String(20), nullable=False)
     fixed_cost_necessity: Mapped[str | None] = mapped_column(String(20))
+    spend_necessity: Mapped[str | None] = mapped_column(String(20))
+
+
+class MerchantAliasRule(TimestampMixin, Base):
+    __tablename__ = "merchant_alias_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "alias_pattern",
+            name="uq_merchant_alias_rules_pattern",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    alias_pattern: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_merchant: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
 class LoanMerchantRule(TimestampMixin, Base):
     __tablename__ = "loan_merchant_rules"
     __table_args__ = (
         UniqueConstraint(
+            "match_field",
             "merchant",
-            name="uq_loan_merchant_rules_merchant",
+            name="uq_loan_merchant_rules_match_field_merchant",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     merchant: Mapped[str] = mapped_column(String(500), nullable=False)
+    match_field: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="merchant",
+        server_default="merchant",
+    )
     loan_account_id: Mapped[int] = mapped_column(
         ForeignKey("loan_accounts.id"),
         nullable=False,

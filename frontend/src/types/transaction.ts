@@ -1,4 +1,5 @@
 export type RecurringPaymentKind = 'installment' | 'monthly_recurring' | 'not_recurring'
+export type SpendNecessity = 'essential' | 'discretionary'
 
 export interface TransactionResponse {
   id: number
@@ -17,7 +18,8 @@ export interface TransactionResponse {
   currency: string
   payment_method: string | null
   cost_kind: 'fixed' | 'variable' | null
-  fixed_cost_necessity: 'essential' | 'discretionary' | null
+  fixed_cost_necessity: SpendNecessity | null
+  spend_necessity: SpendNecessity | null
   cost_classification_source: 'manual' | 'auto' | null
   recurring_payment_kind: RecurringPaymentKind | null
   memo: string | null
@@ -55,7 +57,8 @@ export interface TransactionListParams {
   include_deleted?: boolean
   is_edited?: boolean
   cost_kind?: 'fixed' | 'variable'
-  fixed_cost_necessity?: 'essential' | 'discretionary'
+  fixed_cost_necessity?: SpendNecessity
+  spend_necessity?: SpendNecessity
   recurring_payment_kind?: RecurringPaymentKind
   search?: string
   start_month?: string
@@ -82,7 +85,8 @@ export interface TransactionUpdateRequest {
   category_major_user?: string | null
   category_minor_user?: string | null
   cost_kind?: 'fixed' | 'variable' | null
-  fixed_cost_necessity?: 'essential' | 'discretionary' | null
+  fixed_cost_necessity?: SpendNecessity | null
+  spend_necessity?: SpendNecessity | null
   recurring_payment_kind?: RecurringPaymentKind | null
   memo?: string | null
 }
@@ -93,12 +97,14 @@ export interface TransactionBulkUpdateRequest {
   category_major_user?: string | null
   category_minor_user?: string | null
   cost_kind?: 'fixed' | 'variable' | null
-  fixed_cost_necessity?: 'essential' | 'discretionary' | null
+  fixed_cost_necessity?: SpendNecessity | null
+  spend_necessity?: SpendNecessity | null
   recurring_payment_kind?: RecurringPaymentKind | null
   memo?: string | null
 }
 
 export type LoanRepaymentType = 'principal' | 'interest' | 'mixed' | 'unknown'
+export type LoanMerchantRuleMatchField = 'merchant' | 'description'
 export type LoanKind =
   | 'unknown'
   | 'overdraft'
@@ -235,7 +241,8 @@ export interface CategoryClassificationRuleRequest {
   category_major: string
   category_minor?: string | null
   cost_kind: 'fixed' | 'variable'
-  fixed_cost_necessity?: 'essential' | 'discretionary' | null
+  fixed_cost_necessity?: SpendNecessity | null
+  spend_necessity?: SpendNecessity | null
 }
 
 export interface CategoryClassificationRuleResponse extends CategoryClassificationRuleRequest {
@@ -243,7 +250,8 @@ export interface CategoryClassificationRuleResponse extends CategoryClassificati
   category_major: string
   category_minor: string | null
   cost_kind: 'fixed' | 'variable'
-  fixed_cost_necessity: 'essential' | 'discretionary' | null
+  fixed_cost_necessity: SpendNecessity | null
+  spend_necessity: SpendNecessity | null
   created_at: string
   updated_at: string
 }
@@ -252,8 +260,26 @@ export interface CategoryClassificationRuleListResponse {
   items: CategoryClassificationRuleResponse[]
 }
 
+export interface MerchantAliasRuleRequest {
+  alias_pattern: string
+  normalized_merchant: string
+}
+
+export interface MerchantAliasRuleResponse {
+  id: number
+  alias_pattern: string
+  normalized_merchant: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MerchantAliasRuleListResponse {
+  items: MerchantAliasRuleResponse[]
+}
+
 export interface LoanMerchantRuleRequest {
   merchant: string
+  match_field: LoanMerchantRuleMatchField
   loan_account_id: number
   repayment_type: LoanRepaymentType
   memo?: string | null

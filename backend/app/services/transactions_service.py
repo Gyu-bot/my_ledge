@@ -45,6 +45,7 @@ async def list_transactions(
     search: str | None,
     cost_kind: str,
     fixed_cost_necessity: str,
+    spend_necessity: str,
     recurring_payment_kind: str,
     page: int,
     per_page: int,
@@ -58,6 +59,7 @@ async def list_transactions(
         payment_method=payment_method,
         cost_kind=cost_kind,
         fixed_cost_necessity=fixed_cost_necessity,
+        spend_necessity=spend_necessity,
         recurring_payment_kind=recurring_payment_kind,
         is_edited=is_edited,
         include_deleted=include_deleted,
@@ -283,9 +285,14 @@ async def create_transaction(
         cost_kind=payload_data["cost_kind"],
         fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
     )
+    payload_data["spend_necessity"] = _normalized_spend_necessity(
+        spend_necessity=payload_data.get("spend_necessity"),
+        fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
+    )
     payload_data["cost_classification_source"] = (
         "manual"
-        if {"cost_kind", "fixed_cost_necessity"} & payload.model_fields_set
+        if {"cost_kind", "fixed_cost_necessity", "spend_necessity"}
+        & payload.model_fields_set
         else None
     )
     payload_data["recurring_payment_kind"] = _normalized_recurring_payment_kind(
@@ -323,9 +330,22 @@ async def update_transaction(
                 transaction.fixed_cost_necessity,
             ),
         )
+    if (
+        "spend_necessity" in update_fields
+        or "fixed_cost_necessity" in update_fields
+        or "cost_kind" in update_fields
+    ):
+        transaction.spend_necessity = _normalized_spend_necessity(
+            spend_necessity=update_fields.get(
+                "spend_necessity",
+                transaction.spend_necessity,
+            ),
+            fixed_cost_necessity=transaction.fixed_cost_necessity,
+        )
+        transaction.cost_classification_source = "manual"
 
     for field, value in update_fields.items():
-        if field in {"cost_kind", "fixed_cost_necessity"}:
+        if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
             continue
         if field == "merchant":
             value = _normalized_merchant(merchant=value, description=transaction.description)
@@ -382,8 +402,21 @@ async def bulk_update_transactions(
                     transaction.fixed_cost_necessity,
                 ),
             )
+        if (
+            "spend_necessity" in update_fields
+            or "fixed_cost_necessity" in update_fields
+            or "cost_kind" in update_fields
+        ):
+            transaction.spend_necessity = _normalized_spend_necessity(
+                spend_necessity=update_fields.get(
+                    "spend_necessity",
+                    transaction.spend_necessity,
+                ),
+                fixed_cost_necessity=transaction.fixed_cost_necessity,
+            )
+            transaction.cost_classification_source = "manual"
         for field, value in update_fields.items():
-            if field in {"cost_kind", "fixed_cost_necessity"}:
+            if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
                 continue
             if field == "merchant":
                 value = _normalized_merchant(merchant=value, description=transaction.description)
@@ -409,6 +442,7 @@ async def _load_filtered_transactions(
     search: str | None,
     cost_kind: str = "all",
     fixed_cost_necessity: str = "all",
+    spend_necessity: str = "all",
     recurring_payment_kind: str = "all",
 ) -> list[RowMapping]:
     query, canonical = _build_transaction_query(
@@ -418,6 +452,7 @@ async def _load_filtered_transactions(
         payment_method=payment_method,
         cost_kind=cost_kind,
         fixed_cost_necessity=fixed_cost_necessity,
+        spend_necessity=spend_necessity,
         recurring_payment_kind=recurring_payment_kind,
         tx_type=tx_type,
         source=source,
@@ -440,6 +475,7 @@ def _build_transaction_query(
     payment_method: str | None,
     cost_kind: str,
     fixed_cost_necessity: str,
+    spend_necessity: str,
     recurring_payment_kind: str,
     tx_type: TransactionTypeFilter,
     source: TransactionSourceFilter,
@@ -465,6 +501,8 @@ def _build_transaction_query(
         query = query.where(canonical.c.cost_kind == cost_kind)
     if fixed_cost_necessity != "all":
         query = query.where(canonical.c.fixed_cost_necessity == fixed_cost_necessity)
+    if spend_necessity != "all":
+        query = query.where(canonical.c.spend_necessity == spend_necessity)
     if recurring_payment_kind != "all":
         query = query.where(canonical.c.recurring_payment_kind == recurring_payment_kind)
     if tx_type != "all":
@@ -518,6 +556,7 @@ def _serialize_transaction_model(transaction: Transaction) -> TransactionRespons
         payment_method=transaction.payment_method,
         cost_kind=transaction.cost_kind,
         fixed_cost_necessity=transaction.fixed_cost_necessity,
+        spend_necessity=transaction.spend_necessity,
         cost_classification_source=transaction.cost_classification_source,
         recurring_payment_kind=transaction.recurring_payment_kind,
         memo=transaction.memo,
@@ -549,6 +588,7 @@ def _serialize_transaction_row(transaction: RowMapping) -> TransactionResponse:
         payment_method=transaction["payment_method"],
         cost_kind=transaction["cost_kind"],
         fixed_cost_necessity=transaction["fixed_cost_necessity"],
+        spend_necessity=transaction["spend_necessity"],
         cost_classification_source=transaction["cost_classification_source"],
         recurring_payment_kind=transaction["recurring_payment_kind"],
         memo=transaction["memo"],
@@ -577,6 +617,7 @@ def _is_edited(transaction: Transaction) -> bool:
             transaction.memo is not None,
             transaction.merchant != transaction.description,
             transaction.cost_classification_source == "manual",
+            transaction.spend_necessity is not None,
             transaction.recurring_payment_kind is not None,
         )
     )
@@ -611,6 +652,18 @@ def _normalized_fixed_cost_necessity(
 ) -> str | None:
     if cost_kind != "fixed":
         return None
+    if fixed_cost_necessity in {"essential", "discretionary"}:
+        return fixed_cost_necessity
+    return None
+
+
+def _normalized_spend_necessity(
+    *,
+    spend_necessity: str | None,
+    fixed_cost_necessity: str | None,
+) -> str | None:
+    if spend_necessity in {"essential", "discretionary"}:
+        return spend_necessity
     if fixed_cost_necessity in {"essential", "discretionary"}:
         return fixed_cost_necessity
     return None

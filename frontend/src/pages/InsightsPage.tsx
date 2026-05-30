@@ -247,7 +247,7 @@ export function InsightsPage() {
       <div className="grid md:grid-cols-2 gap-4">
 
         <SectionCard
-          title="거래처 소비 Top 5"
+          title="분석용 거래처 소비 Top 5"
           meta={`최근 ${merchantMonths}개월`}
           action={
             <>

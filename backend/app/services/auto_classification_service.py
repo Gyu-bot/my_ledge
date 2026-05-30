@@ -11,6 +11,7 @@ from app.models.auto_classification import (
     AutoClassificationSettings,
     CategoryClassificationRule,
     LoanMerchantRule,
+    MerchantAliasRule,
     RecurringCategoryRule,
 )
 from app.models.loan_account import LoanAccount
@@ -24,6 +25,9 @@ from app.schemas.auto_classification import (
     LoanMerchantRuleListResponse,
     LoanMerchantRuleRequest,
     LoanMerchantRuleResponse,
+    MerchantAliasRuleListResponse,
+    MerchantAliasRuleRequest,
+    MerchantAliasRuleResponse,
     RecurringCategoryRuleListResponse,
     RecurringCategoryRuleRequest,
     RecurringCategoryRuleResponse,
@@ -107,6 +111,10 @@ async def upsert_category_classification_rule(
     rule.fixed_cost_necessity = (
         payload.fixed_cost_necessity if payload.cost_kind == "fixed" else None
     )
+    rule.spend_necessity = (
+        payload.spend_necessity
+        or payload.fixed_cost_necessity
+    )
     await db_session.commit()
     await db_session.refresh(rule)
     return _serialize_category_rule(rule)
@@ -151,12 +159,86 @@ async def apply_category_classification_rules(
         if (
             transaction.cost_kind == rule.cost_kind
             and transaction.fixed_cost_necessity == rule.fixed_cost_necessity
+            and transaction.spend_necessity == rule.spend_necessity
             and transaction.cost_classification_source == "auto"
         ):
             continue
         transaction.cost_kind = rule.cost_kind
         transaction.fixed_cost_necessity = rule.fixed_cost_necessity
+        transaction.spend_necessity = rule.spend_necessity
         transaction.cost_classification_source = "auto"
+        updated += 1
+
+    await db_session.commit()
+    return ApplyResult(updated=updated)
+
+
+async def list_merchant_alias_rules(
+    db_session: AsyncSession,
+) -> MerchantAliasRuleListResponse:
+    result = await db_session.execute(
+        select(MerchantAliasRule).order_by(MerchantAliasRule.alias_pattern)
+    )
+    return MerchantAliasRuleListResponse(
+        items=[
+            _serialize_merchant_alias_rule(rule)
+            for rule in result.scalars().all()
+        ]
+    )
+
+
+async def upsert_merchant_alias_rule(
+    db_session: AsyncSession,
+    payload: MerchantAliasRuleRequest,
+) -> MerchantAliasRuleResponse:
+    alias_pattern = payload.alias_pattern.strip()
+    normalized_merchant = payload.normalized_merchant.strip()
+    rule = await db_session.scalar(
+        select(MerchantAliasRule).where(
+            MerchantAliasRule.alias_pattern == alias_pattern
+        )
+    )
+    if rule is None:
+        rule = MerchantAliasRule(alias_pattern=alias_pattern)
+        db_session.add(rule)
+    rule.normalized_merchant = normalized_merchant
+    await db_session.commit()
+    await db_session.refresh(rule)
+    return _serialize_merchant_alias_rule(rule)
+
+
+async def delete_merchant_alias_rule(
+    db_session: AsyncSession,
+    rule_id: int,
+) -> bool:
+    rule = await db_session.get(MerchantAliasRule, rule_id)
+    if rule is None:
+        return False
+    await db_session.delete(rule)
+    await db_session.commit()
+    return True
+
+
+async def apply_merchant_alias_rules(
+    db_session: AsyncSession,
+) -> ApplyResult:
+    result = await db_session.execute(select(MerchantAliasRule))
+    rules = result.scalars().all()
+    if not rules:
+        return ApplyResult(updated=0)
+
+    rows = await db_session.execute(
+        select(Transaction)
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .where(Transaction.merchant == Transaction.description)
+    )
+    updated = 0
+    for transaction in rows.scalars().all():
+        normalized = _normalized_merchant_for_rules(transaction.description, rules)
+        if normalized is None or normalized == transaction.merchant:
+            continue
+        transaction.merchant = normalized
         updated += 1
 
     await db_session.commit()
@@ -169,7 +251,7 @@ async def list_loan_merchant_rules(
     result = await db_session.execute(
         select(LoanMerchantRule, LoanAccount)
         .join(LoanAccount, LoanMerchantRule.loan_account_id == LoanAccount.id)
-        .order_by(LoanMerchantRule.merchant)
+        .order_by(LoanMerchantRule.match_field, LoanMerchantRule.merchant)
     )
     return LoanMerchantRuleListResponse(
         items=[
@@ -192,15 +274,20 @@ async def upsert_loan_merchant_rule(
 
     merchant = payload.merchant.strip()
     rule = await db_session.scalar(
-        select(LoanMerchantRule).where(LoanMerchantRule.merchant == merchant)
+        select(LoanMerchantRule).where(
+            LoanMerchantRule.match_field == payload.match_field,
+            LoanMerchantRule.merchant == merchant,
+        )
     )
     if rule is None:
         rule = LoanMerchantRule(
             merchant=merchant,
+            match_field=payload.match_field,
             loan_account_id=account.id,
         )
         db_session.add(rule)
 
+    rule.match_field = payload.match_field
     rule.loan_account_id = account.id
     rule.repayment_type = payload.repayment_type
     rule.memo = payload.memo
@@ -228,9 +315,22 @@ async def apply_loan_merchant_rules(
         select(LoanMerchantRule, LoanAccount)
         .join(LoanAccount, LoanMerchantRule.loan_account_id == LoanAccount.id)
     )
-    rules = {rule.merchant: rule for rule, _account in result.all()}
-    if not rules:
+    rules_by_merchant: dict[str, LoanMerchantRule] = {}
+    rules_by_description: dict[str, LoanMerchantRule] = {}
+    for rule, _account in result.all():
+        if rule.match_field == "description":
+            rules_by_description[rule.merchant] = rule
+        else:
+            rules_by_merchant[rule.merchant] = rule
+
+    if not rules_by_merchant and not rules_by_description:
         return ApplyResult(updated=0)
+
+    match_clauses = []
+    if rules_by_merchant:
+        match_clauses.append(Transaction.merchant.in_(list(rules_by_merchant)))
+    if rules_by_description:
+        match_clauses.append(Transaction.description.in_(list(rules_by_description)))
 
     rows = await db_session.execute(
         select(Transaction, LoanTransactionLink)
@@ -241,14 +341,16 @@ async def apply_loan_merchant_rules(
         .where(Transaction.type == "지출")
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
-        .where(Transaction.merchant.in_(list(rules)))
+        .where(or_(*match_clauses))
     )
 
     updated = 0
     for transaction, link in rows.all():
         if link is not None and link.source == "manual":
             continue
-        rule = rules.get(transaction.merchant)
+        rule = rules_by_merchant.get(transaction.merchant)
+        if rule is None:
+            rule = rules_by_description.get(transaction.description)
         if rule is None:
             continue
         if link is None:
@@ -487,6 +589,19 @@ def _serialize_category_rule(
         category_minor=rule.category_minor,
         cost_kind=rule.cost_kind,
         fixed_cost_necessity=rule.fixed_cost_necessity,
+        spend_necessity=rule.spend_necessity,
+        created_at=rule.created_at,
+        updated_at=rule.updated_at,
+    )
+
+
+def _serialize_merchant_alias_rule(
+    rule: MerchantAliasRule,
+) -> MerchantAliasRuleResponse:
+    return MerchantAliasRuleResponse(
+        id=rule.id,
+        alias_pattern=rule.alias_pattern,
+        normalized_merchant=rule.normalized_merchant,
         created_at=rule.created_at,
         updated_at=rule.updated_at,
     )
@@ -499,6 +614,7 @@ def _serialize_loan_merchant_rule(
     return LoanMerchantRuleResponse(
         id=rule.id,
         merchant=rule.merchant,
+        match_field=rule.match_field,
         loan_account_id=account.id,
         lender=account.lender,
         product_name=account.product_name,
@@ -528,3 +644,14 @@ def _normalize_optional_text(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _normalized_merchant_for_rules(
+    description: str,
+    rules: list[MerchantAliasRule],
+) -> str | None:
+    description_casefold = description.casefold()
+    for rule in rules:
+        if rule.alias_pattern.casefold() in description_casefold:
+            return rule.normalized_merchant
+    return None

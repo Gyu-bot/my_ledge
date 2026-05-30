@@ -12,6 +12,7 @@ from app.schemas.asset import (
     AssetSnapshotTotalsResponse,
     AssetSnapshotComparisonDeltaResponse,
     AssetSnapshotComparisonResponse,
+    AssetLiabilityHealthResponse,
     AssetSnapshotsResponse,
     InvestmentItemResponse,
     InvestmentSummaryResponse,
@@ -21,6 +22,8 @@ from app.schemas.asset import (
     LoanTotalsResponse,
     NetWorthHistoryResponse,
     NetWorthPointResponse,
+    NetWorthBreakdownItemResponse,
+    NetWorthBreakdownResponse,
     SnapshotComparisonMode,
 )
 
@@ -137,6 +140,129 @@ async def get_net_worth_history(db_session: AsyncSession) -> NetWorthHistoryResp
             )
             for item in snapshots.items
         ]
+    )
+
+
+async def get_net_worth_breakdown(
+    db_session: AsyncSession,
+    snapshot_date: date | None = None,
+) -> NetWorthBreakdownResponse:
+    resolved_snapshot_date = await _resolve_snapshot_date(
+        db_session,
+        AssetSnapshot.snapshot_date,
+        snapshot_date,
+    )
+    if resolved_snapshot_date is None:
+        return NetWorthBreakdownResponse(
+            snapshot_date=None,
+            asset_total=Decimal("0"),
+            liability_total=Decimal("0"),
+            net_worth=Decimal("0"),
+            items=[],
+        )
+
+    result = await db_session.execute(
+        select(
+            AssetSnapshot.side,
+            AssetSnapshot.category,
+            func.sum(AssetSnapshot.amount).label("amount"),
+        )
+        .where(AssetSnapshot.snapshot_date == resolved_snapshot_date)
+        .group_by(AssetSnapshot.side, AssetSnapshot.category)
+        .order_by(AssetSnapshot.side, AssetSnapshot.category)
+    )
+    rows = result.all()
+    asset_total = sum(
+        Decimal(amount or 0) for side, _category, amount in rows if side == "asset"
+    )
+    liability_total = sum(
+        Decimal(amount or 0)
+        for side, _category, amount in rows
+        if side == "liability"
+    )
+    return NetWorthBreakdownResponse(
+        snapshot_date=resolved_snapshot_date,
+        asset_total=asset_total,
+        liability_total=liability_total,
+        net_worth=asset_total - liability_total,
+        items=[
+            NetWorthBreakdownItemResponse(
+                side=side,
+                category=category,
+                amount=Decimal(amount or 0),
+                ratio=_safe_ratio(
+                    Decimal(amount or 0),
+                    asset_total if side == "asset" else liability_total,
+                ),
+            )
+            for side, category, amount in rows
+        ],
+    )
+
+
+async def get_asset_liability_health(
+    db_session: AsyncSession,
+    *,
+    monthly_required_spend: Decimal | None = None,
+    monthly_income: Decimal | None = None,
+    snapshot_date: date | None = None,
+) -> AssetLiabilityHealthResponse:
+    breakdown = await get_net_worth_breakdown(db_session, snapshot_date)
+    if breakdown.snapshot_date is None:
+        return AssetLiabilityHealthResponse(
+            snapshot_date=None,
+            cash_equivalent_total=Decimal("0"),
+            asset_total=Decimal("0"),
+            liability_total=Decimal("0"),
+            net_worth=Decimal("0"),
+            monthly_required_spend=monthly_required_spend or Decimal("0"),
+            emergency_fund_months=None,
+            monthly_debt_payment=Decimal("0"),
+            monthly_income=monthly_income or Decimal("0"),
+            debt_payment_ratio=None,
+            debt_to_asset_ratio=None,
+            confidence="low",
+            assumptions=["asset snapshot is missing"],
+        )
+
+    cash_result = await db_session.execute(
+        select(AssetSnapshot)
+        .where(AssetSnapshot.snapshot_date == breakdown.snapshot_date)
+        .where(AssetSnapshot.side == "asset")
+    )
+    assets = list(cash_result.scalars())
+    cash_equivalent_total = sum(
+        (asset.amount for asset in assets if _is_cash_equivalent_asset(asset)),
+        Decimal("0"),
+    )
+
+    loan_result = await db_session.execute(
+        select(func.sum(Loan.monthly_payment)).where(
+            Loan.snapshot_date == breakdown.snapshot_date
+        )
+    )
+    monthly_debt_payment = Decimal(loan_result.scalar_one_or_none() or 0)
+    required_spend = monthly_required_spend or Decimal("0")
+    income = monthly_income or Decimal("0")
+    assumptions = [
+        "cash equivalents use user-confirmed flags first and conservative category/name heuristics when missing",
+        "debt burden uses loan monthly_payment when available",
+    ]
+    confidence = "medium" if required_spend > 0 and monthly_debt_payment > 0 else "low"
+    return AssetLiabilityHealthResponse(
+        snapshot_date=breakdown.snapshot_date,
+        cash_equivalent_total=cash_equivalent_total,
+        asset_total=breakdown.asset_total,
+        liability_total=breakdown.liability_total,
+        net_worth=breakdown.net_worth,
+        monthly_required_spend=required_spend,
+        emergency_fund_months=_safe_ratio(cash_equivalent_total, required_spend),
+        monthly_debt_payment=monthly_debt_payment,
+        monthly_income=income,
+        debt_payment_ratio=_safe_ratio(monthly_debt_payment, income),
+        debt_to_asset_ratio=_safe_ratio(breakdown.liability_total, breakdown.asset_total),
+        confidence=confidence,
+        assumptions=assumptions,
     )
 
 
@@ -291,3 +417,18 @@ def _safe_ratio(numerator: Decimal, denominator: Decimal) -> float | None:
     if denominator == 0:
         return None
     return round(float(numerator / denominator), 4)
+
+
+def _is_cash_equivalent_asset(asset: AssetSnapshot) -> bool:
+    if asset.is_cash_equivalent is not None:
+        return asset.is_cash_equivalent
+    if asset.liquidity_tier in {"cash", "cash_equivalent"}:
+        return True
+    if asset.liquidity_tier in {"locked", "illiquid"}:
+        return False
+    text = f"{asset.category} {asset.product_name}".casefold()
+    cash_markers = ("현금", "예금", "입출금", "cma", "파킹", "보통예금")
+    locked_markers = ("부동산", "전세", "보증금", "연금", "보험")
+    if any(marker in text for marker in locked_markers):
+        return False
+    return any(marker in text for marker in cash_markers)

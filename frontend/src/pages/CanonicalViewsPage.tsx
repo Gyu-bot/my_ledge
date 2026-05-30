@@ -25,6 +25,7 @@ const ADVISOR_VIEW_NAMES = [
   'vw_loan_repayment_monthly',
   'vw_true_spendable_monthly',
   'vw_merchant_monthly_baseline',
+  'vw_recurring_merchant_monthly',
   'vw_unclassified_work_queue',
 ]
 
@@ -33,6 +34,7 @@ const VIEW_LABELS: Record<string, string> = {
   vw_loan_repayment_monthly: '대출 상환 월별 집계',
   vw_true_spendable_monthly: '실질 가용액',
   vw_merchant_monthly_baseline: '거래처 기준선',
+  vw_recurring_merchant_monthly: '반복 거래처 월별 집계',
   vw_unclassified_work_queue: '분류 품질 큐',
   vw_fixed_cost_monthly_summary: '고정비 월별 요약',
   vw_transactions_effective: '거래 canonical row',
@@ -121,8 +123,9 @@ function hasDashboardRows(data?: CanonicalViewsDashboardResponse): boolean {
     data.true_spendable_monthly,
     data.loan_repayment_monthly,
     data.merchant_monthly_baseline,
+    data.recurring_merchant_monthly,
     data.unclassified_work_queue,
-  ].some((items) => items.length > 0)
+  ].some((items) => (items ?? []).length > 0)
 }
 
 export function CanonicalViewsPage() {
@@ -138,11 +141,11 @@ export function CanonicalViewsPage() {
   useEffect(() => {
     setMetaBadge(
       <span className="text-caption text-text-muted bg-surface-bar border border-border px-2.5 py-0.5 rounded-full">
-        {canonicalData?.monthly_cashflow.length ?? 0}개월 canonical data
+        {canonicalData?.monthly_cashflow?.length ?? 0}개월 canonical data
       </span>,
     )
     return () => setMetaBadge(null)
-  }, [canonicalData?.monthly_cashflow.length, setMetaBadge])
+  }, [canonicalData?.monthly_cashflow?.length, setMetaBadge])
 
   if (schema.isLoading || dashboard.isLoading) return <LoadingState />
   if (schema.isError || dashboard.isError) {
@@ -193,7 +196,7 @@ export function CanonicalViewsPage() {
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
-        <SectionCard title="월별 현금흐름" meta={`${canonicalData?.monthly_cashflow.length ?? 0}개월`}>
+        <SectionCard title="월별 현금흐름" meta={`${canonicalData?.monthly_cashflow?.length ?? 0}개월`}>
           <DualBarChart data={cashflowChartItems(canonicalData?.monthly_cashflow ?? [])} height={180} />
           <div className="mt-3 overflow-x-auto">
             <table className="min-w-full text-left text-caption">
@@ -203,6 +206,7 @@ export function CanonicalViewsPage() {
                   <th className="px-2 py-2 font-medium">Income</th>
                   <th className="px-2 py-2 font-medium">Expense</th>
                   <th className="px-2 py-2 font-medium">Loan</th>
+                  <th className="px-2 py-2 font-medium">Discretionary</th>
                   <th className="px-2 py-2 font-medium">Net</th>
                 </tr>
               </thead>
@@ -213,6 +217,7 @@ export function CanonicalViewsPage() {
                     <td className="px-2 py-2 text-text-secondary">{money(item.income_total)}</td>
                     <td className="px-2 py-2 text-text-secondary">{money(item.expense_total)}</td>
                     <td className="px-2 py-2 text-text-muted">{money(item.loan_repayment_total)}</td>
+                    <td className="px-2 py-2 text-text-muted">{money(item.discretionary_spend_total)}</td>
                     <td className="px-2 py-2 text-text-secondary">{money(item.net_cashflow)}</td>
                   </tr>
                 ))}
@@ -242,6 +247,8 @@ export function CanonicalViewsPage() {
                   <span>대출 {money(item.loan_repayment_total)}</span>
                   <span>고정 {money(item.fixed_commitment_total)}</span>
                   <span>변동 {money(item.variable_total)}</span>
+                  <span>필수 변동 {money(item.required_variable_total)}</span>
+                  <span>재량 변동 {money(item.discretionary_variable_total)}</span>
                   <span>변동 전 {money(displaySpendableBeforeVariable(item))}</span>
                 </div>
                 {isEstimatedSpendable(item) && (
@@ -268,8 +275,8 @@ export function CanonicalViewsPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
-        <SectionCard title="대출 상환" meta={`${canonicalData?.loan_repayment_monthly.length ?? 0}건`} bodyClassName="p-0">
+      <div className="grid gap-3 xl:grid-cols-4">
+        <SectionCard title="대출 상환" meta={`${canonicalData?.loan_repayment_monthly?.length ?? 0}건`} bodyClassName="p-0">
           <div className="divide-y divide-border-faint">
             {(canonicalData?.loan_repayment_monthly ?? []).slice(0, 6).map((item) => (
               <div key={`${item.period}-${item.loan_account_id}-${item.loan_repayment_type}`} className="px-4 py-3">
@@ -291,7 +298,27 @@ export function CanonicalViewsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="거래처 기준선" meta={`${canonicalData?.merchant_monthly_baseline.length ?? 0}건`} bodyClassName="p-0">
+        <SectionCard title="반복 거래처" meta={`${canonicalData?.recurring_merchant_monthly?.length ?? 0}건`} bodyClassName="p-0">
+          <div className="divide-y divide-border-faint">
+            {(canonicalData?.recurring_merchant_monthly ?? []).map((item) => (
+              <div key={`${item.period}-${item.merchant}-${item.recurring_payment_kind}`} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-caption font-semibold text-text-primary">{item.merchant}</div>
+                    <div className="mt-1 text-micro text-text-muted">
+                      {item.period} · {item.recurring_payment_kind} · {item.transaction_count}건
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-caption font-semibold text-text-secondary">
+                    {money(item.monthly_spend)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="거래처 기준선" meta={`${canonicalData?.merchant_monthly_baseline?.length ?? 0}건`} bodyClassName="p-0">
           <div className="divide-y divide-border-faint">
             {(canonicalData?.merchant_monthly_baseline ?? []).map((item) => (
               <div key={`${item.period}-${item.merchant}-${item.effective_category_minor ?? ''}`} className="px-4 py-3">

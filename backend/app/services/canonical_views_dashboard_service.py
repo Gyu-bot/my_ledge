@@ -11,6 +11,7 @@ from app.schemas.canonical_views import (
     CanonicalLoanRepaymentMonthlyItem,
     CanonicalMerchantMonthlyBaselineItem,
     CanonicalMonthlyCashflowItem,
+    CanonicalRecurringMerchantMonthlyItem,
     CanonicalTrueSpendableMonthlyItem,
     CanonicalUnclassifiedWorkQueueItem,
     CanonicalViewsDashboardResponse,
@@ -187,6 +188,16 @@ async def get_canonical_views_dashboard(
         """,
         {"limit": merchant_limit},
     )
+    recurring_merchants = await _fetch_rows(
+        db_session,
+        """
+        SELECT *
+        FROM vw_recurring_merchant_monthly
+        ORDER BY period DESC, monthly_spend DESC, merchant ASC
+        LIMIT :limit
+        """,
+        {"limit": merchant_limit},
+    )
     unclassified_queue = await _fetch_rows(
         db_session,
         """
@@ -201,6 +212,7 @@ async def get_canonical_views_dashboard(
             amount_abs,
             COALESCE(needs_cost_kind, false) AS needs_cost_kind,
             COALESCE(needs_fixed_cost_necessity, false) AS needs_fixed_cost_necessity,
+            COALESCE(needs_spend_necessity, false) AS needs_spend_necessity,
             COALESCE(needs_recurring_payment_kind, false) AS needs_recurring_payment_kind,
             COALESCE(needs_loan_link_review, false) AS needs_loan_link_review,
             merchant_expense_count,
@@ -233,6 +245,10 @@ async def get_canonical_views_dashboard(
         merchant_monthly_baseline=_to_items(
             merchant_baselines,
             CanonicalMerchantMonthlyBaselineItem,
+        ),
+        recurring_merchant_monthly=_to_items(
+            recurring_merchants,
+            CanonicalRecurringMerchantMonthlyItem,
         ),
         unclassified_work_queue=_to_items(
             unclassified_queue,

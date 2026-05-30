@@ -25,6 +25,7 @@ interface FilterState {
   payment_method: string
   cost_kind: string
   fixed_cost_necessity: string
+  spend_necessity: string
   recurring_payment_kind: string
   start_date: string
   end_date: string
@@ -34,7 +35,7 @@ interface FilterState {
 
 const DEFAULT_FILTER: FilterState = {
   search: '', type: '', source: '', category_major: '',
-  payment_method: '', cost_kind: '', fixed_cost_necessity: '', recurring_payment_kind: '',
+  payment_method: '', cost_kind: '', fixed_cost_necessity: '', spend_necessity: '', recurring_payment_kind: '',
   start_date: '', end_date: '',
   include_deleted: false, is_edited: undefined,
 }
@@ -45,6 +46,7 @@ interface EditDraft {
   category_minor_user?: string
   cost_kind?: 'fixed' | 'variable' | ''
   fixed_cost_necessity?: 'essential' | 'discretionary' | ''
+  spend_necessity?: 'essential' | 'discretionary' | ''
   memo?: string
 }
 
@@ -93,6 +95,7 @@ export function WorkbenchPage() {
     payment_method: appliedFilter.payment_method || undefined,
     cost_kind: (appliedFilter.cost_kind as 'fixed' | 'variable') || undefined,
     fixed_cost_necessity: (appliedFilter.fixed_cost_necessity as 'essential' | 'discretionary') || undefined,
+    spend_necessity: (appliedFilter.spend_necessity as 'essential' | 'discretionary') || undefined,
     recurring_payment_kind: (appliedFilter.recurring_payment_kind as 'installment' | 'monthly_recurring') || undefined,
     start_date: appliedFilter.start_date || undefined,
     end_date: appliedFilter.end_date || undefined,
@@ -144,6 +147,7 @@ export function WorkbenchPage() {
       category_minor_user: tx.category_minor_user ?? tx.effective_category_minor ?? '',
       cost_kind: tx.cost_kind ?? '',
       fixed_cost_necessity: tx.fixed_cost_necessity ?? '',
+      spend_necessity: tx.spend_necessity ?? '',
       memo: tx.memo ?? '',
     })
   }
@@ -158,6 +162,7 @@ export function WorkbenchPage() {
           category_minor_user: editDraft.category_minor_user || null,
           cost_kind: (editDraft.cost_kind as 'fixed' | 'variable') || null,
           fixed_cost_necessity: (editDraft.fixed_cost_necessity as 'essential' | 'discretionary') || null,
+          spend_necessity: (editDraft.spend_necessity as 'essential' | 'discretionary') || null,
           memo: editDraft.memo || null,
         },
       })
@@ -197,6 +202,7 @@ export function WorkbenchPage() {
         category_minor_user?: string
         cost_kind?: 'fixed' | 'variable'
         fixed_cost_necessity?: 'essential' | 'discretionary'
+        spend_necessity?: 'essential' | 'discretionary'
         memo?: string
       }
       if (bulkDraft.merchant) data.merchant = bulkDraft.merchant
@@ -204,6 +210,7 @@ export function WorkbenchPage() {
       if (bulkDraft.category_minor_user) data.category_minor_user = bulkDraft.category_minor_user
       if (bulkDraft.cost_kind) data.cost_kind = bulkDraft.cost_kind
       if (bulkDraft.fixed_cost_necessity) data.fixed_cost_necessity = bulkDraft.fixed_cost_necessity
+      if (bulkDraft.spend_necessity) data.spend_necessity = bulkDraft.spend_necessity
       if (bulkDraft.memo) data.memo = bulkDraft.memo
       const result = await bulkMutation.mutateAsync(data)
       setSelectedIds(new Set())
@@ -354,7 +361,7 @@ export function WorkbenchPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className={`${inputCls} w-36`}
-            placeholder="🔍  거래처·설명 포함 검색"
+            placeholder="🔍  분석용 거래처·원본 설명 검색"
             value={filterDraft.search}
             onChange={(e) => setFilterDraft((f) => ({ ...f, search: e.target.value }))}
           />
@@ -397,6 +404,18 @@ export function WorkbenchPage() {
             <option value="">필수 여부 전체</option>
             <option value="essential">필수</option>
             <option value="discretionary">비필수</option>
+          </select>
+          <label className="sr-only" htmlFor="spend-necessity-filter">필수/재량 필터</label>
+          <select
+            id="spend-necessity-filter"
+            aria-label="필수/재량 필터"
+            className={inputCls}
+            value={filterDraft.spend_necessity}
+            onChange={(e) => setFilterDraft((f) => ({ ...f, spend_necessity: e.target.value }))}
+          >
+            <option value="">필수/재량 전체</option>
+            <option value="essential">필수</option>
+            <option value="discretionary">재량</option>
           </select>
           <label className="sr-only" htmlFor="recurring-kind-filter">반복결제 분류 필터</label>
           <select
@@ -442,8 +461,8 @@ export function WorkbenchPage() {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-          {(['거래처', '대분류', '소분류', '고정/변동', '필수여부', '메모'] as const).map((label) => {
-            const key: keyof EditDraft = label === '거래처' ? 'merchant' : label === '대분류' ? 'category_major_user' : label === '소분류' ? 'category_minor_user' : label === '고정/변동' ? 'cost_kind' : label === '필수여부' ? 'fixed_cost_necessity' : 'memo'
+          {(['분석용 거래처', '대분류', '소분류', '고정/변동', '필수/재량', '메모'] as const).map((label) => {
+            const key: keyof EditDraft = label === '분석용 거래처' ? 'merchant' : label === '대분류' ? 'category_major_user' : label === '소분류' ? 'category_minor_user' : label === '고정/변동' ? 'cost_kind' : label === '필수/재량' ? 'spend_necessity' : 'memo'
             if (label === '대분류') return (
               <div key={label} className="flex items-center gap-1.5">
                 <span className="text-caption text-text-faint">{label}</span>
@@ -482,11 +501,11 @@ export function WorkbenchPage() {
                 </select>
               </div>
             )
-            if (label === '필수여부') return (
+            if (label === '필수/재량') return (
               <div key={label} className="flex items-center gap-1.5">
                 <span className="text-caption text-text-faint">{label}</span>
-                <select className={`${inputCls} py-1`} value={bulkDraft.fixed_cost_necessity ?? ''} onChange={(e) => setBulkDraft((b) => ({ ...b, fixed_cost_necessity: e.target.value as '' | 'essential' | 'discretionary' }))}>
-                  <option value="">— 선택 —</option><option value="essential">필수</option><option value="discretionary">비필수</option>
+                <select className={`${inputCls} py-1`} value={bulkDraft.spend_necessity ?? ''} onChange={(e) => setBulkDraft((b) => ({ ...b, spend_necessity: e.target.value as '' | 'essential' | 'discretionary' }))}>
+                  <option value="">— 선택 —</option><option value="essential">필수</option><option value="discretionary">재량</option>
                 </select>
               </div>
             )
@@ -547,7 +566,7 @@ export function WorkbenchPage() {
                        className="w-3 h-3 accent-accent disabled:opacity-40"
                      />
                    </th>
-                   {['날짜', '설명', '거래처', '대분류', '소분류', '고정/변동', '필수여부', '반복분류', '메모', '상태', '금액', '동작'].map((h) => (
+                   {['날짜', '원본 설명', '분석용 거래처', '대분류', '소분류', '고정/변동', '필수/재량', '반복분류', '메모', '상태', '금액', '동작'].map((h) => (
                      <th key={h} className="text-micro text-text-ghost px-2 py-2 text-left font-medium">{h}</th>
                    ))}
                  </tr>
@@ -570,9 +589,9 @@ export function WorkbenchPage() {
                          )}
                        </td>
                        <td className="px-2 py-2 text-text-ghost">{tx.date.slice(5)}</td>
-                       {/* 설명: read-only, muted italic */}
+                       {/* 원본 설명: read-only, muted italic */}
                        <td className="px-2 py-2 text-micro text-text-ghost italic overflow-hidden text-ellipsis whitespace-nowrap">{tx.description}</td>
-                       {/* 거래처: same size, editable */}
+                       {/* 분석용 거래처: same size, editable */}
                        <td className="px-2 py-2">
                          {isEditing
                            ? <input className={editInputCls} value={editDraft.merchant ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, merchant: e.target.value }))} />
@@ -607,10 +626,10 @@ export function WorkbenchPage() {
                        </td>
                        <td className="px-2 py-2">
                          {isEditing
-                           ? <select className={editInputCls} value={editDraft.fixed_cost_necessity ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, fixed_cost_necessity: e.target.value as '' | 'essential' | 'discretionary' }))}>
-                               <option value="">—</option><option value="essential">필수</option><option value="discretionary">비필수</option>
+                           ? <select className={editInputCls} value={editDraft.spend_necessity ?? ''} onChange={(e) => setEditDraft((d) => ({ ...d, spend_necessity: e.target.value as '' | 'essential' | 'discretionary' }))}>
+                               <option value="">—</option><option value="essential">필수</option><option value="discretionary">재량</option>
                              </select>
-                           : <NecessityBadge value={tx.fixed_cost_necessity} />
+                           : <NecessityBadge value={tx.spend_necessity} />
                          }
                        </td>
                        <td className="px-2 py-2">

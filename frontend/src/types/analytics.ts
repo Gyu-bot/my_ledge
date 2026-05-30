@@ -39,6 +39,10 @@ export interface FixedCostSummaryResponse {
   fixed_ratio: number | null
   essential_fixed_total: number
   discretionary_fixed_total: number
+  essential_variable_total: number
+  discretionary_variable_total: number
+  required_spend_total: number
+  discretionary_spend_total: number
   unclassified_total: number
   unclassified_count: number
 }
@@ -50,6 +54,10 @@ export interface FixedCostTrendItem {
   variable_total: number
   essential_fixed_total: number
   discretionary_fixed_total: number
+  essential_variable_total: number
+  discretionary_variable_total: number
+  required_spend_total: number
+  discretionary_spend_total: number
   unclassified_total: number
   unclassified_count: number
   fixed_ratio: number | null
