@@ -6,8 +6,8 @@
 ## Current State
 
 - **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
-- **Last Worker:** Codex (2026-05-31T02:33+0900, 검색 메모 포함 안내·작업대 반복분류 단건 수정)
-- **Branch:** feature/memo-search-recurring-edit
+- **Last Worker:** Codex (2026-05-31T16:35+0900, 할부 연계·구매게이트 정리·자산 설정 분리 구현)
+- **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
 ## Start Here
@@ -20,7 +20,6 @@
 
 ## Recent Completed
 
-- [x] 거래 검색/편집 UX 보강: 거래 작업대·대출 연결·할부 연결 검색 안내에 메모 포함을 명시하고, backend 메모 검색 회귀 테스트를 추가했으며, 거래 작업대 단건 수정에서 `recurring_payment_kind`를 편집/저장할 수 있게 했다.
 - [x] 대출 월상환 자동 추정·저장 backend 구현: 수동 `PATCH /api/v1/loans/{loan_id}/repayment-metadata`는 `monthly_payment_source` / `repayment_method_source`를 `manual`로 저장하고, 대출 연결 단건/일괄 저장 및 snapshot import 후 latest loan snapshot에 최근 관측월 median 기반 `monthly_payment`와 mixed-link 기반 `repayment_method='principal_interest'`를 자동 보강
 - [x] 구매게이트 정리: 고정비/필수/대출 연결/필요성 미분류 거래를 제외하고, 같은 거래의 여러 사유는 `transaction:{id}` 후보 1줄과 `candidate_types[]`/`reasons[]`로 통합
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
