@@ -137,7 +137,9 @@ vi.mock('../../hooks/useAssets', () => ({
           balance: '250.00',
           interest_rate: '3.50',
           monthly_payment: '50.00',
-          repayment_method: 'principal_interest',
+          repayment_method: 'principal_equal',
+          repayment_method_source: 'derived_from_loan_account',
+          loan_kind: 'equal_principal',
           start_date: '2021-06-01',
           maturity_date: '2051-05-31',
         },
@@ -220,7 +222,9 @@ describe('AssetsPage', () => {
     expect(screen.getByText('생활비 통장')).toBeInTheDocument()
     expect(screen.getByText('즉시 사용')).toBeInTheDocument()
     expect(screen.getAllByText('현금성').length).toBeGreaterThan(0)
-    expect(screen.getByText('원리금 균등')).toBeInTheDocument()
+    expect(screen.getByText('원금 균등')).toBeInTheDocument()
+    expect(screen.getByText('대출 성격 · 원금 균등 상환')).toBeInTheDocument()
+    expect(screen.getByText('계좌 성격 기준')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '자산 설정으로 이동' })).toHaveAttribute('href', '/operations/asset-settings')
     expect(screen.queryByLabelText('생활비 통장 유동성 등급')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('우리집 주담대 월상환액')).not.toBeInTheDocument()

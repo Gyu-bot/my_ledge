@@ -165,7 +165,7 @@
   - 현금성 자산
 - 순자산 추이
 - 유동성 Health: 순자산 구성, 자산별 `liquidity_tier` / 현금성 여부 읽기 전용 표시, `자산 설정` 이동
-- 대출 요약: 대출별 `monthly_payment` / `repayment_method` 읽기 전용 표시
+- 대출 요약: 대출별 `monthly_payment` / `repayment_method` 읽기 전용 표시, 계좌 메타의 `loan_kind`와 `derived_from_loan_account` 출처 표시
 
 ### Topbar meta
 
@@ -356,7 +356,7 @@
 - write access alert
 - 자산 설정 안내: `/analysis/assets`는 조회 전용이며 이 화면에서 metadata를 수정한다는 안내
 - 자산 유동성 설정: 최신 자산 row의 `liquidity_tier`와 `is_cash_equivalent` 편집
-- 대출 상환 설정: 최신 대출 row의 `monthly_payment`와 `repayment_method` 편집
+- 대출 상환 설정: 최신 대출 row의 `monthly_payment`와 `repayment_method` 편집. 자산 현황에서 `loan_kind` 기반으로 유도된 상환 방식도 저장 전까지는 조회 전용 fallback이다.
 - read-only mode에서는 저장 컨트롤 disabled
 
 ### Topbar meta

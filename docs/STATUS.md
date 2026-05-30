@@ -6,8 +6,8 @@
 ## Current State
 
 - **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
-- **Last Worker:** Codex (2026-05-31T16:35+0900, 할부 연계·구매게이트 정리·자산 설정 분리 구현)
-- **Branch:** main
+- **Last Worker:** Codex (2026-05-31T02:48+0900, 대출 성격 기반 상환 방식 조회 연계)
+- **Branch:** feature/loan-kind-repayment-link
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
 ## Start Here
@@ -20,6 +20,7 @@
 
 ## Recent Completed
 
+- [x] 자산 현황 대출 요약 연계: `GET /api/v1/loans/summary`가 `loan_accounts.loan_kind`를 함께 노출하고, 수동 상환 방식이 없을 때 호환되는 대출 성격을 읽기 전용 `repayment_method` fallback으로 표시한다.
 - [x] 대출 월상환 자동 추정·저장 backend 구현: 수동 `PATCH /api/v1/loans/{loan_id}/repayment-metadata`는 `monthly_payment_source` / `repayment_method_source`를 `manual`로 저장하고, 대출 연결 단건/일괄 저장 및 snapshot import 후 latest loan snapshot에 최근 관측월 median 기반 `monthly_payment`와 mixed-link 기반 `repayment_method='principal_interest'`를 자동 보강
 - [x] 구매게이트 정리: 고정비/필수/대출 연결/필요성 미분류 거래를 제외하고, 같은 거래의 여러 사유는 `transaction:{id}` 후보 1줄과 `candidate_types[]`/`reasons[]`로 통합
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
@@ -63,7 +64,7 @@
 
 ## In Progress
 
-- 없음. 할부 연계, 구매게이트 정리, 자산 설정 분리, 대출 월상환 자동 추정, 관련 문서 정합성 보강은 완료했다.
+- 없음. 대출 성격 기반 상환 방식 조회 연계와 관련 문서 정합성 보강은 완료했다.
 
 ## Next Up
 
@@ -73,6 +74,7 @@
 
 ## Key Decisions
 
+- 2026-05-31: `loan_accounts.loan_kind`는 안정 계좌 메타데이터로 유지하고 `loans.repayment_method` 스냅샷 값을 직접 덮어쓰지 않는다. 자산 현황 대출 요약에서는 `lender + product_name`으로 계좌를 조인해 `loan_kind`를 노출하고, 수동 상환 방식이 없을 때만 `derived_from_loan_account` 출처의 읽기 전용 fallback을 표시한다.
 - 2026-05-31: latest loan snapshot의 `monthly_payment` 자동 추정은 `loan_accounts(lender + product_name)` 안정 식별자 기준 linked repayment 거래만 사용한다. `monthly_payment_source='manual'`은 덮어쓰지 않고, same-date snapshot 재업로드 후에도 추정 hook을 다시 실행해 `estimated_from_linked_transactions` 값만 최신 linked 거래 median으로 재계산한다.
 - 2026-05-31: 구매게이트는 재량 구매 검토 queue로 정의한다. My Ledge는 후보 생성/사유/검토상태만 제공하고, 고정비·필수지출·대출연결·필요성 미분류 거래는 후보에서 제외한다.
 - 2026-05-28: `docs/STATUS.md`는 handoff 요약만 유지한다. 오래된 완료 로그와 상세 결정 기록은 `docs/archive/status/`로 옮기고, 현재 파일에는 archive 링크와 최신 핵심만 남긴다.

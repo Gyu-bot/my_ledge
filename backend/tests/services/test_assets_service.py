@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.loan import Loan
+from app.models.loan_account import LoanAccount
 from app.schemas.asset import LoanRepaymentMetadataPatchRequest, SnapshotComparisonMode
 from app.services import assets_service
 
@@ -272,3 +273,61 @@ async def test_patch_loan_repayment_metadata_marks_manual_sources(
     assert response.repayment_method == "principal_interest"
     assert response.monthly_payment_source == "manual"
     assert response.repayment_method_source == "manual"
+
+
+async def test_get_loan_summary_derives_repayment_method_from_loan_account_kind(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            LoanAccount(
+                lender="국민은행",
+                product_name="우리집 주담대",
+                loan_kind="equal_principal",
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="국민은행",
+                product_name="우리집 주담대",
+                principal=Decimal("100000000.00"),
+                balance=Decimal("90000000.00"),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await assets_service.get_loan_summary(db_session, None)
+
+    assert len(response.items) == 1
+    assert response.items[0].loan_kind == "equal_principal"
+    assert response.items[0].repayment_method == "principal_equal"
+    assert response.items[0].repayment_method_source == "derived_from_loan_account"
+
+
+async def test_get_loan_summary_keeps_manual_repayment_method_over_account_kind(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            LoanAccount(
+                lender="국민은행",
+                product_name="우리집 주담대",
+                loan_kind="equal_principal",
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="국민은행",
+                product_name="우리집 주담대",
+                balance=Decimal("90000000.00"),
+                repayment_method="principal_interest",
+                repayment_method_source="manual",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await assets_service.get_loan_summary(db_session, None)
+
+    assert response.items[0].loan_kind == "equal_principal"
+    assert response.items[0].repayment_method == "principal_interest"
+    assert response.items[0].repayment_method_source == "manual"
