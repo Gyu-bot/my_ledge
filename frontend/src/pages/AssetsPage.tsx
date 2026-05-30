@@ -20,6 +20,7 @@ import { formatKRW, formatKRWCompact } from '../lib/utils'
 import type {
   AssetSnapshotItemResponse,
   LiquidityTier,
+  LoanKind,
   LoanRepaymentMethod,
 } from '../types/asset'
 
@@ -36,6 +37,15 @@ const REPAYMENT_METHOD_LABEL: Record<LoanRepaymentMethod, string> = {
   unknown: '미정',
 }
 
+const LOAN_KIND_LABEL: Record<LoanKind, string> = {
+  unknown: '미지정',
+  overdraft: '마이너스 통장',
+  equal_principal_interest: '원리금 균등 상환',
+  equal_principal: '원금 균등 상환',
+  bullet: '일시 원금 상환',
+  other: '기타',
+}
+
 function assetLabel(asset: AssetSnapshotItemResponse): string {
   return asset.product_name || asset.category || `자산 ${asset.id ?? ''}`.trim()
 }
@@ -48,6 +58,11 @@ function liquidityLabel(value: LiquidityTier | null | undefined) {
 function repaymentMethodLabel(value: LoanRepaymentMethod | null | undefined) {
   if (!value) return '미지정'
   return REPAYMENT_METHOD_LABEL[value]
+}
+
+function loanKindLabel(value: LoanKind | null | undefined) {
+  if (!value) return '미지정'
+  return LOAN_KIND_LABEL[value]
 }
 
 function money(value: string | null | undefined) {
@@ -257,6 +272,11 @@ export function AssetsPage() {
                              {loan.loan_type}
                            </span>
                          ) : null}
+                         {loan.loan_kind ? (
+                           <div className="text-nano text-text-ghost mt-1">
+                             대출 성격 · {loanKindLabel(loan.loan_kind)}
+                           </div>
+                         ) : null}
                        </td>
                        <td className="py-2 text-danger font-semibold text-right">
                          ₩ {formatKRWCompact(parseFloat(loan.balance ?? '0'))}
@@ -267,7 +287,12 @@ export function AssetsPage() {
                          ) : '—'}
                        </td>
                        <td className="py-2 text-right text-text-secondary">{money(loan.monthly_payment)}</td>
-                       <td className="py-2 text-right text-text-secondary">{repaymentMethodLabel(loan.repayment_method)}</td>
+                       <td className="py-2 text-right text-text-secondary">
+                         <div>{repaymentMethodLabel(loan.repayment_method)}</div>
+                         {loan.repayment_method_source === 'derived_from_loan_account' ? (
+                           <div className="text-nano text-text-ghost mt-0.5">계좌 성격 기준</div>
+                         ) : null}
+                       </td>
                      </tr>
                    ))}
                  </tbody>

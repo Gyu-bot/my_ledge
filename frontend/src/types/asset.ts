@@ -1,3 +1,6 @@
+import type { LoanKind } from './transaction'
+export type { LoanKind } from './transaction'
+
 export interface AssetSnapshotTotals {
   id?: number
   snapshot_date: string
@@ -97,6 +100,7 @@ export interface LoanItem {
   repayment_method?: LoanRepaymentMethod | null
   monthly_payment_source?: LoanRepaymentMetadataSource | null
   repayment_method_source?: LoanRepaymentMetadataSource | null
+  loan_kind?: LoanKind | null
   start_date: string | null
   maturity_date: string | null
 }
@@ -104,6 +108,7 @@ export interface LoanItem {
 export type LoanRepaymentMetadataSource =
   | 'manual'
   | 'estimated_from_linked_transactions'
+  | 'derived_from_loan_account'
 
 export type LoanRepaymentMethod =
   | 'principal_interest'

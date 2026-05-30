@@ -826,11 +826,20 @@
     - `principal`
     - `balance`
     - `interest_rate`
+    - `monthly_payment`
+    - `repayment_method`
+    - `monthly_payment_source`
+    - `repayment_method_source`
+    - `loan_kind`
     - `start_date`
     - `maturity_date`
   - `totals`
     - `principal`
     - `balance`
+- Behavior:
+  - latest or requested loan snapshots are enriched with matching `loan_accounts.loan_kind` by stable `lender + product_name`
+  - when `repayment_method` is missing or non-manual `unknown`, compatible `loan_kind` values are exposed as read-only repayment-method fallbacks with `repayment_method_source='derived_from_loan_account'`
+  - the enrichment is response-only and does not update the `loans` snapshot row
 
 ### Analytics
 

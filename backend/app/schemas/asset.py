@@ -134,6 +134,7 @@ class LoanItemResponse(BaseModel):
     repayment_method: str | None = None
     monthly_payment_source: str | None = None
     repayment_method_source: str | None = None
+    loan_kind: str | None = None
     start_date: date | None
     maturity_date: date | None
 

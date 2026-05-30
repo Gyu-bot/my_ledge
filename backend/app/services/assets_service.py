@@ -3,12 +3,13 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.investment import Investment
 from app.models.loan import Loan
+from app.models.loan_account import LoanAccount
 from app.schemas.asset import (
     AssetSnapshotTotalsResponse,
     AssetSnapshotComparisonDeltaResponse,
@@ -391,11 +392,21 @@ async def get_loan_summary(
         )
 
     result = await db_session.execute(
-        select(Loan)
+        select(Loan, LoanAccount.loan_kind)
+        .outerjoin(
+            LoanAccount,
+            and_(
+                LoanAccount.lender == Loan.lender,
+                LoanAccount.product_name == Loan.product_name,
+            ),
+        )
         .where(Loan.snapshot_date == resolved_snapshot_date)
         .order_by(Loan.lender, Loan.product_name)
     )
-    items = [LoanItemResponse.model_validate(row, from_attributes=True) for row in result.scalars()]
+    items = [
+        _loan_item_response_with_account_kind(loan, loan_kind)
+        for loan, loan_kind in result.all()
+    ]
     return LoanSummaryResponse(
         snapshot_date=resolved_snapshot_date,
         items=items,
@@ -404,6 +415,32 @@ async def get_loan_summary(
             balance=sum((item.balance or Decimal("0")) for item in items),
         ),
     )
+
+
+def _loan_item_response_with_account_kind(
+    loan: Loan,
+    loan_kind: str | None,
+) -> LoanItemResponse:
+    item = LoanItemResponse.model_validate(loan, from_attributes=True)
+    item.loan_kind = loan_kind
+    if item.repayment_method and item.repayment_method != "unknown":
+        return item
+    if item.repayment_method_source == "manual":
+        return item
+    derived_method = _repayment_method_from_loan_kind(loan_kind)
+    if derived_method is None:
+        return item
+    item.repayment_method = derived_method
+    item.repayment_method_source = "derived_from_loan_account"
+    return item
+
+
+def _repayment_method_from_loan_kind(loan_kind: str | None) -> str | None:
+    return {
+        "equal_principal_interest": "principal_interest",
+        "equal_principal": "principal_equal",
+        "bullet": "interest_only",
+    }.get(loan_kind or "")
 
 
 async def _resolve_snapshot_date(
