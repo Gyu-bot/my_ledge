@@ -83,6 +83,74 @@ my_ledge/
 - 같은 문서의 같은 섹션을 여러 병렬 PR이 건드릴 가능성이 크면 먼저 PR 본문에 문서 영향만 남기고, main merge 후 별도 docs 정리 커밋/PR로 합친다.
 - 광범위한 문서 재구성, 오래된 내용 정리, backlog 재분류는 기능 PR에 섞지 않고 별도 docs 작업으로 분리한다.
 
+### Parallel Work Workflow
+
+사용자가 병렬 작업 충돌을 최소화하려면 아래 운영을 기본으로 한다.
+
+1. 기능/버그 수정은 `feature/*` 또는 `fix/*` 브랜치의 PR로 올린다. 한 PR은 한 의도와 한 책임 범위를 갖게 한다.
+2. 병렬 PR은 가능하면 파일 소유권이 겹치지 않게 나눈다. 예: backend API, frontend page, infra, docs cleanup을 분리한다.
+3. 같은 페이지, 같은 endpoint, 같은 contract 문서 섹션을 여러 PR이 동시에 바꿀 가능성이 있으면 먼저 한 PR을 merge하고 다른 PR을 최신 `main`에 맞춘다.
+4. feature/fix PR은 `docs/STATUS.md`와 `docs/planned-work.md`를 직접 수정하지 않는다. 대신 PR 본문에 mainline docs sync용 영향을 남긴다.
+5. API/스키마/화면 동작처럼 코드와 함께 리뷰되어야 하는 contract 문서는 기능 PR에 포함하되, 바뀐 섹션만 최소 수정한다.
+6. 여러 PR을 머지한 뒤에는 `main`에서 짧은 mainline docs sync 세션을 돌려 `docs/STATUS.md`와 `docs/planned-work.md`를 현재 main 기준으로 정리한다.
+7. 단일 PR만 머지했고 영향이 작으면 merge 담당자가 같은 흐름에서 mainline docs sync를 바로 처리해도 된다.
+
+Codex에 feature/fix 작업을 맡길 때는 다음 문구를 권장한다.
+
+```text
+이 작업은 feature PR 모드로 해줘.
+STATUS.md와 planned-work.md는 직접 수정하지 말고,
+필요한 내용은 PR 본문 Status impact / Planned-work impact에 남겨줘.
+contract 문서는 변경된 섹션만 최소 수정해줘.
+```
+
+Codex에 병렬 작업 중 한 범위만 맡길 때는 다음처럼 파일/책임 경계를 명시한다.
+
+```text
+이 브랜치는 frontend만 맡고, backend/API contract는 건드리지 마.
+STATUS.md/planned-work.md는 수정하지 마.
+PR 본문에 mainline docs sync에 필요한 영향만 남겨줘.
+```
+
+여러 PR을 머지한 뒤 mainline docs sync 세션을 돌릴 때는 `main`에서 다음 문구를 권장한다.
+
+```text
+main 브랜치에서만 문서 정리해줘.
+최근 머지된 PR들의 Status impact / Planned-work impact를 반영해서
+STATUS.md와 planned-work.md를 현재 main 기준으로 갱신해줘.
+contract 문서는 이미 merge된 코드와 불일치하는 부분만 최소 수정해줘.
+```
+
+### PR Body Template
+
+feature/fix PR 본문은 mainline docs sync 세션이 그대로 읽을 수 있도록 아래 구조를 기본으로 한다.
+
+```markdown
+## Summary
+- 사용자가 볼 수 있는 변화 또는 핵심 코드 변화
+- 변경된 주요 화면/API/서비스
+
+## Verification
+- 실행한 테스트, lint, typecheck, browser smoke
+- 실행하지 못한 검증이 있으면 그 이유
+
+## Status impact
+- main merge 후 `docs/STATUS.md`에 반영할 1-3줄 요약
+- In Progress / Known Issues / Key Decisions에 옮길 내용이 있으면 명시
+- 없으면: 없음
+
+## Planned-work impact
+- 완료되어 `docs/planned-work.md`에서 제거하거나 완료 표시할 항목
+- 새로 발견한 backlog 또는 우선순위 변경
+- 없으면: 없음
+
+## Contract docs
+- 이 PR에서 함께 수정한 contract/source-of-truth 문서
+- 의도적으로 PR 본문에만 남기고 mainline docs sync로 미룬 문서 영향
+```
+
+`Status impact`와 `Planned-work impact`는 비어 있더라도 `없음`이라고 적어 mainline docs sync 담당자가 누락과 무영향을 구분할 수 있게 한다.
+
 ---
 
 ## Core Commands
