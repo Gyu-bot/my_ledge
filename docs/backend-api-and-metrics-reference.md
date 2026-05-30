@@ -1193,8 +1193,32 @@ Documented columns:
 - `variable_total`
 - `essential_fixed_total`
 - `discretionary_fixed_total`
+- `essential_variable_total`
+- `discretionary_variable_total`
+- `required_spend_total`
+- `discretionary_spend_total`
 - `unclassified_total`
 - `unclassified_count`
+
+### `vw_asset_snapshot_canonical`
+
+Canonical snapshot-level asset/liability read surface for agent and readonly SQL use cases. It combines imported snapshot totals with user-confirmed asset liquidity and loan repayment metadata.
+
+Documented columns:
+
+- `snapshot_date`
+- `asset_total`
+- `liability_total`
+- `net_worth`
+- `cash_equivalent_total`
+- `near_liquid_total`
+- `illiquid_total`
+- `loan_balance_total`
+- `monthly_debt_payment_total`
+- `asset_row_count`
+- `loan_row_count`
+
+Interpretation rule: this view provides calculation evidence. Final liquidity/health judgement belongs to the agent, using `/api/v1/analytics/liquidity-health` confidence and assumptions when available.
 
 ### Advisor canonical read model expansion
 
@@ -1224,10 +1248,10 @@ Live P0/P0.5 views:
 - `vw_merchant_monthly_baseline`: canonical `merchant` monthly spend/count plus trailing 3-month closed-month baseline and delta fields.
 - `vw_recurring_merchant_monthly`: monthly aggregate of stored `recurring_payment_kind` classifications. Interval confidence stays in API diagnostics.
 - `vw_unclassified_work_queue`: prioritized transactions missing cost classification, spend necessity, fixed-cost necessity, monthly recurring kind, or likely loan-link review. Recurring review requires a monthly signal, not just two transactions at the same merchant: at least 2 active months, at least 2 active dates, and merchant amount coefficient of variation `<= 0.5`. Same-day split purchases are therefore not recurring-classification candidates. Priority combines analysis impact, amount, and recurrence likelihood.
+- `vw_asset_snapshot_canonical`: snapshot-level asset/liability/net-worth/liquidity/monthly debt payment read model. It is calculation evidence for agent interpretation, not a final health label.
 
 Planned P1/P2 views:
 
-- `vw_asset_snapshot_canonical`: snapshot-level asset/liability/net-worth view after source-of-truth and double-count rules are fixed. Investment detail should remain opaque/summary-only until brokerage API support lands.
 - Deferred investment work: `vw_investment_allocation_snapshot`, investment performance, product allocation, and cashflow-aware returns move to P2 after brokerage API integration.
 
 ## Major Metric Logic

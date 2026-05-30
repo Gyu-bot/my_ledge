@@ -43,12 +43,14 @@ MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
 거래 분석을 직접 SQL로 해야 한다면 raw `transactions` 대신 아래 canonical view를 먼저 사용한다.
 
 - `vw_transactions_effective`: row-level 거래 분석 표준 surface
+- `vw_asset_snapshot_canonical`: snapshot 단위 자산/부채/유동성/월상환액 표준 surface
 - `vw_category_monthly_spend`: 월별 카테고리 지출 aggregate 표준 surface
 - `vw_fixed_cost_monthly_summary`: 월별 고정비/변동비 및 필수/비필수 고정비 aggregate surface
 - `vw_monthly_cashflow`: 월별 수입/지출/이체/대출상환/저축률 surface
 - `vw_true_spendable_monthly`: 대출상환과 고정비 차감 후 실제 가용 현금 surface
 - `vw_loan_repayment_monthly`: 대출 계좌/상환 유형별 월 상환액 surface
 - `vw_merchant_monthly_baseline`: 거래처별 월 지출과 직전 active month baseline surface
+- `vw_recurring_merchant_monthly`: 저장된 반복결제 분류별 월 지출 surface
 - `vw_unclassified_work_queue`: 분류 품질 개선 우선순위 queue
 
 canonical view를 우선하는 이유:
@@ -69,6 +71,9 @@ My Ledge는 계산과 근거를 제공하고, 에이전트는 사용자 맥락�
 - `true_spendable`, `estimated_*`: 계산상 가용액과 예상 보정이다. "써도 되는 돈"으로 단정하지 않는다.
 - `liquidity-health`: endpoint 이름의 `health`는 계산 묶음 이름이다. 실제 건강/위험 평가는 에이전트 해석이다.
 - `spending-anomalies`: `anomaly_score`는 baseline 대비 변화 후보다. 문제 지출이나 낭비 확정이 아니다.
+- `discretionary-velocity`: `risk_level`, `velocity_ratio`는 재량 지출 속도 신호다. 예산 초과 확정이나 지출 금지 판정이 아니다.
+- `purchase-gate-candidates`: 큰 지출/새 거래처/spike 후보와 review state다. 구매 허용/불허 결정은 사용자 목표와 예정 지출을 확인한 에이전트 책임이다.
+- `installments/forecast`: 할부 원장 기반 projection이다. 관측 cashflow가 아니므로 이미 연결된 거래와 이중 계산하지 않는다.
 - `recurring-payments`: `confidence`는 반복 패턴 신호다. 구독 해지/유지 판단은 사용자 맥락이 필요하다.
 - `unclassified_work_queue`: `priority_score`는 데이터 정리 우선순위다. 재무 위험 점수로 말하지 않는다.
 - backend가 제공하지 않은 안정/위험/구매 가능 label을 붙이면 에이전트의 자체 가정임을 밝힌다.
@@ -109,6 +114,14 @@ raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import f
 4. 다건 연결은 `PUT /api/v1/transactions/loan-links/bulk`를 사용한다.
 5. 매핑은 원본 거래 타입/카테고리를 바꾸지 않고 canonical view의 nullable loan fields로만 노출된다.
 
+### 할부 관리와 예측
+
+1. 할부 항목은 `GET /api/v1/installment-plans`에서 조회한다.
+2. 할부 후보 거래는 `GET /api/v1/installment-transaction-links`에서 조회한다.
+3. 단건 연결은 `PUT /api/v1/transactions/{id}/installment-link`, 다건 순차 연결은 `PUT /api/v1/transactions/installment-links/bulk`를 사용한다.
+4. 미래 지출 계획은 `GET /api/v1/installments/forecast`의 `observed/projected/missed`와 `monthly_summary`를 사용한다.
+5. forecast의 `projected_total`은 계획용 금액이며, 이미 관측된 거래 집계와 더할 때는 반드시 observed와 projected를 분리한다.
+
 ## 자주 쓰는 API
 
 - schema: `GET /api/v1/schema`
@@ -120,7 +133,9 @@ raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import f
 - 카테고리 timeline: `GET /api/v1/transactions/by-category/timeline`
 - 자산 비교: `GET /api/v1/assets/snapshot-compare`
 - 투자/대출 최신 snapshot: `GET /api/v1/investments/summary`, `GET /api/v1/loans/summary`
-- advisor analytics: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `merchant-spend`, `payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies`
+- 자산/부채 health: `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health`
+- advisor analytics: `GET /api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-summary`, `fixed-cost-trend`, `merchant-spend`, `payment-method-patterns`, `income-stability`, `recurring-payments`, `spending-anomalies`, `discretionary-velocity`, `purchase-gate-candidates`
+- 할부 관리: `GET /api/v1/installment-plans`, `GET /api/v1/installment-transaction-links`, `GET /api/v1/installments/forecast`
 - analytics settings: `GET/PATCH /api/v1/settings/analytics`
 
 ## 해석 주의사항
@@ -130,6 +145,10 @@ raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import f
 - `monthly-cashflow.transfer`는 순이체가 아니라 `ABS(amount)` 기준 activity volume이다.
 - `canonical-views/dashboard`의 true-spendable row에서 `income_basis='estimated'`면 관측 수입과 예상 수입을 분리해 설명한다.
 - `spending-anomalies` 설정 해석 순서는 `명시적 query param > persisted setting > code default`다.
+- 변동비는 사용자가 `essential`로 명시하지 않으면 `spend_necessity='discretionary'`로 저장/해석한다.
+- `purchase-gate-candidates`의 `review_status`는 사용자가 후보를 검토했는지 나타내는 운영 상태이지 구매 결론 자체가 아니다.
+- `discretionary-velocity`와 `liquidity-health`의 `risk_level`은 최종 위험 판단이 아니라 후보 탐지/보조 지표다.
+- `installments/forecast`의 `projected` 금액은 미래 계획용 projection이며 관측 현금흐름 view를 바꾸지 않는다.
 - `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`은 조언이 아니라 계산/후보/데이터 품질 신호로 먼저 설명한다.
 - `POST /api/v1/data/reset`은 current state를 지우지만 `upload_logs`는 보존한다.
 - `POST /api/v1/transactions/merge`는 현재 `501 Not Implemented` stub이다.

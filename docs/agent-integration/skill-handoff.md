@@ -16,7 +16,7 @@
 - canonical view와 analytics endpoint 우선 사용
 - API/canonical view 값의 의미를 [canonical-read-surface-reference.md](../agents/canonical-read-surface-reference.md) 기준으로 해석
 - My Ledge가 제공하는 계산/후보/근거/settings/review state와 에이전트가 수행하는 최종 해석/권고를 분리
-- 업로드, 거래 편집, 대출 연결, reset API 호출 절차 안내
+- 업로드, 거래 편집, 대출/할부 연결, purchase review, 자산/대출 metadata, reset API 호출 절차 안내
 - 실패 시 재확인 경로 안내
 
 책임지지 않아야 하는 범위:
@@ -73,6 +73,9 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - `anomaly_score`와 anomaly `reason`은 baseline 대비 변화 후보다. 문제 지출 확정이나 낭비 판정이 아니다.
 - `confidence`는 패턴 탐지 또는 데이터 완성도 신호다. 에이전트 조언의 확실성 자체로 말하지 않는다.
 - `priority_score`와 `priority_reason`은 데이터 품질 정리 우선순위다. 재무 위험 점수처럼 말하지 않는다.
+- `risk_level`은 `/analytics/discretionary-velocity`, `/analytics/purchase-gate-candidates`, `/analytics/liquidity-health`의 후보/해석 강도이며 구매 허용 또는 위험 판단의 최종 결론이 아니다.
+- `cost_kind='variable'` 거래의 `spend_necessity` 미지정은 backend에서 `discretionary`로 정규화된다. 필수 변동비는 사용자가 `essential`을 명시한 경우만 해당한다.
+- `/installments/forecast`의 `projected`는 미래 planning 값이고 관측 cashflow가 아니다. 이미 연결된 `observed` 거래와 이중 계산하지 않는다.
 - backend가 제공하지 않은 안정/위험/구매 가능 label을 붙일 때는 에이전트 자체 가정과 사용자 맥락 기반 해석임을 밝힌다.
 
 ### Write 규칙
@@ -105,6 +108,12 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - `my_ledge_get_loan_accounts`
 - `my_ledge_get_loan_transaction_links`
 - `my_ledge_update_loan_link`
+- `my_ledge_get_installment_plans`
+- `my_ledge_get_installment_forecast`
+- `my_ledge_update_installment_link`
+- `my_ledge_update_purchase_candidate_review`
+- `my_ledge_update_asset_liquidity`
+- `my_ledge_update_loan_repayment_metadata`
 - `my_ledge_get_analytics_settings`
 - `my_ledge_patch_analytics_settings`
 
@@ -141,6 +150,13 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 3. 단건 또는 bulk loan-link endpoint 호출
 4. canonical view 또는 read API로 nullable loan fields 반영 확인
 
+### 할부 연결/예측 요청
+
+1. `GET /api/v1/installment-plans`와 `GET /api/v1/installments/forecast`로 원장과 회차 상태 확인
+2. `observed`, `projected`, `missed`를 분리해 설명
+3. 연결 후보는 `GET /api/v1/installment-transaction-links`로 확인
+4. 단건 또는 bulk installment-link endpoint 호출 후 forecast를 다시 조회
+
 ## Acceptance Checklist
 
 - `GET /api/v1/schema`를 읽을 수 있다.
@@ -150,9 +166,14 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - canonical read surface 값 의미를 skill 문서에 포함했다.
 - 진행월 estimated income row를 관측값과 분리해 설명하도록 했다.
 - `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable` 해석 경계를 포함했다.
+- `/analytics/discretionary-velocity`/`/analytics/purchase-gate-candidates`의 후보성/리스크 레벨 경계까지 포함했다.
+- `cost_kind='variable'`의 기본 `spend_necessity='discretionary'` 정규화 규칙을 포함했다.
+- `/installments/forecast`의 관측/예측 이중 계산 금지 규칙을 포함했다.
 - 업로드 API를 `X-API-Key`로 호출할 수 있다.
 - 거래 수정/삭제/복원 API를 호출할 수 있다.
 - 대출 연결 write API를 호출할 수 있다.
+- 할부 원장/거래 연결 write API를 호출할 수 있다.
+- purchase candidate review, asset liquidity, loan repayment metadata write API를 호출할 수 있다.
 - analytics settings API를 호출할 수 있다.
 - `merchant`/`description` 의미 차이와 `merge` endpoint stub 상태를 명시했다.
 - 실패 시 재확인 경로가 적혀 있다.
@@ -174,3 +195,8 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 13. `PATCH /api/v1/transactions/{id}`
 14. `GET /api/v1/loan-accounts`
 15. `PUT /api/v1/transactions/{id}/loan-link`
+16. `GET /api/v1/installments/forecast`
+17. `GET /api/v1/analytics/discretionary-velocity`
+18. `GET /api/v1/analytics/purchase-gate-candidates`
+19. `GET /api/v1/analytics/net-worth-breakdown`
+20. `GET /api/v1/analytics/liquidity-health`

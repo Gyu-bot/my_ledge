@@ -56,8 +56,16 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
 | 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
 | 분류 품질 개선 대상 | `vw_unclassified_work_queue` | operations APIs. 재무 위험 우선순위가 아니라 데이터 품질 queue다. |
+| 자산/부채 snapshot 표준값 | `vw_asset_snapshot_canonical` | `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health` |
 | 유동성/부채 health | `GET /api/v1/analytics/liquidity-health` | `GET /api/v1/analytics/net-worth-breakdown`. health라는 이름은 계산 묶음 이름이며 최종 상태 판정이 아니다. |
 | schema 탐색 | `GET /api/v1/schema` | 이 문서와 backend reference |
+
+권장 조회 순서:
+
+1. `GET /api/v1/schema`로 사용 가능한 view/endpoint를 확인한다.
+2. 질문별로 analytics 또는 dashboard로 결론을 먼저 내려도 되는지 판단한다.
+3. 부족하면 readonly DB의 canonical view를 조회한다.
+4. raw `transactions`는 삭제/병합/수정 이력 같은 감사성 목적으로만 추가 조회한다.
 
 ## `GET /api/v1/canonical-views/dashboard`
 
@@ -70,6 +78,7 @@ Query:
 | `months` | 최근 몇 개월의 월별 row를 가져올지. 기본 `12`, 범위 `1..36`. |
 | `merchant_limit` | 거래처 baseline row 최대 개수. 기본 `10`, 범위 `1..50`. |
 | `queue_limit` | 분류 품질 queue row 최대 개수. 기본 `10`, 범위 `1..50`. |
+| `reference_date` | `true_spendable_monthly`의 진행월 기준 추정 보정을 고정할 기준일. 생략 시 `오늘 날짜` 기준. |
 
 Response groups:
 
@@ -95,6 +104,8 @@ Response groups:
 | `excluded_income_periods` | median 기준 ±30% 밖이라 제외된 월. 환급/보너스성 수입이 섞인 월일 수 있다. |
 | `estimated_spendable_before_variable_spend` | 예상 수입 기준 `estimated_income_total - loan_repayment_total - fixed_commitment_total`. |
 | `estimated_remaining_after_variable_spend` | 예상 수입 기준 `estimated_income_total - loan_repayment_total - fixed_commitment_total - variable_total`. |
+
+주의: `estimated_*`는 `vw_true_spendable_monthly`의 관측값을 대체하지 않고 enrichment으로만 추가된다. `income_total`은 그대로 관측 수입 합계로 유지되어야 하며, 설명 시 observed와 estimated를 분리해야 한다.
 
 예상 수입은 현재 월 row에서 관측 수입이 최근 수입 baseline의 50% 미만일 때만 붙는다. DB view 원본 값은 바꾸지 않는다.
 `true_spendable_monthly`는 계산상 가용액을 보여주는 surface다. 에이전트는 이 값을 "지금 써도 되는 돈"으로 단정하지 않고, 사용자의 목표/현금흐름/예정 지출을 함께 물어본 뒤 해석한다.
@@ -201,8 +212,31 @@ Response groups:
 | `variable_total` | `cost_kind='variable'` 합계. |
 | `essential_fixed_total` | `fixed`이면서 `essential`인 금액. |
 | `discretionary_fixed_total` | `fixed`이면서 `discretionary`인 금액. |
+| `essential_variable_total` | `variable`이면서 `spend_necessity='essential'`인 금액. 사용자가 명시한 필수 변동비만 포함한다. |
+| `discretionary_variable_total` | `variable`이면서 `spend_necessity='discretionary'`인 금액. 변동비 필요성 미지정분은 backend에서 이 값으로 정규화된다. |
+| `required_spend_total` | `essential_fixed_total + essential_variable_total`. 이 view는 대출 상환을 일반 지출에서 제외하므로 대출 부담은 `vw_loan_repayment_monthly` 또는 `vw_monthly_cashflow.loan_repayment_total`과 따로 본다. |
+| `discretionary_spend_total` | `discretionary_fixed_total + discretionary_variable_total`. |
 | `unclassified_total` | `cost_kind is null`인 일반 지출 금액. |
 | `unclassified_count` | `cost_kind is null`인 일반 지출 건수. |
+
+### `vw_asset_snapshot_canonical`
+
+snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge가 sparse snapshot 원본과 사용자 보강 metadata를 합쳐 계산 근거를 제공하고, 에이전트는 confidence와 assumptions를 보고 최종 해석을 붙인다.
+
+| 컬럼 | 의미/계산 |
+|---|---|
+| `snapshot_date` | snapshot 기준일. 업로드 시 지정한 날짜다. |
+| `asset_total` | 자산 row 총액. |
+| `liability_total` | 부채 row 총액. |
+| `net_worth` | `asset_total - liability_total`. |
+| `cash_equivalent_total` | 즉시 현금성으로 확인된 자산 합계. `is_cash_equivalent=true` 또는 미지정 상태의 `liquidity_tier='immediate'`를 포함한다. |
+| `near_liquid_total` | `liquidity_tier='near_liquid'` 자산 합계. 기본 비상금 계산에는 바로 더하지 않는다. |
+| `illiquid_total` | `liquidity_tier='illiquid'` 자산 합계. |
+| `loan_balance_total` | 최신 대출 snapshot 기준 잔액 합계. |
+| `monthly_debt_payment_total` | 사용자가 보강한 `loans.monthly_payment` 합계. 비어 있으면 debt burden confidence가 낮아질 수 있다. |
+| `asset_row_count`, `loan_row_count` | snapshot 원천 row 수. 데이터 완성도 확인용이다. |
+
+`vw_asset_snapshot_canonical`은 자산 상태를 계산한 표준값이지 "건강/위험" 최종 label이 아니다. 유동성 판단은 `/analytics/liquidity-health`의 `confidence`, `assumptions`, 사용자 목표/예정 지출과 함께 해석한다.
 
 ### `vw_merchant_monthly_baseline`
 
@@ -275,6 +309,8 @@ Response groups:
 | `/analytics/merchant-spend` | `merchant`, `amount`, `count`, `avg_amount`, `last_seen_at` | 거래처별 총액, 빈도, 평균 금액, 마지막 거래일. |
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
 | `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
+| `/analytics/discretionary-velocity` | `period`, `discretionary_spend`, `baseline_monthly_spend`, `velocity_ratio`, `risk_level`, `classification_coverage_ratio`, `assumptions`, `reasons` | 월 진행률 기준 재량 지출 속도 신호. `risk_level`은 최종 구매 허용 판단이 아니라 후보 강도와 분류 신뢰도 안내용이다. |
+| `/analytics/purchase-gate-candidates` | `items[]`, `candidate_key`, `risk_level`, `review_status`, `assumptions`, `reasons` | 거래 단위 후보 surface. 큐 항목은 사용자 검토 대상으로, 자동 구매 허용/금지 판정이 아니다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
 | `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`는 지난 미연결 회차다. projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
@@ -291,5 +327,7 @@ Response groups:
 - 자산이동/이체 별도 tracking은 뒤로 미뤘다. 현재는 월별 현금흐름의 `transfer_activity_total`만 보조 값으로 쓴다.
 - `not_recurring`은 “반복 아님으로 검토됨”이지 “거래가 사라짐”이 아니다.
 - `unclassified_work_queue`는 지출 규모가 큰 미분류 거래를 우선 노출하므로, 전체 오류 목록이 아니라 개선 우선순위다.
-- `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable` 같은 단어를 사용자 조언으로 바로 번역하지 않는다. 먼저 계산 기준과 데이터 품질 신호로 설명한다.
+- `health`, `anomaly`, `confidence`, `risk_level`, `priority_score`, `true_spendable` 같은 단어를 사용자 조언으로 바로 번역하지 않는다. 먼저 계산 기준과 데이터 품질 신호로 설명한다.
+- `risk_level`은 `/analytics/discretionary-velocity`, `/analytics/purchase-gate-candidates`, `/analytics/liquidity-health`에서 후보 강도/분류 신호를 의미하며 최종 위험 판정이 아니다.
+- `/installments/forecast`는 현금흐름 관측치가 아니라 계획/예측 레이어다. projected 구간을 현금흐름 합계에 바로 더하면 이중 계산이 발생한다.
 - backend가 label을 제공하지 않는 지표에 임의 등급을 붙일 때는 자체 가정임을 밝힌다.

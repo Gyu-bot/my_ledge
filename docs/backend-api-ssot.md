@@ -81,7 +81,7 @@
 |---|---|---|---|
 | `GET` | `/api/v1/health` | live | healthcheck |
 | `GET` | `/api/v1/schema` | live | API key required |
-| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, P0/P0.5 canonical view row dashboard, current-month estimated true spendable enrichment with 6-month outlier-adjusted income baseline |
+| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, P0/P0.5 canonical view row dashboard, optional `reference_date`, current-month estimated true-spendable enrichment with 6-month outlier-adjusted income baseline |
 
 ### Upload / Operations
 
@@ -110,6 +110,8 @@
 | `POST` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, upsert a recurring category rule |
 | `DELETE` | `/api/v1/auto-classification/recurring-category-rules/{id}` | live | API key required |
 | `POST` | `/api/v1/auto-classification/apply/recurring-category-rules` | live | API key required, apply rules to recurring candidates or fixed costs only |
+| `GET` | `/api/v1/auto-classification/recurring-category-rules/dry-run` | live | API key required, preview recurring rule proposals and matching transactions |
+| `POST` | `/api/v1/auto-classification/apply/recurring-dry-run` | live | API key required, approve one dry-run proposal with explicit apply scope |
 
 ### Transactions Read
 

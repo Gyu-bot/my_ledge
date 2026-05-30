@@ -36,7 +36,7 @@ MY_LEDGE_DB_PASSWORD=<DB_READONLY_PASSWORD>
 | schema/API/canonical dashboard 조회 | REST API |
 | 거래/분석/snapshot 조회 | REST API 또는 readonly DB |
 | ad-hoc SQL 분석 | PostgreSQL readonly user |
-| upload, reset, settings, transaction write, loan-link write | REST API with `X-API-Key` |
+| upload, reset, settings, transaction/loan/installment/purchase-review/asset-liquidity write | REST API with `X-API-Key` |
 | DB write | 금지 |
 
 readonly DB role 요구사항:
@@ -61,6 +61,10 @@ readonly DB role 요구사항:
 - `GET /api/v1/loan-accounts`
 - `GET /api/v1/loan-transaction-links`
 - `GET /api/v1/transactions/{id}/loan-link`
+- `GET /api/v1/installment-plans`
+- `GET /api/v1/installment-transaction-links`
+- `GET /api/v1/transactions/{id}/installment-link`
+- `GET /api/v1/installments/forecast`
 - `GET /api/v1/assets/snapshots`
 - `GET /api/v1/assets/net-worth-history`
 - `GET /api/v1/assets/snapshot-compare`
@@ -74,7 +78,11 @@ readonly DB role 요구사항:
 - `GET /api/v1/analytics/payment-method-patterns`
 - `GET /api/v1/analytics/income-stability`
 - `GET /api/v1/analytics/recurring-payments`
+- `GET /api/v1/analytics/discretionary-velocity`
+- `GET /api/v1/analytics/purchase-gate-candidates`
 - `GET /api/v1/analytics/spending-anomalies`
+- `GET /api/v1/analytics/net-worth-breakdown`
+- `GET /api/v1/analytics/liquidity-health`
 
 ### Write
 
@@ -90,6 +98,14 @@ readonly DB role 요구사항:
 - `DELETE /api/v1/transactions/{id}/loan-link`
 - `PUT /api/v1/transactions/loan-links/bulk`
 - `PATCH /api/v1/loan-accounts`
+- `POST /api/v1/installment-plans`
+- `PATCH /api/v1/installment-plans/{id}`
+- `PUT /api/v1/transactions/{id}/installment-link`
+- `DELETE /api/v1/transactions/{id}/installment-link`
+- `PUT /api/v1/transactions/installment-links/bulk`
+- `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
+- `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
+- `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
 `POST /api/v1/transactions/merge`는 현재 `501 Not Implemented` stub이므로 workflow에 넣지 않는다.
 
@@ -114,6 +130,10 @@ readonly DB role 요구사항:
 | `confidence` | 패턴 탐지 또는 데이터 완성도 신호다. 조언의 확실성 자체가 아니다. |
 | `priority_score`, `priority_reason` | 데이터 품질 정리 우선순위다. 재무 위험 우선순위로 자동 변환하지 않는다. |
 | `risk_level`, `review_priority` | threshold 기반 후보 강도나 검토 우선순위다. 최종 위험/허용 판정은 에이전트 해석이다. |
+| `/analytics/discretionary-velocity`의 `risk_level` | 월 진행률 기준 재량 지출 속도 후보 신호다. 즉시 구매 허용/금지 결론으로 쓰지 않는다. |
+| `/analytics/purchase-gate-candidates`의 `risk_level` | large/new/spike 후보 우선순위 신호다. 자동 위험 판정이 아니다. |
+| `/installments/forecast`의 `projected` | 미래 현금흐름 planning 값이다. 관측된 거래/cashflow view와 이중 계산하지 않는다. |
+| `/api/v1/analytics/liquidity-health` | `confidence`와 `assumptions`를 먼저 제시해 추정치 기반의 유동성 판단으로 해석하고, 최종 판단은 사용자 맥락에서 한다. |
 
 backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트가 붙일 때는 자체 가정과 사용자 맥락 기반 해석임을 답변에 드러낸다.
 
@@ -125,8 +145,10 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 - `vw_loan_repayment_monthly`
 - `vw_fixed_cost_monthly_summary`
 - `vw_merchant_monthly_baseline`
+- `vw_recurring_merchant_monthly`
 - `vw_unclassified_work_queue`
 - `vw_category_monthly_spend`
+- `vw_asset_snapshot_canonical`
 
 ## 예시 흐름
 
@@ -153,6 +175,20 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 4. 대출 연결은 loan-link API로 수정
 5. 반복 결제 분류는 recurring classification API/화면 흐름을 사용
 6. `priority_score`는 데이터 정리 우선순위로만 설명하고 재무 위험 점수처럼 말하지 않는다
+
+### 재량 지출/구매 후보 점검
+
+1. `GET /api/v1/analytics/discretionary-velocity`로 재량 지출 속도와 분류 커버리지를 확인한다.
+2. `GET /api/v1/analytics/purchase-gate-candidates`로 거래 단위 후보를 조회한다.
+3. 후보의 `risk_level`, `reasons`, `assumptions`를 같이 제시하고, 즉시 구매 차단/허용 결론으로 바꾸지 않는다.
+4. 필요 시 `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`로 검토 상태만 반영한다.
+
+### 할부 잔여 지출 설명
+
+1. `GET /api/v1/installment-plans`로 활성 할부 원장을 확인한다.
+2. `GET /api/v1/installments/forecast`에서 `observed`, `projected`, `missed` 회차를 분리한다.
+3. 미래 월 계획에는 `monthly_summary.projected_total`을 참고하되, 이미 관측된 거래와 합산하지 않는다.
+4. 거래 연결이 필요하면 `GET /api/v1/installment-transaction-links` 후보를 확인하고 단건/bulk installment-link API를 사용한다.
 
 ## 실패 대응
 

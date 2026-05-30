@@ -6,8 +6,8 @@
 ## Current State
 
 - **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
-- **Last Worker:** Codex (2026-05-30T23:43+0900, 변동비 기본 재량화 및 할부 관리)
-- **Branch:** codex-complete-pre-p2-work
+- **Last Worker:** Codex (2026-05-31T00:04+0900, 에이전트 문서/API·canonical surface 정합성 보강)
+- **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
 ## Start Here
@@ -44,6 +44,7 @@
 - [x] Sidebar/favicon 공용 brand mark 추가: 이미지 생성 툴로 만든 `frontend/public/brand-mark.png`를 favicon과 desktop sidebar 상단 아이콘에 연결
 - [x] 반복결제 dry-run 승인 흐름 frontend 연결: `/operations/recurring-classification`에서 후보 근거/매칭 거래/apply scope를 확인하고 그룹 단위로 승인 적용
 - [x] 변동비 기본 재량화 및 할부 관리 구현: `cost_kind='variable'` 미지정 필요성은 `spend_necessity='discretionary'`로 정규화하고, `installment_plans`/`installment_transaction_links`, `/api/v1/installments/forecast`, `/operations/installments`를 추가
+- [x] 에이전트 문서/API·canonical surface 정합성 보강: 현재 구현된 `vw_asset_snapshot_canonical`, recurring dry-run, 할부 forecast, purchase gate, liquidity health, 변동비 재량 기본값과 My Ledge/에이전트 판단 경계를 [agents/](agents/)와 [agent-integration/](agent-integration/) 문서에 반영
 - [x] P1 advisor/operations batch 구현: discretionary velocity, purchase gate candidates/review state, recurring dry-run apply scope, bulk delete/restore, asset liquidity/loan repayment metadata, `vw_asset_snapshot_canonical`과 관련 frontend 연결
 - [x] P2 제외 구현 batch hardening: 구매 게이트 frontend/backend contract 정렬, same-date snapshot 재업로드 시 자산/대출 사용자 메타데이터 보존, 최신 asset row만 편집 UI에 노출, `liquidity_tier='immediate'` cash-equivalent 의미 정렬, bulk delete undo와 preview 대상 고정, topbar/redirect/bulk 회귀 테스트 보강
 - [x] 검증 완료: backend 전체 pytest 140 passed, backend ruff, frontend vitest 112 passed, frontend lint/typecheck, Codex 인앱 브라우저 local smoke(`/operations/auto-classification`, `/operations/workbench`, `/operations/installments`)
@@ -59,7 +60,7 @@
 
 ## In Progress
 
-- 없음. 변동비 기본 재량화와 할부 관리 구현은 regression과 browser smoke까지 완료했다.
+- 없음. 변동비 기본 재량화/할부 관리 구현과 에이전트 문서 정합성 보강은 완료했다.
 
 ## Next Up
 
