@@ -25,6 +25,8 @@
 - 어시스턴트 해석에 필요한 주요 요약은 agent가 매번 raw data로 재계산하지 않도록 backend API 또는 canonical read surface로 고정한다.
 - My Ledge는 구매/소비에 대한 최종 규범적 판단을 내리지 않는다. 재현 가능한 계산, threshold 적용, 후보 탐지, 근거, confidence, assumptions, review workflow 상태까지만 책임지고, 에이전트가 사용자 맥락을 반영해 최종 해석과 조언을 만든다.
 - `risk_level`은 "사지 마라/사도 된다" 같은 최종 결정이 아니라 데이터 신호 강도 또는 검토 우선순위로 해석한다. 사용자에게 전달되는 말투, 개입 강도, 행동 제안은 에이전트/consumer layer 책임이다.
+- 새 advisor 기능의 기본 threshold와 lookback 값은 보수적인 초기값으로 두되, `GET/PATCH /api/v1/settings/analytics` 또는 기능별 settings surface로 나중에 조정 가능하게 만든다.
+- `description_user` / `effective_description`은 구현하지 않는다. 원본 설명은 `description`으로 보존하고, 분석/집계용 거래처명은 `merchant`, 사용자 부가 설명은 기존 `memo`를 사용한다.
 - 투자 성과/상품 배분/수익률 분석은 증권사 API 연동 이후로 미룬다.
 - 자산이동/이체 tracking은 현재 사용자 가치가 낮으므로 우선순위를 가장 뒤로 미룬다. `transfer_activity_total` 같은 기존 현금흐름 보조 값만 유지하고 별도 transfer 화면/API는 P2 뒤쪽으로 둔다.
 
@@ -196,7 +198,11 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
   - 재량 지출은 `cost_kind='variable'` 전체가 아니라 `spend_necessity='discretionary'`인 지출을 기준으로 계산한다.
   - 필수 변동비는 재량 속도 경고에서 제외한다.
   - endpoint 후보는 `GET /api/v1/analytics/discretionary-velocity`.
+  - 기본 baseline은 최근 6개 마감월의 재량 지출을 사용하고, median 기준 이상치 제외 평균을 우선한다.
   - `baseline_spend_at_same_progress`는 1차 구현에서 trailing closed-month 재량 지출 baseline에 `month_progress_ratio`를 곱한 prorated 값으로 시작하고, daily cumulative baseline은 후속 고도화로 둔다.
+  - 기본 threshold는 `warning=1.2x`, `high=1.5x`로 시작한다.
+  - `classification_coverage_ratio < 0.7`이면 강한 경고 대신 분류 품질 부족 신호로 표시한다.
+  - 대출상환, 필수지출, 미분류 지출은 속도 판단에서 분리한다.
   - 응답에는 `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level` 또는 `review_priority`, `confidence`, `reasons`, `assumptions`를 포함한다.
   - 분류 품질이 낮을 때 해석이 흔들리지 않도록 `unclassified_spend`, `classification_coverage_ratio`를 포함한다.
   - 진행월 수입이 estimated라면 `income_basis`나 assumptions로 명시한다.
@@ -205,10 +211,15 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
   - 처음에는 구매 차단이 아니라 후보 탐지/리뷰 흐름으로 시작한다.
   - 후보 기준은 큰 금액, 새 거래처, 평소 대비 급증을 조합한다.
   - threshold가 정책값이므로 settings와 함께 설계
+  - 큰 지출 기본 기준은 100,000원으로 시작한다.
+  - 새 거래처는 최근 6개월 동안 등장하지 않은 canonical `merchant` 기준으로 판단한다.
+  - 후보 유형은 `large_oneoff`, `new_merchant`, `merchant_spike`, `discretionary_spike`로 시작한다.
   - endpoint는 후보 중심의 `GET /api/v1/analytics/purchase-gate-candidates`를 우선한다. `should-i-buy`처럼 최종 판단처럼 보이는 이름은 쓰지 않는다.
   - API는 "구매 금지/허용"이 아니라 `candidate_type`, `transaction_id`, `candidate_key`, `signals`, `risk_level` 또는 `review_priority`, `confidence`, `suggested_review_window`, `reasons`, `assumptions`를 제공한다.
   - `candidate_key`는 review 상태 저장을 위해 안정적으로 만들어야 한다. 1차 후보는 `(candidate_type, transaction_id)` 기반으로 충분하다.
-  - 후보 상태 저장은 My Ledge 책임이다. 사용자가 후보를 무시/보류/승인/검토 완료한 이력과 cooldown은 에이전트 memory가 아니라 backend data로 둔다.
+  - 후보 상태 저장은 My Ledge 책임이다. 1차 상태값은 `pending`, `reviewed`, `ignored`, `snoozed`, `dismissed`로 둔다. `approved`는 구매 허용처럼 보일 수 있어 초기 상태값에서 제외한다.
+  - 기본 cooldown은 14일로 시작한다.
+  - frontend는 처음에는 `/analysis/insights`에 후보 카드로 노출하고, 후보가 많아지면 별도 review 화면으로 분리한다.
   - 최종 구매 조언, 보류 권유, 대체안 제안, 말투/개입 강도는 에이전트가 맡는다.
 
 ### Advisor Settings Contract
@@ -216,9 +227,49 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 - velocity / purchase gate threshold와 정책값은 `GET/PATCH /api/v1/settings/analytics` 확장으로 관리한다.
 - 에이전트별 memory에 threshold를 저장하지 않는다. frontend, backend, agent가 같은 기준을 공유해야 한다.
 - 설정은 섹션별로 나누는 방향이 좋다.
-  - `discretionary_velocity`: baseline months, warning threshold, high threshold, minimum classification coverage.
-  - `purchase_gate`: large purchase threshold, min candidate amount, new merchant lookback months, review cooldown period, candidate risk threshold.
-  - 공통 제외 규칙: excluded categories, excluded merchants.
+  - `discretionary_velocity`
+    - `baseline_months`: default `6`
+    - `outlier_policy`: default `median_30pct_exclusion`
+    - `warning_velocity_ratio`: default `1.2`
+    - `high_velocity_ratio`: default `1.5`
+    - `minimum_classification_coverage`: default `0.7`
+    - `baseline_mode`: default `prorated_closed_month_baseline`; later `daily_cumulative_baseline`
+    - `excluded_category_ids` 또는 category name list
+    - `excluded_merchants`
+  - `purchase_gate`
+    - `large_purchase_threshold`: default `100000`
+    - `min_candidate_amount`: default `100000`
+    - `new_merchant_lookback_months`: default `6`
+    - `merchant_spike_ratio`: default `2.0`
+    - `discretionary_spike_ratio`: default `1.5`
+    - `review_cooldown_days`: default `14`
+    - `candidate_risk_threshold`: default `warning`
+    - `enabled_candidate_types`: default `large_oneoff`, `new_merchant`, `merchant_spike`, `discretionary_spike`
+    - `excluded_category_ids` 또는 category name list
+    - `excluded_merchants`
+  - `recurring_dry_run`
+    - `min_occurrences`: default `2`
+    - `min_distinct_months`: default `2`
+    - `min_distinct_days`: default `2`
+    - `max_amount_cv`: default `0.5`
+    - `monthly_interval_days_min`: default `25`
+    - `monthly_interval_days_max`: default `35`
+    - `weekly_interval_days_min`: default `6`
+    - `weekly_interval_days_max`: default `8`
+    - `minimum_confidence`: default `0.5`
+    - `default_apply_scope`: default `future_only`
+    - `upload_auto_apply`: default `false`
+  - `asset_liability_health`
+    - `emergency_fund_included_tiers`: default `immediate`
+    - `show_near_liquid_as_secondary`: default `true`
+    - `monthly_payment_estimate_lookback_months`: default `6`
+    - `monthly_payment_min_observations`: default `2`
+    - `debt_payment_confidence_requires_user_confirmation`: default `true`
+  - `bulk_operations`
+    - `require_preview`: default `true`
+    - `require_confirmation`: default `true`
+    - `show_undo_after_delete`: default `true`
+    - `max_bulk_rows_without_extra_confirmation`: default `100`
 - 에이전트는 설정 변경을 제안할 수 있지만, 실제 변경은 사용자의 명시적 의사와 settings API 저장을 통해 처리한다.
 
 ### Asset / Liability Health
@@ -233,7 +284,15 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 - 정확하지 않은 값은 `*_est`, `confidence`, `assumptions`를 포함한다.
 - liquidity 계산 전 cash-equivalent 분류 기준이 필요하다.
 - `emergency-fund` / `liquidity-health`는 `is_cash_equivalent` 또는 `liquidity_tier`를 우선 사용하고, 기존 데이터가 비어 있으면 보수적 추정과 assumptions를 제공한다.
+- `liquidity_tier`는 1차로 `immediate`, `near_liquid`, `illiquid` 3단계로 둔다.
+  - `immediate`: 입출금, CMA, 파킹통장, 증권 예수금처럼 즉시 사용 가능한 현금성 자산
+  - `near_liquid`: 정기예금, 적금, 단기 예치성 상품처럼 해지/이체 절차가 필요한 준현금성 자산
+  - `illiquid`: 부동산, 장기투자, 보험성 자산 등 즉시 비상금으로 쓰기 어려운 자산
+- 비상금 개월 수 기본 계산에는 `immediate`만 포함하고, `near_liquid`는 보조값으로 별도 표시한다.
+- 사용자가 자산별 `liquidity_tier`와 `is_cash_equivalent`를 직접 검토/수정할 수 있는 UI를 제공한다.
 - `debt-burden` / `debt-health` 정확도를 높이려면 대출별 `monthly_payment`와 상환 스케줄/상환 방식 출처가 필요하다. 이 값이 없으면 추정 필드만 제공한다.
+- `monthly_payment`는 사용자가 직접 입력할 수 있게 하고, 최근 연결된 상환 거래에서 계산한 값은 확정 전까지 `estimated_monthly_payment`로 표시한다.
+- `repayment_method`는 `principal_interest`, `principal_equal`, `interest_only`, `unknown` 중 선택값으로 둔다. 필수 입력은 아니며 비어 있으면 confidence를 낮춘다.
 - 투자 성과/상품 배분/수익률은 증권사 API 연동 이후 P2에서 다룬다.
 
 ### Snapshot Read Models
@@ -299,21 +358,24 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 - `recurring_payment_kind` 자동분류
 - 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 쓰는 dry-run contract
 - 자동 저장하지 않고 dry-run 후보를 먼저 보여준다.
+- 기본 승인 단위는 거래처 그룹 단위로 둔다.
+- dry-run 응답에는 `merchant`, `proposed_kind`, `confidence`, `matched_transactions`, `reason`, `category_hint`, `apply_scope_options`를 포함한다.
+- 사용자가 승인할 때 적용 범위를 고른다.
+  - 과거 유사 거래까지 적용
+  - 앞으로 들어오는 거래에만 적용
+- 업로드 후 자동 적용은 기본 OFF로 시작하고 settings에서 켤 수 있게 한다.
 - 사용자가 승인한 뒤 bulk 반영하는 운영 화면
 
 ### Bulk Operations
 
 - bulk delete / bulk restore API 및 frontend 연결
 - bulk 기능은 허용하되, 백업/복구 안전장치를 전제로 한다.
+- 실행 전 preview를 필수로 둔다.
+- 확인 모달에는 대상 건수, 기간, 총액, 대표 거래처를 표시한다.
+- delete는 soft delete만 수행한다.
+- 실행 후 toast와 "방금 삭제한 항목 복원" 액션을 제공한다.
+- restore는 delete보다 가볍게 처리하되, 대상 건수와 기간은 확인한다.
 - bulk mutation success/error 흐름 테스트 보강
-
-### Description Override
-
-- `description_user` nullable 컬럼 추가
-- `effective_description` canonical read path 추가
-- rolling import 시 사용자 수정 설명 이월
-- 설명 단건/다건 수정 UI와 회귀 테스트
-- 거래 설명 직접 수정 기능은 제품 범위에 포함한다.
 
 ---
 
@@ -413,5 +475,5 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
 2. 투자 분석과 자산이동/이체 tracking은 뒤로 미룬다.
 3. 다음 batch는 discretionary spending velocity와 purchase gate candidates를 우선 검토한다.
 4. recurring 자동분류 dry-run/승인 흐름을 별도 batch로 진행한다.
-5. bulk delete/restore, description override 같은 operations 후속을 진행한다.
+5. bulk delete/restore 같은 operations 후속을 진행한다.
 6. frontend v2는 현재 main UX 안정화 이후 재개 여부를 다시 결정한다.

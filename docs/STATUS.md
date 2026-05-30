@@ -6,7 +6,7 @@
 ## Current State
 
 - **Phase:** P1 advisor surface 1-4 구현 완료. 지출 필수/재량 축 일반화, merchant normalization, 반복 거래처 월별 view, 유동성/부채 health API와 frontend 노출이 live. 투자 분석과 자산이동/이체 tracking은 후순위로 보류.
-- **Last Worker:** Codex (2026-05-30T21:05+0900, 에이전트 판단 책임 경계 문서 반영)
+- **Last Worker:** Codex (2026-05-30T21:38+0900, description override 제외 및 brand icon 추가)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -39,6 +39,9 @@
 - [x] 거래처 정규화 기준 보정: alias rule은 원본 설명(`description`)을 매칭해 분석용 거래처(`merchant`)에 반영하고, `merchant != description`인 수동 수정 추정 row는 보존
 - [x] Advisor 책임 경계 문서화: My Ledge는 계산/후보/근거/settings/review state를 맡고, 에이전트는 사용자 맥락 기반 최종 해석과 조언을 맡도록 [planned-work.md](planned-work.md)에 반영
 - [x] 에이전트 문서 판단 경계 보강: `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`을 My Ledge의 최종 조언이 아니라 계산/후보/데이터 품질 신호로 해석하도록 [agents/](agents/)와 [agent-integration/](agent-integration/) 문서에 반영
+- [x] Advisor 다음 구현 기본값 정리: 재량 지출 속도, 구매 게이트, 반복결제 dry-run, 현금성 자산 tier, 대출 월상환액 보강, bulk 안전장치와 settings 조정 항목을 [planned-work.md](planned-work.md)에 반영
+- [x] `description_user` / `effective_description` 계획 제외: 원본 설명은 `description`, 분석명은 `merchant`, 사용자 부가 설명은 `memo`로 유지
+- [x] Sidebar/favicon 공용 brand mark 추가: 이미지 생성 툴로 만든 `frontend/public/brand-mark.png`를 favicon과 desktop sidebar 상단 아이콘에 연결
 - [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
@@ -59,7 +62,6 @@
   - 투자 성과/배분/수익률은 증권사 API 이후 P2로 미룬다. 자산이동/이체 tracking도 우선순위 최후순위다.
 - [ ] Operations/data-management follow-up
   - bulk delete / bulk restore API 및 frontend 연결.
-  - `description_user` / `effective_description` 기반 거래 설명 직접 수정 기능.
 - [ ] Frontend follow-up
   - Settings page는 실제 사용자 기능으로 구현.
   - Token Lab은 개발/리뷰용 도구로만 유지.
@@ -73,11 +75,11 @@
 
 ## Next Up
 
-1. discretionary spending velocity API/settings contract 설계 및 frontend 노출.
-2. purchase gate candidate API와 review UI 설계.
+1. discretionary spending velocity API/settings contract 설계 및 frontend 노출. 기본값은 최근 6개 마감월 baseline, `warning=1.2x`, `high=1.5x`, 최소 분류 커버리지 `0.7`.
+2. purchase gate candidate API와 review UI 설계. 기본값은 큰 지출 `100,000원`, 새 거래처 lookback 6개월, cooldown 14일.
 3. 반복 후보 그룹 탐지 결과와 카테고리 힌트를 함께 쓰는 dry-run/승인 흐름 설계.
 4. cash-equivalent/liquidity tier와 대출 `monthly_payment` 사용자 보강 UI.
-5. bulk delete/restore, description override 등 operations 후속. 투자 분석과 자산이동/이체 tracking은 P2 뒤쪽으로 보류.
+5. bulk delete/restore 등 operations 후속. 투자 분석과 자산이동/이체 tracking은 P2 뒤쪽으로 보류.
 
 ## Key Decisions
 
@@ -100,6 +102,8 @@
 - 2026-05-30: 대출 매칭 규칙은 `match_field='merchant'|'description'`으로 기준을 명시한다. `merchant`는 분석용/정규화 가능 값이고 `description`은 raw import 원문이다.
 - 2026-05-30: 재량 지출 속도와 구매 게이트에서 My Ledge는 최종 구매 판단을 하지 않는다. My Ledge는 재현 가능한 계산, 후보, 근거, confidence, assumptions, settings, review state를 제공하고, 에이전트가 사용자 맥락 기반 최종 해석과 조언을 맡는다.
 - 2026-05-30: 현재 구현된 canonical/API surface에서도 `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`은 최종 재무 조언이 아니라 계산/후보/데이터 품질 신호로 해석한다. 에이전트가 안정/위험/구매 가능 label을 붙이면 자체 가정과 사용자 맥락 기반 해석임을 밝혀야 한다.
+- 2026-05-30: `description_user` / `effective_description`은 구현하지 않는다. 원본 설명은 `description`, 분석/집계용 거래처명은 `merchant`, 사용자 부가 설명은 `memo`로 충분하다고 본다.
+- 2026-05-30: 다음 advisor 기능 기본값은 보수적으로 시작하고 settings로 조정 가능하게 한다. 재량 지출 속도는 최근 6개 마감월 baseline, `1.2x/1.5x`, coverage `0.7`; 구매 게이트는 100,000원, 새 거래처 6개월, cooldown 14일; 반복결제 dry-run 자동 적용은 기본 OFF다.
 - 2026-05-30: 투자 분석은 증권사 API 이후, 자산이동/이체 tracking은 최후순위 P2로 미룬다.
 - 2026-05-25: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다.
 - 2026-05-25: 반복결제의 `할부` / `매월 반복` 구분은 거래 단위 nullable `transactions.recurring_payment_kind`로 먼저 저장하고, 별도 `/operations/recurring-classification` 화면에서 관리한다.

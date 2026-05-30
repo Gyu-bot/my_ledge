@@ -61,9 +61,12 @@ export function AppSidebar({ className, collapsed, onToggle }: AppSidebarProps) 
           collapsed ? 'flex flex-col items-center gap-3' : 'flex items-center gap-3',
         )}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-strong text-sm font-extrabold text-text-inverse">
-          M
-        </div>
+        <img
+          src="/brand-mark.png"
+          alt=""
+          aria-hidden="true"
+          className="h-9 w-9 rounded-lg shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+        />
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <div className="text-body-md font-semibold text-text-primary">MyLedge</div>

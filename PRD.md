@@ -1008,7 +1008,6 @@ CORS_ORIGINS=https://my-ledge.example.com
   - [ ] liquidity classification / loan repayment metadata 설계 고정
 - [ ] P1 operations/data management
   - 백업/복구 안전장치를 전제로 bulk delete / bulk restore 허용
-  - `description_user` / `effective_description`
   - recurring auto-classification
 - [ ] P2 product expansion
   - Settings는 실제 사용자 기능, Token Lab은 개발/리뷰용 도구
