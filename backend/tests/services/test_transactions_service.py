@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
-from app.services.transactions_service import build_transactions_effective_select
+from app.services.transactions_service import build_transactions_effective_select, list_transactions
 
 
 def _transaction(
@@ -163,3 +163,59 @@ async def test_build_transactions_effective_select_exposes_loan_mapping_fields(
     assert row["loan_product_name"] == "신용대출"
     assert row["loan_repayment_type"] == "mixed"
     assert row["loan_link_memo"] == "매월 상환"
+
+
+async def test_list_transactions_search_matches_transaction_memo(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 5, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="기타",
+                description="기본 설명",
+                merchant="기본 거래처",
+                amount=-12000,
+                payment_method="카드",
+                memo="세탁비 정산",
+            ),
+            _transaction(
+                tx_date=date(2026, 5, 11),
+                tx_time=time(11, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="기타",
+                description="다른 설명",
+                merchant="다른 거래처",
+                amount=-15000,
+                payment_method="카드",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await list_transactions(
+        db_session,
+        start_date=None,
+        end_date=None,
+        tx_type="all",
+        source="all",
+        category_major=None,
+        payment_method=None,
+        is_edited="all",
+        include_deleted=False,
+        include_merged=False,
+        search="세탁비",
+        cost_kind="all",
+        fixed_cost_necessity="all",
+        spend_necessity="all",
+        recurring_payment_kind="all",
+        page=1,
+        per_page=40,
+    )
+
+    assert response.total == 1
+    assert response.items[0].memo == "세탁비 정산"

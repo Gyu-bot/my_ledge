@@ -242,9 +242,9 @@
 ### Blocks
 
 - write access alert
-- filter bar
+- filter bar: 검색은 분석용 거래처, 원본 설명, 메모를 대상으로 한다.
 - bulk edit panel: 거래처/카테고리/고정비/필수여부/메모 수정, delete/restore preview 후 실행
-- transaction table: 반복분류는 읽기 전용 표시
+- transaction table: 단건 수정에서 분석용 거래처/카테고리/고정비/필수여부/반복분류/메모를 편집한다.
 - upload accordion
 - upload history accordion
 - danger zone accordion
@@ -322,7 +322,7 @@
 - write access alert
 - KPI: active plans, candidate count, remaining projected amount, missed amount
 - 할부 항목 관리: 새 할부 항목 생성, 표시명/거래처/총 개월/월 납입액/첫 청구일/메모 저장, 상태 badge
-- 거래 연결 후보: `recurring_payment_kind='installment'` 거래와 기존 연결 거래, 단건 연결/해제, 선택 거래 일괄 순차 연결
+- 거래 연결 후보: 검색은 거래처/원본 설명/메모를 대상으로 하며, `recurring_payment_kind='installment'` 거래와 기존 연결 거래, 단건 연결/해제, 선택 거래 일괄 순차 연결
 - 월별 남은 할부 예측: observed/projected/missed 월별 합계와 회차별 schedule card
 - 반복결제 화면에서 넘어온 query(`search`, `linked`, `prefill_merchant`, `prefill_amount`)는 후보 필터와 새 할부 항목 초안에 반영한다.
 

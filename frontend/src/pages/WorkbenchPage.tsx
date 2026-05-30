@@ -15,7 +15,7 @@ import {
 import { useUploadLogs, useUploadFile, useResetData } from '../hooks/useUpload'
 import { useWriteAccess } from '../hooks/useWriteAccess'
 import { useChromeContext } from '../components/layout/chromeContext'
-import type { TransactionBulkMutationPreview, TransactionResponse } from '../types/transaction'
+import type { RecurringPaymentKind, TransactionBulkMutationPreview, TransactionResponse } from '../types/transaction'
 import type { DataResetScope } from '../types/upload'
 import { formatKRW } from '../lib/utils'
 
@@ -49,6 +49,7 @@ interface EditDraft {
   cost_kind?: 'fixed' | 'variable' | ''
   fixed_cost_necessity?: 'essential' | 'discretionary' | ''
   spend_necessity?: 'essential' | 'discretionary' | ''
+  recurring_payment_kind?: RecurringPaymentKind | ''
   memo?: string
 }
 
@@ -104,7 +105,7 @@ export function WorkbenchPage() {
     cost_kind: (appliedFilter.cost_kind as 'fixed' | 'variable') || undefined,
     fixed_cost_necessity: (appliedFilter.fixed_cost_necessity as 'essential' | 'discretionary') || undefined,
     spend_necessity: (appliedFilter.spend_necessity as 'essential' | 'discretionary') || undefined,
-    recurring_payment_kind: (appliedFilter.recurring_payment_kind as 'installment' | 'monthly_recurring') || undefined,
+    recurring_payment_kind: (appliedFilter.recurring_payment_kind as RecurringPaymentKind) || undefined,
     start_date: appliedFilter.start_date || undefined,
     end_date: appliedFilter.end_date || undefined,
     include_deleted: appliedFilter.include_deleted || undefined,
@@ -161,6 +162,7 @@ export function WorkbenchPage() {
       cost_kind: tx.cost_kind ?? '',
       fixed_cost_necessity: tx.fixed_cost_necessity ?? '',
       spend_necessity: tx.spend_necessity ?? '',
+      recurring_payment_kind: tx.recurring_payment_kind ?? '',
       memo: tx.memo ?? '',
     })
   }
@@ -176,6 +178,7 @@ export function WorkbenchPage() {
           cost_kind: (editDraft.cost_kind as 'fixed' | 'variable') || null,
           fixed_cost_necessity: (editDraft.fixed_cost_necessity as 'essential' | 'discretionary') || null,
           spend_necessity: (editDraft.spend_necessity as 'essential' | 'discretionary') || null,
+          recurring_payment_kind: editDraft.recurring_payment_kind || null,
           memo: editDraft.memo || null,
         },
       })
@@ -365,6 +368,7 @@ export function WorkbenchPage() {
   function recurringPaymentKindLabel(value: TransactionResponse['recurring_payment_kind']) {
     if (value === 'installment') return '할부'
     if (value === 'monthly_recurring') return '매월 반복'
+    if (value === 'not_recurring') return '반복 아님'
     return '—'
   }
 
@@ -422,7 +426,7 @@ export function WorkbenchPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className={`${inputCls} w-36`}
-            placeholder="🔍  분석용 거래처·원본 설명 검색"
+            placeholder="🔍  분석용 거래처·원본 설명·메모 검색"
             value={filterDraft.search}
             onChange={(e) => setFilterDraft((f) => ({ ...f, search: e.target.value }))}
           />
@@ -489,6 +493,7 @@ export function WorkbenchPage() {
             <option value="">반복 분류 전체</option>
             <option value="installment">할부</option>
             <option value="monthly_recurring">매월 반복</option>
+            <option value="not_recurring">반복 아님</option>
           </select>
           <div className="w-px h-5 bg-border-faint" />
           <input type="date" className={inputCls} value={filterDraft.start_date} onChange={(e) => setFilterDraft((f) => ({ ...f, start_date: e.target.value }))} />
@@ -712,7 +717,23 @@ export function WorkbenchPage() {
                          }
                        </td>
                        <td className="px-2 py-2">
-                         <span className="text-micro text-text-ghost">{recurringPaymentKindLabel(tx.recurring_payment_kind)}</span>
+                         {isEditing
+                           ? <select
+                               aria-label="반복분류 수정"
+                               className={editInputCls}
+                               value={editDraft.recurring_payment_kind ?? ''}
+                               onChange={(e) => setEditDraft((d) => ({
+                                 ...d,
+                                 recurring_payment_kind: e.target.value as RecurringPaymentKind | '',
+                               }))}
+                             >
+                               <option value="">—</option>
+                               <option value="installment">할부</option>
+                               <option value="monthly_recurring">매월 반복</option>
+                               <option value="not_recurring">반복 아님</option>
+                             </select>
+                           : <span className="text-micro text-text-ghost">{recurringPaymentKindLabel(tx.recurring_payment_kind)}</span>
+                         }
                        </td>
                        <td className="px-2 py-2">
                          {isEditing

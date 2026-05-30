@@ -249,7 +249,7 @@ describe('WorkbenchPage', () => {
     })
   })
 
-  it('keeps recurring classification out of single-row update payloads', async () => {
+  it('updates recurring classification from the single-row edit controls', async () => {
     mockUseWriteAccess.mockReturnValue(true)
     mockUseTransactionList.mockImplementation(() => ({
       data: {
@@ -271,16 +271,58 @@ describe('WorkbenchPage', () => {
     wrap(<WorkbenchPage />)
 
     fireEvent.click(screen.getByRole('button', { name: '✎' }))
+    fireEvent.change(screen.getByLabelText('반복분류 수정'), { target: { value: 'monthly_recurring' } })
     fireEvent.click(screen.getByRole('button', { name: '✓' }))
 
     await waitFor(() => {
       expect(updateTransactionMock).toHaveBeenCalledWith({
         id: 23,
-        data: expect.not.objectContaining({
-          recurring_payment_kind: expect.anything(),
+        data: expect.objectContaining({
+          recurring_payment_kind: 'monthly_recurring',
         }),
       })
     })
+  })
+
+  it('clears recurring classification from the single-row edit controls', async () => {
+    mockUseWriteAccess.mockReturnValue(true)
+    mockUseTransactionList.mockImplementation(() => ({
+      data: {
+        total: 1,
+        page: 1,
+        per_page: 40,
+        items: [
+          buildTransaction({
+            id: 24,
+            description: '비반복 결제',
+            merchant: '일회성 서비스',
+            recurring_payment_kind: 'not_recurring',
+          }),
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<WorkbenchPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '✎' }))
+    fireEvent.change(screen.getByLabelText('반복분류 수정'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '✓' }))
+
+    await waitFor(() => {
+      expect(updateTransactionMock).toHaveBeenCalledWith({
+        id: 24,
+        data: expect.objectContaining({
+          recurring_payment_kind: null,
+        }),
+      })
+    })
+  })
+
+  it('labels the search box as searching merchant, original description, and memo', () => {
+    wrap(<WorkbenchPage />)
+
+    expect(screen.getByPlaceholderText(/분석용 거래처·원본 설명·메모 검색/)).toBeInTheDocument()
   })
 
   it('applies cost and recurring classification filters to the transaction query', () => {

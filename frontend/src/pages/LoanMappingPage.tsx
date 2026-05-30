@@ -274,7 +274,7 @@ export function LoanMappingPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className={`${inputCls} w-40`}
-            placeholder="분석용 거래처·원본 설명·계좌 검색"
+            placeholder="분석용 거래처·원본 설명·메모·계좌 검색"
             value={filterDraft.search}
             onChange={(e) => setFilterDraft((filter) => ({ ...filter, search: e.target.value }))}
           />
