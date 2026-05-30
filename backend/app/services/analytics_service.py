@@ -773,42 +773,34 @@ async def get_purchase_gate_candidates(
         tx_type="지출",
     )
 
-    current_rows = [
-        row for row in rows
-        if ref_start <= row["date"] <= ref_end and row["loan_account_id"] is None
-    ]
+    eligible_rows = [row for row in rows if _is_purchase_gate_queue_row(row)]
+    current_rows = [row for row in eligible_rows if ref_start <= row["date"] <= ref_end]
     prior_merchants = {
         row["merchant"] or row["description"] or "미분류"
-        for row in rows
-        if row["date"] < ref_start and row["loan_account_id"] is None
+        for row in eligible_rows
+        if row["date"] < ref_start
     }
     prior_merchant_monthly: dict[tuple[str, str], int] = defaultdict(int)
     prior_discretionary_monthly: dict[tuple[str, str], int] = defaultdict(int)
     current_merchant_total: dict[str, int] = defaultdict(int)
     current_discretionary_category_total: dict[str, int] = defaultdict(int)
 
-    for row in rows:
-        if row["loan_account_id"] is not None:
-            continue
+    for row in eligible_rows:
         merchant = row["merchant"] or row["description"] or "미분류"
         category = row["effective_category_major"] or "미분류"
         amount = max(0, -row["amount"])
-        if amount == 0:
-            continue
         row_period = _month_key(row["date"])
         if ref_start <= row["date"] <= ref_end:
             current_merchant_total[merchant] += amount
-            if row["spend_necessity"] == "discretionary":
-                current_discretionary_category_total[category] += amount
+            current_discretionary_category_total[category] += amount
         elif row["date"] < ref_start:
             prior_merchant_monthly[(merchant, row_period)] += amount
-            if row["spend_necessity"] == "discretionary":
-                prior_discretionary_monthly[(category, row_period)] += amount
+            prior_discretionary_monthly[(category, row_period)] += amount
 
     enabled = set(settings.enabled_candidate_types)
     excluded_categories = set(settings.excluded_category_names)
     excluded_merchants = set(settings.excluded_merchants)
-    items: list[PurchaseGateCandidateItem] = []
+    candidate_map: dict[int, dict[str, object]] = {}
 
     for row in current_rows:
         merchant = row["merchant"] or row["description"] or "미분류"
@@ -826,26 +818,24 @@ async def get_purchase_gate_candidates(
             "category": category,
         }
         if "large_oneoff" in enabled and amount >= settings.large_purchase_threshold:
-            items.append(
-                _purchase_candidate_item(
-                    candidate_type="large_oneoff",
-                    base=base,
-                    signals={"threshold": settings.large_purchase_threshold},
-                    risk_level="warning",
-                    reasons=[f"{amount:,}원 지출이 큰 지출 기준을 넘었습니다."],
-                    settings=settings,
-                )
+            _append_purchase_candidate_reason(
+                candidate_map,
+                candidate_type="large_oneoff",
+                base=base,
+                signals={"threshold": settings.large_purchase_threshold},
+                risk_level="warning",
+                reasons=[f"{amount:,}원 지출이 큰 지출 기준을 넘었습니다."],
             )
         if "new_merchant" in enabled and merchant not in prior_merchants:
-            items.append(
-                _purchase_candidate_item(
-                    candidate_type="new_merchant",
-                    base=base,
-                    signals={"lookback_months": settings.new_merchant_lookback_months},
-                    risk_level="warning",
-                    reasons=[f"최근 {settings.new_merchant_lookback_months}개월 내 처음 등장한 거래처입니다."],
-                    settings=settings,
-                )
+            _append_purchase_candidate_reason(
+                candidate_map,
+                candidate_type="new_merchant",
+                base=base,
+                signals={"lookback_months": settings.new_merchant_lookback_months},
+                risk_level="warning",
+                reasons=[
+                    f"최근 {settings.new_merchant_lookback_months}개월 내 처음 등장한 거래처입니다."
+                ],
             )
         merchant_baseline = _monthly_average(
             amount
@@ -860,20 +850,18 @@ async def get_purchase_gate_candidates(
             and merchant_spike_ratio is not None
             and merchant_spike_ratio >= settings.merchant_spike_ratio
         ):
-            items.append(
-                _purchase_candidate_item(
-                    candidate_type="merchant_spike",
-                    base=base,
-                    signals={
-                        "merchant_baseline_avg": merchant_baseline,
-                        "merchant_current_total": merchant_current,
-                        "spike_ratio": merchant_spike_ratio,
-                        "threshold_ratio": settings.merchant_spike_ratio,
-                    },
-                    risk_level="warning",
-                    reasons=[f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."],
-                    settings=settings,
-                )
+            _append_purchase_candidate_reason(
+                candidate_map,
+                candidate_type="merchant_spike",
+                base=base,
+                signals={
+                    "baseline_avg": merchant_baseline,
+                    "current_total": merchant_current,
+                    "ratio": merchant_spike_ratio,
+                    "threshold_ratio": settings.merchant_spike_ratio,
+                },
+                risk_level="warning",
+                reasons=[f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."],
             )
         discretionary_baseline = _monthly_average(
             amount
@@ -887,30 +875,47 @@ async def get_purchase_gate_candidates(
         )
         if (
             "discretionary_spike" in enabled
-            and row["spend_necessity"] == "discretionary"
             and discretionary_baseline > 0
             and discretionary_spike_ratio is not None
             and discretionary_spike_ratio >= settings.discretionary_spike_ratio
         ):
-            items.append(
-                _purchase_candidate_item(
-                    candidate_type="discretionary_spike",
-                    base=base,
-                    signals={
-                        "discretionary_baseline_avg": discretionary_baseline,
-                        "discretionary_current_total": discretionary_current,
-                        "spike_ratio": discretionary_spike_ratio,
-                        "threshold_ratio": settings.discretionary_spike_ratio,
-                    },
-                    risk_level="warning",
-                    reasons=[f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."],
-                    settings=settings,
-                )
+            _append_purchase_candidate_reason(
+                candidate_map,
+                candidate_type="discretionary_spike",
+                base=base,
+                signals={
+                    "baseline_avg": discretionary_baseline,
+                    "current_total": discretionary_current,
+                    "ratio": discretionary_spike_ratio,
+                    "threshold_ratio": settings.discretionary_spike_ratio,
+                },
+                risk_level="warning",
+                reasons=[f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."],
             )
 
+    items = [
+        _purchase_candidate_item(
+            candidate_type=str(candidate["candidate_type"]),
+            candidate_types=list(candidate["candidate_types"]),
+            base=candidate["base"],
+            signals=dict(candidate["signals"]),
+            risk_level=str(candidate["risk_level"]),
+            reasons=list(candidate["reasons"]),
+            settings=settings,
+        )
+        for candidate in candidate_map.values()
+    ]
+    legacy_candidate_keys_by_canonical = {
+        item.candidate_key: [
+            _legacy_candidate_key(candidate_type, item.transaction_id)
+            for candidate_type in item.candidate_types
+        ]
+        for item in items
+    }
     review_map = await _load_purchase_gate_review_statuses(
         db_session,
         [item.candidate_key for item in items],
+        legacy_candidate_keys_by_canonical=legacy_candidate_keys_by_canonical,
     )
     for item in items:
         item.review_status = review_map.get(item.candidate_key, "pending")
@@ -937,24 +942,39 @@ async def update_purchase_gate_candidate_review(
     candidate_key: str,
     payload: PurchaseGateReviewPatchRequest,
 ) -> PurchaseGateReviewResponse:
-    candidate_type, transaction_id = _parse_candidate_key(candidate_key)
+    candidate_type, transaction_id, canonical_candidate_key = _parse_candidate_key(
+        candidate_key
+    )
+    review_keys = [canonical_candidate_key]
+    if candidate_key != canonical_candidate_key:
+        review_keys.append(candidate_key)
     result = await db_session.execute(
         select(PurchaseGateReview).where(
-            PurchaseGateReview.candidate_key == candidate_key
+            PurchaseGateReview.candidate_key.in_(review_keys)
         )
     )
-    review = result.scalar_one_or_none()
+    loaded_reviews = {
+        review.candidate_key: review
+        for review in result.scalars().all()
+    }
+    review = loaded_reviews.get(canonical_candidate_key) or loaded_reviews.get(candidate_key)
     if review is None:
         review = PurchaseGateReview(
-            candidate_key=candidate_key,
+            candidate_key=canonical_candidate_key,
             candidate_type=candidate_type,
             transaction_id=transaction_id,
             review_status=payload.review_status,
         )
         db_session.add(review)
     else:
+        review.candidate_key = canonical_candidate_key
+        review.transaction_id = transaction_id
         review.review_status = payload.review_status
-    await db_session.commit()
+    try:
+        await db_session.commit()
+    except Exception:
+        await db_session.rollback()
+        raise
     await db_session.refresh(review)
     return PurchaseGateReviewResponse(
         candidate_key=review.candidate_key,
@@ -1114,26 +1134,46 @@ def _monthly_average(values: object) -> int:
 async def _load_purchase_gate_review_statuses(
     db_session: AsyncSession,
     candidate_keys: list[str],
+    *,
+    legacy_candidate_keys_by_canonical: dict[str, list[str]] | None = None,
 ) -> dict[str, str]:
     if not candidate_keys:
         return {}
+    lookup_keys = set(candidate_keys)
+    if legacy_candidate_keys_by_canonical is not None:
+        for legacy_keys in legacy_candidate_keys_by_canonical.values():
+            lookup_keys.update(legacy_keys)
     result = await db_session.execute(
         select(PurchaseGateReview).where(
-            PurchaseGateReview.candidate_key.in_(candidate_keys)
+            PurchaseGateReview.candidate_key.in_(lookup_keys)
         )
     )
-    return {
+    review_map = {
         review.candidate_key: review.review_status
         for review in result.scalars().all()
     }
+    resolved: dict[str, str] = {}
+    for candidate_key in candidate_keys:
+        review_status = review_map.get(candidate_key)
+        if review_status is None and legacy_candidate_keys_by_canonical is not None:
+            for legacy_key in legacy_candidate_keys_by_canonical.get(candidate_key, []):
+                review_status = review_map.get(legacy_key)
+                if review_status is not None:
+                    break
+        if review_status is not None:
+            resolved[candidate_key] = review_status
+    return resolved
 
 
-def _parse_candidate_key(candidate_key: str) -> tuple[str, int]:
+def _parse_candidate_key(candidate_key: str) -> tuple[str, int, str]:
     candidate_type, separator, transaction_id_text = candidate_key.partition(":")
     if not separator or not candidate_type:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="candidate_key must use '<candidate_type>:<transaction_id>'",
+            detail=(
+                "candidate_key must use 'transaction:<transaction_id>' or "
+                "'<candidate_type>:<transaction_id>'"
+            ),
         )
     try:
         transaction_id = int(transaction_id_text)
@@ -1142,12 +1182,84 @@ def _parse_candidate_key(candidate_key: str) -> tuple[str, int]:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="candidate_key transaction id must be an integer",
         ) from exc
-    return candidate_type, transaction_id
+    return candidate_type, transaction_id, _canonical_candidate_key(transaction_id)
+
+
+def _is_purchase_gate_queue_row(row: RowMapping) -> bool:
+    return (
+        row["loan_account_id"] is None
+        and row["cost_kind"] != "fixed"
+        and row["spend_necessity"] == "discretionary"
+        and max(0, -row["amount"]) > 0
+    )
+
+
+def _append_purchase_candidate_reason(
+    candidate_map: dict[int, dict[str, object]],
+    *,
+    candidate_type: str,
+    base: dict[str, object],
+    signals: dict[str, int | float | str | bool],
+    risk_level: str,
+    reasons: list[str],
+) -> None:
+    transaction_id = int(base["transaction_id"])
+    namespaced_signals = _namespace_purchase_candidate_signals(candidate_type, signals)
+    candidate = candidate_map.get(transaction_id)
+    if candidate is None:
+        candidate_map[transaction_id] = {
+            "candidate_type": candidate_type,
+            "candidate_types": [candidate_type],
+            "base": base,
+            "signals": namespaced_signals,
+            "risk_level": risk_level,
+            "reasons": list(reasons),
+        }
+        return
+
+    candidate_types = candidate["candidate_types"]
+    assert isinstance(candidate_types, list)
+    if candidate_type not in candidate_types:
+        candidate_types.append(candidate_type)
+    candidate["signals"].update(namespaced_signals)
+    candidate["risk_level"] = _higher_purchase_gate_risk_level(
+        str(candidate["risk_level"]),
+        risk_level,
+    )
+    existing_reasons = candidate["reasons"]
+    assert isinstance(existing_reasons, list)
+    for reason in reasons:
+        if reason not in existing_reasons:
+            existing_reasons.append(reason)
+
+
+def _namespace_purchase_candidate_signals(
+    candidate_type: str,
+    signals: dict[str, int | float | str | bool],
+) -> dict[str, int | float | str | bool]:
+    return {
+        f"{candidate_type}_{signal_name}": value
+        for signal_name, value in signals.items()
+    }
+
+
+def _higher_purchase_gate_risk_level(current: str, incoming: str) -> str:
+    priority = {"normal": 0, "warning": 1, "high": 2}
+    return incoming if priority.get(incoming, 0) > priority.get(current, 0) else current
+
+
+def _canonical_candidate_key(transaction_id: int) -> str:
+    return f"transaction:{transaction_id}"
+
+
+def _legacy_candidate_key(candidate_type: str, transaction_id: int) -> str:
+    return f"{candidate_type}:{transaction_id}"
 
 
 def _purchase_candidate_item(
     *,
     candidate_type: str,
+    candidate_types: list[str],
     base: dict[str, object],
     signals: dict[str, int | float | str | bool],
     risk_level: str,
@@ -1157,8 +1269,9 @@ def _purchase_candidate_item(
     transaction_id = int(base["transaction_id"])
     return PurchaseGateCandidateItem(
         candidate_type=candidate_type,
+        candidate_types=candidate_types,
         transaction_id=transaction_id,
-        candidate_key=f"{candidate_type}:{transaction_id}",
+        candidate_key=_canonical_candidate_key(transaction_id),
         date=base["date"],
         merchant=str(base["merchant"]),
         amount=int(base["amount"]),

@@ -1,5 +1,7 @@
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
+from statistics import median
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -22,6 +24,7 @@ from app.schemas.loan_mapping import (
     LoanTransactionLinkUpsertRequest,
     TransactionLoanLinkResponse,
 )
+from app.services.settings_service import get_analytics_settings
 
 
 async def list_loan_accounts(db_session: AsyncSession) -> LoanAccountsResponse:
@@ -147,6 +150,11 @@ async def upsert_transaction_loan_link(
     link.repayment_type = payload.repayment_type
     link.source = "manual"
     link.memo = payload.memo
+    await db_session.flush()
+    await apply_loan_repayment_estimates_for_latest_snapshots(
+        db_session,
+        loan_keys=[_account_key(account.lender, account.product_name)],
+    )
     await db_session.commit()
     return await _load_link_item_or_500(db_session, transaction_id)
 
@@ -183,6 +191,11 @@ async def bulk_upsert_transaction_loan_links(
         link.source = "manual"
         link.memo = payload.memo
 
+    await db_session.flush()
+    await apply_loan_repayment_estimates_for_latest_snapshots(
+        db_session,
+        loan_keys=[_account_key(account.lender, account.product_name)],
+    )
     await db_session.commit()
     return LoanTransactionLinkBulkUpsertResponse(updated=len(transactions))
 
@@ -202,6 +215,57 @@ async def delete_transaction_loan_link(
     await db_session.delete(link)
     await db_session.commit()
     return True
+
+
+async def apply_loan_repayment_estimates_for_latest_snapshots(
+    db_session: AsyncSession,
+    *,
+    loan_keys: list[tuple[str, str]],
+) -> None:
+    unique_keys = list(dict.fromkeys(loan_keys))
+    if not unique_keys:
+        return
+
+    settings = await get_analytics_settings(db_session)
+    effective = settings.effective.asset_liability_health
+
+    for lender, product_name in unique_keys:
+        latest_loan = await _load_latest_loan_model_for_key(
+            db_session,
+            lender=lender,
+            product_name=product_name,
+        )
+        if latest_loan is None:
+            continue
+
+        observations = await _load_linked_repayment_observations(
+            db_session,
+            lender=lender,
+            product_name=product_name,
+            reference_date=latest_loan.snapshot_date,
+            lookback_months=effective.monthly_payment_estimate_lookback_months,
+        )
+
+        monthly_payment = _estimate_monthly_payment(
+            observations["monthly_totals"],
+            min_observations=effective.monthly_payment_min_observations,
+        )
+        if monthly_payment is not None and _is_estimate_overwritable(
+            latest_loan.monthly_payment_source
+        ):
+            latest_loan.monthly_payment = monthly_payment
+            latest_loan.monthly_payment_source = "estimated_from_linked_transactions"
+
+        repayment_method = _infer_repayment_method(observations["monthly_types"])
+        if repayment_method is not None:
+            latest_loan.repayment_method = repayment_method
+            latest_loan.repayment_method_source = (
+                "estimated_from_linked_transactions"
+            )
+        elif latest_loan.repayment_method is None:
+            latest_loan.repayment_method = "unknown"
+
+    await db_session.flush()
 
 
 async def _load_persisted_accounts(db_session: AsyncSession) -> list[LoanAccount]:
@@ -590,6 +654,104 @@ async def _load_link_item(
         created_at=link.created_at,
         updated_at=link.updated_at,
     )
+
+
+async def _load_latest_loan_model_for_key(
+    db_session: AsyncSession,
+    *,
+    lender: str,
+    product_name: str,
+) -> Loan | None:
+    return await db_session.scalar(
+        select(Loan)
+        .where(Loan.lender == lender)
+        .where(Loan.product_name == product_name)
+        .order_by(Loan.snapshot_date.desc(), Loan.id.desc())
+        .limit(1)
+    )
+
+
+async def _load_linked_repayment_observations(
+    db_session: AsyncSession,
+    *,
+    lender: str,
+    product_name: str,
+    reference_date: date,
+    lookback_months: int,
+) -> dict[str, list[object]]:
+    window_start = _month_window_start(reference_date, lookback_months)
+    result = await db_session.execute(
+        select(
+            Transaction.date,
+            Transaction.amount,
+            LoanTransactionLink.repayment_type,
+        )
+        .join(
+            LoanTransactionLink,
+            LoanTransactionLink.transaction_id == Transaction.id,
+        )
+        .join(
+            LoanAccount,
+            LoanAccount.id == LoanTransactionLink.loan_account_id,
+        )
+        .where(LoanAccount.lender == lender)
+        .where(LoanAccount.product_name == product_name)
+        .where(Transaction.date >= window_start)
+        .where(Transaction.date <= reference_date)
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .order_by(Transaction.date.asc(), Transaction.id.asc())
+    )
+
+    monthly_amounts: dict[tuple[int, int], Decimal] = defaultdict(
+        lambda: Decimal("0")
+    )
+    monthly_types: dict[tuple[int, int], set[str]] = defaultdict(set)
+    for transaction_date, amount, repayment_type in result.all():
+        month_key = (transaction_date.year, transaction_date.month)
+        monthly_amounts[month_key] += Decimal(str(amount or 0))
+        monthly_types[month_key].add(repayment_type or "unknown")
+
+    monthly_totals = [
+        max(-total, Decimal("0")).quantize(Decimal("0.01"))
+        for _month_key, total in sorted(monthly_amounts.items())
+    ]
+    monthly_type_sets = [
+        monthly_types[month_key] for month_key in sorted(monthly_types.keys())
+    ]
+    return {
+        "monthly_totals": monthly_totals,
+        "monthly_types": monthly_type_sets,
+    }
+
+
+def _month_window_start(reference_date: date, lookback_months: int) -> date:
+    month_index = (reference_date.year * 12 + reference_date.month - 1) - (
+        lookback_months - 1
+    )
+    year = month_index // 12
+    month = month_index % 12 + 1
+    return date(year, month, 1)
+
+
+def _estimate_monthly_payment(
+    monthly_totals: list[Decimal],
+    *,
+    min_observations: int,
+) -> Decimal | None:
+    if len(monthly_totals) < min_observations:
+        return None
+    return Decimal(median(monthly_totals)).quantize(Decimal("0.01"))
+
+
+def _infer_repayment_method(monthly_type_sets: list[set[str]]) -> str | None:
+    if monthly_type_sets and all(type_set == {"mixed"} for type_set in monthly_type_sets):
+        return "principal_interest"
+    return None
+
+
+def _is_estimate_overwritable(source: str | None) -> bool:
+    return source in {None, "", "estimated_from_linked_transactions"}
 
 
 def _build_account_candidate(

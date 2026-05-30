@@ -202,6 +202,7 @@ describe('InsightsPage', () => {
         items: [
           {
             candidate_type: 'new_merchant',
+            candidate_types: ['new_merchant', 'merchant_spike'],
             transaction_id: 42,
             candidate_key: 'new_merchant:42',
             merchant: '새거래처',
@@ -227,6 +228,7 @@ describe('InsightsPage', () => {
     expect(screen.getByText('구매 게이트 후보')).toBeInTheDocument()
     expect(screen.getByText('새거래처')).toBeInTheDocument()
     expect(screen.getByText('신규 거래처')).toBeInTheDocument()
+    expect(screen.getByText('거래처 급증')).toBeInTheDocument()
     expect(screen.getByText('리뷰 후보')).toBeInTheDocument()
     expect(screen.getByText('new_merchant: true')).toBeInTheDocument()
     expect(screen.queryByText(/구매 허용|구매 금지/)).not.toBeInTheDocument()

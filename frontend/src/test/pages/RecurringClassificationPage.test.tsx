@@ -20,7 +20,7 @@ vi.mock('../../hooks/useTransactions', () => ({
       items: [
         {
           merchant: '왓챠',
-          proposed_kind: 'monthly_recurring',
+          proposed_kind: 'installment',
           confidence: 1,
           matched_transactions: [
             { id: 31, date: '2026-01-05', amount: -12000 },
@@ -60,7 +60,7 @@ beforeEach(() => {
   applyRecurringDryRunMock = vi.fn().mockResolvedValue({ updated: 2 })
   useRecurringPaymentsMock.mockReturnValue({
     data: {
-      total: 1,
+      total: 3,
       page: 1,
       per_page: 20,
       assumptions: '동일 거래처 기준',
@@ -96,6 +96,22 @@ beforeEach(() => {
           not_recurring_count: 0,
           unclassified_count: 3,
           transaction_ids: [21, 22, 23],
+        },
+        {
+          merchant: '쿠팡',
+          category: '쇼핑',
+          avg_amount: 42000,
+          interval_type: 'monthly',
+          avg_interval_days: 30,
+          occurrences: 3,
+          confidence: 0.95,
+          last_date: '2026-02-03',
+          recurring_payment_kind: 'installment',
+          installment_count: 3,
+          monthly_recurring_count: 0,
+          not_recurring_count: 0,
+          unclassified_count: 0,
+          transaction_ids: [31, 32, 33],
         },
       ],
     },
@@ -133,11 +149,11 @@ describe('RecurringClassificationPage', () => {
 
     await waitFor(() => {
       expect(bulkUpdateTransactionsMock).toHaveBeenCalledWith({
-        ids: [11, 12, 21, 22, 23],
+        ids: [11, 12, 21, 22, 23, 31, 32, 33],
         recurring_payment_kind: 'installment',
       })
     })
-    expect(await screen.findByText('2개 그룹 분류 저장 완료')).toBeInTheDocument()
+    expect(await screen.findByText('3개 그룹 분류 저장 완료')).toBeInTheDocument()
   })
 
   it('can explicitly mark a candidate as not recurring', async () => {
@@ -160,7 +176,7 @@ describe('RecurringClassificationPage', () => {
 
     expect(screen.getByText('dry-run 승인 후보')).toBeInTheDocument()
     expect(screen.getByText('왓챠')).toBeInTheDocument()
-    expect(screen.getAllByText('매월 반복').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('할부').length).toBeGreaterThan(0)
     expect(screen.getByText('confidence 100.0%')).toBeInTheDocument()
     expect(screen.getByText('카테고리 힌트 구독')).toBeInTheDocument()
     expect(screen.getByText('반복 후보 조건과 카테고리 힌트가 일치합니다.')).toBeInTheDocument()
@@ -176,11 +192,24 @@ describe('RecurringClassificationPage', () => {
     await waitFor(() => {
       expect(applyRecurringDryRunMock).toHaveBeenCalledWith({
         merchant: '왓챠',
-        proposed_kind: 'monthly_recurring',
+        proposed_kind: 'installment',
         apply_scope: 'all_matching',
       })
     })
     expect(await screen.findByText('왓챠 dry-run 적용 완료')).toBeInTheDocument()
+  })
+
+  it('adds installment management links for saved installment groups and installment dry-run candidates', () => {
+    wrap(<RecurringClassificationPage />)
+
+    expect(screen.getByRole('link', { name: '쿠팡 할부 관리 이동' })).toHaveAttribute(
+      'href',
+      '/operations/installments?search=%EC%BF%A0%ED%8C%A1&linked=unlinked&prefill_merchant=%EC%BF%A0%ED%8C%A1&prefill_amount=42000',
+    )
+    expect(screen.getByRole('link', { name: '왓챠 할부 관리 이동' })).toHaveAttribute(
+      'href',
+      '/operations/installments?search=%EC%99%93%EC%B1%A0&linked=unlinked&prefill_merchant=%EC%99%93%EC%B1%A0&prefill_amount=12000',
+    )
   })
 
   it('disables classification controls in read-only mode', () => {

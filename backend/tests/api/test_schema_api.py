@@ -68,6 +68,8 @@ def test_expected_tables_exist() -> None:
     } == {("snapshot_date", "broker", "product_name")}
 
     assert not loans.c.lender.nullable
+    assert "monthly_payment_source" in loans.c
+    assert "repayment_method_source" in loans.c
     assert {
         tuple(column.name for column in constraint.columns)
         for constraint in loans.constraints

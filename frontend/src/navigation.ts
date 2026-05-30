@@ -10,6 +10,7 @@ import {
   Repeat,
   SlidersHorizontal,
   Database,
+  WalletCards,
 } from 'lucide-react'
 
 export interface NavigationItem {
@@ -103,6 +104,17 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
     desktopNav: true,
     mobileNav: true,
     Icon: CreditCard,
+  },
+  {
+    path: '/operations/asset-settings',
+    label: '자산 설정',
+    title: '자산 설정',
+    breadcrumb: '운영',
+    section: 'operations',
+    sectionLabel: '운영',
+    desktopNav: true,
+    mobileNav: true,
+    Icon: WalletCards,
   },
   {
     path: '/operations/auto-classification',

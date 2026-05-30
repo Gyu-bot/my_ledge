@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isValidElement } from 'react'
 import { routes } from '../router'
+import { NAVIGATION_ITEMS } from '../navigation'
 
 function findRoute(path: string) {
   return routes.find((route) => route.path === path)
@@ -56,5 +57,24 @@ describe('operations routes', () => {
     const children = root?.children as Array<{ path?: string }> | undefined
 
     expect(children?.some((route) => route.path === 'operations/canonical-views')).toBe(true)
+  })
+
+  it('registers the asset settings operations route', () => {
+    const root = findRoute('/')
+    const children = root?.children as Array<{ path?: string }> | undefined
+
+    expect(children?.some((route) => route.path === 'operations/asset-settings')).toBe(true)
+  })
+})
+
+describe('navigation items', () => {
+  it('exposes an asset settings entry in the operations navigation', () => {
+    expect(NAVIGATION_ITEMS).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: '/operations/asset-settings',
+        label: '자산 설정',
+        section: 'operations',
+      }),
+    ]))
   })
 })

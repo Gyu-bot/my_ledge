@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AlertBanner } from '../components/ui/AlertBanner'
 import { EmptyState } from '../components/ui/EmptyState'
 import { LoadingState } from '../components/ui/LoadingState'
@@ -47,6 +48,22 @@ function orderedDryRunScopes(item: RecurringDryRunItem): RecurringDryRunApplySco
     if (right === 'all_matching') return 1
     return left.localeCompare(right)
   })
+}
+
+function installmentManagementHref(merchant: string, avgAmount: number) {
+  const params = new URLSearchParams({
+    search: merchant,
+    linked: 'unlinked',
+    prefill_merchant: merchant,
+    prefill_amount: String(Math.max(1, Math.round(avgAmount))),
+  })
+  return `/operations/installments?${params.toString()}`
+}
+
+function dryRunAverageAmount(item: RecurringDryRunItem) {
+  if (item.matched_transactions.length === 0) return 0
+  const total = item.matched_transactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+  return total / item.matched_transactions.length
 }
 
 export function RecurringClassificationPage() {
@@ -221,6 +238,9 @@ export function RecurringClassificationPage() {
               {recurringDryRun.data.items.map((item) => {
                 const selectedScope = dryRunScopes[item.merchant] ?? defaultDryRunScope(item)
                 const scopeOptions = orderedDryRunScopes(item)
+                const installmentHref = item.proposed_kind === 'installment'
+                  ? installmentManagementHref(item.merchant, dryRunAverageAmount(item))
+                  : null
                 return (
                   <div key={item.merchant} className="px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -238,6 +258,15 @@ export function RecurringClassificationPage() {
                         <div className="text-micro text-text-ghost mt-1">카테고리 힌트 {item.category_hint}</div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        {installmentHref ? (
+                          <Link
+                            to={installmentHref}
+                            aria-label={`${item.merchant} 할부 관리 이동`}
+                            className="text-caption px-3 py-1.5 border border-border-faint text-text-secondary rounded-md"
+                          >
+                            할부 관리
+                          </Link>
+                        ) : null}
                         <label className="flex items-center gap-1.5">
                           <span className="text-caption text-text-faint">적용 범위</span>
                           <select
@@ -392,6 +421,9 @@ export function RecurringClassificationPage() {
                   {recurring.data.items.map((item) => {
                     const value = overrides[item.merchant] ?? item.recurring_payment_kind
                     const isSelected = selectedMerchants.has(item.merchant)
+                    const installmentHref = value === 'installment'
+                      ? installmentManagementHref(item.merchant, item.avg_amount)
+                      : null
                     return (
                       <tr key={`${item.merchant}:${item.category}`} className={isSelected ? 'bg-surface-selected' : ''}>
                         <td className="px-2 py-2">
@@ -404,7 +436,18 @@ export function RecurringClassificationPage() {
                             className="w-3 h-3 accent-accent disabled:opacity-40"
                           />
                         </td>
-                        <td className="px-2 py-2 text-text-primary font-medium overflow-hidden text-ellipsis whitespace-nowrap">{item.merchant}</td>
+                        <td className="px-2 py-2 align-top">
+                          <div className="text-text-primary font-medium overflow-hidden text-ellipsis whitespace-nowrap">{item.merchant}</div>
+                          {installmentHref ? (
+                            <Link
+                              to={installmentHref}
+                              aria-label={`${item.merchant} 할부 관리 이동`}
+                              className="mt-1 inline-flex text-micro text-info-default underline underline-offset-2"
+                            >
+                              할부 관리
+                            </Link>
+                          ) : null}
+                        </td>
                         <td className="px-2 py-2 text-text-faint overflow-hidden text-ellipsis whitespace-nowrap">{item.category}</td>
                         <td className="px-2 py-2">
                           <span className="text-nano bg-accent-dim text-accent border border-accent-muted px-1.5 py-0.5 rounded">

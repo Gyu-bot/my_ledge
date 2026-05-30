@@ -1,11 +1,18 @@
 from datetime import date, datetime, time
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.loan_account import LoanAccount
+from app.models.loan_transaction_link import LoanTransactionLink
+from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.transaction import Transaction
+from app.schemas.analytics import PurchaseGateReviewPatchRequest
+from app.schemas.settings import PurchaseGateSettings
 from app.services import analytics_service as analytics_service_module
 from app.services.analytics_service import (
     get_category_mom,
+    get_purchase_gate_candidates,
     get_fixed_cost_summary,
     get_fixed_cost_trend,
     get_income_stability,
@@ -14,6 +21,7 @@ from app.services.analytics_service import (
     get_payment_method_patterns,
     get_recurring_payments,
     get_spending_anomalies,
+    update_purchase_gate_candidate_review,
 )
 
 
@@ -1398,3 +1406,294 @@ async def test_get_spending_anomalies_partial_period_uses_same_day_baseline_cuto
     assert response.reference_date == date(2026, 4, 7)
     assert response.is_partial_period is True
     assert "부분 기간 비교" in response.assumptions
+
+
+def _purchase_gate_settings() -> PurchaseGateSettings:
+    return PurchaseGateSettings(
+        large_purchase_threshold=100_000,
+        min_candidate_amount=100_000,
+        new_merchant_lookback_months=6,
+        merchant_spike_ratio=2.0,
+        discretionary_spike_ratio=1.5,
+        review_cooldown_days=14,
+        candidate_risk_threshold="warning",
+        enabled_candidate_types=[
+            "large_oneoff",
+            "new_merchant",
+            "merchant_spike",
+            "discretionary_spike",
+        ],
+        excluded_category_names=[],
+        excluded_merchants=[],
+    )
+
+
+async def test_get_purchase_gate_candidates_deduplicates_reasons_and_filters_queue(
+    db_session: AsyncSession,
+) -> None:
+    loan_account = LoanAccount(lender="테스트은행", product_name="신용대출")
+    baseline_jan = _transaction(
+        tx_date=date(2026, 1, 10),
+        tx_time=time(10, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="평소 쇼핑",
+        merchant="반복상점",
+        amount=-50_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    baseline_feb = _transaction(
+        tx_date=date(2026, 2, 10),
+        tx_time=time(10, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="평소 쇼핑",
+        merchant="반복상점",
+        amount=-50_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    baseline_mar = _transaction(
+        tx_date=date(2026, 3, 10),
+        tx_time=time(10, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="평소 쇼핑",
+        merchant="반복상점",
+        amount=-50_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    spike_tx = _transaction(
+        tx_date=date(2026, 4, 12),
+        tx_time=time(11, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="이번 달 급증",
+        merchant="반복상점",
+        amount=-150_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    new_merchant_tx = _transaction(
+        tx_date=date(2026, 4, 14),
+        tx_time=time(12, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="새 거래처 큰 지출",
+        merchant="새상점",
+        amount=-120_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    fixed_tx = _transaction(
+        tx_date=date(2026, 4, 16),
+        tx_time=time(13, 0),
+        tx_type="지출",
+        category_major="주거",
+        category_minor="관리비",
+        description="고정비 제외",
+        merchant="고정비상점",
+        amount=-200_000,
+        payment_method="카드",
+        cost_kind="fixed",
+        spend_necessity="discretionary",
+    )
+    essential_tx = _transaction(
+        tx_date=date(2026, 4, 18),
+        tx_time=time(14, 0),
+        tx_type="지출",
+        category_major="식비",
+        category_minor="장보기",
+        description="필수 지출 제외",
+        merchant="필수상점",
+        amount=-200_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="essential",
+    )
+    unclassified_tx = _transaction(
+        tx_date=date(2026, 4, 20),
+        tx_time=time(15, 0),
+        tx_type="지출",
+        category_major="취미",
+        category_minor="게임",
+        description="미분류 필요성 제외",
+        merchant="미분류상점",
+        amount=-200_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity=None,
+    )
+    linked_tx = _transaction(
+        tx_date=date(2026, 4, 22),
+        tx_time=time(16, 0),
+        tx_type="지출",
+        category_major="금융",
+        category_minor="대출상환",
+        description="대출 연결 제외",
+        merchant="대출상점",
+        amount=-200_000,
+        payment_method="계좌",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    small_tx = _transaction(
+        tx_date=date(2026, 4, 24),
+        tx_time=time(17, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="최소 금액 미만",
+        merchant="소액상점",
+        amount=-90_000,
+        payment_method="카드",
+        cost_kind="variable",
+        spend_necessity="discretionary",
+    )
+    db_session.add(loan_account)
+    db_session.add_all(
+        [
+            baseline_jan,
+            baseline_feb,
+            baseline_mar,
+            spike_tx,
+            new_merchant_tx,
+            fixed_tx,
+            essential_tx,
+            unclassified_tx,
+            linked_tx,
+            small_tx,
+        ]
+    )
+    await db_session.flush()
+    db_session.add(
+        LoanTransactionLink(
+            transaction_id=linked_tx.id,
+            loan_account_id=loan_account.id,
+            repayment_type="principal",
+            source="manual",
+        )
+    )
+    await db_session.commit()
+
+    db_session.add(
+        PurchaseGateReview(
+            candidate_key=f"large_oneoff:{new_merchant_tx.id}",
+            candidate_type="large_oneoff",
+            transaction_id=new_merchant_tx.id,
+            review_status="ignored",
+        )
+    )
+    await db_session.commit()
+
+    response = await get_purchase_gate_candidates(
+        db_session,
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        settings=_purchase_gate_settings(),
+    )
+
+    assert response.total == 2
+    assert [item.transaction_id for item in response.items] == [
+        spike_tx.id,
+        new_merchant_tx.id,
+    ]
+
+    spike_item = response.items[0]
+    assert spike_item.candidate_key == f"transaction:{spike_tx.id}"
+    assert spike_item.candidate_type == "large_oneoff"
+    assert spike_item.candidate_types == [
+        "large_oneoff",
+        "merchant_spike",
+        "discretionary_spike",
+    ]
+    assert spike_item.review_status == "pending"
+    assert spike_item.signals["large_oneoff_threshold"] == 100_000
+    assert spike_item.signals["merchant_spike_baseline_avg"] == 50_000
+    assert spike_item.signals["merchant_spike_current_total"] == 150_000
+    assert spike_item.signals["merchant_spike_ratio"] == 3.0
+    assert spike_item.signals["discretionary_spike_current_total"] == 360_000
+    assert len(spike_item.reasons) == 3
+
+    new_merchant_item = response.items[1]
+    assert new_merchant_item.candidate_key == f"transaction:{new_merchant_tx.id}"
+    assert new_merchant_item.candidate_type == "large_oneoff"
+    assert new_merchant_item.candidate_types == [
+        "large_oneoff",
+        "new_merchant",
+        "discretionary_spike",
+    ]
+    assert new_merchant_item.review_status == "ignored"
+    assert new_merchant_item.signals["new_merchant_lookback_months"] == 6
+    assert len(new_merchant_item.reasons) == 3
+
+
+async def test_update_purchase_gate_candidate_review_writes_canonical_key(
+    db_session: AsyncSession,
+) -> None:
+    response = await update_purchase_gate_candidate_review(
+        db_session,
+        candidate_key="large_oneoff:42",
+        payload=PurchaseGateReviewPatchRequest(review_status="reviewed"),
+    )
+
+    assert response.candidate_key == "transaction:42"
+    assert response.candidate_type == "large_oneoff"
+    assert response.transaction_id == 42
+    assert response.review_status == "reviewed"
+
+    stored = await db_session.get(PurchaseGateReview, 1)
+    assert stored is not None
+    assert stored.candidate_key == "transaction:42"
+    assert stored.candidate_type == "large_oneoff"
+
+
+async def test_update_purchase_gate_candidate_review_rejects_invalid_candidate_key(
+    db_session: AsyncSession,
+) -> None:
+    with pytest.raises(analytics_service_module.HTTPException) as exc_info:
+        await update_purchase_gate_candidate_review(
+            db_session,
+            candidate_key="transaction:not-a-number",
+            payload=PurchaseGateReviewPatchRequest(review_status="reviewed"),
+        )
+
+    assert exc_info.value.status_code == 422
+
+
+async def test_update_purchase_gate_candidate_review_rolls_back_on_commit_error(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rollback_called = False
+
+    async def failing_commit() -> None:
+        raise RuntimeError("commit failed")
+
+    async def tracking_rollback() -> None:
+        nonlocal rollback_called
+        rollback_called = True
+
+    monkeypatch.setattr(db_session, "commit", failing_commit)
+    monkeypatch.setattr(db_session, "rollback", tracking_rollback)
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        await update_purchase_gate_candidate_review(
+            db_session,
+            candidate_key="transaction:99",
+            payload=PurchaseGateReviewPatchRequest(review_status="ignored"),
+        )
+
+    assert rollback_called is True

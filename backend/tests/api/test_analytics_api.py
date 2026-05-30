@@ -190,17 +190,18 @@ async def test_purchase_gate_candidates_endpoint_returns_large_and_new_merchant_
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["total"] == 2
-    assert [item["candidate_type"] for item in payload["items"]] == [
+    assert payload["total"] == 1
+    assert [item["candidate_type"] for item in payload["items"]] == ["large_oneoff"]
+    assert payload["items"][0]["merchant"] == "새상점"
+    assert payload["items"][0]["amount"] == 120000
+    assert payload["items"][0]["candidate_key"].startswith("transaction:")
+    assert payload["items"][0]["candidate_types"] == [
         "large_oneoff",
         "new_merchant",
     ]
-    assert payload["items"][0]["merchant"] == "새상점"
-    assert payload["items"][0]["amount"] == 120000
-    assert payload["items"][0]["candidate_key"].startswith("large_oneoff:")
     assert payload["items"][0]["review_status"] == "pending"
-    assert payload["items"][0]["signals"]["threshold"] == 100000
-    assert payload["items"][1]["signals"]["lookback_months"] == 6
+    assert payload["items"][0]["signals"]["large_oneoff_threshold"] == 100000
+    assert payload["items"][0]["signals"]["new_merchant_lookback_months"] == 6
 
 
 async def test_purchase_gate_candidates_include_spike_types_and_saved_review_status(
@@ -273,15 +274,16 @@ async def test_purchase_gate_candidates_include_spike_types_and_saved_review_sta
 
     assert response.status_code == 200
     payload = response.json()
-    candidate_types = {item["candidate_type"] for item in payload["items"]}
-    assert "merchant_spike" in candidate_types
-    assert "discretionary_spike" in candidate_types
-
-    merchant_spike = next(
-        item for item in payload["items"] if item["candidate_type"] == "merchant_spike"
-    )
-    assert merchant_spike["signals"]["merchant_baseline_avg"] == 50000
-    assert merchant_spike["signals"]["merchant_current_total"] == 150000
+    assert payload["total"] == 1
+    merchant_spike = payload["items"][0]
+    assert merchant_spike["candidate_type"] == "large_oneoff"
+    assert merchant_spike["candidate_types"] == [
+        "large_oneoff",
+        "merchant_spike",
+        "discretionary_spike",
+    ]
+    assert merchant_spike["signals"]["merchant_spike_baseline_avg"] == 50000
+    assert merchant_spike["signals"]["merchant_spike_current_total"] == 150000
 
     patch_response = await async_client.patch(
         f"/api/v1/analytics/purchase-gate-candidates/{merchant_spike['candidate_key']}/review",

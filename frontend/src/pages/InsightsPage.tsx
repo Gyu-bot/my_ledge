@@ -62,11 +62,19 @@ function riskBadgeClass(value: AnalyticsRiskLevel) {
   return VARIANT_BADGE.ok
 }
 
-function purchaseGateTypeLabel(value: PurchaseGateCandidateItem['candidate_type']) {
+function purchaseGateTypeLabel(value: string) {
   if (value === 'large_oneoff') return '큰 일회성'
   if (value === 'new_merchant') return '신규 거래처'
   if (value === 'merchant_spike') return '거래처 급증'
-  return '재량 급증'
+  if (value === 'discretionary_spike') return '재량 급증'
+  return value
+}
+
+function purchaseGateTypeLabels(item: PurchaseGateCandidateItem) {
+  const rawTypes = item.candidate_types.length > 0
+    ? item.candidate_types
+    : [item.candidate_type]
+  return [...new Set(rawTypes.map((value) => purchaseGateTypeLabel(value)))]
 }
 
 export function InsightsPage() {
@@ -228,6 +236,7 @@ export function InsightsPage() {
              <div className="flex flex-col divide-y divide-border-subtle">
                {purchaseGateCandidates.data.items.map((item) => {
                  const signals = Object.entries(item.signals).slice(0, 2)
+                 const typeLabels = purchaseGateTypeLabels(item)
                  return (
                  <div key={item.candidate_key} className="py-2 first:pt-0 last:pb-0">
                    <div className="flex items-start justify-between gap-3">
@@ -244,9 +253,11 @@ export function InsightsPage() {
                      </span>
                    </div>
                    <div className="flex flex-wrap gap-1.5 mt-2">
-                     <span className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
-                       {purchaseGateTypeLabel(item.candidate_type)}
-                     </span>
+                     {typeLabels.map((label) => (
+                       <span key={label} className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
+                         {label}
+                       </span>
+                     ))}
                      <span className="text-nano bg-surface-bar border border-border-subtle text-text-secondary px-1.5 py-0.5 rounded">
                        리뷰 후보
                      </span>

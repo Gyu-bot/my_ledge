@@ -20,6 +20,9 @@ from app.parsers.transactions import TransactionRow, parse_transactions
 from app.services.auto_classification_service import (
     apply_enabled_auto_classification_after_upload,
 )
+from app.services.loan_mapping_service import (
+    apply_loan_repayment_estimates_for_latest_snapshots,
+)
 
 
 UPLOAD_RETENTION_COUNT = 5
@@ -91,6 +94,14 @@ async def import_transactions_from_workbook(
     try:
         parsed_snapshots = parse_snapshots(workbook)
         await _replace_snapshots(db_session, snapshot_date, parsed_snapshots)
+        await db_session.flush()
+        await apply_loan_repayment_estimates_for_latest_snapshots(
+            db_session,
+            loan_keys=[
+                (str(row["lender"]), str(row["product_name"]))
+                for row in normalize_snapshots_for_storage(parsed_snapshots).loans
+            ],
+        )
         await db_session.commit()
 
         asset_snapshot_count = len(parsed_snapshots.asset_snapshots)
@@ -381,9 +392,16 @@ async def _replace_snapshots(
         (row.lender, row.product_name): {
             "monthly_payment": row.monthly_payment,
             "repayment_method": row.repayment_method,
+            "monthly_payment_source": row.monthly_payment_source,
+            "repayment_method_source": row.repayment_method_source,
         }
         for row in existing_loans
-        if row.monthly_payment is not None or row.repayment_method is not None
+        if (
+            row.monthly_payment is not None
+            or row.repayment_method is not None
+            or row.monthly_payment_source is not None
+            or row.repayment_method_source is not None
+        )
     }
 
     await db_session.execute(

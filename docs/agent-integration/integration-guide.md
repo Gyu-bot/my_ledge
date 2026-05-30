@@ -166,6 +166,7 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 2. `loan_repayment_type`별 `repayment_total` 확인
 3. 필요하면 `GET /api/v1/loan-transaction-links`로 거래 drill-down
 4. 연결 누락 후보는 `vw_unclassified_work_queue.needs_loan_link_review` 확인
+5. `loans.monthly_payment_source`가 `estimated_from_linked_transactions`이면 My Ledge가 연결 거래 월합계 median으로 채운 추정값임을 설명하고, 최종 대출 조건 판단은 에이전트/사용자 확인 영역으로 둔다.
 
 ### 분류 품질 개선
 
@@ -180,8 +181,9 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 
 1. `GET /api/v1/analytics/discretionary-velocity`로 재량 지출 속도와 분류 커버리지를 확인한다.
 2. `GET /api/v1/analytics/purchase-gate-candidates`로 거래 단위 후보를 조회한다.
-3. 후보의 `risk_level`, `reasons`, `assumptions`를 같이 제시하고, 즉시 구매 차단/허용 결론으로 바꾸지 않는다.
-4. 필요 시 `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`로 검토 상태만 반영한다.
+3. `candidate_key`는 `transaction:{transaction_id}`이고, 같은 거래의 여러 사유는 `candidate_types[]`와 `reasons[]`로 묶여 있다.
+4. 후보의 `risk_level`, `reasons`, `assumptions`를 같이 제시하고, 즉시 구매 차단/허용 결론으로 바꾸지 않는다.
+5. 필요 시 `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`로 검토 상태만 반영한다.
 
 ### 할부 잔여 지출 설명
 

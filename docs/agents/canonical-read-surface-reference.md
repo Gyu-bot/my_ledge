@@ -233,7 +233,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `near_liquid_total` | `liquidity_tier='near_liquid'` 자산 합계. 기본 비상금 계산에는 바로 더하지 않는다. |
 | `illiquid_total` | `liquidity_tier='illiquid'` 자산 합계. |
 | `loan_balance_total` | 최신 대출 snapshot 기준 잔액 합계. |
-| `monthly_debt_payment_total` | 사용자가 보강한 `loans.monthly_payment` 합계. 비어 있으면 debt burden confidence가 낮아질 수 있다. |
+| `monthly_debt_payment_total` | `loans.monthly_payment` 합계. `monthly_payment_source='manual'`이면 사용자 확정값이고, `estimated_from_linked_transactions`이면 My Ledge가 대출 연결 거래의 월합계 median으로 보강한 추정값이다. |
 | `asset_row_count`, `loan_row_count` | snapshot 원천 row 수. 데이터 완성도 확인용이다. |
 
 `vw_asset_snapshot_canonical`은 자산 상태를 계산한 표준값이지 "건강/위험" 최종 label이 아니다. 유동성 판단은 `/analytics/liquidity-health`의 `confidence`, `assumptions`, 사용자 목표/예정 지출과 함께 해석한다.
@@ -310,7 +310,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
 | `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
 | `/analytics/discretionary-velocity` | `period`, `discretionary_spend`, `baseline_monthly_spend`, `velocity_ratio`, `risk_level`, `classification_coverage_ratio`, `assumptions`, `reasons` | 월 진행률 기준 재량 지출 속도 신호. `risk_level`은 최종 구매 허용 판단이 아니라 후보 강도와 분류 신뢰도 안내용이다. |
-| `/analytics/purchase-gate-candidates` | `items[]`, `candidate_key`, `risk_level`, `review_status`, `assumptions`, `reasons` | 거래 단위 후보 surface. 큐 항목은 사용자 검토 대상으로, 자동 구매 허용/금지 판정이 아니다. |
+| `/analytics/purchase-gate-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `assumptions`, `reasons` | 재량 구매 검토 queue. My Ledge는 고정비/필수/대출연결/필요성 미분류 거래를 제외하고 거래 1건당 후보 1줄을 만든다. 에이전트는 이를 자동 구매 허용/금지 판정으로 바꾸지 않는다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
 | `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`는 지난 미연결 회차다. projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |

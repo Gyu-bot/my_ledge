@@ -74,6 +74,8 @@ My Ledge는 계산과 근거를 제공하고, 에이전트는 사용자 맥락�
 - `discretionary-velocity`: `risk_level`, `velocity_ratio`는 재량 지출 속도 신호다. 예산 초과 확정이나 지출 금지 판정이 아니다.
 - `purchase-gate-candidates`: 큰 지출/새 거래처/spike 후보와 review state다. 구매 허용/불허 결정은 사용자 목표와 예정 지출을 확인한 에이전트 책임이다.
 - `installments/forecast`: 할부 원장 기반 projection이다. 관측 cashflow가 아니므로 이미 연결된 거래와 이중 계산하지 않는다.
+- `purchase-gate-candidates`: 재량 구매 검토 queue다. My Ledge가 고정비/필수/대출연결/필요성 미분류 거래를 제외하고 거래 단위 후보와 사유를 제공하며, 에이전트는 사용자의 목표와 맥락을 받아 최종 판단을 정리한다.
+- `loans.monthly_payment_source`: `manual`은 사용자 확정값, `estimated_from_linked_transactions`는 대출 연결 거래 기반 My Ledge 추정값이다.
 - `recurring-payments`: `confidence`는 반복 패턴 신호다. 구독 해지/유지 판단은 사용자 맥락이 필요하다.
 - `unclassified_work_queue`: `priority_score`는 데이터 정리 우선순위다. 재무 위험 점수로 말하지 않는다.
 - backend가 제공하지 않은 안정/위험/구매 가능 label을 붙이면 에이전트의 자체 가정임을 밝힌다.

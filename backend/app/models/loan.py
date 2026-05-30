@@ -27,6 +27,8 @@ class Loan(Base):
     interest_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     monthly_payment: Mapped[Decimal | None] = mapped_column(Numeric(15, 2))
     repayment_method: Mapped[str | None] = mapped_column(String(50))
+    monthly_payment_source: Mapped[str | None] = mapped_column(String(50))
+    repayment_method_source: Mapped[str | None] = mapped_column(String(50))
     start_date: Mapped[date | None] = mapped_column(Date)
     maturity_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(

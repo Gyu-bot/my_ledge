@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.loan import Loan
-from app.schemas.asset import SnapshotComparisonMode
+from app.schemas.asset import LoanRepaymentMetadataPatchRequest, SnapshotComparisonMode
 from app.services import assets_service
 
 
@@ -245,3 +245,30 @@ async def test_get_asset_liability_health_reports_liquidity_and_debt_burden(
     assert result.monthly_debt_payment == Decimal("500000.00")
     assert result.debt_payment_ratio == 0.125
     assert result.debt_to_asset_ratio == 0.3846
+
+
+async def test_patch_loan_repayment_metadata_marks_manual_sources(
+    db_session: AsyncSession,
+) -> None:
+    loan = Loan(
+        snapshot_date=date(2026, 5, 31),
+        lender="국민은행",
+        product_name="주담대",
+        balance=Decimal("100000000.00"),
+    )
+    db_session.add(loan)
+    await db_session.commit()
+
+    response = await assets_service.patch_loan_repayment_metadata(
+        db_session,
+        loan.id,
+        LoanRepaymentMetadataPatchRequest(
+            monthly_payment=Decimal("650000.00"),
+            repayment_method="principal_interest",
+        ),
+    )
+
+    assert response.monthly_payment == Decimal("650000.00")
+    assert response.repayment_method == "principal_interest"
+    assert response.monthly_payment_source == "manual"
+    assert response.repayment_method_source == "manual"

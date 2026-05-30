@@ -184,6 +184,7 @@ export type PurchaseGateCandidateStatus =
 
 export interface PurchaseGateCandidateItem {
   candidate_type: PurchaseGateCandidateType
+  candidate_types: string[]
   transaction_id: number
   candidate_key: string
   date: string

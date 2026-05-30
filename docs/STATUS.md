@@ -6,7 +6,7 @@
 ## Current State
 
 - **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
-- **Last Worker:** Codex (2026-05-31T00:04+0900, 에이전트 문서/API·canonical surface 정합성 보강)
+- **Last Worker:** Codex (2026-05-31T16:35+0900, 할부 연계·구매게이트 정리·자산 설정 분리 구현)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -20,6 +20,8 @@
 
 ## Recent Completed
 
+- [x] 대출 월상환 자동 추정·저장 backend 구현: 수동 `PATCH /api/v1/loans/{loan_id}/repayment-metadata`는 `monthly_payment_source` / `repayment_method_source`를 `manual`로 저장하고, 대출 연결 단건/일괄 저장 및 snapshot import 후 latest loan snapshot에 최근 관측월 median 기반 `monthly_payment`와 mixed-link 기반 `repayment_method='principal_interest'`를 자동 보강
+- [x] 구매게이트 정리: 고정비/필수/대출 연결/필요성 미분류 거래를 제외하고, 같은 거래의 여러 사유는 `transaction:{id}` 후보 1줄과 `candidate_types[]`/`reasons[]`로 통합
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
 - [x] 범용 에이전트 문서 정리: API/canonical view 값 의미와 계산식을 [agents/canonical-read-surface-reference.md](agents/canonical-read-surface-reference.md)에 추가하고, 운영/skill handoff 문서를 [agent-integration/](agent-integration/)로 이동
 - [x] README 기능 설명 보강: 프론트엔드 화면별 표시 항목, 주요 지표 의미, canonical view/read surface 목록 정리
@@ -48,6 +50,7 @@
 - [x] P1 advisor/operations batch 구현: discretionary velocity, purchase gate candidates/review state, recurring dry-run apply scope, bulk delete/restore, asset liquidity/loan repayment metadata, `vw_asset_snapshot_canonical`과 관련 frontend 연결
 - [x] P2 제외 구현 batch hardening: 구매 게이트 frontend/backend contract 정렬, same-date snapshot 재업로드 시 자산/대출 사용자 메타데이터 보존, 최신 asset row만 편집 UI에 노출, `liquidity_tier='immediate'` cash-equivalent 의미 정렬, bulk delete undo와 preview 대상 고정, topbar/redirect/bulk 회귀 테스트 보강
 - [x] 검증 완료: backend 전체 pytest 140 passed, backend ruff, frontend vitest 112 passed, frontend lint/typecheck, Codex 인앱 브라우저 local smoke(`/operations/auto-classification`, `/operations/workbench`, `/operations/installments`)
+- [x] frontend asset/installment UX 정렬: 반복결제 목록에 할부 관리 CTA 추가, `/operations/installments` query prefill/label helper 지원, `/analysis/assets` 조회 전용 전환과 `/operations/asset-settings` 분리, 구매게이트 다중 사유 badge 렌더링 및 관련 vitest 회귀 추가
 - [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
@@ -60,7 +63,7 @@
 
 ## In Progress
 
-- 없음. 변동비 기본 재량화/할부 관리 구현과 에이전트 문서 정합성 보강은 완료했다.
+- 없음. 할부 연계, 구매게이트 정리, 자산 설정 분리, 대출 월상환 자동 추정, 관련 문서 정합성 보강은 완료했다.
 
 ## Next Up
 
@@ -70,6 +73,8 @@
 
 ## Key Decisions
 
+- 2026-05-31: latest loan snapshot의 `monthly_payment` 자동 추정은 `loan_accounts(lender + product_name)` 안정 식별자 기준 linked repayment 거래만 사용한다. `monthly_payment_source='manual'`은 덮어쓰지 않고, same-date snapshot 재업로드 후에도 추정 hook을 다시 실행해 `estimated_from_linked_transactions` 값만 최신 linked 거래 median으로 재계산한다.
+- 2026-05-31: 구매게이트는 재량 구매 검토 queue로 정의한다. My Ledge는 후보 생성/사유/검토상태만 제공하고, 고정비·필수지출·대출연결·필요성 미분류 거래는 후보에서 제외한다.
 - 2026-05-28: `docs/STATUS.md`는 handoff 요약만 유지한다. 오래된 완료 로그와 상세 결정 기록은 `docs/archive/status/`로 옮기고, 현재 파일에는 archive 링크와 최신 핵심만 남긴다.
 - 2026-05-28: `POST /api/v1/upload` 원본 파일 retention은 API upload 경로에서만 opt-in 저장한다. service helper 직접 호출은 `persist_upload_file=True`일 때만 저장해 테스트/스크립트 부작용을 줄인다.
 - 2026-05-28: P0/P0.5 canonical view는 DB view를 source of truth로 유지하되, 프론트엔드 대시보드에는 allowlist 기반 `GET /api/v1/canonical-views/dashboard`로 실제 row 값을 제공한다. `/schema`는 reference/registry 역할로 유지한다.
@@ -104,7 +109,7 @@
 
 - 거래처 정규화는 alias rule을 적용한 이후부터 품질이 좋아진다. 기존 raw `merchant` 표기는 사용자가 규칙을 적용하기 전까지 남아 있을 수 있다. 이미 `merchant != description`인 row는 자동 정규화가 덮어쓰지 않는다.
 - `asset_snapshots`의 현금성 분류 기준이 비어 있는 기존 데이터는 초기 emergency fund 계산에서 service heuristic과 assumptions에 의존한다. 사용자가 `immediate` / `near_liquid` / `illiquid`와 cash-equivalent를 저장하면 해당 값이 우선한다.
-- `loans.monthly_payment` 컬럼은 생겼지만 기존 데이터에는 비어 있을 수 있어 debt burden은 사용자 보강 전까지 낮은 confidence가 될 수 있다.
+- `loans.monthly_payment`는 대출 연결 거래가 충분하면 자동 추정된다. 연결 거래가 부족하거나 수동 확정이 필요한 대출은 사용자 보강 전까지 debt burden confidence가 낮을 수 있다.
 - 현재 실데이터 기준 대출원금상환은 raw `type='이체'`가 아니라 `type='지출'`, `category_major='금융'`에 섞여 있다. transfer tracking 구현은 expense-side 재분류를 반드시 포함해야 한다.
 - 대출상환은 사용자 의도상 고정비 지출로도 해석될 수 있으므로 MVP에서는 raw `지출`을 `이체`로 바꾸지 않는다. 별도 transfer/debt movement slice는 파생 레이어로만 제공한다.
 - 현재 지출 실데이터에서 `cost_kind`, `fixed_cost_necessity`가 비어 있으면 fixed-cost/essential/discretionary 진단 효용이 낮다. `vw_unclassified_work_queue`가 이 품질 문제를 먼저 드러내야 한다.

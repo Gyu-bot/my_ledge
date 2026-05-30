@@ -175,6 +175,7 @@ class DiscretionaryVelocityResponse(BaseModel):
 
 class PurchaseGateCandidateItem(BaseModel):
     candidate_type: str
+    candidate_types: list[str]
     transaction_id: int
     candidate_key: str
     date: date

@@ -95,9 +95,15 @@ export interface LoanItem {
   interest_rate: string | null
   monthly_payment?: string | null
   repayment_method?: LoanRepaymentMethod | null
+  monthly_payment_source?: LoanRepaymentMetadataSource | null
+  repayment_method_source?: LoanRepaymentMetadataSource | null
   start_date: string | null
   maturity_date: string | null
 }
+
+export type LoanRepaymentMetadataSource =
+  | 'manual'
+  | 'estimated_from_linked_transactions'
 
 export type LoanRepaymentMethod =
   | 'principal_interest'
@@ -117,6 +123,8 @@ export interface LoanRepaymentMetadataResponse {
   product_name: string
   monthly_payment: string | null
   repayment_method: LoanRepaymentMethod | null
+  monthly_payment_source: LoanRepaymentMetadataSource | null
+  repayment_method_source: LoanRepaymentMetadataSource | null
 }
 
 export interface LoanSummaryResponse {

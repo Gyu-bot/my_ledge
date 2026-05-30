@@ -526,6 +526,7 @@
 - Behavior:
   - maps many transaction rows to one stable loan account
   - returns `404` if any requested transaction or account ID does not exist
+  - after a successful link write, latest matching loan snapshots may receive an estimated `monthly_payment` / `repayment_method` when their corresponding source is not `manual`
 
 #### `DELETE /api/v1/transactions/{transaction_id}/loan-link`
 
@@ -761,7 +762,7 @@
   - when `is_cash_equivalent` is null, `liquidity_tier='immediate'` counts as cash-equivalent; `near_liquid` and `illiquid` do not count in the base emergency-fund months
   - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption
   - same-date snapshot re-import preserves user-confirmed `liquidity_tier` / `is_cash_equivalent` and loan repayment metadata by stable snapshot row identity
-  - monthly debt payment uses `loans.monthly_payment` when available; otherwise it remains an assumption-backed estimate surface
+  - monthly debt payment uses `loans.monthly_payment` when available; `monthly_payment_source` says whether that value is user-confirmed `manual` or `estimated_from_linked_transactions`
   - if required spend or income is omitted, emergency/debt ratios can be `null`
 
 #### `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
@@ -781,6 +782,12 @@
   - `monthly_payment`: decimal `>= 0` or `null`
   - `repayment_method`: `principal_interest`, `principal_equal`, `interest_only`, `unknown`, or `null`
 - Response model: `LoanRepaymentMetadataResponse`
+- Response/source fields:
+  - `monthly_payment_source`: `manual`, `estimated_from_linked_transactions`, or `null`
+  - `repayment_method_source`: `manual`, `estimated_from_linked_transactions`, or `null`
+- Behavior:
+  - supplied `monthly_payment` and `repayment_method` fields are marked `manual`
+  - automatic linked-transaction estimation does not overwrite `monthly_payment_source='manual'`
 
 #### `GET /api/v1/investments/summary`
 
@@ -1037,21 +1044,28 @@
 
 #### `GET /api/v1/analytics/purchase-gate-candidates`
 
-- Purpose: expose review candidates for unusually notable discretionary purchases without deciding whether a purchase is allowed.
+- Purpose: expose a discretionary purchase review queue without deciding whether a purchase is allowed.
 - Query params:
   - `start_date`, `end_date`
   - `review_status`
   - `page`, `per_page`
 - Candidate types: `large_oneoff`, `new_merchant`, `merchant_spike`, `discretionary_spike`.
-- Response items include `candidate_key`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, and `review_status`.
+- Candidate scope:
+  - `loan_account_id is null`
+  - `cost_kind != 'fixed'`
+  - `spend_necessity == 'discretionary'`
+  - amount meets the effective minimum candidate amount
+- Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, and `review_status`.
+- `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
 
 #### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
 - Auth: API key required
 - Purpose: persist review state for a stable purchase candidate key.
 - Request: `review_status` as `pending`, `reviewed`, `ignored`, `snoozed`, or `dismissed`.
-- Response: saved `candidate_key`, `candidate_type`, `transaction_id`, and `review_status`.
+- Response: saved canonical `candidate_key`, `candidate_type`, `transaction_id`, and `review_status`.
   - `snoozed` is currently persisted as review state; cooldown days are exposed in settings/assumptions but do not create a separate hidden expiry filter yet.
+  - legacy keys such as `large_oneoff:42` are accepted and rewritten to `transaction:42` on save.
 
 #### `GET /api/v1/settings/analytics`
 

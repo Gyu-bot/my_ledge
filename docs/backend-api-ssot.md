@@ -167,7 +167,7 @@
 | `GET` | `/api/v1/analytics/net-worth-breakdown` | live | optional `snapshot_date`; latest if omitted |
 | `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income` |
 | `PATCH` | `/api/v1/assets/snapshots/{asset_snapshot_id}/liquidity` | live | API key required, update `liquidity_tier` and `is_cash_equivalent` |
-| `PATCH` | `/api/v1/loans/{loan_id}/repayment-metadata` | live | API key required, update `monthly_payment` and `repayment_method` |
+| `PATCH` | `/api/v1/loans/{loan_id}/repayment-metadata` | live | API key required, update `monthly_payment` / `repayment_method` and mark changed fields as `manual` source |
 
 ### Advisor Analytics
 
@@ -183,8 +183,8 @@
 | `GET` | `/api/v1/analytics/recurring-payments` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/spending-anomalies` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/discretionary-velocity` | live | discretionary spend pace against closed-month prorated baseline |
-| `GET` | `/api/v1/analytics/purchase-gate-candidates` | live | large/new/spike review candidates; optional `review_status` |
-| `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist candidate review status |
+| `GET` | `/api/v1/analytics/purchase-gate-candidates` | live | discretionary purchase review queue; one row per transaction; optional `review_status` |
+| `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist review status under canonical `transaction:{transaction_id}` key |
 
 ## Key Contract Notes
 
@@ -260,14 +260,31 @@
 - Installment plans live in `installment_plans` and represent a user-managed ledger entry with `display_name`, `merchant`, optional `payment_method`, `total_installments`, `monthly_amount`, `first_payment_date`, `status`, and `memo`.
 - Installment transaction links live in `installment_transaction_links`; one transaction can link to one plan, and each `(installment_plan_id, installment_number)` can be used once.
 - `GET /api/v1/installment-transaction-links` returns expense candidates where `recurring_payment_kind='installment'` or an installment link already exists. It supports `linked`, date, search, plan, and pagination filters.
+- The recurring-classification screen may classify a merchant group as `installment`, but the ledger, installment count, per-transaction installment number, and forecast are managed through installment plan/link APIs.
 - `GET /api/v1/installments/forecast` derives the schedule from `first_payment_date + total_installments`. Linked installments are `observed`, unlinked future or current installments are `projected`, and past unlinked installments are `missed`.
 - Forecast totals are a projection surface. Existing cashflow/canonical views stay observation-only, so projected installment totals must not be double-counted with already observed transactions.
+
+### Purchase Gate
+
+- Purchase gate candidates are a discretionary purchase review queue, not a final purchase allow/deny decision.
+- Candidate generation excludes loan-linked transactions, fixed costs, essential variable expenses, and rows whose `spend_necessity` is still unclassified.
+- A transaction appears once even if it triggers multiple signals. `candidate_type` is the representative reason, while `candidate_types[]`, `reasons[]`, and namespaced `signals` carry every matched reason.
+- Canonical review keys are `transaction:{transaction_id}`. Legacy reason keys such as `large_oneoff:42` are still read as fallback state, but new writes store the canonical key.
 
 ### Snapshot Import Behavior
 
 - 업로드는 `snapshot_date`를 필수로 받는다.
 - snapshot 적재는 문서상 UPSERT처럼 보일 수 있지만, **현재 구현은 해당 `snapshot_date` 행을 먼저 삭제한 뒤 새 파싱 결과 전체를 다시 insert** 한다.
 - 즉, contract는 실질적으로 “date-scoped replace”다.
+- same-date snapshot replace preserves saved asset liquidity metadata and loan repayment metadata sources where possible, then reruns linked-loan repayment estimation for the latest affected loan snapshots.
+
+### Loan Repayment Metadata Source
+
+- `loans.monthly_payment_source` and `loans.repayment_method_source` are nullable string sources exposed on loan summary and repayment metadata responses.
+- Supported live values are `manual` and `estimated_from_linked_transactions`.
+- Manual `PATCH /api/v1/loans/{loan_id}/repayment-metadata` marks only the supplied field sources as `manual`.
+- After loan-link writes and snapshot imports, My Ledge estimates latest loan snapshot `monthly_payment` from linked repayment transaction monthly totals using the effective `asset_liability_health.monthly_payment_estimate_*` settings.
+- Auto-estimation never overwrites `monthly_payment_source='manual'`. When all observed linked repayment months use `repayment_type='mixed'`, My Ledge can auto-fill `repayment_method='principal_interest'` with `repayment_method_source='estimated_from_linked_transactions'`.
 
 ### Analytics Settings
 

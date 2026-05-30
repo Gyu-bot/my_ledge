@@ -327,6 +327,10 @@ async def patch_loan_repayment_metadata(
     update_fields = payload.model_dump(exclude_unset=True)
     for field, value in update_fields.items():
         setattr(loan, field, value)
+    if "monthly_payment" in update_fields:
+        loan.monthly_payment_source = "manual"
+    if "repayment_method" in update_fields:
+        loan.repayment_method_source = "manual"
     await db_session.commit()
     await db_session.refresh(loan)
     return LoanRepaymentMetadataResponse.model_validate(loan, from_attributes=True)

@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.app_setting import AppSetting
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.transaction import Transaction
@@ -208,3 +209,128 @@ async def test_bulk_upsert_transaction_loan_links_maps_many_transactions_to_one_
         assert fetched.link is not None
         assert fetched.link.loan_account_id == account.id
         assert fetched.link.repayment_type == "mixed"
+
+
+async def test_upsert_transaction_loan_link_updates_latest_loan_snapshot_estimate(
+    db_session: AsyncSession,
+) -> None:
+    march = _transaction()
+    march.date = date(2026, 3, 20)
+    march.amount = -300000
+    april = _transaction()
+    april.date = date(2026, 4, 20)
+    april.amount = -500000
+    older_loan = Loan(
+        snapshot_date=date(2026, 4, 30),
+        lender="국민은행",
+        product_name="주택담보대출",
+        balance=Decimal("101000000.00"),
+    )
+    latest_loan = Loan(
+        snapshot_date=date(2026, 5, 31),
+        lender="국민은행",
+        product_name="주택담보대출",
+        balance=Decimal("100000000.00"),
+    )
+    db_session.add_all(
+        [
+            march,
+            april,
+            older_loan,
+            latest_loan,
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_estimate_lookback_months",
+                value="3",
+            ),
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_min_observations",
+                value="2",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await upsert_transaction_loan_link(
+        db_session,
+        march.id,
+        LoanTransactionLinkUpsertRequest(
+            lender="국민은행",
+            product_name="주택담보대출",
+            repayment_type="mixed",
+        ),
+    )
+    await upsert_transaction_loan_link(
+        db_session,
+        april.id,
+        LoanTransactionLinkUpsertRequest(
+            lender="국민은행",
+            product_name="주택담보대출",
+            repayment_type="mixed",
+        ),
+    )
+
+    await db_session.refresh(older_loan)
+    await db_session.refresh(latest_loan)
+
+    assert latest_loan.monthly_payment == Decimal("400000.00")
+    assert latest_loan.monthly_payment_source == "estimated_from_linked_transactions"
+    assert latest_loan.repayment_method == "principal_interest"
+    assert latest_loan.repayment_method_source == "estimated_from_linked_transactions"
+    assert older_loan.monthly_payment is None
+
+
+async def test_bulk_upsert_transaction_loan_links_keeps_manual_monthly_payment(
+    db_session: AsyncSession,
+) -> None:
+    march = _transaction()
+    march.date = date(2026, 3, 20)
+    march.amount = -300000
+    april = _transaction()
+    april.date = date(2026, 4, 20)
+    april.amount = -500000
+    latest_loan = Loan(
+        snapshot_date=date(2026, 5, 31),
+        lender="국민은행",
+        product_name="주택담보대출",
+        balance=Decimal("100000000.00"),
+        monthly_payment=Decimal("650000.00"),
+        monthly_payment_source="manual",
+    )
+    db_session.add_all(
+        [
+            march,
+            april,
+            latest_loan,
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_estimate_lookback_months",
+                value="3",
+            ),
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_min_observations",
+                value="2",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    result = await bulk_upsert_transaction_loan_links(
+        db_session,
+        LoanTransactionLinkBulkUpsertRequest(
+            transaction_ids=[march.id, april.id],
+            lender="국민은행",
+            product_name="주택담보대출",
+            repayment_type="mixed",
+        ),
+    )
+
+    await db_session.refresh(latest_loan)
+
+    assert result.updated == 2
+    assert latest_loan.monthly_payment == Decimal("650000.00")
+    assert latest_loan.monthly_payment_source == "manual"
+    assert latest_loan.repayment_method == "principal_interest"
+    assert latest_loan.repayment_method_source == "estimated_from_linked_transactions"

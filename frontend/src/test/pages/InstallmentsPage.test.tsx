@@ -18,7 +18,7 @@ vi.mock('../../hooks/useWriteAccess', () => ({
 
 vi.mock('../../hooks/useTransactions', () => ({
   useInstallmentPlans: () => useInstallmentPlansMock(),
-  useInstallmentTransactionMappings: () => useInstallmentTransactionMappingsMock(),
+  useInstallmentTransactionMappings: (...args: unknown[]) => useInstallmentTransactionMappingsMock(...args),
   useInstallmentForecast: () => useInstallmentForecastMock(),
   useCreateInstallmentPlan: () => ({ mutateAsync: createInstallmentPlanMock, isPending: false }),
   usePatchInstallmentPlan: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -37,11 +37,11 @@ vi.mock('../../components/layout/chromeContext', () => ({
   useChromeContext: () => ({ setMetaBadge: vi.fn() }),
 }))
 
-function wrap(ui: React.ReactNode) {
+function wrap(ui: React.ReactNode, initialEntries: string[] = ['/operations/installments']) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -174,6 +174,30 @@ describe('InstallmentsPage', () => {
         },
       })
     })
+  })
+
+  it('hydrates filters and new-plan draft from query params and shows helper copy for numeric fields', () => {
+    wrap(
+      <InstallmentsPage />,
+      ['/operations/installments?search=%EC%95%A0%ED%94%8C&linked=unlinked&prefill_merchant=%EC%95%A0%ED%94%8C&prefill_amount=120000'],
+    )
+
+    expect(useInstallmentTransactionMappingsMock).toHaveBeenCalledWith(expect.objectContaining({
+      search: '애플',
+      linked: 'unlinked',
+    }))
+    expect(screen.getByLabelText('후보 검색어')).toHaveValue('애플')
+    expect(screen.getByLabelText('후보 연결 상태')).toHaveValue('unlinked')
+    expect(screen.getByLabelText('거래처')).toHaveValue('애플')
+    expect(screen.getByLabelText('월 납입액')).toHaveValue(120000)
+    expect(screen.getByText('카드 할부 전체 회차')).toBeInTheDocument()
+    expect(screen.getByText('매월 청구 예상액')).toBeInTheDocument()
+    expect(screen.getByText('1회차 청구 날짜')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' }))
+
+    expect(screen.getAllByText('선택한 첫 거래가 몇 회차인지').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('이 거래가 전체 할부 중 몇 번째인지').length).toBeGreaterThan(0)
   })
 
   it('disables write controls in read-only mode', () => {

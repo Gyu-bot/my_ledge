@@ -132,6 +132,8 @@ class LoanItemResponse(BaseModel):
     interest_rate: Decimal | None
     monthly_payment: Decimal | None = None
     repayment_method: str | None = None
+    monthly_payment_source: str | None = None
+    repayment_method_source: str | None = None
     start_date: date | None
     maturity_date: date | None
 
@@ -153,6 +155,8 @@ class LoanRepaymentMetadataResponse(BaseModel):
     product_name: str
     monthly_payment: Decimal | None
     repayment_method: str | None
+    monthly_payment_source: str | None = None
+    repayment_method_source: str | None = None
 
 
 class LoanTotalsResponse(BaseModel):

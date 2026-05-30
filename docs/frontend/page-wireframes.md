@@ -14,6 +14,7 @@
 - `/operations/workbench`
 - `/operations/loan-mapping`
 - `/operations/installments`
+- `/operations/asset-settings`
 - `/operations/auto-classification`
 - `/operations/canonical-views`
 - `/operations/recurring-classification`
@@ -163,8 +164,8 @@
   - 총부채
   - 현금성 자산
 - 순자산 추이
-- 유동성 Health: 순자산 구성, 자산별 `liquidity_tier` / 현금성 여부 저장
-- 대출 요약: 대출별 `monthly_payment` / `repayment_method` 저장
+- 유동성 Health: 순자산 구성, 자산별 `liquidity_tier` / 현금성 여부 읽기 전용 표시, `자산 설정` 이동
+- 대출 요약: 대출별 `monthly_payment` / `repayment_method` 읽기 전용 표시
 
 ### Topbar meta
 
@@ -176,8 +177,8 @@
 | --- | --- | --- |
 | KPI row | `KpiCard` x4 | `bg-surface-card`, `border-border`, `text-kpi`, `text-text-secondary`, delta accent/danger |
 | net-worth chart | `SectionCard` + `LineAreaChart` | `bg-surface-card`, `border-border`, `CHART_ACCENT`, shared tooltip contract |
-| liquidity health | `SectionCard` + summary cards + `HorizontalBarList` + inline row editors | `bg-surface-card`, `border-border`, `text-text-secondary`, accent/info tones |
-| loan summary | `SectionCard` + summary cards + compact table + inline row editors | `bg-surface-card`, `border-border`, `text-text-primary`, `text-danger`, table text tokens without separators |
+| liquidity health | `SectionCard` + summary cards + `HorizontalBarList` + read-only metadata rows | `bg-surface-card`, `border-border`, `text-text-secondary`, accent/info tones |
+| loan summary | `SectionCard` + summary cards + compact read-only table | `bg-surface-card`, `border-border`, `text-text-primary`, `text-danger`, table text tokens without separators |
 
 ## Insights `/analysis/insights`
 
@@ -201,7 +202,7 @@
   - 이상 지출 카테고리 수
 - 핵심 인사이트
 - 재량 지출 속도: 월 진행률 대비 재량 지출 baseline 비교
-- 구매 게이트 후보: 큰 일회성/새 거래처/거래처 급증/재량 급증 후보와 review status
+- 구매 게이트 후보: 거래 1건당 1줄, 큰 일회성/새 거래처/거래처 급증/재량 급증 사유 badge 복수 표시, review status
 - 반복 결제: 거래처별 반복 후보와 저장된 `할부` / `매월 반복` 분류 결과를 읽기 전용으로 표시
 - 이상 지출
 - 거래처 소비 Top 5
@@ -283,7 +284,7 @@
 - summary
 - dry-run approval candidates: 카테고리 기반 반복결제 제안, confidence, 매칭 거래, 적용 범위
 - selected group bulk classification panel
-- recurring payment candidate table
+- recurring payment candidate table, `할부` 분류 행의 할부 관리 이동 링크
 - group classification select: `미분류`, `할부`, `매월 반복`, `반복 아님`
 - pagination
 
@@ -320,9 +321,10 @@
 
 - write access alert
 - KPI: active plans, candidate count, remaining projected amount, missed amount
-- 할부 항목 관리: 새 할부 항목 생성, 표시명/메모 저장, 상태 badge
+- 할부 항목 관리: 새 할부 항목 생성, 표시명/거래처/총 개월/월 납입액/첫 청구일/메모 저장, 상태 badge
 - 거래 연결 후보: `recurring_payment_kind='installment'` 거래와 기존 연결 거래, 단건 연결/해제, 선택 거래 일괄 순차 연결
 - 월별 남은 할부 예측: observed/projected/missed 월별 합계와 회차별 schedule card
+- 반복결제 화면에서 넘어온 query(`search`, `linked`, `prefill_merchant`, `prefill_amount`)는 후보 필터와 새 할부 항목 초안에 반영한다.
 
 ### Topbar meta
 
@@ -336,6 +338,37 @@
 | plan management | `SectionCard` + compact form + plan cards | `bg-surface-section`, `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
 | transaction candidates | `SectionCard` + filter bar + table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `text-pagination` |
 | forecast | `SectionCard` + compact summary table + schedule cards | `bg-surface-section`, `border-border-subtle`, `text-info-default`, `text-warn`, `text-danger` |
+
+## Asset Settings `/operations/asset-settings`
+
+```text
+[read-only alert]
+
+[자산 설정 안내]
+
+[자산 유동성 설정]
+
+[대출 상환 설정]
+```
+
+### Blocks
+
+- write access alert
+- 자산 설정 안내: `/analysis/assets`는 조회 전용이며 이 화면에서 metadata를 수정한다는 안내
+- 자산 유동성 설정: 최신 자산 row의 `liquidity_tier`와 `is_cash_equivalent` 편집
+- 대출 상환 설정: 최신 대출 row의 `monthly_payment`와 `repayment_method` 편집
+- read-only mode에서는 저장 컨트롤 disabled
+
+### Topbar meta
+
+- `기준일 YYYY-MM-DD`
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| write access alert | `AlertBanner` | warn state surface and text tokens |
+| asset/loan settings | `SectionCard` + row editors | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `bg-surface-bar` |
 
 ## Auto Classification `/operations/auto-classification`
 

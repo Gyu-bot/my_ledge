@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AlertBanner } from '../components/ui/AlertBanner'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ErrorState } from '../components/ui/ErrorState'
@@ -86,6 +87,18 @@ const DEFAULT_BULK_LINK_DRAFT: BulkLinkDraft = {
 
 const DEFAULT_FORECAST_MONTHS = '6'
 
+function parseLinkedFilter(value: string | null): InstallmentLinkStateFilter {
+  if (value === 'linked' || value === 'unlinked') return value
+  return 'all'
+}
+
+function parsePrefillAmount(value: string | null) {
+  if (!value) return ''
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return ''
+  return String(Math.round(parsed))
+}
+
 function localDateValue() {
   const now = new Date()
   const offsetMinutes = now.getTimezoneOffset()
@@ -110,6 +123,23 @@ function createPlanDraft(plan: InstallmentPlanResponse): PlanDraft {
     display_name: plan.display_name,
     memo: plan.memo ?? '',
   }
+}
+
+function createStateFromSearch(search: string) {
+  const params = new URLSearchParams(search)
+  const filter: LinkFilterState = {
+    ...DEFAULT_LINK_FILTER,
+    search: params.get('search')?.trim() ?? '',
+    linked: parseLinkedFilter(params.get('linked')),
+  }
+
+  const newPlanDraft: NewPlanDraft = {
+    ...createNewPlanDraft(),
+    merchant: params.get('prefill_merchant')?.trim() ?? '',
+    monthly_amount: parsePrefillAmount(params.get('prefill_amount')),
+  }
+
+  return { filter, newPlanDraft }
 }
 
 function createRowLinkDraft(item: InstallmentTransactionMappingItem): RowLinkDraft {
@@ -160,14 +190,16 @@ function forecastStatusClass(status: InstallmentForecastStatus) {
 }
 
 export function InstallmentsPage() {
+  const location = useLocation()
+  const initialState = createStateFromSearch(location.search)
   const hasWrite = useWriteAccess()
   const { setMetaBadge } = useChromeContext()
   const selectPageCheckboxRef = useRef<HTMLInputElement | null>(null)
   const [alert, setAlert] = useState<{ variant: 'success' | 'error'; title: string; description?: string } | null>(null)
-  const [newPlanDraft, setNewPlanDraft] = useState<NewPlanDraft>(createNewPlanDraft)
+  const [newPlanDraft, setNewPlanDraft] = useState<NewPlanDraft>(initialState.newPlanDraft)
   const [planDrafts, setPlanDrafts] = useState<Record<number, PlanDraft>>({})
-  const [filterDraft, setFilterDraft] = useState<LinkFilterState>(DEFAULT_LINK_FILTER)
-  const [appliedFilter, setAppliedFilter] = useState<LinkFilterState>(DEFAULT_LINK_FILTER)
+  const [filterDraft, setFilterDraft] = useState<LinkFilterState>(initialState.filter)
+  const [appliedFilter, setAppliedFilter] = useState<LinkFilterState>(initialState.filter)
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkLinkDraft, setBulkLinkDraft] = useState<BulkLinkDraft>(DEFAULT_BULK_LINK_DRAFT)
@@ -254,6 +286,14 @@ export function InstallmentsPage() {
       selectPageCheckboxRef.current.indeterminate = someVisibleSelected && !allVisibleSelected
     }
   }, [allVisibleSelected, someVisibleSelected])
+
+  useEffect(() => {
+    const next = createStateFromSearch(location.search)
+    setFilterDraft(next.filter)
+    setAppliedFilter(next.filter)
+    setNewPlanDraft(next.newPlanDraft)
+    setPage(1)
+  }, [location.search])
 
   function applyFilter() {
     setAppliedFilter(filterDraft)
@@ -480,56 +520,77 @@ export function InstallmentsPage() {
               </button>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              <input
-                aria-label="할부명"
-                className={inputCls}
-                placeholder="예: 맥북 3개월 할부"
-                value={newPlanDraft.display_name}
-                disabled={!hasWrite}
-                onChange={(event) => setNewPlanDraft((current) => ({ ...current, display_name: event.target.value }))}
-              />
-              <input
-                aria-label="거래처"
-                className={inputCls}
-                placeholder="거래처"
-                value={newPlanDraft.merchant}
-                disabled={!hasWrite}
-                onChange={(event) => setNewPlanDraft((current) => ({ ...current, merchant: event.target.value }))}
-              />
-              <input
-                aria-label="결제수단"
-                className={inputCls}
-                placeholder="결제수단"
-                value={newPlanDraft.payment_method}
-                disabled={!hasWrite}
-                onChange={(event) => setNewPlanDraft((current) => ({ ...current, payment_method: event.target.value }))}
-              />
-              <input
-                aria-label="총 개월"
-                type="number"
-                min={1}
-                className={inputCls}
-                value={newPlanDraft.total_installments}
-                disabled={!hasWrite}
-                onChange={(event) => setNewPlanDraft((current) => ({ ...current, total_installments: event.target.value }))}
-              />
-              <input
-                aria-label="월 납입액"
-                type="number"
-                min={1}
-                className={inputCls}
-                value={newPlanDraft.monthly_amount}
-                disabled={!hasWrite}
-                onChange={(event) => setNewPlanDraft((current) => ({ ...current, monthly_amount: event.target.value }))}
-              />
-              <input
-                aria-label="첫 청구일"
-                type="date"
-                className={inputCls}
-                value={newPlanDraft.first_payment_date}
-                disabled={!hasWrite}
-                onChange={(event) => setNewPlanDraft((current) => ({ ...current, first_payment_date: event.target.value }))}
-              />
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">할부명</span>
+                <input
+                  aria-label="할부명"
+                  className={inputCls}
+                  placeholder="예: 맥북 3개월 할부"
+                  value={newPlanDraft.display_name}
+                  disabled={!hasWrite}
+                  onChange={(event) => setNewPlanDraft((current) => ({ ...current, display_name: event.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">거래처</span>
+                <input
+                  aria-label="거래처"
+                  className={inputCls}
+                  placeholder="거래처"
+                  value={newPlanDraft.merchant}
+                  disabled={!hasWrite}
+                  onChange={(event) => setNewPlanDraft((current) => ({ ...current, merchant: event.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">결제수단</span>
+                <input
+                  aria-label="결제수단"
+                  className={inputCls}
+                  placeholder="결제수단"
+                  value={newPlanDraft.payment_method}
+                  disabled={!hasWrite}
+                  onChange={(event) => setNewPlanDraft((current) => ({ ...current, payment_method: event.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">총 개월</span>
+                <input
+                  aria-label="총 개월"
+                  type="number"
+                  min={1}
+                  className={inputCls}
+                  value={newPlanDraft.total_installments}
+                  disabled={!hasWrite}
+                  onChange={(event) => setNewPlanDraft((current) => ({ ...current, total_installments: event.target.value }))}
+                />
+                <span className="text-micro text-text-ghost">카드 할부 전체 회차</span>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">월 납입액</span>
+                <input
+                  aria-label="월 납입액"
+                  type="number"
+                  min={1}
+                  className={inputCls}
+                  value={newPlanDraft.monthly_amount}
+                  disabled={!hasWrite}
+                  onChange={(event) => setNewPlanDraft((current) => ({ ...current, monthly_amount: event.target.value }))}
+                />
+                <span className="text-micro text-text-ghost">매월 청구 예상액</span>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-micro text-text-faint">첫 청구일</span>
+                <input
+                  aria-label="첫 청구일"
+                  type="date"
+                  className={inputCls}
+                  value={newPlanDraft.first_payment_date}
+                  disabled={!hasWrite}
+                  onChange={(event) => setNewPlanDraft((current) => ({ ...current, first_payment_date: event.target.value }))}
+                />
+                <span className="text-micro text-text-ghost">1회차 청구 날짜</span>
+              </label>
               <input
                 aria-label="계획 메모"
                 className="md:col-span-2 xl:col-span-3 text-caption text-text-secondary bg-surface-bar border border-border-subtle rounded-md px-2.5 py-1.5 disabled:opacity-40"
@@ -638,12 +699,14 @@ export function InstallmentsPage() {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input
+                aria-label="후보 검색어"
                 className={`${inputCls} w-44`}
                 placeholder="거래처·원본 설명 검색"
                 value={filterDraft.search}
                 onChange={(event) => setFilterDraft((current) => ({ ...current, search: event.target.value }))}
               />
               <select
+                aria-label="후보 연결 상태"
                 className={inputCls}
                 value={filterDraft.linked}
                 onChange={(event) => setFilterDraft((current) => ({
@@ -718,18 +781,22 @@ export function InstallmentsPage() {
                     <option key={plan.id} value={plan.id}>{plan.display_name}</option>
                   ))}
                 </select>
-                <input
-                  aria-label="시작 회차"
-                  type="number"
-                  min={1}
-                  className={`${inputCls} w-28`}
-                  value={bulkLinkDraft.start_installment_number}
-                  disabled={!hasWrite || bulkLinkMutation.isPending}
-                  onChange={(event) => setBulkLinkDraft((current) => ({
-                    ...current,
-                    start_installment_number: event.target.value,
-                  }))}
-                />
+                <label className="flex flex-col gap-1">
+                  <span className="text-micro text-text-faint">시작 회차</span>
+                  <input
+                    aria-label="시작 회차"
+                    type="number"
+                    min={1}
+                    className={`${inputCls} w-28`}
+                    value={bulkLinkDraft.start_installment_number}
+                    disabled={!hasWrite || bulkLinkMutation.isPending}
+                    onChange={(event) => setBulkLinkDraft((current) => ({
+                      ...current,
+                      start_installment_number: event.target.value,
+                    }))}
+                  />
+                  <span className="text-micro text-text-ghost">선택한 첫 거래가 몇 회차인지</span>
+                </label>
                 <input
                   aria-label="일괄 연결 메모"
                   className={`${inputCls} w-40`}
@@ -842,21 +909,25 @@ export function InstallmentsPage() {
                                 <option key={plan.id} value={plan.id}>{plan.display_name}</option>
                               ))}
                             </select>
-                            <input
-                              aria-label={`${item.description} 회차`}
-                              type="number"
-                              min={1}
-                              className={`${inputCls} w-20`}
-                              value={draft.installment_number}
-                              disabled={!hasWrite || linkMutation.isPending}
-                              onChange={(event) => setRowLinkDrafts((current) => ({
-                                ...current,
-                                [item.transaction_id]: {
-                                  ...draft,
-                                  installment_number: event.target.value,
-                                },
-                              }))}
-                            />
+                            <label className="flex flex-col gap-1">
+                              <span className="text-micro text-text-faint">거래별 회차</span>
+                              <input
+                                aria-label={`${item.description} 회차`}
+                                type="number"
+                                min={1}
+                                className={`${inputCls} w-20`}
+                                value={draft.installment_number}
+                                disabled={!hasWrite || linkMutation.isPending}
+                                onChange={(event) => setRowLinkDrafts((current) => ({
+                                  ...current,
+                                  [item.transaction_id]: {
+                                    ...draft,
+                                    installment_number: event.target.value,
+                                  },
+                                }))}
+                              />
+                              <span className="text-micro text-text-ghost">이 거래가 전체 할부 중 몇 번째인지</span>
+                            </label>
                             <input
                               aria-label={`${item.description} 연결 메모`}
                               className={`${inputCls} w-28`}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { AssetsPage } from '../../pages/AssetsPage'
@@ -214,59 +214,17 @@ describe('AssetsPage', () => {
     expect(screen.getByText('유동성 Health')).toBeInTheDocument()
   })
 
-  it('saves editable liquidity metadata for each asset snapshot row', async () => {
+  it('shows asset and loan metadata as read-only text and routes editing to asset settings', () => {
     wrap(<AssetsPage />)
 
-    fireEvent.change(screen.getByLabelText('생활비 통장 유동성 등급'), {
-      target: { value: 'near_liquid' },
-    })
-    fireEvent.click(screen.getByLabelText('생활비 통장 현금성 자산'))
-    fireEvent.click(screen.getByRole('button', { name: '생활비 통장 유동성 저장' }))
-
-    await waitFor(() => {
-      expect(patchAssetLiquidityMock).toHaveBeenCalledWith({
-        id: 101,
-        data: {
-          liquidity_tier: 'near_liquid',
-          is_cash_equivalent: false,
-        },
-      })
-    })
-  })
-
-  it('saves editable monthly payment and repayment method for each loan row', async () => {
-    wrap(<AssetsPage />)
-
-    fireEvent.change(screen.getByLabelText('우리집 주담대 월상환액'), {
-      target: { value: '75' },
-    })
-    fireEvent.change(screen.getByLabelText('우리집 주담대 상환 방식'), {
-      target: { value: 'principal_equal' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '우리집 주담대 상환 메타 저장' }))
-
-    await waitFor(() => {
-      expect(patchLoanRepaymentMetadataMock).toHaveBeenCalledWith({
-        id: 201,
-        data: {
-          monthly_payment: '75',
-          repayment_method: 'principal_equal',
-        },
-      })
-    })
-  })
-
-  it('disables asset and loan metadata editing when write access is unavailable', () => {
-    mockUseWriteAccess.mockReturnValue(false)
-
-    wrap(<AssetsPage />)
-
-    expect(screen.getByText('읽기 전용 모드')).toBeInTheDocument()
-    expect(screen.getByLabelText('생활비 통장 유동성 등급')).toBeDisabled()
-    expect(screen.getByLabelText('생활비 통장 현금성 자산')).toBeDisabled()
-    expect(screen.getByRole('button', { name: '생활비 통장 유동성 저장' })).toBeDisabled()
-    expect(screen.getByLabelText('우리집 주담대 월상환액')).toBeDisabled()
-    expect(screen.getByLabelText('우리집 주담대 상환 방식')).toBeDisabled()
-    expect(screen.getByRole('button', { name: '우리집 주담대 상환 메타 저장' })).toBeDisabled()
+    expect(screen.getByText('생활비 통장')).toBeInTheDocument()
+    expect(screen.getByText('즉시 사용')).toBeInTheDocument()
+    expect(screen.getAllByText('현금성').length).toBeGreaterThan(0)
+    expect(screen.getByText('원리금 균등')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '자산 설정으로 이동' })).toHaveAttribute('href', '/operations/asset-settings')
+    expect(screen.queryByLabelText('생활비 통장 유동성 등급')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('우리집 주담대 월상환액')).not.toBeInTheDocument()
+    expect(patchAssetLiquidityMock).not.toHaveBeenCalled()
+    expect(patchLoanRepaymentMetadataMock).not.toHaveBeenCalled()
   })
 })
