@@ -11,6 +11,7 @@ Hermes, Codex, Claude, OpenClaw 등 범용 에이전트가 `my_ledge`를 읽기/
 2. [../agents/canonical-read-surface-reference.md](../agents/canonical-read-surface-reference.md)
    - API와 canonical view 값의 의미
    - 계산식과 null/비율/금액 해석 규칙
+   - My Ledge 계산/후보와 에이전트 최종 해석의 책임 경계
    - 에이전트 답변 시 주의사항
 3. [integration-guide.md](integration-guide.md)
    - API/DB 연결 정보

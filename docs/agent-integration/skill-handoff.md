@@ -15,6 +15,7 @@
 - 읽기/쓰기 권한 분리 강제
 - canonical view와 analytics endpoint 우선 사용
 - API/canonical view 값의 의미를 [canonical-read-surface-reference.md](../agents/canonical-read-surface-reference.md) 기준으로 해석
+- My Ledge가 제공하는 계산/후보/근거/settings/review state와 에이전트가 수행하는 최종 해석/권고를 분리
 - 업로드, 거래 편집, 대출 연결, reset API 호출 절차 안내
 - 실패 시 재확인 경로 안내
 
@@ -25,6 +26,7 @@
 - raw table 기반 재계산을 기본값으로 삼는 분석
 - 브라우저 자동화를 기본 write 경로로 사용하는 흐름
 - 특정 에이전트 런타임에만 맞춘 하드코딩
+- `health`, `anomaly`, `true_spendable`, `priority_score` 같은 계산 신호를 My Ledge의 최종 조언처럼 포장하는 흐름
 
 ## 최소 입력값
 
@@ -57,7 +59,8 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - advisor/분석 질문은 analytics endpoint 또는 `GET /api/v1/canonical-views/dashboard`를 먼저 사용한다.
 - SQL이 필요하면 raw table보다 canonical view를 우선 사용한다.
 - 거래 category는 `effective_category_major`, `effective_category_minor` 기준이다.
-- 거래처 집계는 canonical `merchant` 기준이다. alias/정규화는 아직 없다.
+- 거래처 집계는 canonical `merchant` 기준이다. `merchant`는 분석용 거래처명이고, raw import 원문은 `description`이다.
+- 거래처 정규화 rule은 raw `description`을 매칭해 `merchant`에 반영한다. 이미 `merchant != description`인 row는 수동 수정 또는 기존 정규화로 보고 자동으로 덮어쓰지 않는다.
 - `이체`는 수입/지출에서 제외하고 활동량으로만 해석한다.
 - 삭제/병합 거래는 기본 제외다.
 - 삭제/병합 상태까지 봐야 하면 raw `transactions` 또는 `GET /api/v1/transactions?include_deleted=true&include_merged=true`를 사용한다.
@@ -65,6 +68,12 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - `income_basis='estimated'`인 dashboard row는 관측값과 예상값을 분리해 답한다.
 - `monthly-cashflow.transfer`는 `abs(amount)` 기준 activity volume이며 `net_cashflow` 계산에는 포함하지 않는다.
 - `spending-anomalies` 설정 해석 순서는 `명시적 query param > persisted setting > code default`다.
+- `true_spendable`은 계산상 가용액이며 구매 가능/허용 판정이 아니다.
+- `liquidity-health`의 `health`는 계산 묶음 이름이다. 실제 재무 건강/위험 평가는 에이전트 해석으로 분리한다.
+- `anomaly_score`와 anomaly `reason`은 baseline 대비 변화 후보다. 문제 지출 확정이나 낭비 판정이 아니다.
+- `confidence`는 패턴 탐지 또는 데이터 완성도 신호다. 에이전트 조언의 확실성 자체로 말하지 않는다.
+- `priority_score`와 `priority_reason`은 데이터 품질 정리 우선순위다. 재무 위험 점수처럼 말하지 않는다.
+- backend가 제공하지 않은 안정/위험/구매 가능 label을 붙일 때는 에이전트 자체 가정과 사용자 맥락 기반 해석임을 밝힌다.
 
 ### Write 규칙
 
@@ -108,6 +117,7 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 3. 부족하면 read API 사용
 4. 그래도 부족하면 readonly DB에서 canonical view 조회
 5. raw table이 필요하면 왜 필요한지 명시
+6. My Ledge 값이 계산/후보인지 최종 판정인지 구분하고, 최종 조언은 사용자 맥락을 확인한 뒤 말한다
 
 ### 업로드 요청
 
@@ -139,11 +149,12 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - readonly role에 `statement_timeout=30s`가 걸려 있다.
 - canonical read surface 값 의미를 skill 문서에 포함했다.
 - 진행월 estimated income row를 관측값과 분리해 설명하도록 했다.
+- `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable` 해석 경계를 포함했다.
 - 업로드 API를 `X-API-Key`로 호출할 수 있다.
 - 거래 수정/삭제/복원 API를 호출할 수 있다.
 - 대출 연결 write API를 호출할 수 있다.
 - analytics settings API를 호출할 수 있다.
-- `merchant` 정규화 부재와 `merge` endpoint stub 상태를 명시했다.
+- `merchant`/`description` 의미 차이와 `merge` endpoint stub 상태를 명시했다.
 - 실패 시 재확인 경로가 적혀 있다.
 
 ## 최소 검증 시나리오

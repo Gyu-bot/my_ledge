@@ -6,7 +6,7 @@
 ## Current State
 
 - **Phase:** P1 advisor surface 1-4 구현 완료. 지출 필수/재량 축 일반화, merchant normalization, 반복 거래처 월별 view, 유동성/부채 health API와 frontend 노출이 live. 투자 분석과 자산이동/이체 tracking은 후순위로 보류.
-- **Last Worker:** Codex (2026-05-30T20:21+0900, 거래처 정규화 description 기준 적용 및 수동 merchant 보존)
+- **Last Worker:** Codex (2026-05-30T21:05+0900, 에이전트 판단 책임 경계 문서 반영)
 - **Branch:** main
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -37,6 +37,8 @@
 - [x] 대출 매칭 규칙 기준 선택 구현: `/operations/auto-classification`에서 분석용 거래처(`merchant`) 또는 원본 설명(`description`)을 선택해 대출 상환 자동 연결 규칙을 저장/적용
 - [x] 프론트엔드 거래처 표기 정리: 작업대/대출 연결/지출/인사이트/반복분류 화면에서 `merchant`는 분석용 거래처, `description`은 원본 설명으로 구분
 - [x] 거래처 정규화 기준 보정: alias rule은 원본 설명(`description`)을 매칭해 분석용 거래처(`merchant`)에 반영하고, `merchant != description`인 수동 수정 추정 row는 보존
+- [x] Advisor 책임 경계 문서화: My Ledge는 계산/후보/근거/settings/review state를 맡고, 에이전트는 사용자 맥락 기반 최종 해석과 조언을 맡도록 [planned-work.md](planned-work.md)에 반영
+- [x] 에이전트 문서 판단 경계 보강: `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`을 My Ledge의 최종 조언이 아니라 계산/후보/데이터 품질 신호로 해석하도록 [agents/](agents/)와 [agent-integration/](agent-integration/) 문서에 반영
 - [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
@@ -96,6 +98,8 @@
 - 2026-05-30: merchant normalization은 자동 병합이 아니라 `merchant_alias_rules` 포함 패턴 기반 일괄 정규화로 시작한다.
 - 2026-05-30: merchant normalization의 매칭 기준은 raw `description`이다. 결과는 `merchant`에 쓰고, `merchant != description`인 row는 수동 수정 또는 기존 정규화로 보고 덮어쓰지 않는다.
 - 2026-05-30: 대출 매칭 규칙은 `match_field='merchant'|'description'`으로 기준을 명시한다. `merchant`는 분석용/정규화 가능 값이고 `description`은 raw import 원문이다.
+- 2026-05-30: 재량 지출 속도와 구매 게이트에서 My Ledge는 최종 구매 판단을 하지 않는다. My Ledge는 재현 가능한 계산, 후보, 근거, confidence, assumptions, settings, review state를 제공하고, 에이전트가 사용자 맥락 기반 최종 해석과 조언을 맡는다.
+- 2026-05-30: 현재 구현된 canonical/API surface에서도 `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`은 최종 재무 조언이 아니라 계산/후보/데이터 품질 신호로 해석한다. 에이전트가 안정/위험/구매 가능 label을 붙이면 자체 가정과 사용자 맥락 기반 해석임을 밝혀야 한다.
 - 2026-05-30: 투자 분석은 증권사 API 이후, 자산이동/이체 tracking은 최후순위 P2로 미룬다.
 - 2026-05-25: 대출 상환 거래 연결은 기존 거래 작업대 bulk edit에 섞지 않고 별도 `/operations/loan-mapping` 화면으로 분리한다.
 - 2026-05-25: 반복결제의 `할부` / `매월 반복` 구분은 거래 단위 nullable `transactions.recurring_payment_kind`로 먼저 저장하고, 별도 `/operations/recurring-classification` 화면에서 관리한다.

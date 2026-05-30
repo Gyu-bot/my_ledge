@@ -26,6 +26,22 @@
 | 비율 값 | backend 값은 보통 `0.25 = 25%` 형태다. UI 표시 시 퍼센트로 변환한다. |
 | `null` | 계산 불가, 기준 부족, 미분류, 또는 사용자가 아직 입력하지 않은 상태를 의미한다. `0`과 다르게 해석한다. |
 
+## My Ledge / Agent 판단 책임 경계
+
+My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품질 신호, 사용자 settings, review state를 제공한다.
+에이전트는 이 값을 사용자 맥락과 대화 목적에 맞게 해석하고, 최종 조언/권고/행동 제안을 책임진다.
+
+| 신호 | My Ledge가 제공하는 것 | 에이전트가 판단할 것 |
+|---|---|---|
+| `health` endpoint | 유동성/부채 부담 계산값, confidence, assumptions. | 재무 상태가 실제로 위험한지, 어떤 행동이 필요한지. |
+| `anomaly_score`, `reason` | baseline 대비 변화 후보와 계산 근거. | 낭비/문제/정상 이벤트/계절성 지출 여부. |
+| `confidence` | 패턴 탐지 또는 데이터 완성도 신호. | 조언 강도, 추가 확인 필요성, 사용자에게 물어볼 질문. |
+| `priority_score`, `priority_reason` | 데이터 정리/검토 우선순위. | 재무 위험 우선순위로 볼지 여부. 기본은 데이터 품질 queue로만 해석한다. |
+| `true_spendable`, `estimated_*` | 관측/예상 수입과 지출 차감 후 계산값. | "써도 된다"는 구매 판단이나 예산 행동 권고. |
+| `risk_level`, `review_priority` | threshold 기반 후보 강도 또는 검토 우선순위. | 최종 위험 판정, 구매/지출 허용 여부, 사용자별 대응. |
+
+에이전트는 My Ledge가 명시적으로 제공하지 않은 label을 붙일 수 있지만, 그 label은 에이전트의 해석이며 My Ledge의 확정 판정이 아님을 답변에 드러낸다.
+
 ## 어떤 surface를 먼저 쓸까
 
 | 질문 유형 | 우선 surface | 보조 surface |
@@ -35,11 +51,11 @@
 | 월별 현금흐름/저축률 | `vw_monthly_cashflow` 또는 `GET /api/v1/analytics/monthly-cashflow` | `GET /api/v1/canonical-views/dashboard` |
 | 고정비/변동비 구조 | `vw_fixed_cost_monthly_summary` 또는 fixed-cost analytics endpoints | `vw_unclassified_work_queue` |
 | 대출 상환 부담 | `vw_loan_repayment_monthly` | `GET /api/v1/loan-transaction-links` |
-| 실제 가용 현금 | `vw_true_spendable_monthly` | dashboard endpoint의 estimated enrichment |
+| 실제 가용 현금 | `vw_true_spendable_monthly` | dashboard endpoint의 estimated enrichment. 구매 가능 판단이 아니라 계산 surface다. |
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
 | 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
-| 분류 품질 개선 대상 | `vw_unclassified_work_queue` | operations APIs |
-| 유동성/부채 health | `GET /api/v1/analytics/liquidity-health` | `GET /api/v1/analytics/net-worth-breakdown` |
+| 분류 품질 개선 대상 | `vw_unclassified_work_queue` | operations APIs. 재무 위험 우선순위가 아니라 데이터 품질 queue다. |
+| 유동성/부채 health | `GET /api/v1/analytics/liquidity-health` | `GET /api/v1/analytics/net-worth-breakdown`. health라는 이름은 계산 묶음 이름이며 최종 상태 판정이 아니다. |
 | schema 탐색 | `GET /api/v1/schema` | 이 문서와 backend reference |
 
 ## `GET /api/v1/canonical-views/dashboard`
@@ -80,6 +96,7 @@ Response groups:
 | `estimated_remaining_after_variable_spend` | 예상 수입 기준 `estimated_income_total - loan_repayment_total - fixed_commitment_total - variable_total`. |
 
 예상 수입은 현재 월 row에서 관측 수입이 최근 수입 baseline의 50% 미만일 때만 붙는다. DB view 원본 값은 바꾸지 않는다.
+`true_spendable_monthly`는 계산상 가용액을 보여주는 surface다. 에이전트는 이 값을 "지금 써도 되는 돈"으로 단정하지 않고, 사용자의 목표/현금흐름/예정 지출을 함께 물어본 뒤 해석한다.
 
 ## Canonical DB Views
 
@@ -256,11 +273,11 @@ Response groups:
 | `/analytics/fixed-cost-trend` | monthly fixed/variable/essential/discretionary/unclassified fields | 월별 고정비 구조 추이. |
 | `/analytics/merchant-spend` | `merchant`, `amount`, `count`, `avg_amount`, `last_seen_at` | 거래처별 총액, 빈도, 평균 금액, 마지막 거래일. |
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
-| `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공하고 안정/불안정 label은 frontend 해석이다. |
-| `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. |
-| `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. |
+| `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
+| `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
+| `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
 | `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. |
-| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 부채 부담 추정. 입력/분류가 부족하면 confidence와 assumptions를 확인한다. |
+| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. 입력/분류가 부족하면 confidence와 assumptions를 확인한다. |
 
 ## 에이전트 답변 시 주의사항
 
@@ -271,4 +288,5 @@ Response groups:
 - 자산이동/이체 별도 tracking은 뒤로 미뤘다. 현재는 월별 현금흐름의 `transfer_activity_total`만 보조 값으로 쓴다.
 - `not_recurring`은 “반복 아님으로 검토됨”이지 “거래가 사라짐”이 아니다.
 - `unclassified_work_queue`는 지출 규모가 큰 미분류 거래를 우선 노출하므로, 전체 오류 목록이 아니라 개선 우선순위다.
+- `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable` 같은 단어를 사용자 조언으로 바로 번역하지 않는다. 먼저 계산 기준과 데이터 품질 신호로 설명한다.
 - backend가 label을 제공하지 않는 지표에 임의 등급을 붙일 때는 자체 가정임을 밝힌다.

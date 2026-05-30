@@ -14,6 +14,7 @@
 - ad-hoc 분석은 readonly DB 직접 조회를 허용한다.
 - 업로드, 거래 수정, 대출 연결, reset 같은 쓰기 동작은 API만 사용한다.
 - 에이전트가 raw table을 재계산해서 별도 의미를 만들기보다, canonical/API 값의 정의를 먼저 따른다.
+- My Ledge는 계산, 후보, 근거, settings, review state를 제공하고 최종 해석/권고/행동 제안은 에이전트가 사용자 맥락으로 판단한다.
 
 ## 연결 정보
 
@@ -101,6 +102,21 @@ readonly DB role 요구사항:
 5. drill-down이 필요하면 readonly DB에서 canonical view를 조회한다.
 6. raw table은 import fidelity, 삭제/병합 감사, snapshot 원본 확인 같은 보조 작업에만 사용한다.
 
+## 판단 책임 경계
+
+에이전트는 My Ledge의 read surface를 "판정"이 아니라 "근거가 붙은 계산/후보"로 취급한다.
+
+| 값/표현 | 해석 규칙 |
+|---|---|
+| `true_spendable`, `estimated_*` | 계산상 가용액과 예상 보정이다. "써도 된다"는 구매 판단으로 단정하지 않는다. |
+| `liquidity-health` | endpoint 이름은 계산 묶음 이름이다. 비상금 개월 수, 부채상환비율, confidence, assumptions를 근거로 에이전트가 해석한다. |
+| `anomaly_score`, anomaly `reason` | baseline 대비 변화 후보다. 낭비/문제 지출 확정이 아니다. |
+| `confidence` | 패턴 탐지 또는 데이터 완성도 신호다. 조언의 확실성 자체가 아니다. |
+| `priority_score`, `priority_reason` | 데이터 품질 정리 우선순위다. 재무 위험 우선순위로 자동 변환하지 않는다. |
+| `risk_level`, `review_priority` | threshold 기반 후보 강도나 검토 우선순위다. 최종 위험/허용 판정은 에이전트 해석이다. |
+
+backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트가 붙일 때는 자체 가정과 사용자 맥락 기반 해석임을 답변에 드러낸다.
+
 ## 권장 canonical SQL 대상
 
 - `vw_transactions_effective`
@@ -120,6 +136,7 @@ readonly DB role 요구사항:
 2. `true_spendable_monthly[]`에서 `income_basis` 확인
 3. `income_basis='estimated'`면 관측 수입과 예상 수입을 분리해 설명
 4. `loan_repayment_total`, `fixed_commitment_total`, `variable_total`을 각각 분리해서 원인 설명
+5. `true_spendable`을 "남은 계산값"으로 설명하고, 구매/지출 가능 여부는 사용자의 예정 지출과 목표를 확인한 뒤 조언
 
 ### 대출 상환 분석
 
@@ -135,6 +152,7 @@ readonly DB role 요구사항:
 3. 비용 성격은 transaction update/bulk-update API로 수정
 4. 대출 연결은 loan-link API로 수정
 5. 반복 결제 분류는 recurring classification API/화면 흐름을 사용
+6. `priority_score`는 데이터 정리 우선순위로만 설명하고 재무 위험 점수처럼 말하지 않는다
 
 ## 실패 대응
 

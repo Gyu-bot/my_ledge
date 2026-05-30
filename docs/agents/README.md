@@ -62,6 +62,17 @@ canonical view를 우선하는 이유:
 각 값의 의미와 계산식은 [canonical-read-surface-reference.md](canonical-read-surface-reference.md)를 기준으로 해석한다.
 특히 `income_basis='estimated'`, `transfer_activity_total`, `loan_repayment_total`, `baseline_delta_pct`, `priority_score`는 raw 숫자만 보고 임의 해석하지 않는다.
 
+## 판단 책임 경계
+
+My Ledge는 계산과 근거를 제공하고, 에이전트는 사용자 맥락에 맞춘 최종 해석과 조언을 담당한다.
+
+- `true_spendable`, `estimated_*`: 계산상 가용액과 예상 보정이다. "써도 되는 돈"으로 단정하지 않는다.
+- `liquidity-health`: endpoint 이름의 `health`는 계산 묶음 이름이다. 실제 건강/위험 평가는 에이전트 해석이다.
+- `spending-anomalies`: `anomaly_score`는 baseline 대비 변화 후보다. 문제 지출이나 낭비 확정이 아니다.
+- `recurring-payments`: `confidence`는 반복 패턴 신호다. 구독 해지/유지 판단은 사용자 맥락이 필요하다.
+- `unclassified_work_queue`: `priority_score`는 데이터 정리 우선순위다. 재무 위험 점수로 말하지 않는다.
+- backend가 제공하지 않은 안정/위험/구매 가능 label을 붙이면 에이전트의 자체 가정임을 밝힌다.
+
 raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import fidelity 점검, 삭제/병합 row 확인처럼 canonical view가 일부러 숨긴 내부 상태가 필요할 때다.
 이때도 쓰기는 API로 되돌아가야 한다.
 
@@ -119,6 +130,7 @@ raw `transactions`를 직접 볼 수 있는 경우는 감사성 조회, import f
 - `monthly-cashflow.transfer`는 순이체가 아니라 `ABS(amount)` 기준 activity volume이다.
 - `canonical-views/dashboard`의 true-spendable row에서 `income_basis='estimated'`면 관측 수입과 예상 수입을 분리해 설명한다.
 - `spending-anomalies` 설정 해석 순서는 `명시적 query param > persisted setting > code default`다.
+- `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`은 조언이 아니라 계산/후보/데이터 품질 신호로 먼저 설명한다.
 - `POST /api/v1/data/reset`은 current state를 지우지만 `upload_logs`는 보존한다.
 - `POST /api/v1/transactions/merge`는 현재 `501 Not Implemented` stub이다.
 - 원본 업로드 파일 retention은 `POST /api/v1/upload` 경로에서 live이며, 기본 `UPLOAD_DIR=/data/uploads`에 최신 5개만 보관한다.

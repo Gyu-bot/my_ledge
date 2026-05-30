@@ -23,8 +23,44 @@
 - assistant personality, 말투, 조언 강도는 My Ledge core가 아니라 별도 assistant/consumer layer에서 결정한다.
 - canonical layer는 성격을 갖지 않고 `reason`, `confidence`, `assumptions`, `risk_level`, `baseline_delta`, `is_estimated`, `needs_user_review` 같은 판단 재료를 안정적으로 제공한다.
 - 어시스턴트 해석에 필요한 주요 요약은 agent가 매번 raw data로 재계산하지 않도록 backend API 또는 canonical read surface로 고정한다.
+- My Ledge는 구매/소비에 대한 최종 규범적 판단을 내리지 않는다. 재현 가능한 계산, threshold 적용, 후보 탐지, 근거, confidence, assumptions, review workflow 상태까지만 책임지고, 에이전트가 사용자 맥락을 반영해 최종 해석과 조언을 만든다.
+- `risk_level`은 "사지 마라/사도 된다" 같은 최종 결정이 아니라 데이터 신호 강도 또는 검토 우선순위로 해석한다. 사용자에게 전달되는 말투, 개입 강도, 행동 제안은 에이전트/consumer layer 책임이다.
 - 투자 성과/상품 배분/수익률 분석은 증권사 API 연동 이후로 미룬다.
 - 자산이동/이체 tracking은 현재 사용자 가치가 낮으므로 우선순위를 가장 뒤로 미룬다. `transfer_activity_total` 같은 기존 현금흐름 보조 값만 유지하고 별도 transfer 화면/API는 P2 뒤쪽으로 둔다.
+
+---
+
+## My Ledge / Agent Responsibility Boundary
+
+재무 어시스턴트 기능을 구현할 때 My Ledge와 외부 에이전트의 책임을 다음처럼 나눈다.
+
+### My Ledge가 책임지는 것
+
+- 재현 가능한 계산과 canonical read surface 제공.
+- baseline, threshold, 진행률, outlier/partial-period 처리 같은 반복 계산.
+- `spend_necessity`, 대출 상환 연결, true spendable, 거래처 baseline 등 이미 정의된 canonical 의미 적용.
+- 검토 후보 탐지와 후보가 된 근거 제공.
+- `risk_level` 또는 `review_priority` 같은 데이터 신호 강도 산출.
+- `confidence`, `assumptions`, `classification_coverage_ratio`, `unclassified_*`처럼 값의 신뢰도를 판단할 수 있는 재료 제공.
+- threshold/settings 저장과 적용. 에이전트별 memory에 정책값을 흩뜨리지 않는다.
+- 후보 review workflow 상태 저장. 예: `pending`, `reviewed`, `ignored`, `snoozed`, `approved`, `dismissed`, `memo`, `reviewed_at`, `cooldown_until`.
+
+### My Ledge가 하지 않는 것
+
+- "사라", "사지 마라", "괜찮다" 같은 최종 구매/소비 판단.
+- 사용자 대화 맥락, 업무상 필요성, 감정 상태, 말투, 개입 강도 추론.
+- assistant personality 반영.
+- raw transaction을 임의로 재해석해 조언 문장을 생성하는 일.
+
+### 에이전트가 책임지는 것
+
+- My Ledge API 결과를 사용자 맥락에 맞게 해석.
+- 대화 맥락, 현재 목표, 업무상 필요, 최근 소비 의도, 심리적 부담을 반영한 최종 조언.
+- 구매 decision memo 작성.
+- 사용자에게 가볍게 알릴지, 질문으로 유도할지, 강하게 제동할지 결정.
+- settings 변경이 필요하면 제안할 수 있지만, 실제 기준값은 My Ledge settings API를 통해 명시적으로 저장한다.
+
+요약하면 My Ledge는 "이 거래/지표는 이런 이유로 검토 후보입니다"까지 제공하고, 에이전트는 "그래서 지금 사용자에게 어떤 의미인지"를 판단한다.
 
 ---
 
@@ -159,11 +195,31 @@ P1은 투자 성과/배분을 제외하고 다음 구현 우선순위로 올린�
   - `as_of_date`, baseline, threshold가 필요하므로 API/settings contract로 설계
   - 재량 지출은 `cost_kind='variable'` 전체가 아니라 `spend_necessity='discretionary'`인 지출을 기준으로 계산한다.
   - 필수 변동비는 재량 속도 경고에서 제외한다.
+  - endpoint 후보는 `GET /api/v1/analytics/discretionary-velocity`.
+  - `baseline_spend_at_same_progress`는 1차 구현에서 trailing closed-month 재량 지출 baseline에 `month_progress_ratio`를 곱한 prorated 값으로 시작하고, daily cumulative baseline은 후속 고도화로 둔다.
+  - 응답에는 `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level` 또는 `review_priority`, `confidence`, `reasons`, `assumptions`를 포함한다.
+  - 분류 품질이 낮을 때 해석이 흔들리지 않도록 `unclassified_spend`, `classification_coverage_ratio`를 포함한다.
+  - 진행월 수입이 estimated라면 `income_basis`나 assumptions로 명시한다.
 - purchase gate candidates
   - 큰 일회성 지출, 새 거래처, discretionary spike 후보 추출
   - 처음에는 구매 차단이 아니라 후보 탐지/리뷰 흐름으로 시작한다.
   - 후보 기준은 큰 금액, 새 거래처, 평소 대비 급증을 조합한다.
   - threshold가 정책값이므로 settings와 함께 설계
+  - endpoint는 후보 중심의 `GET /api/v1/analytics/purchase-gate-candidates`를 우선한다. `should-i-buy`처럼 최종 판단처럼 보이는 이름은 쓰지 않는다.
+  - API는 "구매 금지/허용"이 아니라 `candidate_type`, `transaction_id`, `candidate_key`, `signals`, `risk_level` 또는 `review_priority`, `confidence`, `suggested_review_window`, `reasons`, `assumptions`를 제공한다.
+  - `candidate_key`는 review 상태 저장을 위해 안정적으로 만들어야 한다. 1차 후보는 `(candidate_type, transaction_id)` 기반으로 충분하다.
+  - 후보 상태 저장은 My Ledge 책임이다. 사용자가 후보를 무시/보류/승인/검토 완료한 이력과 cooldown은 에이전트 memory가 아니라 backend data로 둔다.
+  - 최종 구매 조언, 보류 권유, 대체안 제안, 말투/개입 강도는 에이전트가 맡는다.
+
+### Advisor Settings Contract
+
+- velocity / purchase gate threshold와 정책값은 `GET/PATCH /api/v1/settings/analytics` 확장으로 관리한다.
+- 에이전트별 memory에 threshold를 저장하지 않는다. frontend, backend, agent가 같은 기준을 공유해야 한다.
+- 설정은 섹션별로 나누는 방향이 좋다.
+  - `discretionary_velocity`: baseline months, warning threshold, high threshold, minimum classification coverage.
+  - `purchase_gate`: large purchase threshold, min candidate amount, new merchant lookback months, review cooldown period, candidate risk threshold.
+  - 공통 제외 규칙: excluded categories, excluded merchants.
+- 에이전트는 설정 변경을 제안할 수 있지만, 실제 변경은 사용자의 명시적 의사와 settings API 저장을 통해 처리한다.
 
 ### Asset / Liability Health
 
