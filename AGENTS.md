@@ -14,7 +14,7 @@ my_ledge/
 ├── docker-compose.yml
 ├── .env                     # 환경변수 (DB_PASSWORD, EXCEL_PASSWORD 등)
 ├── docs/
-│   └── STATUS.md            # 작업 현황 (모든 작업자가 읽고 갱신)
+│   └── STATUS.md            # main 기준 작업 현황 (모든 작업자가 읽고, mainline 정리 시 갱신)
 ├── backend/
 │   ├── pyproject.toml       # uv 기반 의존성
 │   ├── alembic/             # DB 마이그레이션
@@ -46,7 +46,7 @@ my_ledge/
 | 문서 | 역할 | 비고 |
 |---|---|---|
 | `docs/STATUS.md` | main 기준 현재 작업 상태, 최근 완료, 진행 중, 다음 작업, 핵심 결정 로그 | 작업 시작 전 읽는다. feature/PR 브랜치에서는 기본적으로 수정하지 않고, main에 머지된 후 mainline snapshot으로 갱신한다. backlog 전체 목록으로 쓰지 않는다. |
-| `docs/planned-work.md` | 아직 구현되지 않았지만 계획으로 유지하는 backlog / roadmap | P0/P0.5/P1/P2, Paused, Stale 항목의 기준 문서다. `STATUS.md`와 분리해 유지한다. |
+| `docs/planned-work.md` | main 기준 아직 구현되지 않았지만 계획으로 유지하는 backlog / roadmap | P0/P0.5/P1/P2, Paused, Stale 항목의 기준 문서다. `STATUS.md`와 분리해 유지한다. feature/PR 브랜치에서는 기본적으로 수정하지 않고, mainline backlog 정리 때 갱신한다. |
 | `PRD.md` | 제품 요구사항과 장기 범위 | live 구현 여부 판단은 코드와 backend/API SSOT를 우선한다. |
 | `docs/backend-api-ssot.md` | 현재 backend/API live contract 요약 | endpoint/field 충돌 시 backend 코드 다음 우선순위다. |
 | `docs/backend-api-and-metrics-reference.md` | endpoint, metric, canonical view 계산 방식 상세 설명 | 구현자와 리뷰어용 상세 reference다. |
@@ -60,9 +60,28 @@ my_ledge/
 | `docs/frontend-reimplementation-wireframe-functional-requirements.md` | frontend 재구현/정렬 요구사항 | current frontend 기준과 함께 참고한다. |
 | `docs/archive/**`, `docs/daily/**`, `docs/superpowers/plans/**`, `docs/superpowers/specs/**` | historical reference | 미체크 task가 남아 있어도 current backlog로 보지 않는다. 필요한 내용은 `docs/planned-work.md`로 승격한 뒤 사용한다. |
 
-`docs/STATUS.md`와 `docs/planned-work.md`는 역할이 다르므로 분리한다. `STATUS.md`는 handoff log이고, `planned-work.md`는 미구현 계획의 정리된 backlog다.
+`docs/STATUS.md`와 `docs/planned-work.md`는 역할이 다르므로 분리한다. `STATUS.md`는 mainline handoff log이고, `planned-work.md`는 mainline 미구현 계획의 정리된 backlog다.
 
 `docs/STATUS.md`는 필수 mainline handoff 파일이므로 길이를 관리한다. 상단에는 main에 실제 반영된 현재 상태, 최근 완료, 진행 중, 다음 작업, 핵심 결정만 유지하고, 오래된 완료 로그가 파일을 비대하게 만들면 `docs/archive/status/` 아래 날짜별 snapshot으로 옮긴 뒤 요약 링크만 남긴다.
+
+### Shared Docs Update Policy
+
+병렬 PR 충돌을 줄이기 위해 문서를 두 종류로 나눠 다룬다.
+
+**Mainline coordination docs**는 main의 현재 상태와 다음 계획을 요약하는 공유 조정 문서다.
+
+- 해당 문서: `docs/STATUS.md`, `docs/planned-work.md`
+- feature/fix PR에서는 기본적으로 수정하지 않는다.
+- PR 본문에 `Status impact`와 필요 시 `Planned-work impact`를 남긴다.
+- PR이 main에 머지된 뒤, 또는 여러 병렬 PR을 순차 머지한 뒤, main에서 한 번에 갱신한다.
+- 예외: 사용자가 명시적으로 요청한 문서/계획 정리 PR이거나, 브랜치 목적 자체가 backlog/status 정리라면 해당 브랜치에서 수정할 수 있다.
+
+**Contract/source-of-truth docs**는 코드 변경과 함께 리뷰되어야 하는 동작 계약 문서다.
+
+- 해당 문서 예: `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`, `docs/agent-integration/**`, `docs/frontend/page-wireframes.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend-design-tokens.md`
+- feature/fix PR에서 실제 변경된 endpoint, field, canonical surface, route, component surface에 한해 최소 범위로 같이 갱신한다.
+- 같은 문서의 같은 섹션을 여러 병렬 PR이 건드릴 가능성이 크면 먼저 PR 본문에 문서 영향만 남기고, main merge 후 별도 docs 정리 커밋/PR로 합친다.
+- 광범위한 문서 재구성, 오래된 내용 정리, backlog 재분류는 기능 PR에 섞지 않고 별도 docs 작업으로 분리한다.
 
 ---
 
@@ -391,7 +410,7 @@ CORS_ORIGINS=          # 프론트엔드 도메인
   - 예: `[frontend] 지출 분석 페이지 레이아웃 (민규)`
   - 예: `[infra] docker-compose 초기 설정 (agent)`
 - 영역 태그: `[backend]`, `[frontend]`, `[infra]`, `[docs]`, `[db]`
-- **설계 결정이 발생하면** Key Decisions에 날짜와 함께 기록 (무엇을, 왜, 대안은 뭐였는지)
+- **설계 결정이 발생하면** feature/PR 브랜치에서는 PR 본문 `Handoff`/`Status impact` 또는 관련 contract 문서에 기록하고, mainline 정리 때 필요한 핵심만 `docs/STATUS.md` Key Decisions에 옮긴다.
 - 개발/검증을 위해 띄운 서버, watcher, 브라우저 자동화, 포트 포워딩, 백그라운드 프로세스는 **사용이 끝나는 즉시 종료**한다
 - 현재 작업에 쓰지 않는 프로세스를 계속 살려두지 않는다. 메모리/포트 점유를 줄이기 위해 항상 정리하면서 진행한다
 
@@ -401,7 +420,8 @@ CORS_ORIGINS=          # 프론트엔드 도메인
    - main에 머지되면 `docs/STATUS.md`에 반영할 1-3줄 요약
    - 완료/미완료/후속 작업
    - 새로 발견한 이슈나 운영 주의사항
-3. 장기 작업이라 브랜치 내부 handoff 문서가 꼭 필요하면 `docs/status-notes/<branch-name>.md`처럼 브랜치별 파일을 사용한다. main 머지 후 필요한 내용만 `docs/STATUS.md`에 흡수하고, 임시 note는 archive하거나 제거한다.
+3. `docs/planned-work.md` 변경이 필요해 보이면 PR 본문에 `Planned-work impact`를 남기고, mainline backlog 정리 때 반영한다.
+4. 장기 작업이라 브랜치 내부 handoff 문서가 꼭 필요하면 `docs/status-notes/<branch-name>.md`처럼 브랜치별 파일을 사용한다. main 머지 후 필요한 내용만 `docs/STATUS.md`에 흡수하고, 임시 note는 archive하거나 제거한다.
 
 **main 갱신 시 (머지 직후 또는 main 직접 변경):**
 1. `docs/STATUS.md`를 main에 실제 반영된 상태 기준으로 갱신한다:
@@ -410,8 +430,12 @@ CORS_ORIGINS=          # 프론트엔드 도메인
    - In Progress 현재 지점 업데이트
    - 새로 발견한 이슈는 Known Issues에 추가
    - 다음 작업자가 해야 할 일은 Next Up에 추가
-2. 여러 병렬 PR을 순차 머지할 때는 각 PR에서 `docs/STATUS.md`를 따로 갱신하지 말고, 마지막에 main 기준으로 한 번 정리한다.
-3. `docs/STATUS.md` 변경은 mainline 상태 정리 커밋 또는 머지 커밋에 포함한다.
+2. `docs/planned-work.md`를 main에 실제 남은 backlog 기준으로 갱신한다:
+   - 완료된 항목 제거 또는 완료 표시
+   - 새로 발견된 미구현 작업 추가
+   - 우선순위/Paused/Stale 분류 조정
+3. 여러 병렬 PR을 순차 머지할 때는 각 PR에서 `docs/STATUS.md` / `docs/planned-work.md`를 따로 갱신하지 말고, 마지막에 main 기준으로 한 번 정리한다.
+4. `docs/STATUS.md` / `docs/planned-work.md` 변경은 mainline 상태 정리 커밋 또는 머지 커밋에 포함한다.
 
 **핸드오프 시 (다른 작업자에게 넘길 때):**
 - feature/PR 브랜치 handoff는 PR 본문에 **현재 작업 지점을 구체적으로** 표시한다 (파일명, 함수명, 어디까지 했는지)
@@ -430,5 +454,5 @@ main                    ← 안정 버전, 직접 커밋 금지
 ```
 
 - 기능 단위로 브랜치 생성, 완료 후 main에 머지
-- feature/PR 브랜치는 `docs/STATUS.md`를 기본적으로 수정하지 않는다
-- 머지 후 main 기준으로 `docs/STATUS.md`를 업데이트한다. 병렬 PR 여러 개를 머지할 때는 충돌 방지를 위해 main에서 한 번에 정리한다.
+- feature/PR 브랜치는 `docs/STATUS.md`와 `docs/planned-work.md`를 기본적으로 수정하지 않는다.
+- 머지 후 main 기준으로 `docs/STATUS.md`와 `docs/planned-work.md`를 업데이트한다. 병렬 PR 여러 개를 머지할 때는 충돌 방지를 위해 main에서 한 번에 정리한다.
