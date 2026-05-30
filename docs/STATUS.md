@@ -6,7 +6,7 @@
 ## Current State
 
 - **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
-- **Last Worker:** Codex (2026-05-30T22:50+0900, P2 제외 구현 batch 최종 검증)
+- **Last Worker:** Codex (2026-05-30T23:43+0900, 변동비 기본 재량화 및 할부 관리)
 - **Branch:** codex-complete-pre-p2-work
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
@@ -43,9 +43,10 @@
 - [x] `description_user` / `effective_description` 계획 제외: 원본 설명은 `description`, 분석명은 `merchant`, 사용자 부가 설명은 `memo`로 유지
 - [x] Sidebar/favicon 공용 brand mark 추가: 이미지 생성 툴로 만든 `frontend/public/brand-mark.png`를 favicon과 desktop sidebar 상단 아이콘에 연결
 - [x] 반복결제 dry-run 승인 흐름 frontend 연결: `/operations/recurring-classification`에서 후보 근거/매칭 거래/apply scope를 확인하고 그룹 단위로 승인 적용
+- [x] 변동비 기본 재량화 및 할부 관리 구현: `cost_kind='variable'` 미지정 필요성은 `spend_necessity='discretionary'`로 정규화하고, `installment_plans`/`installment_transaction_links`, `/api/v1/installments/forecast`, `/operations/installments`를 추가
 - [x] P1 advisor/operations batch 구현: discretionary velocity, purchase gate candidates/review state, recurring dry-run apply scope, bulk delete/restore, asset liquidity/loan repayment metadata, `vw_asset_snapshot_canonical`과 관련 frontend 연결
 - [x] P2 제외 구현 batch hardening: 구매 게이트 frontend/backend contract 정렬, same-date snapshot 재업로드 시 자산/대출 사용자 메타데이터 보존, 최신 asset row만 편집 UI에 노출, `liquidity_tier='immediate'` cash-equivalent 의미 정렬, bulk delete undo와 preview 대상 고정, topbar/redirect/bulk 회귀 테스트 보강
-- [x] 검증 완료: backend 전체 pytest 134 passed, backend ruff, frontend vitest 109 passed, frontend lint/typecheck, Codex 인앱 브라우저 local smoke(`/spending`, `/assets`, `/data`, insights, recurring classification, workbench)
+- [x] 검증 완료: backend 전체 pytest 140 passed, backend ruff, frontend vitest 112 passed, frontend lint/typecheck, Codex 인앱 브라우저 local smoke(`/operations/auto-classification`, `/operations/workbench`, `/operations/installments`)
 - [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
 - [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
@@ -58,7 +59,7 @@
 
 ## In Progress
 
-- 없음. P2 제외 구현 batch는 local regression과 browser smoke까지 완료했다.
+- 없음. 변동비 기본 재량화와 할부 관리 구현은 regression과 browser smoke까지 완료했다.
 
 ## Next Up
 
@@ -82,6 +83,7 @@
 - 2026-05-27: Advisor canonical 확장은 API 중복 구현이 아니라 readonly SQL/외부 에이전트용 read model 안정화로 본다.
 - 2026-05-27: 월별 현금흐름 view는 `expense_total`, `loan_repayment_total`, `non_loan_expense_total`을 함께 노출해 대출 상환과 일반 소비의 double count를 막는다.
 - 2026-05-30: `cost_kind`는 고정/변동 축, `spend_necessity`는 필수/재량 축으로 분리한다. `fixed_cost_necessity`는 고정비 호환 필드로 유지한다.
+- 2026-05-30: 변동비의 `spend_necessity`는 명시적으로 `essential`을 선택하지 않으면 `discretionary`로 저장한다. 할부는 관측 cashflow view를 바꾸지 않고 원장/거래 연결/forecast API로 별도 projection surface를 제공한다.
 - 2026-05-30: merchant normalization은 자동 병합이 아니라 `merchant_alias_rules` 포함 패턴 기반 일괄 정규화로 시작한다.
 - 2026-05-30: merchant normalization의 매칭 기준은 raw `description`이다. 결과는 `merchant`에 쓰고, `merchant != description`인 row는 수동 수정 또는 기존 정규화로 보고 덮어쓰지 않는다.
 - 2026-05-30: 대출 매칭 규칙은 `match_field='merchant'|'description'`으로 기준을 명시한다. `merchant`는 분석용/정규화 가능 값이고 `description`은 raw import 원문이다.

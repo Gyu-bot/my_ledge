@@ -16,6 +16,18 @@ import type {
   LoanTransactionLinkBulkResponse,
   LoanTransactionMappingListResponse,
   LoanTransactionMappingParams,
+  InstallmentPlansResponse,
+  InstallmentPlanCreateRequest,
+  InstallmentPlanPatchRequest,
+  InstallmentTransactionLinkItem,
+  InstallmentTransactionLinkRequest,
+  InstallmentTransactionLinkBulkRequest,
+  InstallmentTransactionLinkBulkResponse,
+  InstallmentTransactionMappingListResponse,
+  InstallmentTransactionMappingParams,
+  InstallmentForecastResponse,
+  InstallmentForecastParams,
+  InstallmentPlanResponse,
   CategoryTimelineItem,
   CategoryBreakdownItem,
   CategoryBreakdownParams,
@@ -160,6 +172,48 @@ export const transactionApi = {
 
   loanTransactionMappings: (params: LoanTransactionMappingParams = {}) =>
     apiFetch<LoanTransactionMappingListResponse>(`/loan-transaction-links${buildQuery(params)}`),
+
+  installmentPlans: () =>
+    apiFetch<InstallmentPlansResponse>('/installment-plans'),
+
+  createInstallmentPlan: (data: InstallmentPlanCreateRequest) =>
+    apiFetch<InstallmentPlanResponse>('/installment-plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  patchInstallmentPlan: (id: number, data: InstallmentPlanPatchRequest) =>
+    apiFetch<InstallmentPlanResponse>(`/installment-plans/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  installmentTransactionMappings: (params: InstallmentTransactionMappingParams = {}) =>
+    apiFetch<InstallmentTransactionMappingListResponse>(`/installment-transaction-links${buildQuery(params)}`),
+
+  linkTransactionToInstallment: (id: number, data: InstallmentTransactionLinkRequest) =>
+    apiFetch<InstallmentTransactionLinkItem>(`/transactions/${id}/installment-link`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  unlinkTransactionFromInstallment: (id: number) =>
+    apiFetch<void>(`/transactions/${id}/installment-link`, {
+      method: 'DELETE',
+    }),
+
+  bulkLinkTransactionsToInstallment: (data: InstallmentTransactionLinkBulkRequest) =>
+    apiFetch<InstallmentTransactionLinkBulkResponse>('/transactions/installment-links/bulk', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  installmentForecast: (params: InstallmentForecastParams = {}) =>
+    apiFetch<InstallmentForecastResponse>(`/installments/forecast${buildQuery(params)}`),
 
   autoClassificationSettings: () =>
     apiFetch<AutoClassificationSettings>('/auto-classification/settings'),

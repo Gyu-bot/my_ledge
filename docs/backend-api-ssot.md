@@ -63,6 +63,11 @@
   - `DELETE /api/v1/transactions/{id}/loan-link`
   - `PUT /api/v1/transactions/loan-links/bulk`
   - `PATCH /api/v1/loan-accounts`
+  - `POST /api/v1/installment-plans`
+  - `PATCH /api/v1/installment-plans/{id}`
+  - `PUT /api/v1/transactions/{id}/installment-link`
+  - `DELETE /api/v1/transactions/{id}/installment-link`
+  - `PUT /api/v1/transactions/installment-links/bulk`
   - `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
   - `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
   - `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
@@ -117,6 +122,10 @@
 | `GET` | `/api/v1/transactions/by-category/timeline` | live | timeline aggregate |
 | `GET` | `/api/v1/transactions/payment-methods` | live | payment method aggregate |
 | `GET` | `/api/v1/loan-transaction-links` | live | loan repayment candidate worklist, linked/unlinked filters |
+| `GET` | `/api/v1/installment-plans` | live | installment ledger entries |
+| `GET` | `/api/v1/installment-transaction-links` | live | installment candidate worklist, linked/unlinked filters |
+| `GET` | `/api/v1/transactions/{id}/installment-link` | live | transaction-to-installment mapping |
+| `GET` | `/api/v1/installments/forecast` | live | installment schedule forecast with observed/projected/missed states |
 
 ### Transactions Write
 
@@ -136,6 +145,11 @@
 | `DELETE` | `/api/v1/transactions/{id}/loan-link` | live | API key required, remove mapping |
 | `PUT` | `/api/v1/transactions/loan-links/bulk` | live | API key required, map selected transactions to one loan account |
 | `PATCH` | `/api/v1/loan-accounts` | live | API key required, update loan account display name and loan kind |
+| `POST` | `/api/v1/installment-plans` | live | API key required, create an installment ledger entry |
+| `PATCH` | `/api/v1/installment-plans/{id}` | live | API key required, update installment ledger metadata |
+| `PUT` | `/api/v1/transactions/{id}/installment-link` | live | API key required, upsert one transaction-to-installment mapping |
+| `DELETE` | `/api/v1/transactions/{id}/installment-link` | live | API key required, remove installment mapping |
+| `PUT` | `/api/v1/transactions/installment-links/bulk` | live | API key required, sequentially map selected transactions to one installment plan |
 | `POST` | `/api/v1/transactions/merge` | stub | `501 Not Implemented` |
 
 ### Assets / Snapshots
@@ -234,9 +248,18 @@
 - `cost_kind` and `spend_necessity` are independent axes:
   - `cost_kind`: repeatability/predictability (`fixed` or `variable`)
   - `spend_necessity`: need/control axis (`essential` or `discretionary`)
+- For `cost_kind='variable'`, omitted or null `spend_necessity` is normalized to `discretionary`. Variable expense is `essential` only when explicitly selected.
 - `fixed_cost_necessity` remains a compatibility field for fixed costs. New summary surfaces use `spend_necessity` for both fixed and variable expenses.
 - Required spend is interpreted as `essential_fixed_total + essential_variable_total + loan_repayment_total`.
 - Discretionary spend is interpreted as `discretionary_fixed_total + discretionary_variable_total`.
+
+### Installment Management
+
+- Installment plans live in `installment_plans` and represent a user-managed ledger entry with `display_name`, `merchant`, optional `payment_method`, `total_installments`, `monthly_amount`, `first_payment_date`, `status`, and `memo`.
+- Installment transaction links live in `installment_transaction_links`; one transaction can link to one plan, and each `(installment_plan_id, installment_number)` can be used once.
+- `GET /api/v1/installment-transaction-links` returns expense candidates where `recurring_payment_kind='installment'` or an installment link already exists. It supports `linked`, date, search, plan, and pagination filters.
+- `GET /api/v1/installments/forecast` derives the schedule from `first_payment_date + total_installments`. Linked installments are `observed`, unlinked future or current installments are `projected`, and past unlinked installments are `missed`.
+- Forecast totals are a projection surface. Existing cashflow/canonical views stay observation-only, so projected installment totals must not be double-counted with already observed transactions.
 
 ### Snapshot Import Behavior
 

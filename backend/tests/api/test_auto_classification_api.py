@@ -66,7 +66,56 @@ async def test_category_rule_crud_and_apply_endpoint(
     transaction = (await async_client.get("/api/v1/transactions")).json()["items"][0]
     assert transaction["cost_kind"] == "fixed"
     assert transaction["fixed_cost_necessity"] == "essential"
+    assert transaction["spend_necessity"] == "essential"
     assert transaction["cost_classification_source"] == "auto"
+
+
+async def test_variable_category_rule_defaults_spend_necessity_to_discretionary(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        Transaction(
+            date=date(2026, 5, 21),
+            time=time(9, 0),
+            type="지출",
+            category_major="쇼핑",
+            category_minor="생활용품",
+            description="마트",
+            merchant="마트",
+            amount=-45000,
+            currency="KRW",
+            payment_method="카드",
+            source="import",
+        )
+    )
+    await db_session.commit()
+
+    created = await async_client.post(
+        "/api/v1/auto-classification/category-rules",
+        headers=api_headers,
+        json={
+            "category_major": "쇼핑",
+            "category_minor": "생활용품",
+            "cost_kind": "variable",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["fixed_cost_necessity"] is None
+    assert created.json()["spend_necessity"] == "discretionary"
+
+    applied = await async_client.post(
+        "/api/v1/auto-classification/apply/category-rules",
+        headers=api_headers,
+    )
+    assert applied.status_code == 200
+    assert applied.json() == {"updated": 1}
+
+    transaction = (await async_client.get("/api/v1/transactions")).json()["items"][0]
+    assert transaction["cost_kind"] == "variable"
+    assert transaction["fixed_cost_necessity"] is None
+    assert transaction["spend_necessity"] == "discretionary"
 
 
 async def test_loan_merchant_rule_crud_and_apply_endpoint(

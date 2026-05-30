@@ -34,6 +34,7 @@
   - `AssetsPage`
   - `InsightsPage`
   - `WorkbenchPage`
+  - `InstallmentsPage`
   - `CanonicalViewsPage`
 
 ### `AppSidebar`
@@ -47,6 +48,7 @@
   - `/analysis/insights`
   - `/operations/workbench`
   - `/operations/loan-mapping`
+  - `/operations/installments`
   - `/operations/auto-classification`
   - `/operations/canonical-views`
   - `/operations/recurring-classification`
@@ -323,6 +325,17 @@
   - classification selects with `미분류`, `할부`, `매월 반복`, `반복 아님`
 - topbar meta:
   - 현재 page item count / total count
+
+### `InstallmentsPage`
+
+- blocks:
+  - write access alert
+  - KPI cards for active plans, candidates, remaining projected amount, missed amount
+  - installment plan management form/cards
+  - transaction candidate table with single and bulk link controls
+  - monthly forecast summary table and schedule cards
+- topbar meta:
+  - 등록된 할부 항목 수
 
 ## Token Coverage Summary
 

@@ -284,13 +284,10 @@ async def create_transaction(
         description=payload_data["description"],
     )
     payload_data["cost_kind"] = _normalized_cost_kind(payload_data.get("cost_kind"))
-    payload_data["fixed_cost_necessity"] = _normalized_fixed_cost_necessity(
+    payload_data["fixed_cost_necessity"], payload_data["spend_necessity"] = _normalized_necessity_pair(
         cost_kind=payload_data["cost_kind"],
         fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
-    )
-    payload_data["spend_necessity"] = _normalized_spend_necessity(
         spend_necessity=payload_data.get("spend_necessity"),
-        fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
     )
     payload_data["cost_classification_source"] = (
         "manual"
@@ -326,11 +323,26 @@ async def update_transaction(
         transaction.cost_kind = effective_cost_kind
         transaction.cost_classification_source = "manual"
     if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
-        transaction.fixed_cost_necessity = _normalized_fixed_cost_necessity(
+        transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
             cost_kind=effective_cost_kind,
             fixed_cost_necessity=update_fields.get(
                 "fixed_cost_necessity",
                 transaction.fixed_cost_necessity,
+            ),
+            spend_necessity=update_fields.get(
+                "spend_necessity",
+                transaction.spend_necessity,
+            ),
+        )
+    elif (
+        "spend_necessity" in update_fields
+    ):
+        transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
+            cost_kind=effective_cost_kind,
+            fixed_cost_necessity=transaction.fixed_cost_necessity,
+            spend_necessity=update_fields.get(
+                "spend_necessity",
+                transaction.spend_necessity,
             ),
         )
     if (
@@ -338,13 +350,6 @@ async def update_transaction(
         or "fixed_cost_necessity" in update_fields
         or "cost_kind" in update_fields
     ):
-        transaction.spend_necessity = _normalized_spend_necessity(
-            spend_necessity=update_fields.get(
-                "spend_necessity",
-                transaction.spend_necessity,
-            ),
-            fixed_cost_necessity=transaction.fixed_cost_necessity,
-        )
         transaction.cost_classification_source = "manual"
 
     for field, value in update_fields.items():
@@ -444,11 +449,26 @@ async def bulk_update_transactions(
             transaction.cost_kind = effective_cost_kind
             transaction.cost_classification_source = "manual"
         if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
-            transaction.fixed_cost_necessity = _normalized_fixed_cost_necessity(
+            transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
                 cost_kind=effective_cost_kind,
                 fixed_cost_necessity=update_fields.get(
                     "fixed_cost_necessity",
                     transaction.fixed_cost_necessity,
+                ),
+                spend_necessity=update_fields.get(
+                    "spend_necessity",
+                    transaction.spend_necessity,
+                ),
+            )
+        elif (
+            "spend_necessity" in update_fields
+        ):
+            transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
+                cost_kind=effective_cost_kind,
+                fixed_cost_necessity=transaction.fixed_cost_necessity,
+                spend_necessity=update_fields.get(
+                    "spend_necessity",
+                    transaction.spend_necessity,
                 ),
             )
         if (
@@ -456,13 +476,6 @@ async def bulk_update_transactions(
             or "fixed_cost_necessity" in update_fields
             or "cost_kind" in update_fields
         ):
-            transaction.spend_necessity = _normalized_spend_necessity(
-                spend_necessity=update_fields.get(
-                    "spend_necessity",
-                    transaction.spend_necessity,
-                ),
-                fixed_cost_necessity=transaction.fixed_cost_necessity,
-            )
             transaction.cost_classification_source = "manual"
         for field, value in update_fields.items():
             if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
@@ -742,28 +755,24 @@ def _resolve_effective_cost_kind(
     return _normalized_cost_kind(current_cost_kind)
 
 
-def _normalized_fixed_cost_necessity(
+def _normalized_necessity_pair(
     *,
     cost_kind: str,
     fixed_cost_necessity: str | None,
-) -> str | None:
-    if cost_kind != "fixed":
-        return None
-    if fixed_cost_necessity in {"essential", "discretionary"}:
-        return fixed_cost_necessity
-    return None
-
-
-def _normalized_spend_necessity(
-    *,
     spend_necessity: str | None,
-    fixed_cost_necessity: str | None,
-) -> str | None:
-    if spend_necessity in {"essential", "discretionary"}:
-        return spend_necessity
-    if fixed_cost_necessity in {"essential", "discretionary"}:
-        return fixed_cost_necessity
-    return None
+) -> tuple[str | None, str | None]:
+    explicit_spend_necessity = (
+        spend_necessity if spend_necessity in {"essential", "discretionary"} else None
+    )
+    explicit_fixed_necessity = (
+        fixed_cost_necessity
+        if fixed_cost_necessity in {"essential", "discretionary"}
+        else None
+    )
+    if cost_kind == "fixed":
+        normalized = explicit_fixed_necessity or explicit_spend_necessity
+        return normalized, normalized
+    return None, explicit_spend_necessity or "discretionary"
 
 
 def _normalized_recurring_payment_kind(

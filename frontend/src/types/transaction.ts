@@ -220,6 +220,144 @@ export interface LoanTransactionMappingParams {
   repayment_type?: LoanRepaymentType
 }
 
+export type InstallmentPlanStatus = 'active' | 'completed' | 'cancelled'
+export type InstallmentLinkStateFilter = 'all' | 'linked' | 'unlinked'
+export type InstallmentForecastStatus = 'observed' | 'projected' | 'missed'
+
+export interface InstallmentPlanResponse {
+  id: number
+  display_name: string
+  merchant: string
+  payment_method: string | null
+  total_installments: number
+  monthly_amount: number
+  first_payment_date: string
+  memo: string | null
+  status: InstallmentPlanStatus
+  linked_installment_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface InstallmentPlansResponse {
+  items: InstallmentPlanResponse[]
+}
+
+export interface InstallmentPlanCreateRequest {
+  display_name: string
+  merchant: string
+  payment_method?: string | null
+  total_installments: number
+  monthly_amount: number
+  first_payment_date: string
+  memo?: string | null
+}
+
+export interface InstallmentPlanPatchRequest {
+  display_name?: string
+  merchant?: string
+  payment_method?: string | null
+  total_installments?: number
+  monthly_amount?: number
+  first_payment_date?: string
+  memo?: string | null
+  status?: InstallmentPlanStatus
+}
+
+export interface InstallmentTransactionLinkItem {
+  transaction_id: number
+  installment_plan_id: number
+  installment_plan_display_name: string
+  total_installments: number
+  installment_number: number
+  monthly_amount: number
+  due_date: string
+  source: 'manual' | 'auto'
+  memo: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InstallmentTransactionMappingItem {
+  transaction_id: number
+  date: string
+  time: string
+  type: string
+  effective_category_major: string
+  effective_category_minor: string | null
+  description: string
+  merchant: string
+  amount: number
+  currency: string
+  payment_method: string | null
+  memo: string | null
+  recurring_payment_kind: RecurringPaymentKind | null
+  link: InstallmentTransactionLinkItem | null
+}
+
+export interface InstallmentTransactionMappingListResponse {
+  total: number
+  page: number
+  per_page: number
+  items: InstallmentTransactionMappingItem[]
+}
+
+export interface InstallmentTransactionMappingParams {
+  page?: number
+  per_page?: number
+  start_date?: string
+  end_date?: string
+  search?: string
+  linked?: InstallmentLinkStateFilter
+  installment_plan_id?: number
+}
+
+export interface InstallmentTransactionLinkRequest {
+  installment_plan_id: number
+  installment_number: number
+  memo?: string | null
+}
+
+export interface InstallmentTransactionLinkBulkRequest {
+  transaction_ids: number[]
+  installment_plan_id: number
+  start_installment_number: number
+  memo?: string | null
+}
+
+export interface InstallmentTransactionLinkBulkResponse {
+  updated: number
+}
+
+export interface InstallmentForecastItem {
+  installment_plan_id: number
+  installment_plan_display_name: string
+  installment_number: number
+  total_installments: number
+  due_date: string
+  period: string
+  amount: number
+  status: InstallmentForecastStatus
+  transaction_id: number | null
+}
+
+export interface InstallmentForecastMonthlySummaryItem {
+  period: string
+  observed_total: number
+  projected_total: number
+  missed_total: number
+}
+
+export interface InstallmentForecastResponse {
+  items: InstallmentForecastItem[]
+  monthly_summary: InstallmentForecastMonthlySummaryItem[]
+}
+
+export interface InstallmentForecastParams {
+  as_of_date?: string
+  months?: number
+}
+
 export interface CategoryTimelineItem {
   period: string
   category: string

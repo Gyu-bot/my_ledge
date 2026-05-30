@@ -51,6 +51,7 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 | 월별 현금흐름/저축률 | `vw_monthly_cashflow` 또는 `GET /api/v1/analytics/monthly-cashflow` | `GET /api/v1/canonical-views/dashboard` |
 | 고정비/변동비 구조 | `vw_fixed_cost_monthly_summary` 또는 fixed-cost analytics endpoints | `vw_unclassified_work_queue` |
 | 대출 상환 부담 | `vw_loan_repayment_monthly` | `GET /api/v1/loan-transaction-links` |
+| 할부 잔여 현금흐름 | `GET /api/v1/installments/forecast` | `/operations/installments`. canonical cashflow view는 관측 거래만 유지하고, 할부 예측은 별도 projection surface로 읽는다. |
 | 실제 가용 현금 | `vw_true_spendable_monthly` | dashboard endpoint의 estimated enrichment. 구매 가능 판단이 아니라 계산 surface다. |
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
 | 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
@@ -116,7 +117,7 @@ Response groups:
 | `amount`, `currency`, `payment_method` | 원본 금액, 통화, 결제수단. |
 | `cost_kind` | `fixed`, `variable`, 또는 `null`. 고정비/변동비 분류다. |
 | `fixed_cost_necessity` | `essential`, `discretionary`, 또는 `null`. 고정비 전용 legacy/호환 필드다. |
-| `spend_necessity` | `essential`, `discretionary`, 또는 `null`. 고정/변동과 무관한 필수/재량 축이다. 재량 지출 계산은 이 값을 우선한다. |
+| `spend_necessity` | `essential`, `discretionary`, 또는 `null`. 고정/변동과 무관한 필수/재량 축이다. 재량 지출 계산은 이 값을 우선한다. `cost_kind='variable'` 저장/규칙 적용 시 미지정 값은 `discretionary`로 정규화된다. |
 | `cost_classification_source` | `manual`, `auto`, 또는 `null`. 비용 성격 분류 출처다. |
 | `recurring_payment_kind` | `installment`, `monthly_recurring`, `not_recurring`, 또는 `null`. 반복결제 수동/규칙 분류 결과다. |
 | `memo` | 사용자 메모. |
@@ -275,6 +276,7 @@ Response groups:
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
 | `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
+| `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`는 지난 미연결 회차다. projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
 | `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. |
 | `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. 입력/분류가 부족하면 confidence와 assumptions를 확인한다. |
@@ -284,6 +286,7 @@ Response groups:
 - 진행월 값에 `income_basis='estimated'`가 붙으면 “관측값”과 “예상값”을 분리해 말한다.
 - 대출 상환은 일반 소비와 분리한다. 같은 금액을 고정비와 대출 부담에 이중으로 더하지 않는다.
 - `fixed_cost_necessity`는 고정비 호환 필드이고, 필수/재량 분석은 `spend_necessity`를 우선한다.
+- 변동비는 별도 필수 지정이 없으면 `discretionary`로 본다. 필수 변동비는 사용자가 `essential`로 명시한 경우만 해당한다.
 - `merchant`는 alias rule 적용 전에는 같은 실거래처가 여러 표기로 갈라질 수 있다. 거래처 분석 전 `/operations/auto-classification`의 거래처 정규화 규칙 적용 여부를 확인한다. 정규화 규칙은 raw `description`을 기준으로 `merchant`를 채우며, 수동 수정으로 보이는 `merchant != description` row는 덮어쓰지 않는다. 원본 문구 기준으로 대출 상환을 잡아야 하면 `description` 기준 대출 매칭 규칙을 사용한다.
 - 자산이동/이체 별도 tracking은 뒤로 미뤘다. 현재는 월별 현금흐름의 `transfer_activity_total`만 보조 값으로 쓴다.
 - `not_recurring`은 “반복 아님으로 검토됨”이지 “거래가 사라짐”이 아니다.

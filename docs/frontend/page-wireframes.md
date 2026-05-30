@@ -13,6 +13,7 @@
 - `/analysis/insights`
 - `/operations/workbench`
 - `/operations/loan-mapping`
+- `/operations/installments`
 - `/operations/auto-classification`
 - `/operations/canonical-views`
 - `/operations/recurring-classification`
@@ -300,6 +301,41 @@
 | selected group bulk classification panel | inline edit panel | `bg-surface-section`, `border-border-subtle`, `text-info-default`, `bg-accent-dim` |
 | recurring table | table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
 | classification select | native select | `bg-surface-bar`, `border-border-subtle`, `text-text-secondary` |
+
+## Installments `/operations/installments`
+
+```text
+[read-only alert]
+
+[KPI x4]
+
+[할부 항목 관리]
+
+[거래 연결 후보]
+
+[월별 남은 할부 예측]
+```
+
+### Blocks
+
+- write access alert
+- KPI: active plans, candidate count, remaining projected amount, missed amount
+- 할부 항목 관리: 새 할부 항목 생성, 표시명/메모 저장, 상태 badge
+- 거래 연결 후보: `recurring_payment_kind='installment'` 거래와 기존 연결 거래, 단건 연결/해제, 선택 거래 일괄 순차 연결
+- 월별 남은 할부 예측: observed/projected/missed 월별 합계와 회차별 schedule card
+
+### Topbar meta
+
+- 등록된 할부 항목 수
+
+### Component token map
+
+| Block | Component | Primary tokens |
+| --- | --- | --- |
+| write access alert | `AlertBanner` | warn state surface and text tokens |
+| plan management | `SectionCard` + compact form + plan cards | `bg-surface-section`, `bg-surface-card`, `border-border-subtle`, `text-text-primary`, `text-text-muted` |
+| transaction candidates | `SectionCard` + filter bar + table + `Pagination` | `bg-surface-card`, `border-border-subtle`, `text-text-secondary`, `text-pagination` |
+| forecast | `SectionCard` + compact summary table + schedule cards | `bg-surface-section`, `border-border-subtle`, `text-info-default`, `text-warn`, `text-danger` |
 
 ## Auto Classification `/operations/auto-classification`
 

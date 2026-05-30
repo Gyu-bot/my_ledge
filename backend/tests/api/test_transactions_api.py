@@ -23,6 +23,7 @@ def _transaction(
     category_minor_user: str | None = None,
     cost_kind: str | None = None,
     fixed_cost_necessity: str | None = None,
+    spend_necessity: str | None = None,
     recurring_payment_kind: str | None = None,
     is_deleted: bool = False,
     merged_into_id: int | None = None,
@@ -44,6 +45,7 @@ def _transaction(
         payment_method=payment_method,
         cost_kind=cost_kind,
         fixed_cost_necessity=fixed_cost_necessity,
+        spend_necessity=spend_necessity,
         recurring_payment_kind=recurring_payment_kind,
         memo=memo,
         is_deleted=is_deleted,
@@ -573,6 +575,7 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert create_response.json()["description"] == "점심"
     assert create_response.json()["merchant"] == "점심"
     assert create_response.json()["cost_kind"] == "variable"
+    assert create_response.json()["spend_necessity"] == "discretionary"
 
     patch_response = await async_client.patch(
         f"/api/v1/transactions/{created_id}",
@@ -581,6 +584,7 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
             "category_major_user": "생활/잡화",
             "category_minor_user": "생필품",
             "merchant": "회사식당",
+            "cost_kind": "variable",
             "memo": "수정 메모",
         },
     )
@@ -588,6 +592,8 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert patch_response.json()["effective_category_major"] == "생활/잡화"
     assert patch_response.json()["description"] == "점심"
     assert patch_response.json()["merchant"] == "회사식당"
+    assert patch_response.json()["cost_kind"] == "variable"
+    assert patch_response.json()["spend_necessity"] == "discretionary"
     assert patch_response.json()["is_edited"] is True
 
     second = _transaction(
@@ -641,6 +647,7 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert stored.merchant == "공통 거래처"
     assert stored.cost_kind == "fixed"
     assert stored.fixed_cost_necessity == "essential"
+    assert stored.spend_necessity == "essential"
     assert stored.recurring_payment_kind == "installment"
     assert stored.memo == "일괄 메모"
     assert stored.is_deleted is False

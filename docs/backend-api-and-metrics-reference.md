@@ -32,6 +32,7 @@
   - `auto_classification.py`
   - `canonical_views.py`
   - `loan_mapping.py`
+  - `installments.py`
   - `analytics.py`
 
 ## Auth
@@ -44,6 +45,10 @@
 - `GET /api/v1/loan-accounts`
 - `GET /api/v1/loan-transaction-links`
 - `GET /api/v1/transactions/{transaction_id}/loan-link`
+- `GET /api/v1/installment-plans`
+- `GET /api/v1/installment-transaction-links`
+- `GET /api/v1/transactions/{transaction_id}/installment-link`
+- `GET /api/v1/installments/forecast`
 
 ### `X-API-Key` 필요
 
@@ -79,6 +84,11 @@
 - `PUT /api/v1/transactions/{transaction_id}/loan-link`
 - `DELETE /api/v1/transactions/{transaction_id}/loan-link`
 - `PUT /api/v1/transactions/loan-links/bulk`
+- `POST /api/v1/installment-plans`
+- `PATCH /api/v1/installment-plans/{plan_id}`
+- `PUT /api/v1/transactions/{transaction_id}/installment-link`
+- `DELETE /api/v1/transactions/{transaction_id}/installment-link`
+- `PUT /api/v1/transactions/installment-links/bulk`
 
 ## Endpoints
 
@@ -525,6 +535,109 @@
 - Behavior:
   - returns `404` if the transaction does not exist
   - deleting a missing link is idempotent and still returns `204`
+
+#### `GET /api/v1/installment-plans`
+
+- Purpose: list user-managed installment ledger entries.
+- Auth: none
+- Response model: `InstallmentPlanListResponse`
+- Response shape:
+  - `items[]`
+    - `id`, `display_name`, `merchant`, `payment_method`
+    - `total_installments`, `monthly_amount`, `first_payment_date`
+    - `status: "active" | "completed" | "cancelled"`
+    - `memo`, `linked_installment_count`, `created_at`, `updated_at`
+
+#### `POST /api/v1/installment-plans`
+
+- Purpose: create an installment ledger entry that can be linked to observed transactions and forecast future cash outflow.
+- Auth: API key required
+- Request model: `InstallmentPlanCreateRequest`
+- Required fields: `display_name`, `merchant`, `total_installments`, `monthly_amount`, `first_payment_date`
+- Optional fields: `payment_method`, `status`, `memo`
+- Response model: `InstallmentPlanResponse`
+
+#### `PATCH /api/v1/installment-plans/{plan_id}`
+
+- Purpose: update installment ledger metadata.
+- Auth: API key required
+- Request accepts partial plan fields from create plus `status`.
+- Response model: `InstallmentPlanResponse`
+- Behavior: returns `404` for unknown plans.
+
+#### `GET /api/v1/installment-transaction-links`
+
+- Purpose: list installment transaction candidates and current link state for `/operations/installments`.
+- Auth: none
+- Query params:
+  - `start_date`
+  - `end_date`
+  - `search`
+  - `linked: "all" | "linked" | "unlinked"` default `all`
+  - `installment_plan_id`
+  - `page` default `1`
+  - `per_page` default `40`, max `200`
+- Response model: `InstallmentTransactionMappingListResponse`
+- Behavior:
+  - only returns visible `type="지출"` rows
+  - candidate scope is `recurring_payment_kind='installment'` or rows that already have an installment link
+  - excludes deleted and merged transactions through `vw_transactions_effective` semantics
+  - ordered by `date desc, time desc, id desc`
+
+#### `GET /api/v1/transactions/{transaction_id}/installment-link`
+
+- Purpose: read one transaction's installment mapping.
+- Auth: none
+- Response model: `TransactionInstallmentLinkResponse`
+- Behavior: returns `{"link": null}` when no mapping exists, and `404` when the transaction does not exist.
+
+#### `PUT /api/v1/transactions/{transaction_id}/installment-link`
+
+- Purpose: create or replace one transaction-to-installment mapping.
+- Auth: API key required
+- Request model: `InstallmentTransactionLinkUpsertRequest`
+- Request fields: `installment_plan_id`, `installment_number`, optional `memo`
+- Response model: `InstallmentTransactionLinkItem`
+- Behavior:
+  - one transaction can have only one installment link
+  - one `(installment_plan_id, installment_number)` can be linked once
+  - `installment_number` must be within the plan range
+  - conflict at the DB uniqueness boundary rolls back and returns `409`
+
+#### `PUT /api/v1/transactions/installment-links/bulk`
+
+- Purpose: sequentially link selected transactions to one installment plan.
+- Auth: API key required
+- Request fields: `transaction_ids`, `installment_plan_id`, `start_installment_number`, optional `memo`
+- Response shape: `updated`
+- Behavior:
+  - transactions are sorted by transaction date/time/id before assigning sequential installment numbers
+  - duplicate `transaction_ids` return `422`
+  - conflict at the DB uniqueness boundary rolls back and returns `409`
+
+#### `DELETE /api/v1/transactions/{transaction_id}/installment-link`
+
+- Purpose: remove one transaction's installment mapping.
+- Auth: API key required
+- Response: `204 No Content`
+- Behavior: deleting a missing link is idempotent and still returns `204`.
+
+#### `GET /api/v1/installments/forecast`
+
+- Purpose: project installment schedule status without changing observed cashflow views.
+- Auth: none
+- Query params:
+  - `as_of_date`: defaults to server date
+  - `months`: default `12`, range `1..120`
+- Response model: `InstallmentForecastResponse`
+- Response shape:
+  - `items[]`: plan id/display name, installment number, due date, `period`, `amount`, `status`, optional linked `transaction_id`
+  - `monthly_summary[]`: `observed_total`, `projected_total`, `missed_total` per `period`
+- Status behavior:
+  - linked schedule entries are `observed`
+  - unlinked entries before `as_of_date` are `missed`
+  - unlinked entries on or after `as_of_date` are `projected`
+  - projected totals are a separate planning surface and should not be double-counted with observed transactions
 
 ### Assets / Snapshots
 
@@ -983,6 +1096,7 @@
   - `POST /api/v1/auto-classification/apply/category-rules`
 - Rule fields: `category_major`, optional `category_minor`, `cost_kind`, optional `fixed_cost_necessity`
 - Rule fields also accept optional `spend_necessity`. `fixed_cost_necessity` is only valid for `cost_kind='fixed'`; `spend_necessity` is valid for fixed and variable costs.
+- When `cost_kind='variable'`, omitted or null `spend_necessity` is normalized to `discretionary`. Variable expense is `essential` only when explicitly selected.
 - Apply behavior: matches effective category values and updates only rows whose `cost_classification_source` is not `manual`
 
 #### Loan Merchant Auto-Link Rules
@@ -1098,6 +1212,7 @@ Common rules:
 - Convert expense rows with `-amount`; positive `지출` refund/cancellation rows reduce monthly expense.
 - Separate loan-linked transactions before fixed/variable breakdown to avoid double counting repayment burden as ordinary spending.
 - Treat fixed/variable and essential/discretionary as independent axes. `cost_kind` is the repeatability/predictability axis; `spend_necessity` is the essential/discretionary axis for both fixed and variable expenses. Existing `fixed_cost_necessity` remains a fixed-cost compatibility field.
+- Variable expense defaults to `spend_necessity='discretionary'` unless a user or rule explicitly chooses `essential`.
 - Keep `transfer_activity_total` separate from `net_cashflow`.
 - Keep `as_of_date`, threshold, and baseline settings in API/settings contracts when a calculation depends on runtime context.
 

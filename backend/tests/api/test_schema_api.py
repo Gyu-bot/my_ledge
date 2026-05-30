@@ -19,6 +19,8 @@ def test_expected_tables_exist() -> None:
         "loan_accounts",
         "loan_merchant_rules",
         "loan_transaction_links",
+        "installment_plans",
+        "installment_transaction_links",
         "purchase_gate_reviews",
         "upload_logs",
     }
@@ -34,6 +36,9 @@ def test_expected_tables_exist() -> None:
     loan_accounts = Base.metadata.tables["loan_accounts"]
     loan_merchant_rules = Base.metadata.tables["loan_merchant_rules"]
     loan_transaction_links = Base.metadata.tables["loan_transaction_links"]
+    installment_transaction_links = Base.metadata.tables[
+        "installment_transaction_links"
+    ]
 
     assert transactions.c.is_deleted.server_default is not None
     assert transactions.c.source.server_default is not None
@@ -86,6 +91,13 @@ def test_expected_tables_exist() -> None:
         for constraint in loan_transaction_links.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     } == {("transaction_id",)}
+    assert installment_transaction_links.c.transaction_id.foreign_keys
+    assert installment_transaction_links.c.installment_plan_id.foreign_keys
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in installment_transaction_links.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("transaction_id",), ("installment_plan_id", "installment_number")}
 
 
 async def test_schema_endpoint_requires_api_key(async_client: AsyncClient) -> None:

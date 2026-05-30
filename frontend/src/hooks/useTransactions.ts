@@ -8,6 +8,12 @@ import type {
   LoanAccountMetadataUpdateRequest,
   LoanTransactionLinkBulkRequest,
   LoanTransactionMappingParams,
+  InstallmentPlanCreateRequest,
+  InstallmentPlanPatchRequest,
+  InstallmentTransactionLinkRequest,
+  InstallmentTransactionLinkBulkRequest,
+  InstallmentTransactionMappingParams,
+  InstallmentForecastParams,
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
   MerchantTreemapNode,
@@ -25,6 +31,11 @@ export const txKeys = {
   loanAccounts: () => ['transactions', 'loanAccounts'] as const,
   loanTransactionMappings: (params: LoanTransactionMappingParams) =>
     ['transactions', 'loanTransactionMappings', params] as const,
+  installmentPlans: () => ['transactions', 'installmentPlans'] as const,
+  installmentTransactionMappings: (params: InstallmentTransactionMappingParams) =>
+    ['transactions', 'installmentTransactionMappings', params] as const,
+  installmentForecast: (params: InstallmentForecastParams) =>
+    ['transactions', 'installmentForecast', params] as const,
   autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
   categoryClassificationRules: () => ['transactions', 'categoryClassificationRules'] as const,
   merchantAliasRules: () => ['transactions', 'merchantAliasRules'] as const,
@@ -65,6 +76,27 @@ export function useLoanTransactionMappings(params: LoanTransactionMappingParams 
   return useQuery({
     queryKey: txKeys.loanTransactionMappings(params),
     queryFn: () => transactionApi.loanTransactionMappings(params),
+  })
+}
+
+export function useInstallmentPlans() {
+  return useQuery({
+    queryKey: txKeys.installmentPlans(),
+    queryFn: transactionApi.installmentPlans,
+  })
+}
+
+export function useInstallmentTransactionMappings(params: InstallmentTransactionMappingParams = {}) {
+  return useQuery({
+    queryKey: txKeys.installmentTransactionMappings(params),
+    queryFn: () => transactionApi.installmentTransactionMappings(params),
+  })
+}
+
+export function useInstallmentForecast(params: InstallmentForecastParams = {}) {
+  return useQuery({
+    queryKey: txKeys.installmentForecast(params),
+    queryFn: () => transactionApi.installmentForecast(params),
   })
 }
 
@@ -239,6 +271,68 @@ export function useUpdateLoanAccountMetadata() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: txKeys.loanAccounts() })
       void qc.invalidateQueries({ queryKey: ['transactions'] })
+    },
+  })
+}
+
+export function useCreateInstallmentPlan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: InstallmentPlanCreateRequest) =>
+      transactionApi.createInstallmentPlan(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: txKeys.installmentPlans() })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+    },
+  })
+}
+
+export function usePatchInstallmentPlan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: InstallmentPlanPatchRequest }) =>
+      transactionApi.patchInstallmentPlan(id, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: txKeys.installmentPlans() })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+    },
+  })
+}
+
+export function useLinkTransactionToInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: InstallmentTransactionLinkRequest }) =>
+      transactionApi.linkTransactionToInstallment(id, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+    },
+  })
+}
+
+export function useUnlinkTransactionFromInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => transactionApi.unlinkTransactionFromInstallment(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+    },
+  })
+}
+
+export function useBulkLinkTransactionsToInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: InstallmentTransactionLinkBulkRequest) =>
+      transactionApi.bulkLinkTransactionsToInstallment(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
     },
   })
 }

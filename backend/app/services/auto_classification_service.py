@@ -112,12 +112,10 @@ async def upsert_category_classification_rule(
         db_session.add(rule)
 
     rule.cost_kind = payload.cost_kind
-    rule.fixed_cost_necessity = (
-        payload.fixed_cost_necessity if payload.cost_kind == "fixed" else None
-    )
-    rule.spend_necessity = (
-        payload.spend_necessity
-        or payload.fixed_cost_necessity
+    rule.fixed_cost_necessity, rule.spend_necessity = _normalized_necessity_pair(
+        cost_kind=payload.cost_kind,
+        fixed_cost_necessity=payload.fixed_cost_necessity,
+        spend_necessity=payload.spend_necessity,
     )
     await db_session.commit()
     await db_session.refresh(rule)
@@ -607,6 +605,26 @@ def _match_category_rule(
         rules.get((category_major, category_minor))
         or rules.get((category_major, None))
     )
+
+
+def _normalized_necessity_pair(
+    *,
+    cost_kind: str,
+    fixed_cost_necessity: str | None,
+    spend_necessity: str | None,
+) -> tuple[str | None, str | None]:
+    explicit_spend_necessity = (
+        spend_necessity if spend_necessity in {"essential", "discretionary"} else None
+    )
+    explicit_fixed_necessity = (
+        fixed_cost_necessity
+        if fixed_cost_necessity in {"essential", "discretionary"}
+        else None
+    )
+    if cost_kind == "fixed":
+        normalized = explicit_fixed_necessity or explicit_spend_necessity
+        return normalized, normalized
+    return None, explicit_spend_necessity or "discretionary"
 
 
 async def _load_recurring_category_rules(

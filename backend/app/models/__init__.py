@@ -8,6 +8,8 @@ from app.models.auto_classification import (
 )
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.base import Base, TimestampMixin
+from app.models.installment_plan import InstallmentPlan
+from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
@@ -23,6 +25,8 @@ __all__ = [
     "Base",
     "CategoryClassificationRule",
     "Investment",
+    "InstallmentPlan",
+    "InstallmentTransactionLink",
     "Loan",
     "LoanAccount",
     "LoanMerchantRule",
