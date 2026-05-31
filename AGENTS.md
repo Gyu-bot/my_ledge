@@ -95,10 +95,32 @@ my_ledge/
 6. 여러 PR을 머지한 뒤에는 `main`에서 짧은 mainline docs sync 세션을 돌려 `docs/STATUS.md`와 `docs/planned-work.md`를 현재 main 기준으로 정리한다.
 7. 단일 PR만 머지했고 영향이 작으면 merge 담당자가 같은 흐름에서 mainline docs sync를 바로 처리해도 된다.
 
+### Git Worktree Policy
+
+병렬 Codex 세션이나 병렬 feature/fix 작업은 기본적으로 `git worktree`를 사용한다.
+
+- 한 세션 = 한 worktree = 한 branch = 한 PR을 기본 단위로 둔다.
+- 새 작업 worktree는 최신 `origin/main`에서 생성한다.
+- 같은 checkout에서 여러 feature/fix 브랜치를 번갈아 작업하지 않는다.
+- mainline docs sync는 기본 repo의 `main` 또는 별도 docs sync worktree에서만 수행한다.
+- 각 worktree는 dev server 포트, 임시 파일, 테스트 산출물이 섞이지 않도록 독립적으로 관리한다.
+- Docker, DB, host port는 worktree와 무관하게 공유 자원이므로 변경 전 현재 상태를 확인한다.
+
+권장 예시:
+
+```bash
+git fetch origin
+git worktree add ../my_ledge-worktrees/workbench-memo-search -b feature/workbench-memo-search origin/main
+git worktree add ../my_ledge-worktrees/loan-summary-kind -b feature/loan-summary-kind origin/main
+```
+
+`main` 브랜치는 동시에 여러 worktree에서 checkout할 수 없으므로, mainline docs sync는 기존 main checkout을 쓰거나 `docs/mainline-sync-*` 같은 짧은 정리 브랜치/worktree에서 수행한 뒤 main에 반영한다.
+
 Codex에 feature/fix 작업을 맡길 때는 다음 문구를 권장한다.
 
 ```text
 이 작업은 feature PR 모드로 해줘.
+최신 origin/main에서 별도 git worktree를 만들어 작업해줘.
 STATUS.md와 planned-work.md는 직접 수정하지 말고,
 필요한 내용은 PR 본문 Status impact / Planned-work impact에 남겨줘.
 contract 문서는 변경된 섹션만 최소 수정해줘.
@@ -108,6 +130,7 @@ Codex에 병렬 작업 중 한 범위만 맡길 때는 다음처럼 파일/책�
 
 ```text
 이 브랜치는 frontend만 맡고, backend/API contract는 건드리지 마.
+별도 git worktree에서 이 범위만 작업해줘.
 STATUS.md/planned-work.md는 수정하지 마.
 PR 본문에 mainline docs sync에 필요한 영향만 남겨줘.
 ```
