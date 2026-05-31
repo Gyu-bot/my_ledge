@@ -59,9 +59,32 @@ function assetDraftFrom(asset: AssetSnapshotItemResponse): AssetLiquidityDraft {
 
 function loanDraftFrom(loan: LoanItem): LoanRepaymentDraft {
   return {
-    monthly_payment: loan.monthly_payment ?? '',
+    monthly_payment: loan.monthly_payment_source === 'manual'
+      ? (loan.monthly_payment ?? '')
+      : '',
     repayment_method: loan.repayment_method ?? 'unknown',
   }
+}
+
+function monthlyPaymentSourceLabel(loan: LoanItem): string {
+  if (loan.monthly_payment_source === 'manual') return '수동 확정'
+  if (loan.monthly_payment_source === 'estimated_from_linked_transactions') {
+    return loan.loan_kind === 'overdraft'
+      ? '연결 거래 추정 · 최근 완료월 평균'
+      : '연결 거래 추정 · 완료월 중앙값'
+  }
+  return loan.monthly_payment ? '출처 미확인' : '연결 거래 부족'
+}
+
+function linkedTransactionPaymentBasis(loan: LoanItem): string {
+  return loan.loan_kind === 'overdraft' ? '최근 완료월 평균' : '완료월 중앙값'
+}
+
+function linkedTransactionPaymentValue(loan: LoanItem): string {
+  if (loan.monthly_payment_source !== 'estimated_from_linked_transactions' || !loan.monthly_payment) {
+    return '확인 필요'
+  }
+  return `₩ ${formatKRW(parseFloat(loan.monthly_payment))}`
 }
 
 export function AssetSettingsPage() {
@@ -142,13 +165,17 @@ export function AssetSettingsPage() {
   async function saveLoanRepaymentMetadata(loan: LoanItem) {
     if (typeof loan.id !== 'number') return
     const draft = loanDrafts[loan.id] ?? loanDraftFrom(loan)
+    const monthlyPayment = draft.monthly_payment.trim()
+    const data = {
+      repayment_method: draft.repayment_method,
+      ...(monthlyPayment || loan.monthly_payment_source === 'manual'
+        ? { monthly_payment: monthlyPayment || null }
+        : {}),
+    }
     try {
       await patchLoanRepaymentMetadata.mutateAsync({
         id: loan.id,
-        data: {
-          monthly_payment: draft.monthly_payment.trim() || null,
-          repayment_method: draft.repayment_method,
-        },
+        data,
       })
       setAlert({ variant: 'success', title: '대출 상환 메타 저장 완료', description: loan.product_name })
     } catch (error) {
@@ -272,7 +299,7 @@ export function AssetSettingsPage() {
       <SectionCard
         title="대출 상환 설정"
         meta={`${loans.data?.items.length ?? 0}개 대출`}
-        description="최신 loan row의 월상환액과 상환 방식을 관리합니다."
+        description="연결 거래 기준 월상환액을 기본으로 보고, 필요할 때만 수동 확정합니다."
       >
         {loans.data?.items.length ? (
           <div className="divide-y divide-border-faint">
@@ -281,6 +308,7 @@ export function AssetSettingsPage() {
               const draft = typeof loanId === 'number'
                 ? (loanDrafts[loanId] ?? loanDraftFrom(loan))
                 : loanDraftFrom(loan)
+              const linkedPaymentBasis = linkedTransactionPaymentBasis(loan)
               return (
                 <div key={loanId ?? index} className="py-3 flex flex-wrap items-end gap-3">
                   <div className="min-w-44 flex-1">
@@ -288,13 +316,28 @@ export function AssetSettingsPage() {
                     <div className="text-micro text-text-ghost">
                       {[loan.lender, loan.loan_type].filter(Boolean).join(' · ')}
                     </div>
+                    <div className="text-micro text-text-muted mt-1">
+                      {monthlyPaymentSourceLabel(loan)}
+                    </div>
+                  </div>
+                  <div className="min-w-44 rounded-md border border-border-subtle bg-surface-bar px-3 py-2">
+                    <div className="text-micro text-text-faint">연결 거래 기준 월상환액</div>
+                    <div className="mt-1 text-caption font-semibold text-text-primary">
+                      {linkedTransactionPaymentValue(loan)}
+                    </div>
+                    <div className="mt-0.5 text-micro text-text-muted">
+                      {loan.monthly_payment_source === 'estimated_from_linked_transactions'
+                        ? linkedPaymentBasis
+                        : '연결 거래 추정값 없음'}
+                    </div>
                   </div>
                   <label className="flex flex-col gap-1">
-                    <span className="text-micro text-text-faint">월상환액</span>
+                    <span className="text-micro text-text-faint">수동 월상환액</span>
                     <input
                       aria-label={`${loan.product_name} 월상환액`}
                       type="number"
                       min={0}
+                      placeholder={loan.monthly_payment ?? undefined}
                       className={inputCls}
                       value={draft.monthly_payment}
                       disabled={!hasWrite || patchLoanRepaymentMetadata.isPending || typeof loanId !== 'number'}
@@ -340,7 +383,7 @@ export function AssetSettingsPage() {
                     disabled={!hasWrite || patchLoanRepaymentMetadata.isPending || typeof loanId !== 'number'}
                     className="text-caption px-3 py-1.5 bg-info-dim border border-info-muted text-info-default rounded-md disabled:opacity-40"
                   >
-                    저장
+                    수동 확정
                   </button>
                 </div>
               )

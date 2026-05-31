@@ -310,6 +310,245 @@ async def test_upsert_transaction_loan_link_updates_latest_loan_snapshot_estimat
     assert older_loan.monthly_payment is None
 
 
+async def test_loan_repayment_estimate_ignores_partial_reference_month(
+    db_session: AsyncSession,
+) -> None:
+    march = _transaction()
+    march.date = date(2026, 3, 20)
+    march.amount = -300000
+    april = _transaction()
+    april.date = date(2026, 4, 20)
+    april.amount = -500000
+    partial_may = _transaction()
+    partial_may.date = date(2026, 5, 10)
+    partial_may.amount = -900000
+    latest_loan = Loan(
+        snapshot_date=date(2026, 5, 15),
+        lender="국민은행",
+        product_name="주택담보대출",
+        balance=Decimal("100000000.00"),
+    )
+    db_session.add_all(
+        [
+            march,
+            april,
+            partial_may,
+            latest_loan,
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_estimate_lookback_months",
+                value="4",
+            ),
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_min_observations",
+                value="2",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await bulk_upsert_transaction_loan_links(
+        db_session,
+        LoanTransactionLinkBulkUpsertRequest(
+            transaction_ids=[march.id, april.id, partial_may.id],
+            lender="국민은행",
+            product_name="주택담보대출",
+            repayment_type="mixed",
+        ),
+    )
+
+    await db_session.refresh(latest_loan)
+
+    assert latest_loan.monthly_payment == Decimal("400000.00")
+    assert latest_loan.monthly_payment_source == "estimated_from_linked_transactions"
+
+
+async def test_overdraft_repayment_estimate_uses_recent_three_month_average(
+    db_session: AsyncSession,
+) -> None:
+    february = _transaction()
+    february.date = date(2026, 2, 20)
+    february.amount = -100000
+    march = _transaction()
+    march.date = date(2026, 3, 20)
+    march.amount = -200000
+    april = _transaction()
+    april.date = date(2026, 4, 20)
+    april.amount = -600000
+    latest_loan = Loan(
+        snapshot_date=date(2026, 5, 15),
+        lender="카카오뱅크",
+        product_name="마이너스 통장",
+        balance=Decimal("5000000.00"),
+    )
+    db_session.add_all(
+        [
+            february,
+            march,
+            april,
+            latest_loan,
+            LoanAccount(
+                lender="카카오뱅크",
+                product_name="마이너스 통장",
+                loan_kind="overdraft",
+            ),
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_min_observations",
+                value="2",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await bulk_upsert_transaction_loan_links(
+        db_session,
+        LoanTransactionLinkBulkUpsertRequest(
+            transaction_ids=[february.id, march.id, april.id],
+            lender="카카오뱅크",
+            product_name="마이너스 통장",
+            repayment_type="interest",
+        ),
+    )
+
+    await db_session.refresh(latest_loan)
+
+    assert latest_loan.monthly_payment == Decimal("300000.00")
+    assert latest_loan.monthly_payment_source == "estimated_from_linked_transactions"
+
+
+async def test_delete_transaction_loan_link_clears_stale_estimated_monthly_payment(
+    db_session: AsyncSession,
+) -> None:
+    march = _transaction()
+    march.date = date(2026, 3, 20)
+    march.amount = -300000
+    april = _transaction()
+    april.date = date(2026, 4, 20)
+    april.amount = -500000
+    latest_loan = Loan(
+        snapshot_date=date(2026, 5, 31),
+        lender="국민은행",
+        product_name="주택담보대출",
+        balance=Decimal("100000000.00"),
+    )
+    db_session.add_all(
+        [
+            march,
+            april,
+            latest_loan,
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_min_observations",
+                value="2",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await bulk_upsert_transaction_loan_links(
+        db_session,
+        LoanTransactionLinkBulkUpsertRequest(
+            transaction_ids=[march.id, april.id],
+            lender="국민은행",
+            product_name="주택담보대출",
+            repayment_type="mixed",
+        ),
+    )
+    await db_session.refresh(latest_loan)
+    assert latest_loan.monthly_payment == Decimal("400000.00")
+
+    deleted = await delete_transaction_loan_link(db_session, april.id)
+
+    await db_session.refresh(latest_loan)
+
+    assert deleted is True
+    assert latest_loan.monthly_payment is None
+    assert latest_loan.monthly_payment_source is None
+    assert latest_loan.repayment_method == "principal_interest"
+    assert latest_loan.repayment_method_source == "estimated_from_linked_transactions"
+
+    deleted = await delete_transaction_loan_link(db_session, march.id)
+
+    await db_session.refresh(latest_loan)
+
+    assert deleted is True
+    assert latest_loan.monthly_payment is None
+    assert latest_loan.monthly_payment_source is None
+    assert latest_loan.repayment_method is None
+    assert latest_loan.repayment_method_source is None
+
+
+async def test_reassigning_transaction_loan_link_recalculates_previous_account(
+    db_session: AsyncSession,
+) -> None:
+    march = _transaction()
+    march.date = date(2026, 3, 20)
+    march.amount = -300000
+    april = _transaction()
+    april.date = date(2026, 4, 20)
+    april.amount = -500000
+    old_loan = Loan(
+        snapshot_date=date(2026, 5, 31),
+        lender="국민은행",
+        product_name="주택담보대출",
+        balance=Decimal("100000000.00"),
+    )
+    new_loan = Loan(
+        snapshot_date=date(2026, 5, 31),
+        lender="카카오뱅크",
+        product_name="신용대출",
+        balance=Decimal("20000000.00"),
+    )
+    db_session.add_all(
+        [
+            march,
+            april,
+            old_loan,
+            new_loan,
+            AppSetting(
+                scope="analytics.asset_liability_health",
+                key="monthly_payment_min_observations",
+                value="2",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    await bulk_upsert_transaction_loan_links(
+        db_session,
+        LoanTransactionLinkBulkUpsertRequest(
+            transaction_ids=[march.id, april.id],
+            lender="국민은행",
+            product_name="주택담보대출",
+            repayment_type="mixed",
+        ),
+    )
+    await db_session.refresh(old_loan)
+    assert old_loan.monthly_payment == Decimal("400000.00")
+
+    await upsert_transaction_loan_link(
+        db_session,
+        april.id,
+        LoanTransactionLinkUpsertRequest(
+            lender="카카오뱅크",
+            product_name="신용대출",
+            repayment_type="mixed",
+        ),
+    )
+
+    await db_session.refresh(old_loan)
+    await db_session.refresh(new_loan)
+
+    assert old_loan.monthly_payment is None
+    assert old_loan.monthly_payment_source is None
+    assert old_loan.repayment_method == "principal_interest"
+    assert old_loan.repayment_method_source == "estimated_from_linked_transactions"
+    assert new_loan.monthly_payment is None
+    assert new_loan.monthly_payment_source is None
+
+
 async def test_bulk_upsert_transaction_loan_links_keeps_manual_monthly_payment(
     db_session: AsyncSession,
 ) -> None:

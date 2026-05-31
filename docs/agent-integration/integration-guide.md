@@ -166,7 +166,7 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 2. `loan_repayment_type`별 `repayment_total` 확인
 3. 필요하면 `GET /api/v1/loan-transaction-links`로 거래 drill-down
 4. 연결 누락 후보는 `vw_unclassified_work_queue.needs_loan_link_review` 확인
-5. `loans.monthly_payment_source`가 `estimated_from_linked_transactions`이면 My Ledge가 연결 거래 월합계 median으로 채운 추정값임을 설명하고, 최종 대출 조건 판단은 에이전트/사용자 확인 영역으로 둔다.
+5. `loans.monthly_payment_source`가 `estimated_from_linked_transactions`이면 My Ledge가 완료된 월의 연결 거래로 채운 추정값임을 설명한다. 마이너스 통장은 최근 완료월 평균, 그 외 대출은 완료월 중앙값을 쓰며, 최종 대출 조건 판단은 에이전트/사용자 확인 영역으로 둔다.
 
 ### 분류 품질 개선
 

@@ -283,8 +283,8 @@
 - `loans.monthly_payment_source` and `loans.repayment_method_source` are nullable string sources exposed on loan summary and repayment metadata responses.
 - Stored live values are `manual` and `estimated_from_linked_transactions`.
 - Manual `PATCH /api/v1/loans/{loan_id}/repayment-metadata` marks only the supplied field sources as `manual`.
-- After loan-link writes and snapshot imports, My Ledge estimates latest loan snapshot `monthly_payment` from linked repayment transaction monthly totals using the effective `asset_liability_health.monthly_payment_estimate_*` settings.
-- Auto-estimation never overwrites `monthly_payment_source='manual'`. When all observed linked repayment months use `repayment_type='mixed'`, My Ledge can auto-fill `repayment_method='principal_interest'` with `repayment_method_source='estimated_from_linked_transactions'`.
+- After loan-link writes and snapshot imports, My Ledge estimates latest loan snapshot `monthly_payment` from linked repayment transaction monthly totals using the effective `asset_liability_health.monthly_payment_estimate_*` settings. Estimation uses completed months only; overdraft accounts (`loan_kind='overdraft'`) use a recent completed-month average, while other loan kinds use completed-month median.
+- Auto-estimation never overwrites `monthly_payment_source='manual'`. When linked observations fall below the configured minimum, stale `estimated_from_linked_transactions` monthly payments are cleared. When all observed linked repayment months use `repayment_type='mixed'`, My Ledge can auto-fill `repayment_method='principal_interest'` with `repayment_method_source='estimated_from_linked_transactions'`; stale estimated repayment methods are cleared only when linked observations no longer support an inferred method.
 - Loan summary also joins the stable `loan_accounts` row by `lender + product_name` and exposes nullable `loan_kind`. If the snapshot repayment method is missing or non-manual `unknown`, compatible `loan_kind` values can be used as a read-only display fallback with `repayment_method_source='derived_from_loan_account'`; this does not write back to `loans`.
 
 ### Analytics Settings

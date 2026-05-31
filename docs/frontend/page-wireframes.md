@@ -356,7 +356,7 @@
 - write access alert
 - 자산 설정 안내: `/analysis/assets`는 조회 전용이며 이 화면에서 metadata를 수정한다는 안내
 - 자산 유동성 설정: 최신 자산 row의 `liquidity_tier`와 `is_cash_equivalent` 편집
-- 대출 상환 설정: 최신 대출 row의 `monthly_payment`와 `repayment_method` 편집. 자산 현황에서 `loan_kind` 기반으로 유도된 상환 방식도 저장 전까지는 조회 전용 fallback이다.
+- 대출 상환 설정: 최신 대출 row의 `monthly_payment`와 `repayment_method` 편집. 연결 거래 추정 월상환액은 수동 입력과 분리된 읽기 영역으로 보여주고 `manual` / `estimated_from_linked_transactions` 출처를 표시한다. 사용자는 필요할 때만 수동 월상환액으로 확정한다. 자산 현황에서 `loan_kind` 기반으로 유도된 상환 방식도 저장 전까지는 조회 전용 fallback이다.
 - read-only mode에서는 저장 컨트롤 disabled
 
 ### Topbar meta

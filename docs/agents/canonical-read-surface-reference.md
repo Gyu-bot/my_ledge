@@ -233,7 +233,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `near_liquid_total` | `liquidity_tier='near_liquid'` 자산 합계. 기본 비상금 계산에는 바로 더하지 않는다. |
 | `illiquid_total` | `liquidity_tier='illiquid'` 자산 합계. |
 | `loan_balance_total` | 최신 대출 snapshot 기준 잔액 합계. |
-| `monthly_debt_payment_total` | `loans.monthly_payment` 합계. `monthly_payment_source='manual'`이면 사용자 확정값이고, `estimated_from_linked_transactions`이면 My Ledge가 대출 연결 거래의 월합계 median으로 보강한 추정값이다. |
+| `monthly_debt_payment_total` | `loans.monthly_payment` 합계. `monthly_payment_source='manual'`이면 사용자 확정값이고, `estimated_from_linked_transactions`이면 My Ledge가 완료된 월의 대출 연결 거래로 보강한 추정값이다. 마이너스 통장(`loan_kind='overdraft'`)은 최근 완료월 평균, 그 외 대출은 완료월 중앙값을 사용한다. |
 | `asset_row_count`, `loan_row_count` | snapshot 원천 row 수. 데이터 완성도 확인용이다. |
 
 `vw_asset_snapshot_canonical`은 자산 상태를 계산한 표준값이지 "건강/위험" 최종 label이 아니다. 유동성 판단은 `/analytics/liquidity-health`의 `confidence`, `assumptions`, 사용자 목표/예정 지출과 함께 해석한다.

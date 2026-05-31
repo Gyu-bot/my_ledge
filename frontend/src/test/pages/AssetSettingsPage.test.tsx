@@ -54,6 +54,9 @@ vi.mock('../../hooks/useAssets', () => ({
           interest_rate: '3.50',
           monthly_payment: '50.00',
           repayment_method: 'principal_interest',
+          monthly_payment_source: 'estimated_from_linked_transactions',
+          repayment_method_source: 'estimated_from_linked_transactions',
+          loan_kind: 'equal_principal_interest',
           start_date: '2021-06-01',
           maturity_date: '2051-05-31',
         },
@@ -135,6 +138,11 @@ describe('AssetSettingsPage', () => {
   it('saves editable monthly payment and repayment method for each loan row', async () => {
     wrap(<AssetSettingsPage />)
 
+    expect(screen.getByText('연결 거래 기준 월상환액')).toBeInTheDocument()
+    expect(screen.getByText('₩ 50')).toBeInTheDocument()
+    expect(screen.getByText('완료월 중앙값')).toBeInTheDocument()
+    expect(screen.getByText('수동 월상환액')).toBeInTheDocument()
+
     fireEvent.change(screen.getByLabelText('우리집 주담대 월상환액'), {
       target: { value: '75' },
     })
@@ -148,6 +156,24 @@ describe('AssetSettingsPage', () => {
         id: 201,
         data: {
           monthly_payment: '75',
+          repayment_method: 'principal_equal',
+        },
+      })
+    })
+  })
+
+  it('does not mark an estimated monthly payment as manual when only saving repayment method', async () => {
+    wrap(<AssetSettingsPage />)
+
+    fireEvent.change(screen.getByLabelText('우리집 주담대 상환 방식'), {
+      target: { value: 'principal_equal' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '우리집 주담대 상환 메타 저장' }))
+
+    await waitFor(() => {
+      expect(patchLoanRepaymentMetadataMock).toHaveBeenCalledWith({
+        id: 201,
+        data: {
           repayment_method: 'principal_equal',
         },
       })

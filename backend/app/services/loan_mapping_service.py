@@ -1,3 +1,4 @@
+import calendar
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -144,7 +145,15 @@ async def upsert_transaction_loan_link(
             loan_account_id=account.id,
         )
         db_session.add(link)
+        loan_keys = [_account_key(account.lender, account.product_name)]
     else:
+        loan_keys = [_account_key(account.lender, account.product_name)]
+        if link.loan_account_id != account.id:
+            old_account = await db_session.get(LoanAccount, link.loan_account_id)
+            if old_account is not None:
+                loan_keys.append(
+                    _account_key(old_account.lender, old_account.product_name)
+                )
         link.loan_account_id = account.id
 
     link.repayment_type = payload.repayment_type
@@ -153,7 +162,7 @@ async def upsert_transaction_loan_link(
     await db_session.flush()
     await apply_loan_repayment_estimates_for_latest_snapshots(
         db_session,
-        loan_keys=[_account_key(account.lender, account.product_name)],
+        loan_keys=loan_keys,
     )
     await db_session.commit()
     return await _load_link_item_or_500(db_session, transaction_id)
@@ -176,6 +185,15 @@ async def bulk_upsert_transaction_loan_links(
     existing_links = {
         link.transaction_id: link for link in existing_result.scalars().all()
     }
+    old_account_ids = {
+        link.loan_account_id
+        for link in existing_links.values()
+        if link.loan_account_id != account.id
+    }
+    loan_keys = [_account_key(account.lender, account.product_name)]
+    loan_keys.extend(
+        await _load_account_keys_for_ids(db_session, account_ids=old_account_ids)
+    )
 
     for transaction in transactions:
         link = existing_links.get(transaction.id)
@@ -194,7 +212,7 @@ async def bulk_upsert_transaction_loan_links(
     await db_session.flush()
     await apply_loan_repayment_estimates_for_latest_snapshots(
         db_session,
-        loan_keys=[_account_key(account.lender, account.product_name)],
+        loan_keys=loan_keys,
     )
     await db_session.commit()
     return LoanTransactionLinkBulkUpsertResponse(updated=len(transactions))
@@ -212,7 +230,14 @@ async def delete_transaction_loan_link(
     )
     if link is None:
         return False
+    account = await db_session.get(LoanAccount, link.loan_account_id)
     await db_session.delete(link)
+    await db_session.flush()
+    if account is not None:
+        await apply_loan_repayment_estimates_for_latest_snapshots(
+            db_session,
+            loan_keys=[_account_key(account.lender, account.product_name)],
+        )
     await db_session.commit()
     return True
 
@@ -245,16 +270,25 @@ async def apply_loan_repayment_estimates_for_latest_snapshots(
             reference_date=latest_loan.snapshot_date,
             lookback_months=effective.monthly_payment_estimate_lookback_months,
         )
+        loan_kind = await _load_loan_kind_for_key(
+            db_session,
+            lender=lender,
+            product_name=product_name,
+        )
 
         monthly_payment = _estimate_monthly_payment(
             observations["monthly_totals"],
             min_observations=effective.monthly_payment_min_observations,
+            loan_kind=loan_kind,
         )
         if monthly_payment is not None and _is_estimate_overwritable(
             latest_loan.monthly_payment_source
         ):
             latest_loan.monthly_payment = monthly_payment
             latest_loan.monthly_payment_source = "estimated_from_linked_transactions"
+        elif latest_loan.monthly_payment_source == "estimated_from_linked_transactions":
+            latest_loan.monthly_payment = None
+            latest_loan.monthly_payment_source = None
 
         repayment_method = _infer_repayment_method(observations["monthly_types"])
         if repayment_method is not None:
@@ -262,6 +296,9 @@ async def apply_loan_repayment_estimates_for_latest_snapshots(
             latest_loan.repayment_method_source = (
                 "estimated_from_linked_transactions"
             )
+        elif latest_loan.repayment_method_source == "estimated_from_linked_transactions":
+            latest_loan.repayment_method = None
+            latest_loan.repayment_method_source = None
         elif latest_loan.repayment_method is None:
             latest_loan.repayment_method = "unknown"
 
@@ -671,6 +708,35 @@ async def _load_latest_loan_model_for_key(
     )
 
 
+async def _load_loan_kind_for_key(
+    db_session: AsyncSession,
+    *,
+    lender: str,
+    product_name: str,
+) -> str | None:
+    return await db_session.scalar(
+        select(LoanAccount.loan_kind)
+        .where(LoanAccount.lender == lender)
+        .where(LoanAccount.product_name == product_name)
+        .limit(1)
+    )
+
+
+async def _load_account_keys_for_ids(
+    db_session: AsyncSession,
+    *,
+    account_ids: set[int],
+) -> list[tuple[str, str]]:
+    if not account_ids:
+        return []
+    result = await db_session.execute(
+        select(LoanAccount.lender, LoanAccount.product_name).where(
+            LoanAccount.id.in_(account_ids)
+        )
+    )
+    return [_account_key(lender, product_name) for lender, product_name in result.all()]
+
+
 async def _load_linked_repayment_observations(
     db_session: AsyncSession,
     *,
@@ -680,6 +746,13 @@ async def _load_linked_repayment_observations(
     lookback_months: int,
 ) -> dict[str, list[object]]:
     window_start = _month_window_start(reference_date, lookback_months)
+    window_end = _complete_month_window_end(reference_date)
+    if window_end < window_start:
+        return {
+            "monthly_totals": [],
+            "monthly_types": [],
+        }
+
     result = await db_session.execute(
         select(
             Transaction.date,
@@ -697,7 +770,7 @@ async def _load_linked_repayment_observations(
         .where(LoanAccount.lender == lender)
         .where(LoanAccount.product_name == product_name)
         .where(Transaction.date >= window_start)
-        .where(Transaction.date <= reference_date)
+        .where(Transaction.date <= window_end)
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
         .order_by(Transaction.date.asc(), Transaction.id.asc())
@@ -734,13 +807,31 @@ def _month_window_start(reference_date: date, lookback_months: int) -> date:
     return date(year, month, 1)
 
 
+def _complete_month_window_end(reference_date: date) -> date:
+    if reference_date.day == calendar.monthrange(
+        reference_date.year,
+        reference_date.month,
+    )[1]:
+        return reference_date
+    previous_month_index = reference_date.year * 12 + reference_date.month - 2
+    year = previous_month_index // 12
+    month = previous_month_index % 12 + 1
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
 def _estimate_monthly_payment(
     monthly_totals: list[Decimal],
     *,
     min_observations: int,
+    loan_kind: str | None,
 ) -> Decimal | None:
     if len(monthly_totals) < min_observations:
         return None
+    if loan_kind == "overdraft":
+        recent_totals = monthly_totals[-3:]
+        return (sum(recent_totals, Decimal("0")) / len(recent_totals)).quantize(
+            Decimal("0.01")
+        )
     return Decimal(median(monthly_totals)).quantize(Decimal("0.01"))
 
 

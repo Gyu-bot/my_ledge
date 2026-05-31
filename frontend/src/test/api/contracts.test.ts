@@ -122,6 +122,9 @@ describe('frontend query contract adapters', () => {
       monthly_payment: '750000',
       repayment_method: 'principal_equal',
     })
+    await assetApi.patchLoanRepaymentMetadata(202, {
+      repayment_method: 'interest_only',
+    })
 
     expect(fetchMock.mock.calls[0][0]).toContain('/assets/snapshots/101/liquidity')
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH' })
@@ -134,6 +137,10 @@ describe('frontend query contract adapters', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({
       monthly_payment: '750000',
       repayment_method: 'principal_equal',
+    })
+    expect(fetchMock.mock.calls[2][0]).toContain('/loans/202/repayment-metadata')
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual({
+      repayment_method: 'interest_only',
     })
   })
 })
