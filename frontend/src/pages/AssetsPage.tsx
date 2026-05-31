@@ -20,6 +20,7 @@ import { formatKRW, formatKRWCompact } from '../lib/utils'
 import type {
   AssetSnapshotItemResponse,
   LiquidityTier,
+  LoanItem,
   LoanKind,
   LoanRepaymentMethod,
 } from '../types/asset'
@@ -68,6 +69,16 @@ function loanKindLabel(value: LoanKind | null | undefined) {
 function money(value: string | null | undefined) {
   if (!value) return '—'
   return `₩ ${formatKRW(parseFloat(value))}`
+}
+
+function monthlyPaymentSourceLabel(loan: LoanItem): string | null {
+  if (loan.monthly_payment_source === 'manual') return '수동 확정'
+  if (loan.monthly_payment_source === 'estimated_from_linked_transactions') {
+    return loan.loan_kind === 'overdraft'
+      ? '연결 거래 추정 · 최근 완료월 평균'
+      : '연결 거래 추정 · 완료월 중앙값'
+  }
+  return null
 }
 
 export function AssetsPage() {
@@ -286,7 +297,14 @@ export function AssetsPage() {
                            <span className="text-text-muted">{parseFloat(loan.interest_rate).toFixed(2)}%</span>
                          ) : '—'}
                        </td>
-                       <td className="py-2 text-right text-text-secondary">{money(loan.monthly_payment)}</td>
+                       <td className="py-2 text-right text-text-secondary">
+                         <div>{money(loan.monthly_payment)}</div>
+                         {monthlyPaymentSourceLabel(loan) ? (
+                           <div className="text-nano text-text-ghost mt-0.5">
+                             {monthlyPaymentSourceLabel(loan)}
+                           </div>
+                         ) : null}
+                       </td>
                        <td className="py-2 text-right text-text-secondary">
                          <div>{repaymentMethodLabel(loan.repayment_method)}</div>
                          {loan.repayment_method_source === 'derived_from_loan_account' ? (

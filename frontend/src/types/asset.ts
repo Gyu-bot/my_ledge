@@ -117,8 +117,8 @@ export type LoanRepaymentMethod =
   | 'unknown'
 
 export interface LoanRepaymentMetadataPatchRequest {
-  monthly_payment: string | null
-  repayment_method: LoanRepaymentMethod | null
+  monthly_payment?: string | null
+  repayment_method?: LoanRepaymentMethod | null
 }
 
 export interface LoanRepaymentMetadataResponse {

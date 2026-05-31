@@ -526,7 +526,8 @@
 - Behavior:
   - maps many transaction rows to one stable loan account
   - returns `404` if any requested transaction or account ID does not exist
-  - after a successful link write, latest matching loan snapshots may receive an estimated `monthly_payment` / `repayment_method` when their corresponding source is not `manual`
+  - after a successful link write, latest matching loan snapshots may receive an estimated `monthly_payment` / `repayment_method` when their corresponding source is not `manual`; `monthly_payment` uses completed linked-transaction months only, with overdraft accounts using a recent completed-month average and other loan kinds using completed-month median
+  - if linked observations later fall below the configured minimum, stale `estimated_from_linked_transactions` monthly payments are cleared; stale estimated repayment methods are cleared when linked observations no longer support an inferred method
 
 #### `DELETE /api/v1/transactions/{transaction_id}/loan-link`
 
@@ -763,6 +764,7 @@
   - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption
   - same-date snapshot re-import preserves user-confirmed `liquidity_tier` / `is_cash_equivalent` and loan repayment metadata by stable snapshot row identity
   - monthly debt payment uses `loans.monthly_payment` when available; `monthly_payment_source` says whether that value is user-confirmed `manual` or `estimated_from_linked_transactions`
+  - `estimated_from_linked_transactions` monthly payments are based on completed linked-transaction months. Overdraft accounts use a recent completed-month average; other loan kinds use completed-month median.
   - if required spend or income is omitted, emergency/debt ratios can be `null`
 
 #### `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
@@ -788,6 +790,7 @@
 - Behavior:
   - supplied `monthly_payment` and `repayment_method` fields are marked `manual`
   - automatic linked-transaction estimation does not overwrite `monthly_payment_source='manual'`
+  - non-manual estimated monthly payments can be cleared when loan-link deletion or replacement leaves too few completed-month observations; non-manual estimated repayment methods can be cleared when no linked observations still support the inferred method
 
 #### `GET /api/v1/investments/summary`
 
