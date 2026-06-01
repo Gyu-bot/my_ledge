@@ -200,7 +200,6 @@
   - `cost_kind`
   - `fixed_cost_necessity`
   - `spend_necessity`
-  - `cost_classification_source`
   - `recurring_payment_kind`
   - `is_edited`
   - `include_deleted`
@@ -315,6 +314,7 @@
 - `GET /api/v1/assets/snapshot-compare`
 
 위 세 endpoint는 현재 `start_date` / `end_date` filter를 받지 않는다.
+현재 live contract에는 asset/investment/loan raw snapshot row를 삭제, 숨김, 만기 처리, 병합하는 endpoint가 없다. `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`는 최신 자산 row의 유동성 metadata만 수정한다. raw-data lifecycle과 multi-source provenance 관리는 [planned-work.md](planned-work.md)의 P2 계획으로 둔다.
 
 ### Snapshot Compare Contract
 

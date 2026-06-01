@@ -5,6 +5,8 @@
 > **Author:** 민규 + Claude (PM/Dev Partner)
 > **Status:** Draft — 리뷰 후 확정
 
+> **Live contract note:** 이 PRD는 제품 의도와 장기 범위를 설명한다. 현재 구현된 endpoint, field, canonical view, backlog 판단은 backend 코드와 `docs/backend-api-ssot.md`, `docs/planned-work.md`를 우선한다.
+
 ---
 
 ## 1. 개요
