@@ -118,6 +118,16 @@ readonly DB role 요구사항:
 5. drill-down이 필요하면 readonly DB에서 canonical view를 조회한다.
 6. raw table은 import fidelity, 삭제/병합 감사, snapshot 원본 확인 같은 보조 작업에만 사용한다.
 
+## 자주 묻는 질문별 우선 조회 순서
+
+| 질문 | 우선 조회 | 부족할 때 | 주의 |
+|---|---|---|---|
+| 이번 달 현금흐름/가용액 | `GET /api/v1/canonical-views/dashboard` | `vw_monthly_cashflow`, `vw_true_spendable_monthly` | `income_basis='estimated'`면 관측/예상 수입을 분리한다. |
+| 특정 거래 설명/수정 | `GET /api/v1/transactions` | `vw_transactions_effective`, raw `transactions` | raw table은 감사용으로만 쓰고 수정은 API로 한다. |
+| 대출 상환 부담 | `GET /api/v1/analytics/liquidity-health` | `vw_loan_repayment_monthly`, `GET /api/v1/loan-transaction-links` | 연결 부족/추정값이면 confidence와 assumptions를 같이 말한다. |
+| 자산/부채 상태 | `GET /api/v1/analytics/net-worth-breakdown` | `GET /api/v1/assets/snapshots`, `vw_asset_snapshot_canonical` | 현재 raw 자산 삭제/숨김/병합 API는 planned 상태다. 만기/중복/음수 자산은 사용자 확인 대상으로 표시한다. |
+| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [planned-work.md](../planned-work.md), `GET /api/v1/schema` | `planned-work`의 endpoint 후보를 live로 가정하지 않는다. |
+
 ## 판단 책임 경계
 
 에이전트는 My Ledge의 read surface를 "판정"이 아니라 "근거가 붙은 계산/후보"로 취급한다.

@@ -23,10 +23,13 @@ Hermes, Codex, Claude, OpenClaw 등 범용 에이전트가 `my_ledge`를 읽기/
 
 참고 문서:
 
-- 제품 요구사항: [../../PRD.md](../../PRD.md)
-- 협업/운영 규칙: [../../AGENTS.md](../../AGENTS.md)
-- 현재 구현/검증 상태: [../STATUS.md](../STATUS.md)
-- live backend/API contract: [../backend-api-ssot.md](../backend-api-ssot.md)
-- 상세 endpoint/metric reference: [../backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md)
+| 문서 | 상태 | 용도 |
+|---|---|---|
+| [../backend-api-ssot.md](../backend-api-ssot.md) | live | 현재 호출 가능한 endpoint와 contract 판단 |
+| [../backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md) | live detail | endpoint/metric/canonical 계산 상세 |
+| [../STATUS.md](../STATUS.md) | live handoff | main 기준 구현/검증 상태 |
+| [../planned-work.md](../planned-work.md) | planned | 미구현 backlog와 보류/장기 계획 |
+| [../../PRD.md](../../PRD.md) | product intent | 제품 의도와 배경. live contract 판단에는 사용하지 않음 |
+| [../../AGENTS.md](../../AGENTS.md) | workflow | 협업/운영 규칙 |
 
 기존 `docs/openclaw/` 경로는 과거 호환용 alias로만 유지한다. 새 문서는 이 디렉터리를 기준으로 갱신한다.

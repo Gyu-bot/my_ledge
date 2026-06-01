@@ -222,6 +222,10 @@
   - `source: "import" | "manual" | "all"` default `all`
   - `category_major`
   - `payment_method`
+  - `cost_kind: "fixed" | "variable" | "all"` default `all`
+  - `fixed_cost_necessity: "essential" | "discretionary" | "all"` default `all`
+  - `spend_necessity: "essential" | "discretionary" | "all"` default `all`
+  - `recurring_payment_kind: "installment" | "monthly_recurring" | "not_recurring" | "all"` default `all`
   - `is_edited: "true" | "false" | "all"` default `all`
   - `include_deleted: bool` default `false`
   - `include_merged: bool` default `false`
@@ -250,7 +254,7 @@
   - query is built from `build_transactions_effective_select()`
   - default excludes deleted and merged rows
   - `search` is `ILIKE %keyword%` over `description`, `merchant`, `memo`, `payment_method`
-  - ordered by `date desc, time desc, id desc`
+  - ordered by `date asc, time asc, id asc`
 
 #### `GET /api/v1/transactions/filter-options`
 
@@ -347,6 +351,8 @@
   - `payment_method`
   - `cost_kind`
   - `fixed_cost_necessity`
+  - `spend_necessity`
+  - `recurring_payment_kind`
   - `memo`
 - Response model: `TransactionResponse`
 - Behavior:
@@ -366,6 +372,8 @@
     - `category_minor_user`
     - `cost_kind`
     - `fixed_cost_necessity`
+    - `spend_necessity`
+    - `recurring_payment_kind`
     - `memo`
 - Response model: `TransactionBulkUpdateResponse`
 - Response shape:
@@ -383,6 +391,8 @@
   - `category_minor_user`
   - `cost_kind`
   - `fixed_cost_necessity`
+  - `spend_necessity`
+  - `recurring_payment_kind`
   - `memo`
 
 #### `DELETE /api/v1/transactions/{transaction_id}`
@@ -895,6 +905,10 @@
   - `fixed_ratio`
   - `essential_fixed_total`
   - `discretionary_fixed_total`
+  - `essential_variable_total`
+  - `discretionary_variable_total`
+  - `required_spend_total`
+  - `discretionary_spend_total`
   - `unclassified_total`
   - `unclassified_count`
 
@@ -913,26 +927,13 @@
     - `variable_total`
     - `essential_fixed_total`
     - `discretionary_fixed_total`
+    - `essential_variable_total`
+    - `discretionary_variable_total`
+    - `required_spend_total`
+    - `discretionary_spend_total`
     - `unclassified_total`
     - `unclassified_count`
     - `fixed_ratio`
-
-#### `GET /api/v1/analytics/recurring-payments`
-
-- Purpose: detect recurring expense groups by merchant and expose manual recurring classification state.
-- Query params:
-  - `start_date`
-  - `end_date`
-  - `min_occurrences` default `2`
-  - `page` default `1`
-  - `per_page` default `10`, max `100`
-- Response includes:
-  - `recurring_payment_kind`: resolved group value when all transactions in the group share one manual value
-  - `installment_count`
-  - `monthly_recurring_count`
-  - `not_recurring_count`
-  - `unclassified_count`
-  - `transaction_ids`: ids used by the operations recurring-classification screen to bulk-update a recurring group
 
 #### `GET /api/v1/analytics/merchant-spend`
 
@@ -991,13 +992,13 @@
 
 #### `GET /api/v1/analytics/recurring-payments`
 
-- Purpose: recurring merchant detection
+- Purpose: detect recurring expense groups by merchant and expose saved recurring classification state.
 - Query params:
   - `start_date`
   - `end_date`
   - `min_occurrences` default `2`
-  - `page`
-  - `per_page`
+  - `page` default `1`
+  - `per_page` default `10`, max `100`
 - Response model: `RecurringPaymentsResponse`
 - Response shape:
   - `total`
@@ -1012,7 +1013,16 @@
     - `occurrences`
     - `confidence`
     - `last_date`
+    - `recurring_payment_kind`
+    - `installment_count`
+    - `monthly_recurring_count`
+    - `not_recurring_count`
+    - `unclassified_count`
+    - `transaction_ids`
   - `assumptions`
+- Notes:
+  - `recurring_payment_kind` is the resolved group value when all transactions in the group share one saved value; otherwise it can be `null`.
+  - `transaction_ids` are the row ids used by `/operations/recurring-classification` for group-level bulk updates.
 
 #### `GET /api/v1/analytics/spending-anomalies`
 

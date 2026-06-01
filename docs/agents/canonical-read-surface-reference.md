@@ -26,6 +26,19 @@
 | 비율 값 | backend 값은 보통 `0.25 = 25%` 형태다. UI 표시 시 퍼센트로 변환한다. |
 | `null` | 계산 불가, 기준 부족, 미분류, 또는 사용자가 아직 입력하지 않은 상태를 의미한다. `0`과 다르게 해석한다. |
 
+## 자산/부채 원천값 해석 규칙
+
+현재 live 자산 surface는 BankSalad snapshot row와 사용자 보강 metadata를 그대로 읽는 보수적 surface다. 에이전트는 자산/부채 값을 임의로 재분류하지 말고, 아래 우선순위로 해석한다.
+
+| 항목 | 현재 해석 |
+|---|---|
+| `asset_snapshots.side` | `asset`이면 자산, `liability`이면 부채 row로 집계한다. |
+| 음수 자산 row | 현재 backend는 `side='asset'`인 음수 금액을 자동으로 부채 row로 옮기지 않는다. 마이너스 통장처럼 실질 부채로 보이는 row는 사용자 확인 또는 향후 raw-data 정리 기능 대상이라고 설명한다. |
+| `liquidity_tier` | 사용자가 저장한 값이 있으면 우선한다. 없으면 health service가 category/name heuristic을 사용하고 assumptions에 남긴다. |
+| `is_cash_equivalent` | 명시값이 있으면 `liquidity_tier`보다 우선해 현금성 포함 여부를 결정한다. 값이 없으면 `liquidity_tier='immediate'` 또는 보수적 category/name heuristic을 사용한다. |
+| 만기/소멸/중복 자산 | 현재 live 삭제/숨김/병합 API가 없으므로 latest snapshot/API에 남을 수 있다. 에이전트는 이를 live 값으로 단정하지 말고, snapshot 날짜와 raw source 한계를 함께 말한다. |
+| 원천 우선순위 | 현재는 사용자 보강값(`liquidity_tier`, `is_cash_equivalent`, 대출 `monthly_payment`/`repayment_method`)이 raw import metadata보다 우선한다. multi-source 우선순위와 source confidence는 planned work다. |
+
 ## My Ledge / Agent 판단 책임 경계
 
 My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품질 신호, 사용자 settings, review state를 제공한다.
