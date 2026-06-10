@@ -126,7 +126,7 @@ readonly DB role 요구사항:
 | 특정 거래 설명/수정 | `GET /api/v1/transactions` | `vw_transactions_effective`, raw `transactions` | raw table은 감사용으로만 쓰고 수정은 API로 한다. |
 | 대출 상환 부담 | `GET /api/v1/analytics/liquidity-health` | `vw_loan_repayment_monthly`, `GET /api/v1/loan-transaction-links` | 연결 부족/추정값이면 confidence와 assumptions를 같이 말한다. |
 | 자산/부채 상태 | `GET /api/v1/analytics/net-worth-breakdown` | `GET /api/v1/assets/snapshots`, `vw_asset_snapshot_canonical` | 현재 raw 자산 삭제/숨김/병합 API는 planned 상태다. 만기/중복/음수 자산은 사용자 확인 대상으로 표시한다. |
-| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [planned-work.md](../planned-work.md), `GET /api/v1/schema` | `planned-work`의 endpoint 후보를 live로 가정하지 않는다. |
+| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [Implentation-plan.md](../../Implentation-plan.md), `GET /api/v1/schema` | 전역 실행계획의 endpoint 후보를 live로 가정하지 않는다. |
 
 ## 판단 책임 경계
 

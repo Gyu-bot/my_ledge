@@ -5,7 +5,7 @@
 
 ## Current State
 
-- **Phase:** P2 제외 P0/P0.5/P1 구현 완료. advisor/operations API, canonical views, frontend 연결, contract docs, regression tests가 정렬됨. 투자 분석과 자산이동/이체 tracking은 P2 이후로 보류.
+- **Phase:** P2 제외 P0/P0.5/P1 구현 완료 후, `advisor-canonical-gap-analysis.md` 기반 전역 실행계획으로 재정렬됨. 다음 우선순위는 `Implentation-plan.md`의 T001부터 진행한다.
 - **Last Worker:** Codex (2026-05-31T02:41+0900, GitHub Actions CI workflow 추가)
 - **Branch:** codex/add-github-ci
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
@@ -13,7 +13,7 @@
 ## Start Here
 
 1. 현재 live backend/API contract는 [backend-api-ssot.md](backend-api-ssot.md)를 먼저 본다.
-2. 아직 구현되지 않은 backlog는 [planned-work.md](planned-work.md)를 본다.
+2. 현재 전역 실행계획과 backlog tracking은 [../Implentation-plan.md](../Implentation-plan.md)를 본다.
 3. 상세 endpoint/metric/canonical view 계산 방식은 [backend-api-and-metrics-reference.md](backend-api-and-metrics-reference.md)를 본다.
 4. 외부 에이전트 연동은 [agents/README.md](agents/README.md)를 본다.
 5. 현재 frontend 구조는 [frontend-design-tokens.md](frontend-design-tokens.md), [frontend/components-and-design-token-inventory.md](frontend/components-and-design-token-inventory.md), [frontend/page-wireframes.md](frontend/page-wireframes.md), [frontend-reimplementation-wireframe-functional-requirements.md](frontend-reimplementation-wireframe-functional-requirements.md)를 본다.
@@ -34,15 +34,15 @@
 - [x] 자동분류 일괄 적용 UX 수정: 고정비/변동비 규칙 폼에 입력 중인 값이 있으면 먼저 저장한 뒤 일괄 적용해 `fixed_cost_necessity` 변경이 누락되지 않도록 함
 - [x] 진행월 true spendable 예상 표시: 현재 월 수입이 최근 6개 마감월의 이상치 제외 수입 baseline의 50% 미만이면 dashboard API가 `estimated_*` 필드와 `excluded_income_periods`를 제공하고, frontend가 `예상` 태그/관측값/제외 월을 함께 표시
 - [x] `vw_fixed_cost_monthly_summary`를 loan-linked repayment 제외 기준으로 정렬
-- [x] Planned backlog 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 [planned-work.md](planned-work.md)에 반영
+- [x] Planned backlog 보강: 투자 성과 시계열 view는 제외하고, cash-equivalent/liquidity tier 분류, 대출 `monthly_payment`/상환 메타데이터, agent 재계산 방지를 위한 backend API/canonical read surface 고정 원칙을 현재 archive된 [planned-work snapshot](archive/planning/2026-06-10-planned-work.md)에 반영
 - [x] P1 1-4 구현: `spend_necessity`, `merchant_alias_rules`, `vw_recurring_merchant_monthly`, `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health`
 - [x] P1 frontend 노출: `/operations/workbench` 필수/재량 편집/필터, `/operations/auto-classification` 거래처 정규화/필수·재량 규칙, `/operations/canonical-views` 반복 거래처, `/analysis/assets` 유동성 Health
 - [x] 대출 매칭 규칙 기준 선택 구현: `/operations/auto-classification`에서 분석용 거래처(`merchant`) 또는 원본 설명(`description`)을 선택해 대출 상환 자동 연결 규칙을 저장/적용
 - [x] 프론트엔드 거래처 표기 정리: 작업대/대출 연결/지출/인사이트/반복분류 화면에서 `merchant`는 분석용 거래처, `description`은 원본 설명으로 구분
 - [x] 거래처 정규화 기준 보정: alias rule은 원본 설명(`description`)을 매칭해 분석용 거래처(`merchant`)에 반영하고, `merchant != description`인 수동 수정 추정 row는 보존
-- [x] Advisor 책임 경계 문서화: My Ledge는 계산/후보/근거/settings/review state를 맡고, 에이전트는 사용자 맥락 기반 최종 해석과 조언을 맡도록 [planned-work.md](planned-work.md)에 반영
+- [x] Advisor 책임 경계 문서화: My Ledge는 계산/후보/근거/settings/review state를 맡고, 에이전트는 사용자 맥락 기반 최종 해석과 조언을 맡도록 현재 archive된 [planned-work snapshot](archive/planning/2026-06-10-planned-work.md)에 반영
 - [x] 에이전트 문서 판단 경계 보강: `health`, `anomaly`, `confidence`, `priority_score`, `true_spendable`을 My Ledge의 최종 조언이 아니라 계산/후보/데이터 품질 신호로 해석하도록 [agents/](agents/)와 [agent-integration/](agent-integration/) 문서에 반영
-- [x] Advisor 다음 구현 기본값 정리: 재량 지출 속도, 구매 게이트, 반복결제 dry-run, 현금성 자산 tier, 대출 월상환액 보강, bulk 안전장치와 settings 조정 항목을 [planned-work.md](planned-work.md)에 반영
+- [x] Advisor 다음 구현 기본값 정리: 재량 지출 속도, 구매 게이트, 반복결제 dry-run, 현금성 자산 tier, 대출 월상환액 보강, bulk 안전장치와 settings 조정 항목을 현재 archive된 [planned-work snapshot](archive/planning/2026-06-10-planned-work.md)에 반영
 - [x] `description_user` / `effective_description` 계획 제외: 원본 설명은 `description`, 분석명은 `merchant`, 사용자 부가 설명은 `memo`로 유지
 - [x] Sidebar/favicon 공용 brand mark 추가: 이미지 생성 툴로 만든 `frontend/public/brand-mark.png`를 favicon과 desktop sidebar 상단 아이콘에 연결
 - [x] 반복결제 dry-run 승인 흐름 frontend 연결: `/operations/recurring-classification`에서 후보 근거/매칭 거래/apply scope를 확인하고 그룹 단위로 승인 적용
@@ -53,7 +53,7 @@
 - [x] 검증 완료: backend 전체 pytest 140 passed, backend ruff, frontend vitest 112 passed, frontend lint/typecheck, Codex 인앱 브라우저 local smoke(`/operations/auto-classification`, `/operations/workbench`, `/operations/installments`)
 - [x] frontend asset/installment UX 정렬: 반복결제 목록에 할부 관리 CTA 추가, `/operations/installments` query prefill/label helper 지원, `/analysis/assets` 조회 전용 전환과 `/operations/asset-settings` 분리, 구매게이트 다중 사유 badge 렌더링 및 관련 vitest 회귀 추가
 - [x] 우선순위 조정: 투자 관련 분석은 증권사 API 이후로, 자산이동/이체 tracking은 가장 뒤쪽 P2로 이동
-- [x] docs 역할 정리: [planned-work.md](planned-work.md)는 미구현 backlog/roadmap, `docs/STATUS.md`는 handoff/status log로 분리
+- [x] docs 역할 정리: 전역 실행계획은 [../Implentation-plan.md](../Implentation-plan.md), `docs/STATUS.md`는 handoff/status log로 분리
 - [x] 과거 advisor 제안서 정리: 루트 `docs/additional_feature.md`를 [archive/planning/finance-advisor-analytics-expansion.md](archive/planning/finance-advisor-analytics-expansion.md)로 이동
 - [x] Canonical read model 확장 요구사항 정리: P0/P0.5/P1/P2 view 후보, 대출 상환 double-count 방지, true spendable, merchant baseline, unclassified work queue, as_of/threshold API 분리 원칙 반영
 - [x] 대출 계좌 관리 및 대출 상환 매핑 기반 구현 완료: `loan_accounts`, `loan_transaction_links`, `/operations/loan-mapping`, canonical loan fields
@@ -64,13 +64,13 @@
 
 ## In Progress
 
-- 없음. 할부 연계, 구매게이트 정리, 자산 설정 분리, 대출 월상환 자동 추정, 관련 문서 정합성 보강은 완료했다.
+- 없음. 다음 작업은 [../Implentation-plan.md](../Implentation-plan.md)의 Ready task에서 시작한다.
 
 ## Next Up
 
-1. P2 범위로 남긴 항목만 재개한다: Settings page, frontend v2 full reimplementation, 투자 분석, 자산이동/이체 tracking.
-2. 운영 배포본 screenshot capture는 별도 환경 검증 항목으로만 남긴다. local DOM smoke와 console error 확인은 완료했다.
-3. 구매 게이트 별도 review 화면이 필요해지면 `memo`/`reviewed_at`/`cooldown_until` 같은 확장 상태를 그때 추가한다.
+1. `Implentation-plan.md` T001/T002: 음수 자산 중복 차감 제거와 현금성 자산 fallback 보강.
+2. `Implentation-plan.md` T003: `/loans/summary`를 agent loan structure surface로 문서 승격.
+3. 이후 T004~T007 순서로 profile, loan canonical view, data coverage, income composition을 진행한다.
 
 ## Key Decisions
 
@@ -83,7 +83,7 @@
 - 2026-05-28: 진행월 예상 수입은 최근 3개월 단순 평균 대신 최근 6개 마감월의 median 기준 ±30% 밖 수입 월을 제외한 baseline으로 계산한다. 연말정산 환급/보너스처럼 월급과 같이 입금되어 거래 단위 분리가 어려운 수입은 `excluded_income_periods`로 표시한다.
 - 2026-05-28: `vw_unclassified_work_queue`의 반복결제 미분류 신호는 같은 거래처 2건만으로 판단하지 않는다. 같은 날 분할 구매를 제외하기 위해 최소 2개 월, 최소 2개 거래일, 금액 변동계수 `<= 0.5`를 만족하는 거래처만 `missing_recurring_kind` 후보로 본다.
 - 2026-05-28: 반복결제 카테고리 자동분류는 전체 거래를 단순 카테고리로 덮지 않는다. 기존 `recurring_payment_kind`를 보존하고, 반복 후보 gate(최소 2개 월/2개 거래일/CV `<= 0.5`) 또는 `cost_kind='fixed'`인 거래에만 `recurring_category_rules`를 적용한다. `not_recurring`은 reviewed non-recurring 상태를 명시하기 위한 값으로 추가했다.
-- 2026-05-28: `docs/planned-work.md`는 미구현 backlog/roadmap으로 유지하고 `docs/STATUS.md`와 분리한다.
+- 2026-06-10: `Implentation-plan.md`를 전역 실행계획과 current backlog tracking 문서로 삼고, 기존 `docs/planned-work.md`와 advisor canonical gap priority plan은 archive로 이동한다.
 - 2026-05-28: My Ledge core는 재무 어시스턴트의 말투/성격을 결정하지 않는다. 재무 어시스턴트가 사용할 canonical read model foundation과 `reason`/`confidence`/`assumptions`/`risk_level` 같은 판단 재료를 제공한다.
 - 2026-05-28: 다음 작업은 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어가되, 운영 smoke와 contract 검증은 각 구현 batch의 acceptance check로 유지한다.
 - 2026-05-28: 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 sparse 데이터로 본다.

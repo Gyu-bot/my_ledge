@@ -9,12 +9,12 @@ Hermes, Codex, Claude, OpenClaw 등 외부 에이전트가 `my_ledge`를 읽기/
 2. API/canonical value dictionary: [docs/agents/canonical-read-surface-reference.md](canonical-read-surface-reference.md)
 3. 상세 endpoint/metric reference: [docs/backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md)
 4. 범용 에이전트 연동 문서: [docs/agent-integration/README.md](../agent-integration/README.md)
-5. 미구현 계획 backlog: [docs/planned-work.md](../planned-work.md)
+5. 전역 실행계획 / 미구현 backlog: [Implentation-plan.md](../../Implentation-plan.md)
 6. 협업 규칙과 상태: [AGENTS.md](../../AGENTS.md), [docs/STATUS.md](../STATUS.md)
 
 `PRD.md`와 과거 plan/spec 문서는 제품 의도와 배경을 볼 때만 사용한다.
 live endpoint나 필드 계약이 충돌하면 backend 코드와 [docs/backend-api-ssot.md](../backend-api-ssot.md)를 우선한다.
-아직 구현되지 않은 계획은 [docs/planned-work.md](../planned-work.md)에 승격된 항목만 current backlog로 본다.
+아직 구현되지 않은 계획은 [Implentation-plan.md](../../Implentation-plan.md)에 승격된 항목만 current backlog로 본다.
 
 ## 연결 정보
 
