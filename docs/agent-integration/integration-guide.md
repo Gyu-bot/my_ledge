@@ -69,6 +69,7 @@ readonly DB role 요구사항:
 - `GET /api/v1/assets/net-worth-history`
 - `GET /api/v1/assets/snapshot-compare`
 - `GET /api/v1/investments/summary`
+- `GET /api/v1/insurance/summary`
 - `GET /api/v1/loans/summary`
 - `GET /api/v1/analytics/monthly-cashflow`
 - `GET /api/v1/analytics/category-mom`
@@ -122,11 +123,13 @@ readonly DB role 요구사항:
 
 | 질문 | 우선 조회 | 부족할 때 | 주의 |
 |---|---|---|---|
-| 이번 달 현금흐름/가용액 | `GET /api/v1/canonical-views/dashboard` | `vw_monthly_cashflow`, `vw_true_spendable_monthly` | `income_basis='estimated'`면 관측/예상 수입을 분리한다. |
+| 이번 달 현금흐름/가용액 | `GET /api/v1/canonical-views/dashboard` | `vw_monthly_cashflow`, `vw_true_spendable_monthly` | `income_basis='estimated'`면 관측/예상 수입을 분리하고, `is_complete_month=false` 월은 부분월로 표시한다. |
 | 특정 거래 설명/수정 | `GET /api/v1/transactions` | `vw_transactions_effective`, raw `transactions` | raw table은 감사용으로만 쓰고 수정은 API로 한다. |
 | 대출 상환 부담 | `GET /api/v1/analytics/liquidity-health` | `vw_loan_repayment_monthly`, `GET /api/v1/loan-transaction-links` | 연결 부족/추정값이면 confidence와 assumptions를 같이 말한다. |
-| 자산/부채 상태 | `GET /api/v1/analytics/net-worth-breakdown` | `GET /api/v1/assets/snapshots`, `vw_asset_snapshot_canonical` | 현재 raw 자산 삭제/숨김/병합 API는 planned 상태다. 만기/중복/음수 자산은 사용자 확인 대상으로 표시한다. |
-| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [planned-work.md](../planned-work.md), `GET /api/v1/schema` | `planned-work`의 endpoint 후보를 live로 가정하지 않는다. |
+| 대출 구조/금리/만기 | `GET /api/v1/loans/summary` | `vw_loan_account_canonical` | 금리와 잔액은 snapshot 값이고, 상환 우선순위는 에이전트 해석이다. |
+| 보험 계약/보험료 추정 | `GET /api/v1/insurance/summary` | raw `insurance_contracts`, 거래 API의 보험 카테고리 지출 | 보험료 적정성 판단은 에이전트 해석이며, API는 계약과 최근 마감월 보험 지출 근거만 제공한다. |
+| 자산/부채 상태 | `GET /api/v1/analytics/net-worth-breakdown` | `GET /api/v1/assets/snapshots`, `vw_asset_snapshot_canonical` | `negative_asset_excluded_total`이 있으면 음수 asset row 제외를 같이 설명한다. |
+| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [Implentation-plan.md](../../Implentation-plan.md), `GET /api/v1/schema` | 전역 실행계획의 endpoint 후보를 live로 가정하지 않는다. |
 
 ## 판단 책임 경계
 
@@ -193,7 +196,7 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 2. `GET /api/v1/analytics/purchase-gate-candidates`로 거래 단위 후보를 조회한다.
 3. `candidate_key`는 `transaction:{transaction_id}`이고, 같은 거래의 여러 사유는 `candidate_types[]`와 `reasons[]`로 묶여 있다.
 4. 후보의 `risk_level`, `reasons`, `assumptions`를 같이 제시하고, 즉시 구매 차단/허용 결론으로 바꾸지 않는다.
-5. 필요 시 `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`로 검토 상태만 반영한다.
+5. 필요 시 `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`로 검토 상태, memo, snooze cooldown만 반영한다.
 
 ### 할부 잔여 지출 설명
 

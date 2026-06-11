@@ -24,6 +24,7 @@ class NetWorthBreakdownItemResponse(BaseModel):
 class NetWorthBreakdownResponse(BaseModel):
     snapshot_date: date | None
     asset_total: Decimal
+    negative_asset_excluded_total: Decimal = Decimal("0")
     liability_total: Decimal
     net_worth: Decimal
     items: list[NetWorthBreakdownItemResponse]
@@ -33,10 +34,13 @@ class AssetLiabilityHealthResponse(BaseModel):
     snapshot_date: date | None
     cash_equivalent_total: Decimal
     asset_total: Decimal
+    negative_asset_excluded_total: Decimal = Decimal("0")
     liability_total: Decimal
     net_worth: Decimal
     monthly_required_spend: Decimal
     emergency_fund_months: float | None
+    emergency_fund_target_months: int
+    target_progress_ratio: float | None
     monthly_debt_payment: Decimal
     monthly_income: Decimal
     debt_payment_ratio: float | None
@@ -68,7 +72,9 @@ class AssetSnapshotsResponse(BaseModel):
 
 class SnapshotComparisonMode(StrEnum):
     LATEST_AVAILABLE_VS_PREVIOUS_AVAILABLE = "latest_available_vs_previous_available"
-    LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH = "last_closed_month_vs_previous_closed_month"
+    LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH = (
+        "last_closed_month_vs_previous_closed_month"
+    )
     SELECTED_SNAPSHOT_VS_BASELINE_SNAPSHOT = "selected_snapshot_vs_baseline_snapshot"
 
 
@@ -109,6 +115,7 @@ class InvestmentItemResponse(BaseModel):
     cost_basis: Decimal | None
     market_value: Decimal | None
     return_rate: Decimal | None
+    pct_of_investment_total: float | None = None
 
 
 class InvestmentTotalsResponse(BaseModel):
@@ -120,6 +127,29 @@ class InvestmentSummaryResponse(BaseModel):
     snapshot_date: date | None
     items: list[InvestmentItemResponse]
     totals: InvestmentTotalsResponse
+
+
+class InsuranceContractItemResponse(BaseModel):
+    id: int
+    snapshot_date: date
+    insurer: str
+    product_name: str
+    contract_status: str | None
+    total_paid: Decimal | None
+    contract_date: date | None
+    maturity_date: date | None
+
+
+class InsurancePremiumEstimateResponse(BaseModel):
+    period: str | None
+    amount: Decimal | None
+    assumptions: list[str]
+
+
+class InsuranceSummaryResponse(BaseModel):
+    snapshot_date: date | None
+    items: list[InsuranceContractItemResponse]
+    monthly_premium_estimate: InsurancePremiumEstimateResponse
 
 
 class LoanItemResponse(BaseModel):
@@ -141,12 +171,15 @@ class LoanItemResponse(BaseModel):
 
 class LoanRepaymentMetadataPatchRequest(BaseModel):
     monthly_payment: Decimal | None = Field(default=None, ge=0)
-    repayment_method: Literal[
-        "principal_interest",
-        "principal_equal",
-        "interest_only",
-        "unknown",
-    ] | None = None
+    repayment_method: (
+        Literal[
+            "principal_interest",
+            "principal_equal",
+            "interest_only",
+            "unknown",
+        ]
+        | None
+    ) = None
 
 
 class LoanRepaymentMetadataResponse(BaseModel):

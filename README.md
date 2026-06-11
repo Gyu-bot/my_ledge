@@ -26,7 +26,7 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 반복 결제 분류
 
 제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), 협업 규칙은 [AGENTS.md](AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](docs/STATUS.md)를 기준으로 본다.
-아직 구현되지 않았지만 계획으로 유지하는 backlog는 [docs/planned-work.md](docs/planned-work.md)에서 관리한다.
+아직 구현되지 않았지만 계획으로 유지하는 backlog는 [Implentation-plan.md](Implentation-plan.md)에서 관리한다.
 현재 live backend/API contract는 [docs/backend-api-ssot.md](docs/backend-api-ssot.md)를 우선 참조한다.
 에이전트 연동 시에는 [docs/agents/README.md](docs/agents/README.md)와 [docs/agents/canonical-read-surface-reference.md](docs/agents/canonical-read-surface-reference.md)를 먼저 읽고, 운영/skill 패키징은 [docs/agent-integration/README.md](docs/agent-integration/README.md)를 이어서 본다.
 
@@ -100,7 +100,7 @@ Canonical view는 raw table을 직접 다시 해석하지 않아도 같은 기�
 | `vw_merchant_monthly_baseline` | 거래처별 baseline과 증감 확인 | 월별 거래처 지출/건수, 직전 3개월 마감월 baseline, delta field |
 | `vw_unclassified_work_queue` | 분류 품질 개선 우선순위 | 비용 성격/필수 여부/월 단위 반복분류/대출 연결 검토가 필요한 거래와 우선순위. 같은 날 분할 구매처럼 월 반복성이 없는 거래는 반복분류 후보로 보지 않는다 |
 
-P1/P2 후보로 `vw_recurring_merchant_monthly`, `vw_asset_snapshot_canonical`, `vw_investment_allocation_snapshot`가 계획되어 있다. 아직 구현되지 않은 항목은 [docs/planned-work.md](docs/planned-work.md)를 기준으로 확인한다.
+아직 구현되지 않은 항목은 [Implentation-plan.md](Implentation-plan.md)를 기준으로 확인한다.
 
 ## 빠른 시작
 
@@ -354,7 +354,7 @@ npm run build
 - 제품 요구사항: [PRD.md](PRD.md)
 - 협업 규칙: [AGENTS.md](AGENTS.md)
 - 현재 진행 상태: [docs/STATUS.md](docs/STATUS.md)
-- 미구현 계획 backlog: [docs/planned-work.md](docs/planned-work.md)
+- 전역 실행계획 / 미구현 backlog: [Implentation-plan.md](Implentation-plan.md)
 - Backend/API live contract: [docs/backend-api-ssot.md](docs/backend-api-ssot.md)
 - Backend 상세 reference: [docs/backend-api-and-metrics-reference.md](docs/backend-api-and-metrics-reference.md)
 - 에이전트용 canonical README: [docs/agents/README.md](docs/agents/README.md)
@@ -362,7 +362,7 @@ npm run build
 - 범용 에이전트 연동 문서 인덱스: [docs/agent-integration/README.md](docs/agent-integration/README.md)
 - Legacy OpenClaw 호환 안내: [docs/openclaw/README.md](docs/openclaw/README.md)
 
-`docs/STATUS.md`는 작업 handoff와 현재 상태 로그이고, `docs/planned-work.md`는 계획으로 유지하는 미구현 항목의 backlog다. 과거 plan/spec/archive 문서의 미체크 항목은 `docs/planned-work.md`에 승격되어 있지 않으면 current backlog로 보지 않는다.
+`docs/STATUS.md`는 작업 handoff와 현재 상태 로그이고, `Implentation-plan.md`는 계획으로 유지하는 미구현 항목의 전역 실행계획이다. 과거 plan/spec/archive 문서의 미체크 항목은 `Implentation-plan.md`에 승격되어 있지 않으면 current backlog로 보지 않는다.
 
 ## 에이전트 연동
 

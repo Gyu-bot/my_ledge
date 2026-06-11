@@ -1660,6 +1660,26 @@ async def test_update_purchase_gate_candidate_review_writes_canonical_key(
     assert stored.candidate_type == "large_oneoff"
 
 
+async def test_update_purchase_gate_candidate_review_stores_memo_and_cooldown(
+    db_session: AsyncSession,
+) -> None:
+    response = await update_purchase_gate_candidate_review(
+        db_session,
+        candidate_key="transaction:42",
+        payload=PurchaseGateReviewPatchRequest(
+            review_status="snoozed",
+            memo="다음 급여일 이후 재검토",
+            cooldown_days=10,
+        ),
+    )
+
+    assert response.review_status == "snoozed"
+    assert response.memo == "다음 급여일 이후 재검토"
+    assert response.reviewed_at is not None
+    assert response.cooldown_until is not None
+    assert (response.cooldown_until - response.reviewed_at).days == 10
+
+
 async def test_update_purchase_gate_candidate_review_rejects_invalid_candidate_key(
     db_session: AsyncSession,
 ) -> None:

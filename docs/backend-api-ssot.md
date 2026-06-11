@@ -81,7 +81,7 @@
 |---|---|---|---|
 | `GET` | `/api/v1/health` | live | healthcheck |
 | `GET` | `/api/v1/schema` | live | API key required |
-| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, P0/P0.5 canonical view row dashboard, optional `reference_date`, current-month estimated true-spendable enrichment with 6-month outlier-adjusted income baseline |
+| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, canonical view row dashboard, optional `reference_date`, data coverage, complete-month flags, current-month estimated true-spendable enrichment |
 
 ### Upload / Operations
 
@@ -90,6 +90,7 @@
 | `GET` | `/api/v1/upload/logs` | live | 최근 10건 반환 |
 | `POST` | `/api/v1/upload` | live | multipart + `snapshot_date` required |
 | `POST` | `/api/v1/data/reset` | live | `transactions_only` / `transactions_and_snapshots` |
+| `GET` | `/api/v1/profile` | live | latest BankSalad `1.고객정보` profile snapshot; stores gender/age/KCB score only, not name/email |
 | `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
 | `PATCH` | `/api/v1/settings/analytics` | live | API key required, persisted analytics settings |
 | `GET` | `/api/v1/auto-classification/settings` | live | API key required, upload auto-apply toggles |
@@ -161,11 +162,12 @@
 | `GET` | `/api/v1/assets/snapshots` | live | query param 없음, `items` snapshot totals + latest snapshot `asset_items` editable asset rows |
 | `GET` | `/api/v1/assets/net-worth-history` | live | query param 없음 |
 | `GET` | `/api/v1/assets/snapshot-compare` | live | `comparison_mode` optional, default `latest_available_vs_previous_available` |
-| `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest |
-| `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest |
+| `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest; items include `pct_of_investment_total` |
+| `GET` | `/api/v1/insurance/summary` | live | optional `snapshot_date`; omitted면 latest; latest insurance contracts + recent closed-month insurance premium estimate |
+| `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest; loan structure/rate/balance/maturity surface for agents |
 | `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots |
 | `GET` | `/api/v1/analytics/net-worth-breakdown` | live | optional `snapshot_date`; latest if omitted |
-| `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income` |
+| `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income`; echoes financial target months/progress |
 | `PATCH` | `/api/v1/assets/snapshots/{asset_snapshot_id}/liquidity` | live | API key required, update `liquidity_tier` and `is_cash_equivalent` |
 | `PATCH` | `/api/v1/loans/{loan_id}/repayment-metadata` | live | API key required, update `monthly_payment` / `repayment_method` and mark changed fields as `manual` source |
 
@@ -184,7 +186,7 @@
 | `GET` | `/api/v1/analytics/spending-anomalies` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/discretionary-velocity` | live | discretionary spend pace against closed-month prorated baseline |
 | `GET` | `/api/v1/analytics/purchase-gate-candidates` | live | discretionary purchase review queue; one row per transaction; optional `review_status` |
-| `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist review status under canonical `transaction:{transaction_id}` key |
+| `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist review status, memo, reviewed_at, cooldown_until under canonical `transaction:{transaction_id}` key |
 
 ## Key Contract Notes
 
@@ -345,6 +347,7 @@
 ### Upload Retention
 
 - `POST /api/v1/upload` 는 import log commit 이후 원본 업로드 파일을 `UPLOAD_DIR` 에 저장한다.
+- upload snapshot summary includes `asset_snapshots`, `insurance_contracts`, `investments`, and `loans`; `2.현금흐름현황` is verification evidence only and is not stored.
 - `UPLOAD_DIR` 기본값은 `/data/uploads` 이다.
 - 저장 파일명은 `upload_logs.id` 기반 prefix와 안전화된 원본 파일명을 사용한다. 예: `000123-finance-sample.xlsx`
 - 저장 후 같은 디렉터리의 파일은 최신 5개만 남기고 오래된 파일을 삭제한다.
@@ -352,7 +355,7 @@
 
 ### Reset / Upload Logs Semantics
 
-- `POST /api/v1/data/reset` 는 transaction/snapshot current state만 삭제한다.
+- `POST /api/v1/data/reset` 는 transaction/snapshot current state만 삭제한다. `transactions_and_snapshots` includes asset, insurance, investment, and loan snapshot tables.
 - `upload_logs` 는 reset 대상이 아니다.
 - reset response의 `upload_logs_retained` 는 현재 항상 `true` 다.
 - 따라서 작업대의 최근 업로드 이력은 “현재 남아 있는 데이터”가 아니라 “최근 import 실행 history” 로 읽어야 한다.

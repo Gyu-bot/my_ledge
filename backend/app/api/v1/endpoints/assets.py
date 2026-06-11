@@ -13,6 +13,7 @@ from app.schemas.asset import (
     NetWorthBreakdownResponse,
     AssetSnapshotComparisonResponse,
     AssetSnapshotsResponse,
+    InsuranceSummaryResponse,
     InvestmentSummaryResponse,
     LoanSummaryResponse,
     LoanRepaymentMetadataPatchRequest,
@@ -23,6 +24,7 @@ from app.schemas.asset import (
 from app.services.assets_service import (
     get_asset_liability_health,
     get_asset_snapshot_comparison,
+    get_insurance_summary,
     get_investment_summary,
     get_loan_summary,
     get_net_worth_breakdown,
@@ -68,7 +70,9 @@ async def get_analytics_liquidity_health(
         db_session,
         snapshot_date=snapshot_date,
         monthly_required_spend=(
-            None if monthly_required_spend is None else Decimal(str(monthly_required_spend))
+            None
+            if monthly_required_spend is None
+            else Decimal(str(monthly_required_spend))
         ),
         monthly_income=None if monthly_income is None else Decimal(str(monthly_income)),
     )
@@ -121,6 +125,14 @@ async def get_investments_summary(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> InvestmentSummaryResponse:
     return await get_investment_summary(db_session, snapshot_date)
+
+
+@router.get("/insurance/summary", response_model=InsuranceSummaryResponse)
+async def get_insurance_summary_endpoint(
+    snapshot_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> InsuranceSummaryResponse:
+    return await get_insurance_summary(db_session, snapshot_date)
 
 
 @router.get("/loans/summary", response_model=LoanSummaryResponse)

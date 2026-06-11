@@ -258,11 +258,19 @@ async def test_canonical_dashboard_returns_view_rows(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["data_coverage"] == {
+        "first_transaction_date": None,
+        "last_transaction_date": None,
+    }
     assert body["monthly_cashflow"][-1]["period"] == "2026-05"
+    assert body["monthly_cashflow"][-1]["is_complete_month"] is False
     assert body["monthly_cashflow"][-1]["loan_repayment_total"] == 500000
     assert body["monthly_cashflow"][-1]["discretionary_variable_total"] == 1000000
     assert body["monthly_cashflow"][-1]["income_total"] == 1521
-    assert body["true_spendable_monthly"][0]["remaining_after_variable_spend"] == -3498479
+    assert (
+        body["true_spendable_monthly"][0]["remaining_after_variable_spend"] == -3498479
+    )
+    assert body["true_spendable_monthly"][0]["is_complete_month"] is False
     assert body["true_spendable_monthly"][0]["discretionary_variable_total"] == 1000000
     assert body["loan_repayment_monthly"][0]["loan_display_name"] == "국민 주담대"
     assert body["merchant_monthly_baseline"][0]["baseline_delta"] == 130000.0

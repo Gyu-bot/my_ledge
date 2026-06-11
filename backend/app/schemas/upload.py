@@ -11,6 +11,7 @@ class UploadTransactionSummary(BaseModel):
 
 class UploadSnapshotSummary(BaseModel):
     asset_snapshots: int
+    insurance_contracts: int = 0
     investments: int
     loans: int
 
