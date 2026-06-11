@@ -59,7 +59,10 @@ async def test_get_asset_snapshot_comparison_uses_latest_available_pair_and_part
 
     result = await assets_service.get_asset_snapshot_comparison(db_session)
 
-    assert result.comparison_mode == SnapshotComparisonMode.LATEST_AVAILABLE_VS_PREVIOUS_AVAILABLE
+    assert (
+        result.comparison_mode
+        == SnapshotComparisonMode.LATEST_AVAILABLE_VS_PREVIOUS_AVAILABLE
+    )
     assert result.current.snapshot_date == date(2026, 4, 7)
     assert result.baseline is not None
     assert result.baseline.snapshot_date == date(2026, 3, 31)
@@ -106,7 +109,10 @@ async def test_get_asset_snapshot_comparison_uses_closed_month_pair_when_request
         comparison_mode=SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH,
     )
 
-    assert result.comparison_mode == SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH
+    assert (
+        result.comparison_mode
+        == SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH
+    )
     assert result.current.snapshot_date == date(2026, 3, 31)
     assert result.baseline is not None
     assert result.baseline.snapshot_date == date(2026, 2, 28)
@@ -186,7 +192,10 @@ async def test_get_asset_snapshot_comparison_supports_selected_snapshot_pair(
         baseline_snapshot_date=date(2026, 3, 24),
     )
 
-    assert result.comparison_mode == SnapshotComparisonMode.SELECTED_SNAPSHOT_VS_BASELINE_SNAPSHOT
+    assert (
+        result.comparison_mode
+        == SnapshotComparisonMode.SELECTED_SNAPSHOT_VS_BASELINE_SNAPSHOT
+    )
     assert result.current.snapshot_date == date(2026, 4, 7)
     assert result.baseline is not None
     assert result.baseline.snapshot_date == date(2026, 3, 24)
@@ -246,6 +255,59 @@ async def test_get_asset_liability_health_reports_liquidity_and_debt_burden(
     assert result.monthly_debt_payment == Decimal("500000.00")
     assert result.debt_payment_ratio == 0.125
     assert result.debt_to_asset_ratio == 0.3846
+
+
+async def test_net_worth_and_liquidity_exclude_negative_asset_rows(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            AssetSnapshot(
+                snapshot_date=date(2026, 5, 31),
+                side="asset",
+                category="자유입출금",
+                product_name="생활비 통장",
+                amount=Decimal("310099.00"),
+            ),
+            AssetSnapshot(
+                snapshot_date=date(2026, 5, 31),
+                side="asset",
+                category="자유입출금",
+                product_name="마이너스통장",
+                amount=Decimal("-5000000.00"),
+            ),
+            AssetSnapshot(
+                snapshot_date=date(2026, 5, 31),
+                side="asset",
+                category="예금",
+                product_name="청약 통장",
+                amount=Decimal("1000000.00"),
+            ),
+            AssetSnapshot(
+                snapshot_date=date(2026, 5, 31),
+                side="liability",
+                category="대출",
+                product_name="마이너스통장 대출",
+                amount=Decimal("5000000.00"),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    breakdown = await assets_service.get_net_worth_breakdown(db_session)
+    health = await assets_service.get_asset_liability_health(
+        db_session,
+        monthly_required_spend=Decimal("1000000.00"),
+    )
+
+    assert breakdown.asset_total == Decimal("1310099.00")
+    assert breakdown.negative_asset_excluded_total == Decimal("-5000000.00")
+    assert breakdown.liability_total == Decimal("5000000.00")
+    assert breakdown.net_worth == Decimal("-3689901.00")
+    assert health.asset_total == breakdown.asset_total
+    assert health.cash_equivalent_total == Decimal("310099.00")
+    assert health.emergency_fund_months == 0.3101
+    assert "negative_asset_rows_excluded" in health.assumptions
 
 
 async def test_patch_loan_repayment_metadata_marks_manual_sources(

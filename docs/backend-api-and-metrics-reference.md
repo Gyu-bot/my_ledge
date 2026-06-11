@@ -133,6 +133,7 @@
   - `merchant_monthly_baseline[]`: top recent rows from `vw_merchant_monthly_baseline`
   - `recurring_merchant_monthly[]`: recent rows from `vw_recurring_merchant_monthly`
   - `unclassified_work_queue[]`: top priority rows from `vw_unclassified_work_queue`
+  - `data_coverage`: first/last observed transaction dates
 - Notes:
   - view names are hardcoded in the service; this endpoint is not an arbitrary SQL execution surface
   - intended consumer is `/operations/canonical-views`
@@ -140,6 +141,7 @@
   - the income baseline uses up to 6 closed months, removes months outside ±30% of the median as outliers, and averages the remaining months when at least 3 remain; otherwise it falls back to the 6-month median
   - `income_estimate_source`, `income_estimate_month_count`, and `excluded_income_periods` explain the estimate source and excluded months
   - estimated fields are API-level interpretation helpers, not DB view columns
+  - `monthly_cashflow[]` and `true_spendable_monthly[]` include `is_complete_month`; a month is complete only when its first and last calendar days are inside the observed transaction range
 
 ### Upload / Operations
 
@@ -181,6 +183,7 @@
     - `skipped`
   - `snapshots`
     - `asset_snapshots`
+    - `insurance_contracts`
     - `investments`
     - `loans`
   - `error_message`
@@ -188,6 +191,7 @@
   - decrypts workbook with `open_excel_bytes()`
   - loads workbook with `openpyxl(..., data_only=True)`
   - transaction import and snapshot import run independently
+  - snapshot import parses `1.고객정보`, `3.재무현황`, `4.보험현황`, `5.투자현황`, and `6.대출현황`; `2.현금흐름현황` is read only by parity verification, not persisted
   - final `status` can be `success`, `partial`, or `failed`
   - always writes one `upload_logs` row
 
@@ -204,11 +208,28 @@
   - `deleted`
     - `transactions`
     - `asset_snapshots`
+    - `insurance_contracts`
     - `investments`
     - `loans`
   - `upload_logs_retained`
 - Notes:
   - `upload_logs_retained` is currently always `true`
+
+#### `GET /api/v1/profile`
+
+- Purpose: latest BankSalad `1.고객정보` profile snapshot for agent context.
+- Auth: none.
+- Response model: `ProfileResponse`
+- Response shape:
+  - `snapshot_date`
+  - `gender`
+  - `age`
+  - `credit_score_kcb`
+  - `credit_score_history[]`
+- Notes:
+  - parser stores `gender`, `age`, and KCB credit score only.
+  - name and email from the workbook are intentionally not stored.
+  - missing `1.고객정보` skips profile import without failing the rest of the upload.
 
 ### Transactions Read
 
@@ -735,6 +756,7 @@
 - Response shape:
   - `snapshot_date`
   - `asset_total`
+  - `negative_asset_excluded_total`
   - `liability_total`
   - `net_worth`
   - `items[]`
@@ -743,7 +765,8 @@
     - `amount`
     - `ratio`
 - Notes:
-  - groups `asset_snapshots` by side/category
+  - excludes `side='asset' AND amount < 0` rows from `asset_total` and exposes the excluded sum as `negative_asset_excluded_total`
+  - groups non-excluded `asset_snapshots` by side/category
   - investment details remain summary-only until brokerage API support
 
 #### `GET /api/v1/analytics/liquidity-health`
@@ -758,10 +781,13 @@
   - `snapshot_date`
   - `cash_equivalent_total`
   - `asset_total`
+  - `negative_asset_excluded_total`
   - `liability_total`
   - `net_worth`
   - `monthly_required_spend`
   - `emergency_fund_months`
+  - `emergency_fund_target_months`
+  - `target_progress_ratio`
   - `monthly_debt_payment`
   - `monthly_income`
   - `debt_payment_ratio`
@@ -771,7 +797,9 @@
 - Notes:
   - cash equivalents use `asset_snapshots.is_cash_equivalent=true` first
   - when `is_cash_equivalent` is null, `liquidity_tier='immediate'` counts as cash-equivalent; `near_liquid` and `illiquid` do not count in the base emergency-fund months
-  - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption
+  - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption; `자유입출금`, `전자금융`, and `통장` count only when locked markers such as `청약`, `저금통`, `보험`, `연금`, or `부동산` are absent
+  - negative asset rows are excluded from cash-equivalent totals and add `negative_asset_rows_excluded` to assumptions
+  - `emergency_fund_target_months` comes from effective `settings/analytics.financial_targets`; `target_progress_ratio = emergency_fund_months / emergency_fund_target_months` when required spend is available
   - same-date snapshot re-import preserves user-confirmed `liquidity_tier` / `is_cash_equivalent` and loan repayment metadata by stable snapshot row identity
   - monthly debt payment uses `loans.monthly_payment` when available; `monthly_payment_source` says whether that value is user-confirmed `manual` or `estimated_from_linked_transactions`
   - `estimated_from_linked_transactions` monthly payments are based on completed linked-transaction months. Overdraft accounts use a recent completed-month average; other loan kinds use completed-month median.
@@ -817,12 +845,41 @@
     - `cost_basis`
     - `market_value`
     - `return_rate`
+    - `pct_of_investment_total`: `market_value / totals.market_value`, or `null` when total market value is zero
   - `totals`
     - `cost_basis`
     - `market_value`
 - Behavior:
   - when `snapshot_date` omitted, service resolves `max(snapshot_date)`
   - when no data exists, returns empty items and zero totals
+
+#### `GET /api/v1/insurance/summary`
+
+- Purpose: latest or requested insurance contract snapshot plus a spending-based premium estimate.
+- Query params:
+  - `snapshot_date` optional
+- Response model: `InsuranceSummaryResponse`
+- Response shape:
+  - `snapshot_date`
+  - `items[]`
+    - `id`
+    - `snapshot_date`
+    - `insurer`
+    - `product_name`
+    - `contract_status`
+    - `total_paid`
+    - `contract_date`
+    - `maturity_date`
+  - `monthly_premium_estimate`
+    - `period`
+    - `amount`
+    - `assumptions[]`
+- Behavior:
+  - upload parses `4.보험현황` by marker text and stores contract snapshots in `insurance_contracts`
+  - same snapshot-date re-upload replaces insurance contracts for that date
+  - total rows such as `총계` are skipped
+  - `monthly_premium_estimate` uses the latest closed month `보험` effective category spend from non-deleted, non-merged expense transactions; refunds/cancellations offset the net estimate
+  - My Ledge only provides contract and premium-estimate evidence. Insurance adequacy judgement belongs to the agent/user layer.
 
 #### `GET /api/v1/loans/summary`
 
@@ -1077,16 +1134,16 @@
   - `cost_kind != 'fixed'`
   - `spend_necessity == 'discretionary'`
   - amount meets the effective minimum candidate amount
-- Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, and `review_status`.
+- Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, and `cooldown_until`.
 - `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
 
 #### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
 - Auth: API key required
 - Purpose: persist review state for a stable purchase candidate key.
-- Request: `review_status` as `pending`, `reviewed`, `ignored`, `snoozed`, or `dismissed`.
-- Response: saved canonical `candidate_key`, `candidate_type`, `transaction_id`, and `review_status`.
-  - `snoozed` is currently persisted as review state; cooldown days are exposed in settings/assumptions but do not create a separate hidden expiry filter yet.
+- Request: `review_status` as `pending`, `reviewed`, `ignored`, `snoozed`, or `dismissed`, plus optional `memo` and `cooldown_days`.
+- Response: saved canonical `candidate_key`, `candidate_type`, `transaction_id`, `review_status`, `memo`, `reviewed_at`, and `cooldown_until`.
+  - `snoozed` with `cooldown_days` stores an explicit `cooldown_until`; without an explicit value it defaults to 14 days.
   - legacy keys such as `large_oneoff:42` are accepted and rewritten to `transaction:42` on save.
 
 #### `GET /api/v1/settings/analytics`
@@ -1096,8 +1153,9 @@
 - Response model: `AnalyticsSettingsResponse`
 - Response shape:
   - `defaults`, `saved`, and `effective`
-  - sections: `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`
+  - sections: `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets`
   - `saved` values are nullable; `effective` is saved-over-default and is what backend analytics use when requests do not pass explicit overrides
+  - `financial_targets` includes `emergency_fund_target_months` default `3`, nullable `savings_rate_target`, and nullable `debt_strategy_preference` (`avalanche` or `snowball`)
 
 #### `PATCH /api/v1/settings/analytics`
 
@@ -1246,6 +1304,7 @@ Documented columns:
 - `asset_total`
 - `liability_total`
 - `net_worth`
+- `negative_asset_excluded_total`
 - `cash_equivalent_total`
 - `near_liquid_total`
 - `illiquid_total`
@@ -1254,7 +1313,15 @@ Documented columns:
 - `asset_row_count`
 - `loan_row_count`
 
-Interpretation rule: this view provides calculation evidence. Final liquidity/health judgement belongs to the agent, using `/api/v1/analytics/liquidity-health` confidence and assumptions when available.
+Interpretation rule: this view provides calculation evidence. `asset_total` excludes negative asset rows so overdraft-like assets are not double-counted when a liability row also exists; the excluded amount remains visible in `negative_asset_excluded_total`. Final liquidity/health judgement belongs to the agent, using `/api/v1/analytics/liquidity-health` confidence and assumptions when available.
+
+### `vw_loan_account_canonical`
+
+Latest loan-account structure surface. It uses stable lender/product identity, includes unmapped loan snapshots, and exposes `loan_account_id`, `display_name`, `lender`, `product_name`, `loan_kind`, `snapshot_date`, `principal`, `balance`, `interest_rate`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `start_date`, `maturity_date`, and `estimated_monthly_interest`. The interest estimate is `round(balance * interest_rate / 100 / 12)` and is a simple evidence field, not an amortization schedule.
+
+### `vw_income_monthly_by_category`
+
+Monthly income composition surface sourced from non-deleted, non-merged income transactions. Columns are `period`, `effective_category_major`, `income_total`, and `transaction_count`. Category totals reconcile to `vw_monthly_cashflow.income_total` for the same month.
 
 ### Advisor canonical read model expansion
 
@@ -1298,6 +1365,16 @@ Source: `app.services.canonical_views`
 
 - user-edited category overrides raw imported category
 - downstream analytics and filter options generally use effective category
+
+### Import Parity Verification
+
+Source: `app.services.source_verification`
+
+- `verify_import_parity()` and `backend/scripts/verify_import_parity.py` import or inspect a prepared workbook and compare DB state against workbook evidence.
+- Transaction parity samples raw imported rows and accepts the upload fallback match for one-minute timestamp drift.
+- Snapshot parity compares parsed `3.재무현황`, `5.투자현황`, and `6.대출현황` rows against stored snapshot tables.
+- Cashflow benchmark parity reads `2.현금흐름현황` as validation evidence only. It does not persist those values.
+- Cashflow benchmark rows are compared by `period`, transaction type, and category. Mismatches are reported as warnings in `cashflow_benchmarks.mismatches`; they do not block upload success.
 
 ### Search
 

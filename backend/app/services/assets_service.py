@@ -7,9 +7,11 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
+from app.models.transaction import Transaction
 from app.schemas.asset import (
     AssetSnapshotTotalsResponse,
     AssetSnapshotComparisonDeltaResponse,
@@ -21,6 +23,9 @@ from app.schemas.asset import (
     InvestmentItemResponse,
     InvestmentSummaryResponse,
     InvestmentTotalsResponse,
+    InsuranceContractItemResponse,
+    InsurancePremiumEstimateResponse,
+    InsuranceSummaryResponse,
     LoanItemResponse,
     LoanRepaymentMetadataPatchRequest,
     LoanRepaymentMetadataResponse,
@@ -32,6 +37,7 @@ from app.schemas.asset import (
     NetWorthBreakdownResponse,
     SnapshotComparisonMode,
 )
+from app.services.settings_service import get_analytics_settings
 
 
 async def list_asset_snapshots(db_session: AsyncSession) -> AssetSnapshotsResponse:
@@ -82,7 +88,8 @@ async def get_asset_snapshot_comparison(
         )
 
     is_partial = (
-        comparison_mode != SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH
+        comparison_mode
+        != SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH
         and not _is_month_end(current.snapshot_date)
     )
     return AssetSnapshotComparisonResponse(
@@ -93,9 +100,16 @@ async def get_asset_snapshot_comparison(
             asset_total=current.asset_total - baseline.asset_total,
             liability_total=current.liability_total - baseline.liability_total,
             net_worth=current.net_worth - baseline.net_worth,
-            asset_total_pct=_safe_ratio(current.asset_total - baseline.asset_total, baseline.asset_total),
-            liability_total_pct=_safe_ratio(current.liability_total - baseline.liability_total, baseline.liability_total),
-            net_worth_pct=_safe_ratio(current.net_worth - baseline.net_worth, baseline.net_worth),
+            asset_total_pct=_safe_ratio(
+                current.asset_total - baseline.asset_total, baseline.asset_total
+            ),
+            liability_total_pct=_safe_ratio(
+                current.liability_total - baseline.liability_total,
+                baseline.liability_total,
+            ),
+            net_worth_pct=_safe_ratio(
+                current.net_worth - baseline.net_worth, baseline.net_worth
+            ),
         ),
         comparison_days=(current.snapshot_date - baseline.snapshot_date).days,
         is_partial=is_partial,
@@ -109,9 +123,13 @@ async def get_asset_snapshot_comparison(
     )
 
 
-async def _load_asset_snapshot_totals(db_session: AsyncSession) -> list[AssetSnapshotTotalsResponse]:
+async def _load_asset_snapshot_totals(
+    db_session: AsyncSession,
+) -> list[AssetSnapshotTotalsResponse]:
     asset_case = case((AssetSnapshot.side == "asset", AssetSnapshot.amount), else_=0)
-    liability_case = case((AssetSnapshot.side == "liability", AssetSnapshot.amount), else_=0)
+    liability_case = case(
+        (AssetSnapshot.side == "liability", AssetSnapshot.amount), else_=0
+    )
     result = await db_session.execute(
         select(
             AssetSnapshot.snapshot_date,
@@ -137,9 +155,13 @@ async def _load_asset_snapshot_totals(db_session: AsyncSession) -> list[AssetSna
     return items
 
 
-async def _load_asset_snapshot_items(db_session: AsyncSession) -> list[AssetSnapshotItemResponse]:
+async def _load_asset_snapshot_items(
+    db_session: AsyncSession,
+) -> list[AssetSnapshotItemResponse]:
     latest_snapshot_date = await db_session.scalar(
-        select(func.max(AssetSnapshot.snapshot_date)).where(AssetSnapshot.side == "asset")
+        select(func.max(AssetSnapshot.snapshot_date)).where(
+            AssetSnapshot.side == "asset"
+        )
     )
     if latest_snapshot_date is None:
         return []
@@ -185,6 +207,7 @@ async def get_net_worth_breakdown(
         return NetWorthBreakdownResponse(
             snapshot_date=None,
             asset_total=Decimal("0"),
+            negative_asset_excluded_total=Decimal("0"),
             liability_total=Decimal("0"),
             net_worth=Decimal("0"),
             items=[],
@@ -194,24 +217,42 @@ async def get_net_worth_breakdown(
         select(
             AssetSnapshot.side,
             AssetSnapshot.category,
-            func.sum(AssetSnapshot.amount).label("amount"),
+            AssetSnapshot.amount,
         )
         .where(AssetSnapshot.snapshot_date == resolved_snapshot_date)
-        .group_by(AssetSnapshot.side, AssetSnapshot.category)
         .order_by(AssetSnapshot.side, AssetSnapshot.category)
     )
-    rows = result.all()
+    raw_rows = result.all()
     asset_total = sum(
-        Decimal(amount or 0) for side, _category, amount in rows if side == "asset"
+        Decimal(amount or 0)
+        for side, _category, amount in raw_rows
+        if side == "asset" and Decimal(amount or 0) >= 0
+    )
+    negative_asset_excluded_total = sum(
+        Decimal(amount or 0)
+        for side, _category, amount in raw_rows
+        if side == "asset" and Decimal(amount or 0) < 0
     )
     liability_total = sum(
         Decimal(amount or 0)
-        for side, _category, amount in rows
+        for side, _category, amount in raw_rows
         if side == "liability"
     )
+    grouped_rows: dict[tuple[str, str], Decimal] = {}
+    for side, category, amount in raw_rows:
+        amount_value = Decimal(amount or 0)
+        if side == "asset" and amount_value < 0:
+            continue
+        key = (side, category)
+        grouped_rows[key] = grouped_rows.get(key, Decimal("0")) + amount_value
+    rows = [
+        (side, category, amount)
+        for (side, category), amount in sorted(grouped_rows.items())
+    ]
     return NetWorthBreakdownResponse(
         snapshot_date=resolved_snapshot_date,
         asset_total=asset_total,
+        negative_asset_excluded_total=negative_asset_excluded_total,
         liability_total=liability_total,
         net_worth=asset_total - liability_total,
         items=[
@@ -236,16 +277,23 @@ async def get_asset_liability_health(
     monthly_income: Decimal | None = None,
     snapshot_date: date | None = None,
 ) -> AssetLiabilityHealthResponse:
+    analytics_settings = await get_analytics_settings(db_session)
+    emergency_fund_target_months = (
+        analytics_settings.effective.financial_targets.emergency_fund_target_months
+    )
     breakdown = await get_net_worth_breakdown(db_session, snapshot_date)
     if breakdown.snapshot_date is None:
         return AssetLiabilityHealthResponse(
             snapshot_date=None,
             cash_equivalent_total=Decimal("0"),
             asset_total=Decimal("0"),
+            negative_asset_excluded_total=Decimal("0"),
             liability_total=Decimal("0"),
             net_worth=Decimal("0"),
             monthly_required_spend=monthly_required_spend or Decimal("0"),
             emergency_fund_months=None,
+            emergency_fund_target_months=emergency_fund_target_months,
+            target_progress_ratio=None,
             monthly_debt_payment=Decimal("0"),
             monthly_income=monthly_income or Decimal("0"),
             debt_payment_ratio=None,
@@ -261,7 +309,11 @@ async def get_asset_liability_health(
     )
     assets = list(cash_result.scalars())
     cash_equivalent_total = sum(
-        (asset.amount for asset in assets if _is_cash_equivalent_asset(asset)),
+        (
+            asset.amount
+            for asset in assets
+            if asset.amount >= 0 and _is_cash_equivalent_asset(asset)
+        ),
         Decimal("0"),
     )
 
@@ -277,21 +329,76 @@ async def get_asset_liability_health(
         "cash equivalents use user-confirmed flags first and conservative category/name heuristics when missing",
         "debt burden uses loan monthly_payment when available",
     ]
+    if breakdown.negative_asset_excluded_total < 0:
+        assumptions.append("negative_asset_rows_excluded")
     confidence = "medium" if required_spend > 0 and monthly_debt_payment > 0 else "low"
+    emergency_fund_months = _safe_ratio(cash_equivalent_total, required_spend)
     return AssetLiabilityHealthResponse(
         snapshot_date=breakdown.snapshot_date,
         cash_equivalent_total=cash_equivalent_total,
         asset_total=breakdown.asset_total,
+        negative_asset_excluded_total=breakdown.negative_asset_excluded_total,
         liability_total=breakdown.liability_total,
         net_worth=breakdown.net_worth,
         monthly_required_spend=required_spend,
-        emergency_fund_months=_safe_ratio(cash_equivalent_total, required_spend),
+        emergency_fund_months=emergency_fund_months,
+        emergency_fund_target_months=emergency_fund_target_months,
+        target_progress_ratio=_safe_ratio(
+            Decimal(str(emergency_fund_months or 0)),
+            Decimal(emergency_fund_target_months),
+        )
+        if emergency_fund_months is not None
+        else None,
         monthly_debt_payment=monthly_debt_payment,
         monthly_income=income,
         debt_payment_ratio=_safe_ratio(monthly_debt_payment, income),
-        debt_to_asset_ratio=_safe_ratio(breakdown.liability_total, breakdown.asset_total),
+        debt_to_asset_ratio=_safe_ratio(
+            breakdown.liability_total, breakdown.asset_total
+        ),
         confidence=confidence,
         assumptions=assumptions,
+    )
+
+
+async def get_insurance_summary(
+    db_session: AsyncSession,
+    snapshot_date: date | None,
+) -> InsuranceSummaryResponse:
+    resolved_snapshot_date = await _resolve_snapshot_date(
+        db_session,
+        InsuranceContract.snapshot_date,
+        snapshot_date,
+    )
+    if resolved_snapshot_date is None:
+        return InsuranceSummaryResponse(
+            snapshot_date=None,
+            items=[],
+            monthly_premium_estimate=InsurancePremiumEstimateResponse(
+                period=None,
+                amount=None,
+                assumptions=["insurance contract snapshot is missing"],
+            ),
+        )
+
+    result = await db_session.execute(
+        select(InsuranceContract)
+        .where(InsuranceContract.snapshot_date == resolved_snapshot_date)
+        .order_by(
+            InsuranceContract.insurer.asc(),
+            InsuranceContract.product_name.asc(),
+            InsuranceContract.id.asc(),
+        )
+    )
+    items = [
+        InsuranceContractItemResponse.model_validate(row, from_attributes=True)
+        for row in result.scalars().all()
+    ]
+    return InsuranceSummaryResponse(
+        snapshot_date=resolved_snapshot_date,
+        items=items,
+        monthly_premium_estimate=await _estimate_monthly_insurance_premium(
+            db_session,
+        ),
     )
 
 
@@ -361,7 +468,22 @@ async def get_investment_summary(
         .where(Investment.snapshot_date == resolved_snapshot_date)
         .order_by(Investment.broker, Investment.product_name)
     )
-    items = [InvestmentItemResponse.model_validate(row, from_attributes=True) for row in result.scalars()]
+    raw_items = [
+        InvestmentItemResponse.model_validate(row, from_attributes=True)
+        for row in result.scalars()
+    ]
+    market_value_total = sum((item.market_value or Decimal("0")) for item in raw_items)
+    items = [
+        item.model_copy(
+            update={
+                "pct_of_investment_total": _safe_ratio(
+                    item.market_value or Decimal("0"),
+                    market_value_total,
+                )
+            }
+        )
+        for item in raw_items
+    ]
     return InvestmentSummaryResponse(
         snapshot_date=resolved_snapshot_date,
         items=items,
@@ -443,6 +565,62 @@ def _repayment_method_from_loan_kind(loan_kind: str | None) -> str | None:
     }.get(loan_kind or "")
 
 
+async def _estimate_monthly_insurance_premium(
+    db_session: AsyncSession,
+) -> InsurancePremiumEstimateResponse:
+    latest_transaction_date = await db_session.scalar(
+        select(func.max(Transaction.date))
+    )
+    if latest_transaction_date is None:
+        return InsurancePremiumEstimateResponse(
+            period=None,
+            amount=None,
+            assumptions=["no transaction history is available"],
+        )
+
+    period_start, period_end = _recent_closed_month_bounds(latest_transaction_date)
+    result = await db_session.execute(
+        select(Transaction.amount)
+        .where(Transaction.date >= period_start)
+        .where(Transaction.date <= period_end)
+        .where(Transaction.type == "지출")
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .where(
+            func.coalesce(
+                Transaction.category_major_user,
+                Transaction.category_major,
+            )
+            == "보험"
+        )
+    )
+    net_spend = sum(
+        (Decimal(-amount) for amount in result.scalars().all()), Decimal("0")
+    )
+    return InsurancePremiumEstimateResponse(
+        period=f"{period_start:%Y-%m}",
+        amount=net_spend,
+        assumptions=[
+            "monthly_premium_estimate uses the latest closed month insurance-category spending",
+            "effective category uses category_major_user before category_major",
+            "refunds and cancellations offset the estimate through net spend",
+        ],
+    )
+
+
+def _recent_closed_month_bounds(value: date) -> tuple[date, date]:
+    if _is_month_end(value):
+        year = value.year
+        month = value.month
+    elif value.month == 1:
+        year = value.year - 1
+        month = 12
+    else:
+        year = value.year
+        month = value.month - 1
+    return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
+
+
 async def _resolve_snapshot_date(
     db_session: AsyncSession,
     model_field,
@@ -470,8 +648,13 @@ def _resolve_comparison_pair(
         baseline = snapshots[-2] if len(snapshots) > 1 else None
         return current, baseline
 
-    if comparison_mode == SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH:
-        closed_months = [item for item in snapshots if _is_month_end(item.snapshot_date)]
+    if (
+        comparison_mode
+        == SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH
+    ):
+        closed_months = [
+            item for item in snapshots if _is_month_end(item.snapshot_date)
+        ]
         current = closed_months[-1] if closed_months else None
         baseline = closed_months[-2] if len(closed_months) > 1 else None
         return current, baseline
@@ -498,11 +681,16 @@ def _build_comparison_label(
     is_partial: bool,
     is_stale: bool,
 ) -> str:
-    if comparison_mode == SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH:
+    if (
+        comparison_mode
+        == SnapshotComparisonMode.LAST_CLOSED_MONTH_VS_PREVIOUS_CLOSED_MONTH
+    ):
         base_label = "마감월 기준"
     elif is_partial:
         base_label = "부분 기간"
-    elif comparison_mode == SnapshotComparisonMode.SELECTED_SNAPSHOT_VS_BASELINE_SNAPSHOT:
+    elif (
+        comparison_mode == SnapshotComparisonMode.SELECTED_SNAPSHOT_VS_BASELINE_SNAPSHOT
+    ):
         base_label = "선택 스냅샷 기준"
     else:
         base_label = "최신 스냅샷 기준"
@@ -527,6 +715,8 @@ def _safe_ratio(numerator: Decimal, denominator: Decimal) -> float | None:
 
 
 def _is_cash_equivalent_asset(asset: AssetSnapshot) -> bool:
+    if asset.amount < 0:
+        return False
     if asset.is_cash_equivalent is not None:
         return asset.is_cash_equivalent
     if asset.liquidity_tier in {"cash", "cash_equivalent", "immediate"}:
@@ -534,8 +724,18 @@ def _is_cash_equivalent_asset(asset: AssetSnapshot) -> bool:
     if asset.liquidity_tier in {"near_liquid", "locked", "illiquid"}:
         return False
     text = f"{asset.category} {asset.product_name}".casefold()
-    cash_markers = ("현금", "예금", "입출금", "cma", "파킹", "보통예금")
-    locked_markers = ("부동산", "전세", "보증금", "연금", "보험")
+    cash_markers = (
+        "현금",
+        "예금",
+        "입출금",
+        "자유입출금",
+        "전자금융",
+        "cma",
+        "파킹",
+        "보통예금",
+        "통장",
+    )
+    locked_markers = ("부동산", "전세", "보증금", "연금", "보험", "청약", "저금통")
     if any(marker in text for marker in locked_markers):
         return False
     return any(marker in text for marker in cash_markers)

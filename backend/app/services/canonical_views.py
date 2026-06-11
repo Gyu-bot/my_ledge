@@ -165,11 +165,18 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("liability_total", Numeric(15, 2), nullable=False),
             SchemaColumnDefinition("net_worth", Numeric(15, 2), nullable=False),
             SchemaColumnDefinition(
+                "negative_asset_excluded_total",
+                Numeric(15, 2),
+                nullable=False,
+            ),
+            SchemaColumnDefinition(
                 "cash_equivalent_total", Numeric(15, 2), nullable=False
             ),
             SchemaColumnDefinition("near_liquid_total", Numeric(15, 2), nullable=False),
             SchemaColumnDefinition("illiquid_total", Numeric(15, 2), nullable=False),
-            SchemaColumnDefinition("loan_balance_total", Numeric(15, 2), nullable=False),
+            SchemaColumnDefinition(
+                "loan_balance_total", Numeric(15, 2), nullable=False
+            ),
             SchemaColumnDefinition(
                 "monthly_debt_payment_total",
                 Numeric(15, 2),
@@ -177,6 +184,61 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             ),
             SchemaColumnDefinition("asset_row_count", Integer(), nullable=False),
             SchemaColumnDefinition("loan_row_count", Integer(), nullable=False),
+        ),
+    ),
+    SchemaViewDefinition(
+        name="vw_loan_account_canonical",
+        description=(
+            "Canonical latest loan-account structure read model. Uses stable "
+            "lender/product identity, includes unmapped loan snapshots, and exposes "
+            "a simple monthly interest estimate for agent-side prioritization."
+        ),
+        recommended_for_ai=True,
+        columns=(
+            SchemaColumnDefinition("loan_account_id", Integer(), nullable=True),
+            SchemaColumnDefinition("display_name", String(length=200), nullable=False),
+            SchemaColumnDefinition("lender", String(length=50), nullable=False),
+            SchemaColumnDefinition("product_name", String(length=200), nullable=False),
+            SchemaColumnDefinition("loan_kind", String(length=40), nullable=True),
+            SchemaColumnDefinition("snapshot_date", Date(), nullable=False),
+            SchemaColumnDefinition("principal", Numeric(15, 2), nullable=True),
+            SchemaColumnDefinition("balance", Numeric(15, 2), nullable=True),
+            SchemaColumnDefinition("interest_rate", Numeric(5, 2), nullable=True),
+            SchemaColumnDefinition("monthly_payment", Numeric(15, 2), nullable=True),
+            SchemaColumnDefinition(
+                "monthly_payment_source",
+                String(length=50),
+                nullable=True,
+            ),
+            SchemaColumnDefinition(
+                "repayment_method", String(length=50), nullable=True
+            ),
+            SchemaColumnDefinition("start_date", Date(), nullable=True),
+            SchemaColumnDefinition("maturity_date", Date(), nullable=True),
+            SchemaColumnDefinition(
+                "estimated_monthly_interest",
+                Numeric(15, 2),
+                nullable=True,
+            ),
+        ),
+    ),
+    SchemaViewDefinition(
+        name="vw_income_monthly_by_category",
+        description=(
+            "Canonical monthly income composition read model. Groups effective "
+            "major categories from income transactions and reconciles to monthly "
+            "cashflow income totals."
+        ),
+        recommended_for_ai=True,
+        columns=(
+            SchemaColumnDefinition("period", String(length=7), nullable=False),
+            SchemaColumnDefinition(
+                "effective_category_major",
+                String(length=50),
+                nullable=False,
+            ),
+            SchemaColumnDefinition("income_total", Integer(), nullable=False),
+            SchemaColumnDefinition("transaction_count", Integer(), nullable=False),
         ),
     ),
     SchemaViewDefinition(

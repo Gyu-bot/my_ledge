@@ -1,3 +1,4 @@
+import calendar
 from datetime import date
 from statistics import median
 from typing import Any, TypeVar
@@ -11,6 +12,7 @@ from app.schemas.canonical_views import (
     CanonicalLoanRepaymentMonthlyItem,
     CanonicalMerchantMonthlyBaselineItem,
     CanonicalMonthlyCashflowItem,
+    CanonicalDataCoverage,
     CanonicalRecurringMerchantMonthlyItem,
     CanonicalTrueSpendableMonthlyItem,
     CanonicalUnclassifiedWorkQueueItem,
@@ -41,6 +43,53 @@ def _reference_period(reference_date: date) -> str:
     return reference_date.strftime("%Y-%m")
 
 
+async def _load_data_coverage(db_session: AsyncSession) -> CanonicalDataCoverage:
+    rows = await _fetch_rows(
+        db_session,
+        """
+        SELECT
+            MIN(date) AS first_transaction_date,
+            MAX(date) AS last_transaction_date
+        FROM transactions
+        WHERE is_deleted = false
+          AND merged_into_id IS NULL
+        """,
+        {},
+    )
+    row = rows[0] if rows else {}
+    return CanonicalDataCoverage(
+        first_transaction_date=row.get("first_transaction_date"),
+        last_transaction_date=row.get("last_transaction_date"),
+    )
+
+
+def _is_complete_month(period: str, coverage: CanonicalDataCoverage) -> bool:
+    if (
+        coverage.first_transaction_date is None
+        or coverage.last_transaction_date is None
+    ):
+        return False
+    year, month = (int(part) for part in period.split("-", 1))
+    month_start = date(year, month, 1)
+    month_end = date(year, month, calendar.monthrange(year, month)[1])
+    return (
+        coverage.first_transaction_date <= month_start
+        and coverage.last_transaction_date >= month_end
+    )
+
+
+def _apply_complete_month_flags(
+    items: list[T],
+    coverage: CanonicalDataCoverage,
+) -> list[T]:
+    return [
+        item.model_copy(
+            update={"is_complete_month": _is_complete_month(item.period, coverage)}
+        )
+        for item in items
+    ]
+
+
 def _estimate_income_from_closed_months(
     monthly_cashflow: list[CanonicalMonthlyCashflowItem],
     *,
@@ -55,7 +104,9 @@ def _estimate_income_from_closed_months(
     lower_bound = income_median * (1 - INCOME_OUTLIER_RATIO)
     upper_bound = income_median * (1 + INCOME_OUTLIER_RATIO)
     adjusted_months = [
-        item for item in recent_months if lower_bound <= item.income_total <= upper_bound
+        item
+        for item in recent_months
+        if lower_bound <= item.income_total <= upper_bound
     ]
     excluded_periods = [
         item.period for item in recent_months if item not in adjusted_months
@@ -226,12 +277,22 @@ async def get_canonical_views_dashboard(
     )
 
     monthly_cashflow_items = _to_items(monthly_cashflow, CanonicalMonthlyCashflowItem)
+    data_coverage = await _load_data_coverage(db_session)
+    monthly_cashflow_items = _apply_complete_month_flags(
+        monthly_cashflow_items,
+        data_coverage,
+    )
     true_spendable_items = _to_items(
         true_spendable,
         CanonicalTrueSpendableMonthlyItem,
     )
+    true_spendable_items = _apply_complete_month_flags(
+        true_spendable_items,
+        data_coverage,
+    )
 
     return CanonicalViewsDashboardResponse(
+        data_coverage=data_coverage,
         monthly_cashflow=monthly_cashflow_items,
         true_spendable_monthly=_enrich_true_spendable_items(
             true_spendable_items,

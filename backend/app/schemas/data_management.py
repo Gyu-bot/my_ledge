@@ -13,6 +13,7 @@ class DataResetRequest(BaseModel):
 class DataResetCounts(BaseModel):
     transactions: int
     asset_snapshots: int
+    insurance_contracts: int = 0
     investments: int
     loans: int
 

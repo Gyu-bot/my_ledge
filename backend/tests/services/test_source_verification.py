@@ -32,7 +32,20 @@ async def test_verify_import_parity_matches_transaction_samples_and_all_snapshot
     assert report.transaction.db_rows == 2357
     assert report.transaction.sample_size == 12
     assert report.transaction.missing_sample_indices == []
-    assert report.transaction.sampled_indices == [185, 208, 411, 720, 935, 1102, 1425, 1466, 1481, 2039, 2229, 2328]
+    assert report.transaction.sampled_indices == [
+        185,
+        208,
+        411,
+        720,
+        935,
+        1102,
+        1425,
+        1466,
+        1481,
+        2039,
+        2229,
+        2328,
+    ]
     assert report.snapshots.asset_snapshots.expected_rows == 42
     assert report.snapshots.asset_snapshots.db_rows == 42
     assert report.snapshots.asset_snapshots.missing_rows == []
@@ -45,6 +58,8 @@ async def test_verify_import_parity_matches_transaction_samples_and_all_snapshot
     assert report.snapshots.loans.db_rows == 4
     assert report.snapshots.loans.missing_rows == []
     assert report.snapshots.loans.extra_rows == []
+    assert report.cashflow_benchmarks.expected_rows == 351
+    assert len(report.cashflow_benchmarks.mismatches) == 57
 
 
 async def test_verify_import_parity_reports_snapshot_mismatch_after_db_tamper(
@@ -78,6 +93,38 @@ async def test_verify_import_parity_reports_snapshot_mismatch_after_db_tamper(
     assert report.transaction.missing_sample_indices == []
     assert len(report.snapshots.asset_snapshots.missing_rows) == 1
     assert len(report.snapshots.asset_snapshots.extra_rows) == 1
+
+
+async def test_verify_import_parity_compares_cashflow_income_categories(
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+) -> None:
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=sample_workbook_bytes,
+        filename="finance_sample.xlsx",
+        snapshot_date=date(2026, 5, 21),
+    )
+
+    report = await verify_import_parity(
+        db_session=db_session,
+        workbook_bytes=sample_workbook_bytes,
+        snapshot_date=date(2026, 5, 21),
+        transaction_sample_size=0,
+        transaction_sample_seed=20260324,
+    )
+    mismatches_by_key = {
+        (row.period, row.transaction_type, row.category_major): row
+        for row in report.cashflow_benchmarks.mismatches
+    }
+
+    assert ("2026-02", "수입", "급여") not in mismatches_by_key
+    assert ("2026-02", "수입", "보험금") not in mismatches_by_key
+    assert ("2026-02", "수입", "기타") not in mismatches_by_key
+    assert mismatches_by_key[("2026-02", "지출", "보험")].expected_amount == Decimal(
+        "127662"
+    )
+    assert mismatches_by_key[("2026-02", "지출", "보험")].db_amount == Decimal("329466")
 
 
 async def test_verify_import_parity_accepts_rolling_window_fallback_matches(

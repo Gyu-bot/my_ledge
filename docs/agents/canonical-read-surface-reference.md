@@ -33,7 +33,7 @@
 | 항목 | 현재 해석 |
 |---|---|
 | `asset_snapshots.side` | `asset`이면 자산, `liability`이면 부채 row로 집계한다. |
-| 음수 자산 row | 현재 backend는 `side='asset'`인 음수 금액을 자동으로 부채 row로 옮기지 않는다. 마이너스 통장처럼 실질 부채로 보이는 row는 사용자 확인 또는 향후 raw-data 정리 기능 대상이라고 설명한다. |
+| 음수 자산 row | canonical/API 계산에서는 `side='asset' AND amount < 0` row를 `asset_total`과 현금성 합계에서 제외하고 `negative_asset_excluded_total`로 노출한다. raw row를 부채로 이동하지는 않으므로, 마이너스 통장처럼 실질 부채로 보이는 row는 사용자 확인 대상으로 설명한다. |
 | `liquidity_tier` | 사용자가 저장한 값이 있으면 우선한다. 없으면 health service가 category/name heuristic을 사용하고 assumptions에 남긴다. |
 | `is_cash_equivalent` | 명시값이 있으면 `liquidity_tier`보다 우선해 현금성 포함 여부를 결정한다. 값이 없으면 `liquidity_tier='immediate'` 또는 보수적 category/name heuristic을 사용한다. |
 | 만기/소멸/중복 자산 | 현재 live 삭제/숨김/병합 API가 없으므로 latest snapshot/API에 남을 수 있다. 에이전트는 이를 live 값으로 단정하지 말고, snapshot 날짜와 raw source 한계를 함께 말한다. |
@@ -64,7 +64,10 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 | 월별 현금흐름/저축률 | `vw_monthly_cashflow` 또는 `GET /api/v1/analytics/monthly-cashflow` | `GET /api/v1/canonical-views/dashboard` |
 | 고정비/변동비 구조 | `vw_fixed_cost_monthly_summary` 또는 fixed-cost analytics endpoints | `vw_unclassified_work_queue` |
 | 대출 상환 부담 | `vw_loan_repayment_monthly` | `GET /api/v1/loan-transaction-links` |
+| 대출 구조/금리/만기 | `GET /api/v1/loans/summary` 또는 `vw_loan_account_canonical` | `GET /api/v1/schema` |
+| 보험 계약/추정 보험료 | `GET /api/v1/insurance/summary` | raw `insurance_contracts`; 보험 적정성 판단은 에이전트 해석이다. |
 | 할부 잔여 현금흐름 | `GET /api/v1/installments/forecast` | `/operations/installments`. canonical cashflow view는 관측 거래만 유지하고, 할부 예측은 별도 projection surface로 읽는다. |
+| 수입 구성 | `vw_income_monthly_by_category` | `vw_monthly_cashflow`, `GET /api/v1/canonical-views/dashboard` |
 | 실제 가용 현금 | `vw_true_spendable_monthly` | dashboard endpoint의 estimated enrichment. 구매 가능 판단이 아니라 계산 surface다. |
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
 | 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
@@ -240,9 +243,10 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 |---|---|
 | `snapshot_date` | snapshot 기준일. 업로드 시 지정한 날짜다. |
 | `asset_total` | 자산 row 총액. |
+| `negative_asset_excluded_total` | asset-side 음수 row 제외분. `asset_total`, `net_worth`, `cash_equivalent_total`에는 포함하지 않는다. |
 | `liability_total` | 부채 row 총액. |
 | `net_worth` | `asset_total - liability_total`. |
-| `cash_equivalent_total` | 즉시 현금성으로 확인된 자산 합계. `is_cash_equivalent=true` 또는 미지정 상태의 `liquidity_tier='immediate'`를 포함한다. |
+| `cash_equivalent_total` | 즉시 현금성으로 확인된 자산 합계. `is_cash_equivalent=true` 또는 미지정 상태의 `liquidity_tier='immediate'`를 포함한다. 휴리스틱은 `자유입출금`, `전자금융`, `통장`을 포함하되 `청약`, `저금통`, `보험`, `연금`, `부동산` 후보와 음수 asset row는 제외한다. |
 | `near_liquid_total` | `liquidity_tier='near_liquid'` 자산 합계. 기본 비상금 계산에는 바로 더하지 않는다. |
 | `illiquid_total` | `liquidity_tier='illiquid'` 자산 합계. |
 | `loan_balance_total` | 최신 대출 snapshot 기준 잔액 합계. |
@@ -323,12 +327,12 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
 | `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 월별 수입 변동성. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
 | `/analytics/discretionary-velocity` | `period`, `discretionary_spend`, `baseline_monthly_spend`, `velocity_ratio`, `risk_level`, `classification_coverage_ratio`, `assumptions`, `reasons` | 월 진행률 기준 재량 지출 속도 신호. `risk_level`은 최종 구매 허용 판단이 아니라 후보 강도와 분류 신뢰도 안내용이다. |
-| `/analytics/purchase-gate-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `assumptions`, `reasons` | 재량 구매 검토 queue. My Ledge는 고정비/필수/대출연결/필요성 미분류 거래를 제외하고 거래 1건당 후보 1줄을 만든다. 에이전트는 이를 자동 구매 허용/금지 판정으로 바꾸지 않는다. |
+| `/analytics/purchase-gate-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `assumptions`, `reasons` | 재량 구매 검토 queue. My Ledge는 고정비/필수/대출연결/필요성 미분류 거래를 제외하고 거래 1건당 후보 1줄을 만든다. 에이전트는 이를 자동 구매 허용/금지 판정으로 바꾸지 않는다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 반복 후보와 저장된 반복분류 상태. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
 | `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`는 지난 미연결 회차다. projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. 설정 우선순위는 query > persisted setting > code default. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
 | `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. |
-| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. 입력/분류가 부족하면 confidence와 assumptions를 확인한다. |
+| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `emergency_fund_target_months`, `target_progress_ratio`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 목표 대비 진행률, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. 입력/분류가 부족하면 confidence와 assumptions를 확인한다. |
 
 ## 에이전트 답변 시 주의사항
 

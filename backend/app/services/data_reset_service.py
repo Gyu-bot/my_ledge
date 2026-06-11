@@ -2,10 +2,15 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.transaction import Transaction
-from app.schemas.data_management import DataResetCounts, DataResetResponse, DataResetScope
+from app.schemas.data_management import (
+    DataResetCounts,
+    DataResetResponse,
+    DataResetScope,
+)
 
 
 async def reset_data(
@@ -15,6 +20,7 @@ async def reset_data(
 ) -> DataResetResponse:
     transaction_count = await _count_rows(db_session, Transaction)
     asset_snapshot_count = 0
+    insurance_contract_count = 0
     investment_count = 0
     loan_count = 0
 
@@ -22,9 +28,11 @@ async def reset_data(
 
     if scope == "transactions_and_snapshots":
         asset_snapshot_count = await _count_rows(db_session, AssetSnapshot)
+        insurance_contract_count = await _count_rows(db_session, InsuranceContract)
         investment_count = await _count_rows(db_session, Investment)
         loan_count = await _count_rows(db_session, Loan)
         await db_session.execute(delete(AssetSnapshot))
+        await db_session.execute(delete(InsuranceContract))
         await db_session.execute(delete(Investment))
         await db_session.execute(delete(Loan))
 
@@ -35,6 +43,7 @@ async def reset_data(
         deleted=DataResetCounts(
             transactions=transaction_count,
             asset_snapshots=asset_snapshot_count,
+            insurance_contracts=insurance_contract_count,
             investments=investment_count,
             loans=loan_count,
         ),

@@ -190,6 +190,9 @@ class PurchaseGateCandidateItem(BaseModel):
     reasons: list[str]
     assumptions: list[str]
     review_status: str
+    review_memo: str | None = None
+    reviewed_at: datetime | None = None
+    cooldown_until: datetime | None = None
 
 
 class PurchaseGateCandidatesResponse(BaseModel):
@@ -211,6 +214,8 @@ PurchaseGateReviewStatus = Literal[
 
 class PurchaseGateReviewPatchRequest(BaseModel):
     review_status: PurchaseGateReviewStatus
+    memo: str | None = None
+    cooldown_days: int | None = None
 
 
 class PurchaseGateReviewResponse(BaseModel):
@@ -218,3 +223,6 @@ class PurchaseGateReviewResponse(BaseModel):
     candidate_type: str
     transaction_id: int
     review_status: PurchaseGateReviewStatus
+    memo: str | None = None
+    reviewed_at: datetime | None = None
+    cooldown_until: datetime | None = None

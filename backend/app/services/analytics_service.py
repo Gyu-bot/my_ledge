@@ -1,6 +1,6 @@
 import math
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import Select, select
@@ -256,8 +256,7 @@ async def get_fixed_cost_trend(
                 essential_variable_total=values["essential_variable_total"],
                 discretionary_variable_total=values["discretionary_variable_total"],
                 required_spend_total=(
-                    values["essential_fixed_total"]
-                    + values["essential_variable_total"]
+                    values["essential_fixed_total"] + values["essential_variable_total"]
                 ),
                 discretionary_spend_total=(
                     values["discretionary_fixed_total"]
@@ -342,7 +341,9 @@ async def get_payment_method_patterns(
             payment_method=method,
             total_amount=values["amount"],
             transaction_count=values["count"],
-            avg_amount=round(values["amount"] / values["count"]) if values["count"] else 0,
+            avg_amount=round(values["amount"] / values["count"])
+            if values["count"]
+            else 0,
             pct_of_total=_safe_ratio(values["amount"] * 100, total_amount),
         )
         for method, values in grouped.items()
@@ -358,7 +359,9 @@ async def get_income_stability(
     end_date: date | None,
 ) -> IncomeStabilityResponse:
     used_last_closed_month = end_date is None
-    ref_date = _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    ref_date = (
+        _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    )
     assert ref_date is not None
     partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
 
@@ -448,7 +451,9 @@ async def get_recurring_payments(
         merchant = row["merchant"] or row["description"] or "미분류"
         merchant_data[merchant]["dates"].append(row["date"])
         merchant_data[merchant]["amounts"].append(-row["amount"])
-        merchant_data[merchant]["category"] = row["effective_category_major"] or "미분류"
+        merchant_data[merchant]["category"] = (
+            row["effective_category_major"] or "미분류"
+        )
         merchant_data[merchant]["transaction_ids"].append(row["id"])
         kind = row["recurring_payment_kind"] or "unclassified"
         merchant_data[merchant]["kind_counts"][kind] += 1
@@ -472,7 +477,9 @@ async def get_recurring_payments(
         if len(gaps) > 1:
             gap_variance = sum((g - avg_gap) ** 2 for g in gaps) / len(gaps)
             gap_stdev = math.sqrt(gap_variance)
-            confidence = round(max(0.0, 1.0 - gap_stdev / avg_gap), 4) if avg_gap > 0 else 0.0
+            confidence = (
+                round(max(0.0, 1.0 - gap_stdev / avg_gap), 4) if avg_gap > 0 else 0.0
+            )
         else:
             confidence = 0.5
 
@@ -498,7 +505,9 @@ async def get_recurring_payments(
         )
 
     items.sort(key=lambda item: (-item.confidence, -item.occurrences, item.merchant))
-    paged_items, total, resolved_page = _paginate_items(items, page=page, per_page=per_page)
+    paged_items, total, resolved_page = _paginate_items(
+        items, page=page, per_page=per_page
+    )
     return RecurringPaymentsResponse(
         total=total,
         page=resolved_page,
@@ -523,7 +532,9 @@ async def get_spending_anomalies(
     per_page: int = 10,
 ) -> SpendingAnomaliesResponse:
     used_last_closed_month = end_date is None
-    ref_date = _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    ref_date = (
+        _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    )
     assert ref_date is not None
     target_period = _month_key(ref_date)
     partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
@@ -562,7 +573,11 @@ async def get_spending_anomalies(
     grouped: dict[tuple[str, str], int] = defaultdict(int)
     for row in rows:
         period = _month_key(row["date"])
-        if partial_cutoff_day is not None and period in baseline_period_set and row["date"].day > partial_cutoff_day:
+        if (
+            partial_cutoff_day is not None
+            and period in baseline_period_set
+            and row["date"].day > partial_cutoff_day
+        ):
             continue
         category = row["effective_category_major"] or "미분류"
         grouped[(period, category)] += -row["amount"]
@@ -577,7 +592,9 @@ async def get_spending_anomalies(
             continue
         baseline_avg = round(sum(baseline_amounts) / len(baseline_amounts))
         if len(baseline_amounts) > 1:
-            b_var = sum((v - baseline_avg) ** 2 for v in baseline_amounts) / len(baseline_amounts)
+            b_var = sum((v - baseline_avg) ** 2 for v in baseline_amounts) / len(
+                baseline_amounts
+            )
             b_stdev = math.sqrt(b_var)
         else:
             b_stdev = 0.0
@@ -616,7 +633,9 @@ async def get_spending_anomalies(
         )
 
     items.sort(key=lambda item: (-item.anomaly_score, item.category))
-    paged_items, total, resolved_page = _paginate_items(items, page=page, per_page=per_page)
+    paged_items, total, resolved_page = _paginate_items(
+        items, page=page, per_page=per_page
+    )
     return SpendingAnomaliesResponse(
         total=total,
         page=resolved_page,
@@ -693,9 +712,7 @@ async def get_discretionary_velocity(
 
     baseline_values = _exclude_outlier_amounts(list(baseline_monthly.values()))
     baseline_monthly_spend = (
-        round(sum(baseline_values) / len(baseline_values))
-        if baseline_values
-        else 0
+        round(sum(baseline_values) / len(baseline_values)) if baseline_values else 0
     )
     baseline_spend_at_same_progress = round(
         baseline_monthly_spend * month_progress_ratio
@@ -861,7 +878,9 @@ async def get_purchase_gate_candidates(
                     "threshold_ratio": settings.merchant_spike_ratio,
                 },
                 risk_level="warning",
-                reasons=[f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."],
+                reasons=[
+                    f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."
+                ],
             )
         discretionary_baseline = _monthly_average(
             amount
@@ -890,7 +909,9 @@ async def get_purchase_gate_candidates(
                     "threshold_ratio": settings.discretionary_spike_ratio,
                 },
                 risk_level="warning",
-                reasons=[f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."],
+                reasons=[
+                    f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."
+                ],
             )
 
     items = [
@@ -918,12 +939,21 @@ async def get_purchase_gate_candidates(
         legacy_candidate_keys_by_canonical=legacy_candidate_keys_by_canonical,
     )
     for item in items:
-        item.review_status = review_map.get(item.candidate_key, "pending")
+        review = review_map.get(item.candidate_key)
+        if review is not None:
+            item.review_status = review.review_status
+            item.review_memo = review.memo
+            item.reviewed_at = review.reviewed_at
+            item.cooldown_until = review.cooldown_until
+        else:
+            item.review_status = "pending"
     if review_status is not None:
         items = [item for item in items if item.review_status == review_status]
 
     items.sort(key=lambda item: (-item.amount, item.candidate_type, item.merchant))
-    paged_items, total, resolved_page = _paginate_items(items, page=page, per_page=per_page)
+    paged_items, total, resolved_page = _paginate_items(
+        items, page=page, per_page=per_page
+    )
     return PurchaseGateCandidatesResponse(
         total=total,
         page=resolved_page,
@@ -953,11 +983,10 @@ async def update_purchase_gate_candidate_review(
             PurchaseGateReview.candidate_key.in_(review_keys)
         )
     )
-    loaded_reviews = {
-        review.candidate_key: review
-        for review in result.scalars().all()
-    }
-    review = loaded_reviews.get(canonical_candidate_key) or loaded_reviews.get(candidate_key)
+    loaded_reviews = {review.candidate_key: review for review in result.scalars().all()}
+    review = loaded_reviews.get(canonical_candidate_key) or loaded_reviews.get(
+        candidate_key
+    )
     if review is None:
         review = PurchaseGateReview(
             candidate_key=canonical_candidate_key,
@@ -970,6 +999,16 @@ async def update_purchase_gate_candidate_review(
         review.candidate_key = canonical_candidate_key
         review.transaction_id = transaction_id
         review.review_status = payload.review_status
+    review.memo = payload.memo
+    review.reviewed_at = datetime.now(UTC)
+    if payload.cooldown_days is not None:
+        review.cooldown_until = review.reviewed_at + timedelta(
+            days=payload.cooldown_days
+        )
+    elif payload.review_status == "snoozed":
+        review.cooldown_until = review.reviewed_at + timedelta(days=14)
+    elif payload.review_status in {"pending", "reviewed", "ignored", "dismissed"}:
+        review.cooldown_until = None
     try:
         await db_session.commit()
     except Exception:
@@ -981,6 +1020,9 @@ async def update_purchase_gate_candidate_review(
         candidate_type=review.candidate_type,
         transaction_id=review.transaction_id,
         review_status=review.review_status,
+        memo=review.memo,
+        reviewed_at=review.reviewed_at,
+        cooldown_until=review.cooldown_until,
     )
 
 
@@ -997,7 +1039,9 @@ async def _load_analytics_transactions(
         tx_type=tx_type,
     )
     result = await db_session.execute(
-        query.order_by(canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc())
+        query.order_by(
+            canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc()
+        )
     )
     return result.mappings().all()
 
@@ -1008,7 +1052,9 @@ def _build_analytics_query(
     end_date: date | None,
     tx_type: TransactionTypeFilter,
 ) -> tuple[Select, object]:
-    canonical = build_transactions_effective_select().subquery("vw_transactions_effective")
+    canonical = build_transactions_effective_select().subquery(
+        "vw_transactions_effective"
+    )
     query = select(canonical)
     if start_date is not None:
         query = query.where(canonical.c.date >= start_date)
@@ -1069,11 +1115,15 @@ def _build_spending_anomalies_assumptions(
     if used_last_closed_month:
         parts.append(f"직전 마감월 기준(as_of={ref_date.isoformat()})")
     elif partial_cutoff_day is not None:
-        parts.append(f"부분 기간 비교(기준일={ref_date.isoformat()}, 이전 월도 매월 {partial_cutoff_day}일까지만 집계)")
+        parts.append(
+            f"부분 기간 비교(기준일={ref_date.isoformat()}, 이전 월도 매월 {partial_cutoff_day}일까지만 집계)"
+        )
     parts.append(
         f"threshold={anomaly_threshold} anomaly_score 기준 (표준편차가 있으면 |delta|/stdev, 없으면 |delta|/baseline_avg)"
     )
-    parts.append(f"min_delta_amount={min_delta_amount} (baseline 대비 절대 변동액 하한)")
+    parts.append(
+        f"min_delta_amount={min_delta_amount} (baseline 대비 절대 변동액 하한)"
+    )
     return ", ".join(parts)
 
 
@@ -1117,10 +1167,7 @@ def _exclude_outlier_amounts(values: list[int]) -> list[int]:
     median = ordered[len(ordered) // 2]
     if median <= 0:
         return values
-    filtered = [
-        value for value in values
-        if abs(value - median) / median <= 0.3
-    ]
+    filtered = [value for value in values if abs(value - median) / median <= 0.3]
     return filtered or values
 
 
@@ -1136,7 +1183,7 @@ async def _load_purchase_gate_review_statuses(
     candidate_keys: list[str],
     *,
     legacy_candidate_keys_by_canonical: dict[str, list[str]] | None = None,
-) -> dict[str, str]:
+) -> dict[str, PurchaseGateReview]:
     if not candidate_keys:
         return {}
     lookup_keys = set(candidate_keys)
@@ -1148,20 +1195,17 @@ async def _load_purchase_gate_review_statuses(
             PurchaseGateReview.candidate_key.in_(lookup_keys)
         )
     )
-    review_map = {
-        review.candidate_key: review.review_status
-        for review in result.scalars().all()
-    }
-    resolved: dict[str, str] = {}
+    review_map = {review.candidate_key: review for review in result.scalars().all()}
+    resolved: dict[str, PurchaseGateReview] = {}
     for candidate_key in candidate_keys:
-        review_status = review_map.get(candidate_key)
-        if review_status is None and legacy_candidate_keys_by_canonical is not None:
+        review = review_map.get(candidate_key)
+        if review is None and legacy_candidate_keys_by_canonical is not None:
             for legacy_key in legacy_candidate_keys_by_canonical.get(candidate_key, []):
-                review_status = review_map.get(legacy_key)
-                if review_status is not None:
+                review = review_map.get(legacy_key)
+                if review is not None:
                     break
-        if review_status is not None:
-            resolved[candidate_key] = review_status
+        if review is not None:
+            resolved[candidate_key] = review
     return resolved
 
 
@@ -1282,14 +1326,17 @@ def _purchase_candidate_item(
         confidence="medium",
         suggested_review_window=f"{settings.review_cooldown_days}d",
         reasons=reasons,
-        assumptions=["My Ledge는 후보와 근거만 제공하고 최종 구매 판단은 하지 않습니다."],
+        assumptions=[
+            "My Ledge는 후보와 근거만 제공하고 최종 구매 판단은 하지 않습니다."
+        ],
         review_status="pending",
     )
 
 
 def _resolved_recurring_payment_kind(kind_counts: dict[str, int]) -> str | None:
     classified = [
-        kind for kind in ("installment", "monthly_recurring", "not_recurring")
+        kind
+        for kind in ("installment", "monthly_recurring", "not_recurring")
         if kind_counts[kind] > 0
     ]
     if len(classified) == 1 and kind_counts["unclassified"] == 0:
@@ -1303,8 +1350,10 @@ def _safe_ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4)
 
 
-def _paginate_items[T](items: list[T], *, page: int, per_page: int) -> tuple[list[T], int, int]:
+def _paginate_items[T](
+    items: list[T], *, page: int, per_page: int
+) -> tuple[list[T], int, int]:
     total = len(items)
     resolved_page = 1 if total == 0 else min(page, math.ceil(total / per_page))
     start_index = (resolved_page - 1) * per_page
-    return items[start_index:start_index + per_page], total, resolved_page
+    return items[start_index : start_index + per_page], total, resolved_page

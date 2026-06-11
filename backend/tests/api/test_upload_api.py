@@ -80,6 +80,7 @@ async def test_upload_returns_import_summary(
         },
         "snapshots": {
             "asset_snapshots": 42,
+            "insurance_contracts": 2,
             "investments": 9,
             "loans": 4,
         },

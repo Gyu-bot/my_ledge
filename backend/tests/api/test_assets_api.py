@@ -52,12 +52,12 @@ async def test_net_worth_history_returns_series(
     assert response.status_code == 200
     assert response.json() == {
         "items": [
-                {
-                    "snapshot_date": "2026-03-24",
-                    "net_worth": "121889999.54",
-                }
-            ]
-        }
+            {
+                "snapshot_date": "2026-03-24",
+                "net_worth": "121889999.54",
+            }
+        ]
+    }
 
 
 async def test_investments_summary_uses_latest_snapshot_by_default(
@@ -73,6 +73,10 @@ async def test_investments_summary_uses_latest_snapshot_by_default(
     assert payload["snapshot_date"] == "2026-03-24"
     assert payload["totals"]["market_value"] == "20810947.50"
     assert len(payload["items"]) == 9
+    alphabet = next(
+        item for item in payload["items"] if item["product_name"] == "알파벳 A"
+    )
+    assert alphabet["pct_of_investment_total"] == 0.5622
 
 
 async def test_loans_summary_uses_latest_snapshot_by_default(
@@ -393,3 +397,66 @@ async def test_patch_asset_liquidity_and_loan_repayment_metadata(
     assert health.status_code == 200
     assert health.json()["cash_equivalent_total"] == "1000000.00"
     assert health.json()["monthly_debt_payment"] == "650000.00"
+
+
+async def test_liquidity_health_echoes_financial_target_settings(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        AssetSnapshot(
+            snapshot_date=date(2026, 4, 30),
+            side="asset",
+            category="자유입출금 자산",
+            product_name="생활통장",
+            amount="1200000.00",
+        )
+    )
+    await db_session.commit()
+
+    settings_response = await async_client.patch(
+        "/api/v1/settings/analytics",
+        headers=api_headers,
+        json={"financial_targets": {"emergency_fund_target_months": 6}},
+    )
+    assert settings_response.status_code == 200
+
+    health = await async_client.get(
+        "/api/v1/analytics/liquidity-health",
+        params={"monthly_required_spend": 400000},
+    )
+
+    assert health.status_code == 200
+    payload = health.json()
+    assert payload["emergency_fund_months"] == 3.0
+    assert payload["emergency_fund_target_months"] == 6
+    assert payload["target_progress_ratio"] == 0.5
+
+
+async def test_insurance_summary_uses_latest_snapshot_and_closed_month_premium(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    sample_workbook_bytes: bytes,
+) -> None:
+    await import_transactions_from_workbook(
+        db_session=db_session,
+        file_bytes=sample_workbook_bytes,
+        filename="finance_sample.xlsx",
+        snapshot_date=date(2026, 5, 21),
+    )
+
+    response = await async_client.get("/api/v1/insurance/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["snapshot_date"] == "2026-05-21"
+    assert len(payload["items"]) == 2
+    assert payload["items"][0]["insurer"] == "DB손해보험"
+    assert payload["items"][0]["contract_status"] == "정상"
+    assert payload["monthly_premium_estimate"]["period"] == "2026-04"
+    assert payload["monthly_premium_estimate"]["amount"] == "127662"
+    assert (
+        "monthly_premium_estimate uses the latest closed month insurance-category spending"
+        in payload["monthly_premium_estimate"]["assumptions"]
+    )

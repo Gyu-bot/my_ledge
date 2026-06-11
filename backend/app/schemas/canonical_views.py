@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class CanonicalMonthlyCashflowItem(BaseModel):
     period: str
+    is_complete_month: bool = False
     income_total: int
     expense_total: int
     non_loan_expense_total: int
@@ -26,6 +27,7 @@ class CanonicalMonthlyCashflowItem(BaseModel):
 
 class CanonicalTrueSpendableMonthlyItem(BaseModel):
     period: str
+    is_complete_month: bool = False
     income_total: int
     observed_income_total: int | None = None
     loan_repayment_total: int
@@ -106,7 +108,13 @@ class CanonicalUnclassifiedWorkQueueItem(BaseModel):
     priority_reason: str
 
 
+class CanonicalDataCoverage(BaseModel):
+    first_transaction_date: date | None
+    last_transaction_date: date | None
+
+
 class CanonicalViewsDashboardResponse(BaseModel):
+    data_coverage: CanonicalDataCoverage
     monthly_cashflow: list[CanonicalMonthlyCashflowItem]
     true_spendable_monthly: list[CanonicalTrueSpendableMonthlyItem]
     loan_repayment_monthly: list[CanonicalLoanRepaymentMonthlyItem]

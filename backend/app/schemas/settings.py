@@ -129,6 +129,21 @@ class BulkOperationsSavedSettings(BaseModel):
     max_bulk_rows_without_extra_confirmation: int | None
 
 
+DebtStrategyPreference = Literal["avalanche", "snowball"]
+
+
+class FinancialTargetsSettings(BaseModel):
+    emergency_fund_target_months: int
+    savings_rate_target: float | None
+    debt_strategy_preference: DebtStrategyPreference | None
+
+
+class FinancialTargetsSavedSettings(BaseModel):
+    emergency_fund_target_months: int | None
+    savings_rate_target: float | None
+    debt_strategy_preference: DebtStrategyPreference | None
+
+
 class AnalyticsSettingsSection(BaseModel):
     spending_anomalies: SpendingAnomaliesSettings
     discretionary_velocity: DiscretionaryVelocitySettings
@@ -136,6 +151,7 @@ class AnalyticsSettingsSection(BaseModel):
     recurring_dry_run: RecurringDryRunSettings
     asset_liability_health: AssetLiabilityHealthSettings
     bulk_operations: BulkOperationsSettings
+    financial_targets: FinancialTargetsSettings
 
 
 class AnalyticsSavedSettingsSection(BaseModel):
@@ -145,6 +161,7 @@ class AnalyticsSavedSettingsSection(BaseModel):
     recurring_dry_run: RecurringDryRunSavedSettings
     asset_liability_health: AssetLiabilityHealthSavedSettings
     bulk_operations: BulkOperationsSavedSettings
+    financial_targets: FinancialTargetsSavedSettings
 
 
 class AnalyticsSettingsResponse(BaseModel):
@@ -200,7 +217,9 @@ class RecurringDryRunSettingsPatch(BaseModel):
 class AssetLiabilityHealthSettingsPatch(BaseModel):
     emergency_fund_included_tiers: list[str] | None = None
     show_near_liquid_as_secondary: bool | None = None
-    monthly_payment_estimate_lookback_months: int | None = Field(default=None, ge=1, le=24)
+    monthly_payment_estimate_lookback_months: int | None = Field(
+        default=None, ge=1, le=24
+    )
     monthly_payment_min_observations: int | None = Field(default=None, ge=1)
     debt_payment_confidence_requires_user_confirmation: bool | None = None
 
@@ -210,6 +229,12 @@ class BulkOperationsSettingsPatch(BaseModel):
     require_confirmation: bool | None = None
     show_undo_after_delete: bool | None = None
     max_bulk_rows_without_extra_confirmation: int | None = Field(default=None, ge=1)
+
+
+class FinancialTargetsSettingsPatch(BaseModel):
+    emergency_fund_target_months: int | None = Field(default=None, ge=1, le=120)
+    savings_rate_target: float | None = Field(default=None, ge=0.0, le=1.0)
+    debt_strategy_preference: DebtStrategyPreference | None = None
 
 
 class AnalyticsSettingsPatchRequest(BaseModel):
@@ -230,4 +255,7 @@ class AnalyticsSettingsPatchRequest(BaseModel):
     )
     bulk_operations: BulkOperationsSettingsPatch = Field(
         default_factory=BulkOperationsSettingsPatch,
+    )
+    financial_targets: FinancialTargetsSettingsPatch = Field(
+        default_factory=FinancialTargetsSettingsPatch,
     )

@@ -10,10 +10,12 @@ from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
+from app.models.user_profile_snapshot import UserProfileSnapshot
 from app.parsers.decrypt import open_excel_bytes
 from app.parsers.snapshots import SnapshotParseResult, parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
@@ -35,6 +37,7 @@ class TransactionImportResult:
     tx_new: int
     tx_skipped: int
     asset_snapshot_count: int
+    insurance_contract_count: int
     investment_count: int
     loan_count: int
     status: str
@@ -57,6 +60,7 @@ async def import_transactions_from_workbook(
     tx_new = 0
     tx_skipped = 0
     asset_snapshot_count = 0
+    insurance_contract_count = 0
     investment_count = 0
     loan_count = 0
     tx_success = False
@@ -105,6 +109,7 @@ async def import_transactions_from_workbook(
         await db_session.commit()
 
         asset_snapshot_count = len(parsed_snapshots.asset_snapshots)
+        insurance_contract_count = len(parsed_snapshots.insurance_contracts)
         investment_count = len(parsed_snapshots.investments)
         loan_count = len(parsed_snapshots.loans)
         snapshot_success = True
@@ -144,6 +149,7 @@ async def import_transactions_from_workbook(
         tx_new=tx_new,
         tx_skipped=tx_skipped,
         asset_snapshot_count=asset_snapshot_count,
+        insurance_contract_count=insurance_contract_count,
         investment_count=investment_count,
         loan_count=loan_count,
         status=status,
@@ -371,15 +377,25 @@ async def _replace_snapshots(
 ) -> None:
     normalized_snapshots = normalize_snapshots_for_storage(parsed_snapshots)
     existing_assets = (
-        await db_session.execute(
-            select(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
+        (
+            await db_session.execute(
+                select(AssetSnapshot).where(
+                    AssetSnapshot.snapshot_date == snapshot_date
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     existing_loans = (
-        await db_session.execute(
-            select(Loan).where(Loan.snapshot_date == snapshot_date)
+        (
+            await db_session.execute(
+                select(Loan).where(Loan.snapshot_date == snapshot_date)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     asset_metadata = {
         (row.side, row.category, row.product_name): {
             "liquidity_tier": row.liquidity_tier,
@@ -408,6 +424,16 @@ async def _replace_snapshots(
         delete(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
     )
     await db_session.execute(
+        delete(UserProfileSnapshot).where(
+            UserProfileSnapshot.snapshot_date == snapshot_date
+        )
+    )
+    await db_session.execute(
+        delete(InsuranceContract).where(
+            InsuranceContract.snapshot_date == snapshot_date
+        )
+    )
+    await db_session.execute(
         delete(Investment).where(Investment.snapshot_date == snapshot_date)
     )
     await db_session.execute(delete(Loan).where(Loan.snapshot_date == snapshot_date))
@@ -416,12 +442,20 @@ async def _replace_snapshots(
     for row in normalized_snapshots.asset_snapshots:
         stored_row = dict(row)
         metadata = asset_metadata.get(
-            (str(stored_row["side"]), str(stored_row["category"]), str(stored_row["product_name"]))
+            (
+                str(stored_row["side"]),
+                str(stored_row["category"]),
+                str(stored_row["product_name"]),
+            )
         )
         if metadata:
             stored_row.update(metadata)
         asset_rows.append(AssetSnapshot(snapshot_date=snapshot_date, **stored_row))
     db_session.add_all(asset_rows)
+    db_session.add_all(
+        InsuranceContract(snapshot_date=snapshot_date, **row)
+        for row in normalized_snapshots.insurance_contracts
+    )
     db_session.add_all(
         Investment(snapshot_date=snapshot_date, **row)
         for row in normalized_snapshots.investments
@@ -429,11 +463,20 @@ async def _replace_snapshots(
     loan_rows = []
     for row in normalized_snapshots.loans:
         stored_row = dict(row)
-        metadata = loan_metadata.get((str(stored_row["lender"]), str(stored_row["product_name"])))
+        metadata = loan_metadata.get(
+            (str(stored_row["lender"]), str(stored_row["product_name"]))
+        )
         if metadata:
             stored_row.update(metadata)
         loan_rows.append(Loan(snapshot_date=snapshot_date, **stored_row))
     db_session.add_all(loan_rows)
+    if normalized_snapshots.user_profile is not None:
+        db_session.add(
+            UserProfileSnapshot(
+                snapshot_date=snapshot_date,
+                **normalized_snapshots.user_profile,
+            )
+        )
 
 
 def _resolve_status(*, tx_success: bool, snapshot_success: bool) -> str:
@@ -448,9 +491,15 @@ def normalize_snapshots_for_storage(
     parsed_snapshots: SnapshotParseResult,
 ) -> SnapshotParseResult:
     return SnapshotParseResult(
+        user_profile=parsed_snapshots.user_profile,
+        cashflow_benchmarks=parsed_snapshots.cashflow_benchmarks,
         asset_snapshots=_deduplicate_named_rows(
             parsed_snapshots.asset_snapshots,
             key_fields=("side", "category"),
+        ),
+        insurance_contracts=_deduplicate_named_rows(
+            parsed_snapshots.insurance_contracts,
+            key_fields=("insurer",),
         ),
         investments=_deduplicate_named_rows(
             parsed_snapshots.investments,

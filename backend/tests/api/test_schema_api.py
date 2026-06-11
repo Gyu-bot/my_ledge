@@ -14,6 +14,7 @@ def test_expected_tables_exist() -> None:
         "recurring_category_rules",
         "transactions",
         "asset_snapshots",
+        "insurance_contracts",
         "investments",
         "loans",
         "loan_accounts",
@@ -23,6 +24,7 @@ def test_expected_tables_exist() -> None:
         "installment_transaction_links",
         "purchase_gate_reviews",
         "upload_logs",
+        "user_profile_snapshots",
     }
 
     transactions = Base.metadata.tables["transactions"]
@@ -32,6 +34,7 @@ def test_expected_tables_exist() -> None:
     ]
     recurring_category_rules = Base.metadata.tables["recurring_category_rules"]
     investments = Base.metadata.tables["investments"]
+    insurance_contracts = Base.metadata.tables["insurance_contracts"]
     loans = Base.metadata.tables["loans"]
     loan_accounts = Base.metadata.tables["loan_accounts"]
     loan_merchant_rules = Base.metadata.tables["loan_merchant_rules"]
@@ -39,6 +42,8 @@ def test_expected_tables_exist() -> None:
     installment_transaction_links = Base.metadata.tables[
         "installment_transaction_links"
     ]
+    purchase_gate_reviews = Base.metadata.tables["purchase_gate_reviews"]
+    user_profile_snapshots = Base.metadata.tables["user_profile_snapshots"]
 
     assert transactions.c.is_deleted.server_default is not None
     assert transactions.c.source.server_default is not None
@@ -61,6 +66,12 @@ def test_expected_tables_exist() -> None:
     } == {("category_major", "category_minor")}
 
     assert not investments.c.broker.nullable
+    assert not insurance_contracts.c.insurer.nullable
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in insurance_contracts.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("snapshot_date", "insurer", "product_name")}
     assert {
         tuple(column.name for column in constraint.columns)
         for constraint in investments.constraints
@@ -100,6 +111,14 @@ def test_expected_tables_exist() -> None:
         for constraint in installment_transaction_links.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     } == {("transaction_id",), ("installment_plan_id", "installment_number")}
+    assert {"memo", "reviewed_at", "cooldown_until"}.issubset(
+        set(purchase_gate_reviews.c.keys())
+    )
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in user_profile_snapshots.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("snapshot_date",)}
 
 
 async def test_schema_endpoint_requires_api_key(async_client: AsyncClient) -> None:
@@ -121,11 +140,13 @@ async def test_schema_endpoint_returns_tables(
         "vw_category_monthly_spend",
         "vw_asset_snapshot_canonical",
         "vw_fixed_cost_monthly_summary",
+        "vw_income_monthly_by_category",
+        "vw_loan_account_canonical",
         "vw_loan_repayment_monthly",
-            "vw_merchant_monthly_baseline",
-            "vw_monthly_cashflow",
-            "vw_recurring_merchant_monthly",
-            "vw_transactions_effective",
+        "vw_merchant_monthly_baseline",
+        "vw_monthly_cashflow",
+        "vw_recurring_merchant_monthly",
+        "vw_transactions_effective",
         "vw_true_spendable_monthly",
         "vw_unclassified_work_queue",
     }
@@ -192,7 +213,43 @@ async def test_schema_endpoint_returns_tables(
         "near_liquid_total",
         "loan_balance_total",
         "monthly_debt_payment_total",
+        "negative_asset_excluded_total",
     }.issubset({column["name"] for column in asset_snapshot_view["columns"]})
+
+    loan_account_view = next(
+        view
+        for view in response.json()["views"]
+        if view["name"] == "vw_loan_account_canonical"
+    )
+    assert {
+        "loan_account_id",
+        "display_name",
+        "lender",
+        "product_name",
+        "loan_kind",
+        "snapshot_date",
+        "principal",
+        "balance",
+        "interest_rate",
+        "monthly_payment",
+        "monthly_payment_source",
+        "repayment_method",
+        "start_date",
+        "maturity_date",
+        "estimated_monthly_interest",
+    }.issubset({column["name"] for column in loan_account_view["columns"]})
+
+    income_view = next(
+        view
+        for view in response.json()["views"]
+        if view["name"] == "vw_income_monthly_by_category"
+    )
+    assert {
+        "period",
+        "effective_category_major",
+        "income_total",
+        "transaction_count",
+    }.issubset({column["name"] for column in income_view["columns"]})
 
     unclassified_queue_view = next(
         view

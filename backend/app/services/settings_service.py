@@ -13,6 +13,8 @@ from app.schemas.settings import (
     BulkOperationsSettings,
     DiscretionaryVelocitySavedSettings,
     DiscretionaryVelocitySettings,
+    FinancialTargetsSavedSettings,
+    FinancialTargetsSettings,
     AnalyticsSavedSettingsSection,
     AnalyticsSettingsResponse,
     AnalyticsSettingsSection,
@@ -30,6 +32,7 @@ PURCHASE_GATE_SCOPE = "analytics.purchase_gate"
 RECURRING_DRY_RUN_SCOPE = "analytics.recurring_dry_run"
 ASSET_LIABILITY_HEALTH_SCOPE = "analytics.asset_liability_health"
 BULK_OPERATIONS_SCOPE = "analytics.bulk_operations"
+FINANCIAL_TARGETS_SCOPE = "analytics.financial_targets"
 
 DEFAULT_SPENDING_ANOMALIES_SETTINGS = SpendingAnomaliesSettings(
     min_delta_amount=100_000,
@@ -89,6 +92,11 @@ DEFAULT_BULK_OPERATIONS_SETTINGS = BulkOperationsSettings(
     show_undo_after_delete=True,
     max_bulk_rows_without_extra_confirmation=100,
 )
+DEFAULT_FINANCIAL_TARGETS_SETTINGS = FinancialTargetsSettings(
+    emergency_fund_target_months=3,
+    savings_rate_target=None,
+    debt_strategy_preference=None,
+)
 
 _SECTION_CONFIGS = {
     "spending_anomalies": (
@@ -121,6 +129,11 @@ _SECTION_CONFIGS = {
         DEFAULT_BULK_OPERATIONS_SETTINGS,
         BulkOperationsSavedSettings,
     ),
+    "financial_targets": (
+        FINANCIAL_TARGETS_SCOPE,
+        DEFAULT_FINANCIAL_TARGETS_SETTINGS,
+        FinancialTargetsSavedSettings,
+    ),
 }
 
 
@@ -141,6 +154,7 @@ async def patch_analytics_settings(
     recurring_dry_run: Mapping[str, Any] | None = None,
     asset_liability_health: Mapping[str, Any] | None = None,
     bulk_operations: Mapping[str, Any] | None = None,
+    financial_targets: Mapping[str, Any] | None = None,
 ) -> AnalyticsSettingsResponse:
     await _patch_settings_section(db_session, "spending_anomalies", spending_anomalies)
     await _patch_settings_section(
@@ -149,13 +163,18 @@ async def patch_analytics_settings(
         discretionary_velocity or {},
     )
     await _patch_settings_section(db_session, "purchase_gate", purchase_gate or {})
-    await _patch_settings_section(db_session, "recurring_dry_run", recurring_dry_run or {})
+    await _patch_settings_section(
+        db_session, "recurring_dry_run", recurring_dry_run or {}
+    )
     await _patch_settings_section(
         db_session,
         "asset_liability_health",
         asset_liability_health or {},
     )
     await _patch_settings_section(db_session, "bulk_operations", bulk_operations or {})
+    await _patch_settings_section(
+        db_session, "financial_targets", financial_targets or {}
+    )
 
     await db_session.commit()
     return await get_analytics_settings(db_session)
@@ -251,11 +270,15 @@ def _build_analytics_settings_response(
             recurring_dry_run=DEFAULT_RECURRING_DRY_RUN_SETTINGS,
             asset_liability_health=DEFAULT_ASSET_LIABILITY_HEALTH_SETTINGS,
             bulk_operations=DEFAULT_BULK_OPERATIONS_SETTINGS,
+            financial_targets=DEFAULT_FINANCIAL_TARGETS_SETTINGS,
         ),
         saved=AnalyticsSavedSettingsSection(
             spending_anomalies=saved,
             discretionary_velocity=DiscretionaryVelocitySavedSettings(
-                **{key: None for key in DEFAULT_DISCRETIONARY_VELOCITY_SETTINGS.model_fields}
+                **{
+                    key: None
+                    for key in DEFAULT_DISCRETIONARY_VELOCITY_SETTINGS.model_fields
+                }
             ),
             purchase_gate=PurchaseGateSavedSettings(
                 **{key: None for key in DEFAULT_PURCHASE_GATE_SETTINGS.model_fields}
@@ -264,10 +287,16 @@ def _build_analytics_settings_response(
                 **{key: None for key in DEFAULT_RECURRING_DRY_RUN_SETTINGS.model_fields}
             ),
             asset_liability_health=AssetLiabilityHealthSavedSettings(
-                **{key: None for key in DEFAULT_ASSET_LIABILITY_HEALTH_SETTINGS.model_fields}
+                **{
+                    key: None
+                    for key in DEFAULT_ASSET_LIABILITY_HEALTH_SETTINGS.model_fields
+                }
             ),
             bulk_operations=BulkOperationsSavedSettings(
                 **{key: None for key in DEFAULT_BULK_OPERATIONS_SETTINGS.model_fields}
+            ),
+            financial_targets=FinancialTargetsSavedSettings(
+                **{key: None for key in DEFAULT_FINANCIAL_TARGETS_SETTINGS.model_fields}
             ),
         ),
         effective=AnalyticsSettingsSection(
@@ -277,15 +306,15 @@ def _build_analytics_settings_response(
             recurring_dry_run=DEFAULT_RECURRING_DRY_RUN_SETTINGS,
             asset_liability_health=DEFAULT_ASSET_LIABILITY_HEALTH_SETTINGS,
             bulk_operations=DEFAULT_BULK_OPERATIONS_SETTINGS,
+            financial_targets=DEFAULT_FINANCIAL_TARGETS_SETTINGS,
         ),
     )
 
 
-def _build_full_analytics_settings_response(saved_sections: dict[str, Any]) -> AnalyticsSettingsResponse:
-    defaults = {
-        section: config[1]
-        for section, config in _SECTION_CONFIGS.items()
-    }
+def _build_full_analytics_settings_response(
+    saved_sections: dict[str, Any],
+) -> AnalyticsSettingsResponse:
+    defaults = {section: config[1] for section, config in _SECTION_CONFIGS.items()}
     effective = {
         section: _effective_settings(defaults[section], saved_sections[section])
         for section in _SECTION_CONFIGS

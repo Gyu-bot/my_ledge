@@ -81,6 +81,11 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
                 "show_undo_after_delete": True,
                 "max_bulk_rows_without_extra_confirmation": 100,
             },
+            "financial_targets": {
+                "emergency_fund_target_months": 3,
+                "savings_rate_target": None,
+                "debt_strategy_preference": None,
+            },
         },
         "saved": {
             "spending_anomalies": {
@@ -135,6 +140,11 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
                 "require_confirmation": None,
                 "show_undo_after_delete": None,
                 "max_bulk_rows_without_extra_confirmation": None,
+            },
+            "financial_targets": {
+                "emergency_fund_target_months": None,
+                "savings_rate_target": None,
+                "debt_strategy_preference": None,
             },
         },
         "effective": {
@@ -196,6 +206,11 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
                 "show_undo_after_delete": True,
                 "max_bulk_rows_without_extra_confirmation": 100,
             },
+            "financial_targets": {
+                "emergency_fund_target_months": 3,
+                "savings_rate_target": None,
+                "debt_strategy_preference": None,
+            },
         },
     }
 
@@ -240,18 +255,45 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
 
     assert settings_patch.status_code == 200
     settings_payload = settings_patch.json()
-    assert settings_payload["saved"]["discretionary_velocity"][
-        "warning_velocity_ratio"
-    ] == 1.1
+    assert (
+        settings_payload["saved"]["discretionary_velocity"]["warning_velocity_ratio"]
+        == 1.1
+    )
     assert settings_payload["effective"]["discretionary_velocity"][
         "excluded_merchants"
     ] == ["면세점"]
-    assert settings_payload["effective"]["purchase_gate"][
-        "large_purchase_threshold"
-    ] == 150000
+    assert (
+        settings_payload["effective"]["purchase_gate"]["large_purchase_threshold"]
+        == 150000
+    )
     assert settings_payload["effective"]["purchase_gate"][
         "enabled_candidate_types"
     ] == ["large_oneoff", "new_merchant"]
+
+    financial_targets_patch = await async_client.patch(
+        "/api/v1/settings/analytics",
+        headers=api_headers,
+        json={
+            "financial_targets": {
+                "emergency_fund_target_months": 6,
+                "savings_rate_target": 0.35,
+                "debt_strategy_preference": "avalanche",
+            },
+        },
+    )
+
+    assert financial_targets_patch.status_code == 200
+    targets_payload = financial_targets_patch.json()
+    assert targets_payload["saved"]["financial_targets"] == {
+        "emergency_fund_target_months": 6,
+        "savings_rate_target": 0.35,
+        "debt_strategy_preference": "avalanche",
+    }
+    assert targets_payload["effective"]["financial_targets"] == {
+        "emergency_fund_target_months": 6,
+        "savings_rate_target": 0.35,
+        "debt_strategy_preference": "avalanche",
+    }
 
 
 async def test_patch_analytics_settings_validates_ranges(

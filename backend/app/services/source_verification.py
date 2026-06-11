@@ -50,9 +50,27 @@ class SnapshotParityReport:
 
 
 @dataclass(slots=True)
+class CashflowBenchmarkMismatch:
+    period: str
+    transaction_type: str
+    category_major: str
+    expected_amount: Decimal
+    db_amount: Decimal
+    delta: Decimal
+
+
+@dataclass(slots=True)
+class CashflowBenchmarkParityReport:
+    expected_rows: int
+    compared_rows: int
+    mismatches: list[CashflowBenchmarkMismatch]
+
+
+@dataclass(slots=True)
 class ImportParityReport:
     transaction: TransactionParityReport
     snapshots: SnapshotParityReport
+    cashflow_benchmarks: CashflowBenchmarkParityReport
 
 
 async def verify_import_parity(
@@ -90,6 +108,10 @@ async def verify_import_parity(
                 snapshot_date,
             ),
         ),
+        cashflow_benchmarks=await _verify_cashflow_benchmark_parity(
+            db_session,
+            parsed_snapshots.cashflow_benchmarks,
+        ),
     )
 
 
@@ -99,7 +121,9 @@ async def _verify_transaction_parity(
     sample_size: int,
     sample_seed: int,
 ) -> TransactionParityReport:
-    db_rows = await db_session.scalar(select(func.count()).select_from(Transaction)) or 0
+    db_rows = (
+        await db_session.scalar(select(func.count()).select_from(Transaction)) or 0
+    )
     sampled_indices = sorted(
         random.Random(sample_seed).sample(
             range(len(parsed_transactions)),
@@ -191,7 +215,9 @@ async def _verify_asset_snapshot_parity(
         select(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
     )
     actual_rows = [_serialize_asset_snapshot(row) for row in result.scalars().all()]
-    expected_serialized = [_serialize_expected_asset_snapshot(row) for row in expected_rows]
+    expected_serialized = [
+        _serialize_expected_asset_snapshot(row) for row in expected_rows
+    ]
     return _build_snapshot_report(expected_serialized, actual_rows)
 
 
@@ -221,6 +247,66 @@ async def _verify_loan_parity(
     return _build_snapshot_report(expected_serialized, actual_rows)
 
 
+async def _verify_cashflow_benchmark_parity(
+    db_session: AsyncSession,
+    expected_rows: list[dict[str, object]],
+) -> CashflowBenchmarkParityReport:
+    if not expected_rows:
+        return CashflowBenchmarkParityReport(
+            expected_rows=0,
+            compared_rows=0,
+            mismatches=[],
+        )
+
+    periods = sorted({str(row["period"]) for row in expected_rows})
+    start_date = _period_start(periods[0])
+    end_date = _period_end(periods[-1])
+    result = await db_session.execute(
+        select(Transaction)
+        .where(Transaction.date >= start_date)
+        .where(Transaction.date <= end_date)
+        .where(Transaction.type.in_(["수입", "지출"]))
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+    )
+    actual_by_key: dict[tuple[str, str, str], Decimal] = {}
+    for row in result.scalars().all():
+        period = f"{row.date:%Y-%m}"
+        category_major = row.category_major_user or row.category_major or "미분류"
+        key = (period, row.type, category_major)
+        amount = Decimal(row.amount)
+        if row.type == "지출":
+            amount = abs(amount)
+        actual_by_key[key] = actual_by_key.get(key, Decimal("0")) + amount
+
+    mismatches: list[CashflowBenchmarkMismatch] = []
+    for row in expected_rows:
+        key = (
+            str(row["period"]),
+            str(row["transaction_type"]),
+            str(row["category_major"]),
+        )
+        expected_amount = Decimal(row["amount"])
+        db_amount = actual_by_key.get(key, Decimal("0"))
+        if db_amount != expected_amount:
+            mismatches.append(
+                CashflowBenchmarkMismatch(
+                    period=key[0],
+                    transaction_type=key[1],
+                    category_major=key[2],
+                    expected_amount=expected_amount,
+                    db_amount=db_amount,
+                    delta=db_amount - expected_amount,
+                )
+            )
+
+    return CashflowBenchmarkParityReport(
+        expected_rows=len(expected_rows),
+        compared_rows=len(expected_rows),
+        mismatches=mismatches,
+    )
+
+
 def _build_snapshot_report(
     expected_rows: list[dict[str, object]],
     actual_rows: list[dict[str, object]],
@@ -243,7 +329,9 @@ def _freeze_row(row: dict[str, object]) -> tuple[tuple[str, object], ...]:
     return tuple(sorted(row.items()))
 
 
-def _expand_counter(counter: Counter[tuple[tuple[str, object], ...]]) -> list[dict[str, object]]:
+def _expand_counter(
+    counter: Counter[tuple[tuple[str, object], ...]],
+) -> list[dict[str, object]]:
     expanded: list[dict[str, object]] = []
     for frozen_row, count in counter.items():
         row = dict(frozen_row)
@@ -326,3 +414,15 @@ def _quantize_optional_decimal(value: Decimal | None, pattern: str) -> Decimal |
 
 def _quantize_decimal(value: Decimal, pattern: str) -> Decimal:
     return Decimal(value).quantize(Decimal(pattern))
+
+
+def _period_start(period: str) -> date:
+    year, month = [int(part) for part in period.split("-")]
+    return date(year, month, 1)
+
+
+def _period_end(period: str) -> date:
+    year, month = [int(part) for part in period.split("-")]
+    if month == 12:
+        return date(year, 12, 31)
+    return date(year, month + 1, 1).replace(day=1) - date.resolution

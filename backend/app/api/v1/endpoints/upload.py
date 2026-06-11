@@ -64,6 +64,7 @@ async def upload_workbook(
         ),
         snapshots=UploadSnapshotSummary(
             asset_snapshots=result.asset_snapshot_count,
+            insurance_contracts=result.insurance_contract_count,
             investments=result.investment_count,
             loans=result.loan_count,
         ),
