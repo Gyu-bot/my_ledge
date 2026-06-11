@@ -1,8 +1,8 @@
-// 프론트엔드 단독 개발용 mock API — 백엔드 없이 홈 프로토타입을 띄운다.
-// 사용: node scripts/mock-api.mjs  →  VITE_PROXY_TARGET=http://127.0.0.1:8765 npm run dev
+// 프론트엔드 단독 개발용 mock API — 백엔드 없이 홈/지출/자산·부채/신호를 띄운다.
+// 사용: node scripts/mock-api.mjs  →  VITE_PROXY_TARGET=http://127.0.0.1:8943 npm run dev
 import { createServer } from 'node:http'
 
-const PORT = Number(process.env.MOCK_API_PORT ?? 8765)
+const PORT = Number(process.env.MOCK_API_PORT ?? 8943)
 
 function months(count) {
   const now = new Date()
@@ -12,18 +12,99 @@ function months(count) {
   })
 }
 
-const PERIODS = months(12)
+const PERIODS = months(13)
 const CURRENT = PERIODS[PERIODS.length - 1]
+const CATEGORIES = ['식비', '주거/통신', '교통', '구독', '쇼핑', '금융', '의료', '문화']
+const MERCHANTS = {
+  식비: ['쿠팡이츠', 'GS25', '이마트', '배달의민족'],
+  '주거/통신': ['SK텔레콤', '관리비', '한전'],
+  교통: ['카카오T', '서울교통공사'],
+  구독: ['넷플릭스', '유튜브 프리미엄', '쿠팡 와우'],
+  쇼핑: ['쿠팡', '무신사'],
+  금융: ['국민은행 대출이자', 'KB손해보험'],
+  의료: ['연세약국'],
+  문화: ['CGV', '스팀'],
+}
+
+function seeded(seed) {
+  let value = seed
+  return () => {
+    value = (value * 9301 + 49297) % 233280
+    return value / 233280
+  }
+}
+
+// 결정적 거래 생성 (12개월 × ~40건)
+const TRANSACTIONS = (() => {
+  const rand = seeded(42)
+  const rows = []
+  let id = 1
+  for (const period of PERIODS) {
+    const isCurrent = period === CURRENT
+    const dayCount = isCurrent ? 10 : 28
+    // 월급
+    if (!isCurrent || rand() > 0.7) {
+      rows.push({ id: id++, date: `${period}-25`, merchant: '월급', category: '급여', amount: 5_050_000, type: '수입' })
+    }
+    if (!isCurrent && rand() > 0.5) {
+      rows.push({ id: id++, date: `${period}-10`, merchant: '이자수익', category: '금융수입', amount: 45_000, type: '수입' })
+    }
+    for (let i = 0; i < 38; i += 1) {
+      const category = CATEGORIES[Math.floor(rand() * CATEGORIES.length)]
+      const merchantList = MERCHANTS[category]
+      const merchant = merchantList[Math.floor(rand() * merchantList.length)]
+      const day = String(1 + Math.floor(rand() * dayCount)).padStart(2, '0')
+      const amount = -Math.round((4_000 + rand() * 120_000) / 100) * 100
+      rows.push({ id: id++, date: `${period}-${day}`, merchant, category, amount, type: '지출' })
+    }
+  }
+  return rows.map((row) => ({
+    ...row,
+    time: '12:00:00',
+    category_major: row.category,
+    category_minor: row.category === '식비' ? '배달' : null,
+    category_major_user: null,
+    category_minor_user: null,
+    effective_category_major: row.category,
+    effective_category_minor: row.category === '식비' ? '배달' : null,
+    description: `${row.merchant}-원본`,
+    currency: 'KRW',
+    payment_method: '카드 A',
+    cost_kind: null,
+    fixed_cost_necessity: null,
+    spend_necessity: null,
+    cost_classification_source: null,
+    recurring_payment_kind: null,
+    memo: null,
+    is_deleted: false,
+    merged_into_id: null,
+    is_edited: false,
+    source: 'import',
+    created_at: '',
+    updated_at: '',
+  }))
+})()
+
+function inRange(row, params) {
+  const start = params.get('start_date')
+  const end = params.get('end_date')
+  if (start && row.date < start) return false
+  if (end && row.date > end) return false
+  return true
+}
+
+function byType(row, type) {
+  if (!type || type === 'all') return true
+  return row.type === type
+}
 
 const cashflow = {
-  items: PERIODS.map((period, index) => {
-    const income = period === CURRENT ? 180_000 : 5_050_000 + (index % 3) * 120_000
-    const expense = -(2_900_000 + ((index * 7) % 5) * 260_000 + (index === 9 ? 900_000 : 0))
+  items: PERIODS.slice(-12).map((period) => {
+    const rows = TRANSACTIONS.filter((row) => row.date.startsWith(period))
+    const income = rows.filter((row) => row.type === '수입').reduce((sum, row) => sum + row.amount, 0)
+    const expense = rows.filter((row) => row.type === '지출').reduce((sum, row) => sum + row.amount, 0)
     return {
-      period,
-      income,
-      expense,
-      transfer: 1_200_000,
+      period, income, expense, transfer: 1_200_000,
       net_cashflow: income + expense,
       savings_rate: income > 0 ? (income + expense) / income : null,
     }
@@ -51,11 +132,18 @@ const trueSpendable = PERIODS.slice(-7).map((period) => {
     excluded_income_periods: isCurrent ? [PERIODS[2]] : [],
     estimated_spendable_before_variable_spend: isCurrent ? 2_730_000 : null,
     estimated_remaining_after_variable_spend: isCurrent ? 1_243_000 : null,
+    is_complete_month: !isCurrent,
   }
 })
 
 const canonicalDashboard = {
-  monthly_cashflow: [],
+  data_coverage: { first_transaction_date: `${PERIODS[0]}-01`, last_transaction_date: `${CURRENT}-10` },
+  monthly_cashflow: cashflow.items.map((item) => ({
+    ...item,
+    income_total: item.income,
+    expense_total: -item.expense,
+    is_complete_month: item.period !== CURRENT,
+  })),
   true_spendable_monthly: trueSpendable,
   loan_repayment_monthly: [],
   merchant_monthly_baseline: [],
@@ -82,72 +170,273 @@ const canonicalDashboard = {
 
 const snapshots = {
   items: [
-    { snapshot_date: PERIODS[5] + '-01', asset_total: '662000000', liability_total: '268000000', net_worth: '394000000' },
+    { snapshot_date: `${PERIODS[7]}-01`, asset_total: '662000000', liability_total: '268000000', net_worth: '394000000' },
     { snapshot_date: `${CURRENT}-07`, asset_total: '684000000', liability_total: '263000000', net_worth: '421000000' },
   ],
-  asset_items: [],
+  asset_items: [
+    { id: 1, snapshot_date: `${CURRENT}-07`, side: 'asset', category: '자유입출금', product_name: '토스뱅크 통장', amount: '8100000', liquidity_tier: 'immediate', is_cash_equivalent: true },
+    { id: 2, snapshot_date: `${CURRENT}-07`, side: 'asset', category: '투자성', product_name: 'ISA', amount: '10100000', liquidity_tier: 'near_liquid', is_cash_equivalent: true },
+    { id: 3, snapshot_date: `${CURRENT}-07`, side: 'asset', category: '부동산', product_name: '아파트', amount: '650000000', liquidity_tier: 'illiquid', is_cash_equivalent: false },
+    { id: 4, snapshot_date: `${CURRENT}-07`, side: 'asset', category: '전자금융', product_name: '카카오페이 머니', amount: '320000', liquidity_tier: null, is_cash_equivalent: null },
+  ],
 }
 
-const transactions = {
-  total: 2219,
-  page: 1,
-  per_page: 5,
-  items: [
-    { id: 1, date: `${CURRENT}-09`, merchant: '쿠팡이츠', effective_category_major: '식비', amount: -23_000 },
-    { id: 2, date: `${CURRENT}-08`, merchant: '월급', effective_category_major: '급여', amount: 180_000 },
-    { id: 3, date: `${CURRENT}-08`, merchant: 'SK텔레콤', effective_category_major: '통신', amount: -106_600 },
-    { id: 4, date: `${CURRENT}-07`, merchant: 'GS25', effective_category_major: '편의점', amount: -4_500 },
-    { id: 5, date: `${CURRENT}-06`, merchant: '넷플릭스', effective_category_major: '구독', amount: -17_000 },
-  ].map((tx) => ({
-    ...tx,
-    time: '12:00:00',
-    type: tx.amount > 0 ? '수입' : '지출',
-    category_major: tx.effective_category_major,
-    category_minor: null,
-    category_major_user: null,
-    category_minor_user: null,
-    effective_category_minor: null,
-    description: tx.merchant,
-    currency: 'KRW',
-    payment_method: '카드 A',
-    cost_kind: null,
-    fixed_cost_necessity: null,
-    spend_necessity: null,
-    cost_classification_source: null,
-    recurring_payment_kind: null,
-    memo: null,
-    is_deleted: false,
-    merged_into_id: null,
-    is_edited: false,
-    source: 'import',
-    created_at: '',
-    updated_at: '',
-  })),
+function categoryAggregate(params, level) {
+  const type = params.get('type') ?? '지출'
+  const totals = new Map()
+  for (const row of TRANSACTIONS) {
+    if (!inRange(row, params) || !byType(row, type)) continue
+    const key = level === 'minor' ? (row.effective_category_minor ?? '미분류') : row.effective_category_major
+    totals.set(key, (totals.get(key) ?? 0) + Math.abs(row.amount))
+  }
+  return {
+    items: [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, amount]) => ({ category, amount })),
+  }
 }
 
 const ROUTES = [
-  ['/api/v1/canonical-views/dashboard', canonicalDashboard],
-  ['/api/v1/analytics/monthly-cashflow', cashflow],
-  ['/api/v1/analytics/spending-anomalies', { total: 2, page: 1, per_page: 1, items: [], comparison_mode: 'closed', reference_date: `${CURRENT}-01`, is_partial_period: false, assumptions: 'mock' }],
-  ['/api/v1/analytics/recurring-payments', { total: 14, page: 1, per_page: 1, items: [], assumptions: 'mock' }],
-  ['/api/v1/analytics/income-stability', { items: [], avg: 5_050_000, stdev: 280_000, coefficient_of_variation: 0.055, comparison_mode: 'closed', reference_date: `${CURRENT}-01`, is_partial_period: false, assumptions: 'mock' }],
-  ['/api/v1/analytics/discretionary-velocity', { period: CURRENT, as_of_date: `${CURRENT}-10`, month_progress_ratio: 0.33, discretionary_spend: 820_000, baseline_spend_at_same_progress: 625_000, velocity_ratio: 1.31, risk_level: 'watch', confidence: 0.81, reasons: ['재량 지출이 같은 진행률의 기준선보다 31% 빠릅니다'], assumptions: [], unclassified_spend: 120_000, classification_coverage_ratio: 0.76 }],
-  ['/api/v1/assets/snapshots', snapshots],
-  ['/api/v1/auto-classification/recurring-category-rules/dry-run', { items: [{ merchant: '넷플릭스' }, { merchant: '유튜브 프리미엄' }, { merchant: '쿠팡 와우' }] }],
-  ['/api/v1/loan-transaction-links', { total: 5, page: 1, per_page: 1, items: [] }],
-  ['/api/v1/transactions', transactions],
+  ['/api/v1/canonical-views/dashboard', () => canonicalDashboard],
+  ['/api/v1/analytics/monthly-cashflow', () => cashflow],
+  ['/api/v1/analytics/spending-anomalies', () => ({
+    total: 2, page: 1, per_page: 8,
+    items: [
+      { period: PERIODS[11], category: '식비', amount: 740_000, baseline_avg: 410_000, delta_pct: 80.5, anomaly_score: 3.2, reason: '최근 3개월 기준선 대비 급증' },
+      { period: PERIODS[11], category: '쇼핑', amount: 520_000, baseline_avg: 390_000, delta_pct: 33.3, anomaly_score: 1.8, reason: '기준선 상회' },
+    ],
+    comparison_mode: 'closed', reference_date: `${PERIODS[11]}-30`, is_partial_period: false,
+    assumptions: '직전 마감월 전체 지출 기준',
+  })],
+  ['/api/v1/analytics/recurring-payments', () => ({
+    total: 14, page: 1, per_page: 8,
+    items: [
+      { merchant: '넷플릭스', category: '구독', avg_amount: 17_000, interval_type: 'monthly', avg_interval_days: 30, occurrences: 12, confidence: 0.93, last_date: `${CURRENT}-01`, recurring_payment_kind: 'monthly_recurring', installment_count: 0, monthly_recurring_count: 12, not_recurring_count: 0, unclassified_count: 0, transaction_ids: [1] },
+      { merchant: 'SK텔레콤', category: '주거/통신', avg_amount: 106_600, interval_type: 'monthly', avg_interval_days: 30, occurrences: 12, confidence: 0.97, last_date: `${CURRENT}-05`, recurring_payment_kind: 'monthly_recurring', installment_count: 0, monthly_recurring_count: 12, not_recurring_count: 0, unclassified_count: 0, transaction_ids: [2] },
+      { merchant: '쿠팡 와우', category: '구독', avg_amount: 7_890, interval_type: 'monthly', avg_interval_days: 30, occurrences: 9, confidence: 0.88, last_date: `${CURRENT}-03`, recurring_payment_kind: null, installment_count: 0, monthly_recurring_count: 0, not_recurring_count: 0, unclassified_count: 9, transaction_ids: [3] },
+    ],
+    assumptions: '같은 거래처 30±5일 간격 3회 이상',
+  })],
+  ['/api/v1/analytics/income-stability', () => ({
+    items: [], avg: 5_050_000, stdev: 280_000, coefficient_of_variation: 0.055,
+    comparison_mode: 'closed', reference_date: `${PERIODS[11]}-30`, is_partial_period: false, assumptions: 'mock',
+  })],
+  ['/api/v1/analytics/discretionary-velocity', () => ({
+    period: CURRENT, as_of_date: `${CURRENT}-10`, month_progress_ratio: 0.33,
+    discretionary_spend: 820_000, baseline_spend_at_same_progress: 625_000,
+    velocity_ratio: 1.31, risk_level: 'watch', confidence: 0.81,
+    reasons: ['재량 지출이 같은 진행률의 기준선보다 31% 빠릅니다'], assumptions: [],
+    unclassified_spend: 120_000, classification_coverage_ratio: 0.76,
+  })],
+  ['/api/v1/analytics/purchase-gate-candidates', () => ({
+    total: 2, page: 1, per_page: 10,
+    items: [
+      {
+        candidate_type: 'large_oneoff', candidate_types: ['large_oneoff', 'new_merchant'],
+        transaction_id: 42, candidate_key: 'transaction:42', date: `${CURRENT}-08`,
+        merchant: '애플스토어', amount: -1_890_000, category: '쇼핑',
+        signals: { zscore: 3.2, baseline: 410000 }, risk_level: 'warning', review_priority: 'high',
+        confidence: '0.8', suggested_review_window: '7d', review_status: 'pending',
+        review_memo: null, reviewed_at: null, cooldown_until: null,
+        reasons: ['최근 6개월 내 최대 단건 지출'], assumptions: [],
+      },
+      {
+        candidate_type: 'merchant_spike', candidate_types: ['merchant_spike'],
+        transaction_id: 51, candidate_key: 'transaction:51', date: `${CURRENT}-06`,
+        merchant: '쿠팡', amount: -420_000, category: '쇼핑',
+        signals: { ratio: 2.4 }, risk_level: 'high', review_priority: 'high',
+        confidence: '0.7', suggested_review_window: '7d', review_status: 'pending',
+        review_memo: null, reviewed_at: null, cooldown_until: null,
+        reasons: ['거래처 월 누적이 기준선의 2.4배'], assumptions: [],
+      },
+    ],
+    assumptions: [],
+  })],
+  ['/api/v1/analytics/category-mom', (params) => {
+    const aggregate = categoryAggregate(params, 'major')
+    return {
+      items: aggregate.items.slice(0, 6).map(({ category, amount }, index) => {
+        const previous = Math.round(amount * (0.7 + index * 0.1))
+        return {
+          period: CURRENT, previous_period: PERIODS[11], category,
+          current_amount: amount, previous_amount: previous,
+          delta_amount: amount - previous,
+          delta_pct: previous > 0 ? ((amount - previous) / previous) * 100 : null,
+        }
+      }),
+    }
+  }],
+  ['/api/v1/analytics/fixed-cost-summary', () => ({
+    expense_total: 3_400_000, fixed_total: 1_200_000, variable_total: 1_800_000, fixed_ratio: 0.4,
+    essential_fixed_total: 900_000, discretionary_fixed_total: 300_000,
+    essential_variable_total: 600_000, discretionary_variable_total: 1_200_000,
+    required_spend_total: 1_500_000, discretionary_spend_total: 1_500_000,
+    unclassified_total: 400_000, unclassified_count: 12,
+  })],
+  ['/api/v1/analytics/fixed-cost-trend', () => ({
+    items: PERIODS.slice(-6).map((period, index) => ({
+      period, expense_total: 3_200_000 + index * 80_000,
+      fixed_total: 1_150_000 + index * 20_000, variable_total: 1_650_000 + index * 40_000,
+      essential_fixed_total: 880_000, discretionary_fixed_total: 290_000,
+      essential_variable_total: 580_000, discretionary_variable_total: 1_080_000,
+      required_spend_total: 1_460_000 + index * 10_000, discretionary_spend_total: 1_370_000 + index * 50_000,
+      unclassified_total: 380_000, unclassified_count: 11, fixed_ratio: 0.41,
+    })),
+  })],
+  ['/api/v1/analytics/merchant-spend', (params) => {
+    const totals = new Map()
+    for (const row of TRANSACTIONS) {
+      if (row.type !== '지출' || !inRange(row, params)) continue
+      const entry = totals.get(row.merchant) ?? { amount: 0, count: 0, last: row.date }
+      entry.amount += Math.abs(row.amount)
+      entry.count += 1
+      if (row.date > entry.last) entry.last = row.date
+      totals.set(row.merchant, entry)
+    }
+    const limit = Number(params.get('limit') ?? 8)
+    return {
+      items: [...totals.entries()]
+        .sort((a, b) => b[1].amount - a[1].amount)
+        .slice(0, limit)
+        .map(([merchant, { amount, count, last }]) => ({
+          merchant, amount, count, avg_amount: Math.round(amount / count), last_seen_at: last,
+        })),
+    }
+  }],
+  ['/api/v1/analytics/net-worth-breakdown', () => ({
+    snapshot_date: `${CURRENT}-07`, asset_total: '684000000', negative_asset_excluded_total: '1200000',
+    liability_total: '263000000', net_worth: '421000000',
+    items: [
+      { side: 'asset', category: '부동산', amount: '650000000', ratio: 0.95 },
+      { side: 'asset', category: '투자성', amount: '25700000', ratio: 0.04 },
+      { side: 'asset', category: '자유입출금', amount: '8300000', ratio: 0.01 },
+      { side: 'liability', category: '주택담보대출', amount: '240000000', ratio: 0.91 },
+      { side: 'liability', category: '신용대출', amount: '23000000', ratio: 0.09 },
+    ],
+  })],
+  ['/api/v1/analytics/liquidity-health', () => ({
+    snapshot_date: `${CURRENT}-07`, cash_equivalent_total: '18200000', asset_total: '684000000',
+    negative_asset_excluded_total: '1200000', liability_total: '263000000', net_worth: '421000000',
+    monthly_required_spend: '5300000', emergency_fund_months: 3.4,
+    emergency_fund_target_months: 4, target_progress_ratio: 0.85,
+    monthly_debt_payment: '1420000', monthly_income: '5050000',
+    debt_payment_ratio: 0.28, debt_to_asset_ratio: 0.38,
+    confidence: 'medium', assumptions: ['negative_asset_rows_excluded', '현금성 분류 휴리스틱 적용'],
+  })],
+  ['/api/v1/assets/snapshots', () => snapshots],
+  ['/api/v1/assets/net-worth-history', () => ({
+    items: PERIODS.slice(-8).map((period, index) => ({
+      snapshot_date: `${period}-01`,
+      net_worth: String(380_000_000 + index * 6_000_000),
+    })),
+  })],
+  ['/api/v1/assets/snapshot-compare', (params) => ({
+    comparison_mode: params.get('comparison_mode') ?? 'latest_available_vs_previous_available',
+    current: snapshots.items[1], baseline: snapshots.items[0],
+    delta: { asset_total: '22000000', liability_total: '-5000000', net_worth: '27000000', asset_total_pct: 0.033, liability_total_pct: -0.018, net_worth_pct: 0.0685 },
+    comparison_days: 37, is_partial: false, is_stale: false, can_compare: true,
+    comparison_label: '이전 스냅샷 대비',
+  })],
+  ['/api/v1/loans/summary', () => ({
+    snapshot_date: `${CURRENT}-07`,
+    totals: { principal: '300000000', balance: '263000000' },
+    items: [
+      { id: 1, loan_type: '은행 대출', lender: '국민은행', product_name: '주택담보대출', principal: '300000000', balance: '240000000', interest_rate: '3.85', monthly_payment: '1420000', repayment_method: 'principal_interest', monthly_payment_source: 'estimated_from_linked_transactions', repayment_method_source: 'derived_from_loan_account', loan_kind: 'equal_principal_interest', start_date: '2023-01-01', maturity_date: '2053-01-01' },
+      { id: 2, loan_type: '신용 대출', lender: '카카오뱅크', product_name: '마이너스 통장', principal: '30000000', balance: '23000000', interest_rate: '5.2', monthly_payment: '98000', repayment_method: 'interest_only', monthly_payment_source: 'estimated_from_linked_transactions', repayment_method_source: 'derived_from_loan_account', loan_kind: 'overdraft', start_date: '2025-03-01', maturity_date: '2027-03-01' },
+    ],
+  })],
+  ['/api/v1/investments/summary', () => ({
+    snapshot_date: `${CURRENT}-07`,
+    totals: { cost_basis: '120000000', market_value: '160000000' },
+    items: [
+      { product_type: '주식', broker: '증권사A', product_name: '미국주식 ETF', cost_basis: '60000000', market_value: '67200000', return_rate: '12.4', pct_of_investment_total: 0.42 },
+      { product_type: '주식', broker: '증권사A', product_name: '국내주식', cost_basis: '40000000', market_value: '36800000', return_rate: '-3.1', pct_of_investment_total: 0.23 },
+      { product_type: '펀드', broker: '증권사B', product_name: '인덱스 펀드', cost_basis: '20000000', market_value: '28800000', return_rate: '5.0', pct_of_investment_total: 0.18 },
+    ],
+  })],
+  ['/api/v1/insurance/summary', () => ({
+    snapshot_date: `${CURRENT}-07`,
+    items: [
+      { id: 1, snapshot_date: `${CURRENT}-07`, insurer: '한화생명', product_name: '종신보험', contract_status: '유지', total_paid: '8400000', contract_date: '2020-05-01', maturity_date: null },
+      { id: 2, snapshot_date: `${CURRENT}-07`, insurer: '삼성화재', product_name: '실손의료보험', contract_status: '유지', total_paid: '3120000', contract_date: '2021-02-01', maturity_date: '2049-05-01' },
+    ],
+    monthly_premium_estimate: { period: PERIODS[11], amount: '214000', assumptions: ['최근 마감월 보험 카테고리 지출 기반', '환불/취소 상계 반영'] },
+  })],
+  ['/api/v1/profile', () => ({
+    snapshot_date: `${CURRENT}-07`, gender: '남', age: 34, credit_score_kcb: 942,
+    credit_score_history: [
+      { snapshot_date: `${PERIODS[7]}-01`, credit_score_kcb: 921 },
+      { snapshot_date: `${PERIODS[9]}-01`, credit_score_kcb: 931 },
+      { snapshot_date: `${CURRENT}-07`, credit_score_kcb: 942 },
+    ],
+  })],
+  ['/api/v1/settings/analytics', () => ({
+    defaults: {}, saved: {},
+    effective: {
+      financial_targets: { emergency_fund_target_months: 4, savings_rate_target: 0.5, debt_strategy_preference: 'avalanche' },
+      spending_anomalies: {}, discretionary_velocity: {}, purchase_gate: {}, recurring_dry_run: {}, asset_liability_health: {}, bulk_operations: {},
+    },
+  })],
+  ['/api/v1/installments/forecast', () => ({
+    monthly_summary: PERIODS.slice(-1).concat(months(7).slice(-6)).slice(0, 6).map((period, index) => ({
+      period, observed_total: index === 0 ? 330_000 : 0,
+      projected_total: index < 3 ? 330_000 : 0,
+      missed_total: index === 1 ? 110_000 : 0,
+    })),
+    items: [],
+  })],
+  ['/api/v1/auto-classification/recurring-category-rules/dry-run', () => ({
+    items: [{ merchant: '넷플릭스' }, { merchant: '유튜브 프리미엄' }, { merchant: '쿠팡 와우' }],
+  })],
+  ['/api/v1/loan-transaction-links', () => ({ total: 5, page: 1, per_page: 1, items: [] })],
+  ['/api/v1/transactions/by-category/timeline', (params) => {
+    const type = params.get('type') ?? '지출'
+    const items = []
+    for (const row of TRANSACTIONS) {
+      if (!inRange(row, params) || !byType(row, type)) continue
+      items.push({ period: row.date.slice(0, 7), category: row.effective_category_major, amount: Math.abs(row.amount) })
+    }
+    const totals = new Map()
+    for (const item of items) {
+      const key = `${item.period}|${item.category}`
+      totals.set(key, (totals.get(key) ?? 0) + item.amount)
+    }
+    return {
+      items: [...totals.entries()].map(([key, amount]) => {
+        const [period, category] = key.split('|')
+        return { period, category, amount }
+      }),
+    }
+  }],
+  ['/api/v1/transactions/by-category', (params) => categoryAggregate(params, params.get('level') ?? 'major')],
+  ['/api/v1/transactions', (params) => {
+    const type = params.get('type')
+    const category = params.get('category_major')
+    const search = params.get('search')
+    const filtered = TRANSACTIONS
+      .filter((row) => inRange(row, params) && byType(row, type))
+      .filter((row) => !category || row.effective_category_major === category)
+      .filter((row) => !search || row.merchant.includes(search) || row.description.includes(search))
+      .sort((a, b) => b.date.localeCompare(a.date))
+    const page = Number(params.get('page') ?? 1)
+    const perPage = Number(params.get('per_page') ?? 20)
+    return {
+      total: filtered.length, page, per_page: perPage,
+      items: filtered.slice((page - 1) * perPage, page * perPage),
+    }
+  }],
 ]
 
 createServer((req, res) => {
-  const { pathname } = new URL(req.url, 'http://localhost')
-  const match = ROUTES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}?`))
+  const url = new URL(req.url, 'http://localhost')
+  const match = ROUTES.find(([prefix]) => url.pathname === prefix)
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   if (!match) {
     res.statusCode = 404
-    res.end(JSON.stringify({ detail: `mock 미구현: ${pathname}` }))
+    res.end(JSON.stringify({ detail: `mock 미구현: ${url.pathname}` }))
     return
   }
-  res.end(JSON.stringify(match[1]))
+  res.end(JSON.stringify(match[1](url.searchParams)))
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`mock API → http://127.0.0.1:${PORT}`)
 })

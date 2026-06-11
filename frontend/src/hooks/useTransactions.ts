@@ -149,6 +149,20 @@ export function useCategoryTimeline(params: { start_month?: string; end_month?: 
   })
 }
 
+export function useIncomeCategoryTimeline(params: { start_month?: string; end_month?: string } = {}) {
+  return useQuery({
+    queryKey: ['transactions', 'incomeCategoryTimeline', params],
+    queryFn: () => transactionApi.incomeCategoryTimeline(params),
+  })
+}
+
+export function useIncomeCategoryBreakdown(params: { start_month?: string; end_month?: string } = {}) {
+  return useQuery({
+    queryKey: ['transactions', 'incomeCategoryBreakdown', params],
+    queryFn: () => transactionApi.incomeCategoryBreakdown(params),
+  })
+}
+
 export function useCategoryBreakdown(params: CategoryBreakdownParams = {}) {
   return useQuery({
     queryKey: txKeys.categoryBreakdown(params),

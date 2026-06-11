@@ -295,6 +295,19 @@ export const transactionApi = {
       body: JSON.stringify(data),
     }),
 
+  incomeCategoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
+    apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery({
+      ...monthSpanToDateRange(params.start_month, params.end_month),
+      type: '수입',
+    })}`),
+
+  incomeCategoryBreakdown: (params: { start_month?: string; end_month?: string } = {}) =>
+    apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery({
+      ...monthSpanToDateRange(params.start_month, params.end_month),
+      type: '수입',
+      level: 'major',
+    })}`),
+
   categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
     apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery(
       monthSpanToDateRange(params.start_month, params.end_month),

@@ -1,32 +1,14 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppShell } from './shell/AppShell'
 import { HomePage } from './features/home/HomePage'
+import { NetWorthPage } from './features/networth/NetWorthPage'
+import { SignalsPage } from './features/signals/SignalsPage'
+import { SpendingPage } from './features/spending/SpendingPage'
 import { PlaceholderPage } from './features/PlaceholderPage'
 
 // 새 IA — docs/frontend-remake/02-ia-redesign.md §2, §5 (레거시 redirect 포함)
 
 const STUBS: Array<{ path: string; title: string; description: string; planned: string[]; wireframeRef: string }> = [
-  {
-    path: 'spending',
-    title: '지출',
-    description: '어디에, 어떤 성격의 돈을 쓰고 있나?',
-    planned: ['전역 기간 컨트롤 + 수입 포함 토글', '렌즈 탭: 추이 / 구성 / 고정비 / 거래처 / 달력', '렌즈 선택을 반영하는 공통 거래 내역 패널'],
-    wireframeRef: 'docs/frontend-remake/03-wireframes.md §2',
-  },
-  {
-    path: 'net-worth',
-    title: '자산·부채',
-    description: '자산·부채 스냅샷 변화와 상환 부담.',
-    planned: ['KPI + 순자산 추이·구성', '유동성 보드 (편집은 데이터 > 자산 메타)', '대출 보드 (잔액·금리·월상환·진행률)', '할부 잔여 요약'],
-    wireframeRef: 'docs/frontend-remake/03-wireframes.md §3',
-  },
-  {
-    path: 'signals',
-    title: '신호',
-    description: '전과 다른 것, 위험한 것, 검토할 것.',
-    planned: ['기준 모드(직전 마감월/부분 기간) 전역 선택', '신호 카드 피드 (이상 지출 + 구매 게이트 + 상태 통합)', '재량 지출 속도 / 반복 결제 현황 / 비교 도구'],
-    wireframeRef: 'docs/frontend-remake/03-wireframes.md §4',
-  },
   {
     path: 'data/inbox',
     title: '데이터 · 인박스',
@@ -114,6 +96,9 @@ export const routes = [
     element: <AppShell />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'spending', element: <SpendingPage /> },
+      { path: 'net-worth', element: <NetWorthPage /> },
+      { path: 'signals', element: <SignalsPage /> },
       ...STUBS.map(({ path, ...props }) => ({ path, element: <PlaceholderPage {...props} /> })),
       { path: 'data', element: <Navigate to="/data/inbox" replace /> },
     ],
