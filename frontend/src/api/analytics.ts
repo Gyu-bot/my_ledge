@@ -6,6 +6,7 @@ import type {
   SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
   DiscretionaryVelocityResponse, DiscretionaryVelocityQuery,
   PurchaseGateCandidatesResponse, PurchaseGateCandidatesQuery,
+  PurchaseGateReviewPatchRequest, PurchaseGateReviewResponse,
 } from '../types/analytics'
 
 function buildQuery(params: object): string {
@@ -87,4 +88,14 @@ export const analyticsApi = {
       per_page: limit,
     })}`)
   },
+
+  reviewPurchaseGateCandidate: (candidateKey: string, data: PurchaseGateReviewPatchRequest) =>
+    apiFetch<PurchaseGateReviewResponse>(
+      `/analytics/purchase-gate-candidates/${encodeURIComponent(candidateKey)}/review`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    ),
 }

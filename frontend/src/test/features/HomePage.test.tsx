@@ -7,10 +7,29 @@ function query<T>(data: T) {
   return { data, isLoading: false, error: null, refetch: vi.fn() }
 }
 
+vi.mock('../../hooks/useSettings', () => ({
+  useAnalyticsSettings: () =>
+    query({
+      defaults: {},
+      saved: {},
+      effective: {
+        financial_targets: {
+          emergency_fund_target_months: 3,
+          savings_rate_target: 0.5,
+          debt_strategy_preference: null,
+        },
+      },
+    }),
+}))
+
 vi.mock('../../hooks/useCanonicalViews', () => ({
   useCanonicalViewsDashboard: () =>
     query({
-      monthly_cashflow: [],
+      data_coverage: { first_transaction_date: '2025-03-12', last_transaction_date: '2026-06-10' },
+      monthly_cashflow: [
+        { period: '2026-05', is_complete_month: true },
+        { period: '2026-06', is_complete_month: false },
+      ],
       true_spendable_monthly: [
         {
           period: '2026-05',

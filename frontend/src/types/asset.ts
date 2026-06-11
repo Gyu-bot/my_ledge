@@ -80,12 +80,36 @@ export interface InvestmentItem {
   cost_basis: string | null
   market_value: string | null
   return_rate: string | null
+  pct_of_investment_total: number | null
 }
 
 export interface InvestmentSummaryResponse {
   snapshot_date: string | null
   items: InvestmentItem[]
   totals: { cost_basis: string; market_value: string }
+}
+
+export interface InsuranceContractItem {
+  id: number
+  snapshot_date: string
+  insurer: string
+  product_name: string
+  contract_status: string | null
+  total_paid: string | null
+  contract_date: string | null
+  maturity_date: string | null
+}
+
+export interface InsurancePremiumEstimate {
+  period: string | null
+  amount: string | null
+  assumptions: string[]
+}
+
+export interface InsuranceSummaryResponse {
+  snapshot_date: string | null
+  items: InsuranceContractItem[]
+  monthly_premium_estimate: InsurancePremiumEstimate
 }
 
 export interface LoanItem {
@@ -148,6 +172,7 @@ export interface NetWorthBreakdownItem {
 export interface NetWorthBreakdownResponse {
   snapshot_date: string | null
   asset_total: string
+  negative_asset_excluded_total: string
   liability_total: string
   net_worth: string
   items: NetWorthBreakdownItem[]
@@ -157,10 +182,13 @@ export interface AssetLiabilityHealthResponse {
   snapshot_date: string | null
   cash_equivalent_total: string
   asset_total: string
+  negative_asset_excluded_total: string
   liability_total: string
   net_worth: string
   monthly_required_spend: string
   emergency_fund_months: number | null
+  emergency_fund_target_months: number
+  target_progress_ratio: number | null
   monthly_debt_payment: string
   monthly_income: string
   debt_payment_ratio: number | null

@@ -10,6 +10,8 @@ export interface CashflowChartItem {
 interface CashflowChartProps {
   items: CashflowChartItem[]
   height?: number
+  /** is_complete_month=false인 월 — 반투명 처리 + 진행중 표기 */
+  incompletePeriods?: ReadonlySet<string>
 }
 
 const VIRTUAL_WIDTH = 720
@@ -22,7 +24,7 @@ const PAD_BOTTOM = 22
  * 수입/지출 dual bar + 순현금흐름 라인 — 04-design-system.md §3.
  * 경량 커스텀 SVG (프로토타입 단계, recharts 미사용).
  */
-export function CashflowChart({ items, height = 200 }: CashflowChartProps) {
+export function CashflowChart({ items, height = 200, incompletePeriods }: CashflowChartProps) {
   if (items.length === 0) return null
 
   const plotWidth = VIRTUAL_WIDTH - PAD_LEFT - PAD_RIGHT
@@ -85,10 +87,11 @@ export function CashflowChart({ items, height = 200 }: CashflowChartProps) {
           const center = groupX + groupWidth / 2
           const incomeHeight = zeroY - yOf(item.income)
           const expenseHeight = zeroY - yOf(Math.abs(item.expense))
+          const incomplete = incompletePeriods?.has(item.period) ?? false
           return (
-            <g key={item.period}>
+            <g key={item.period} opacity={incomplete ? 0.45 : 1}>
               <title>
-                {`${item.period} · 수입 ${formatWon(item.income)} · 지출 ${formatWon(Math.abs(item.expense))} · 순 ${formatSignedWon(item.net)}`}
+                {`${item.period}${incomplete ? ' (진행중)' : ''} · 수입 ${formatWon(item.income)} · 지출 ${formatWon(Math.abs(item.expense))} · 순 ${formatSignedWon(item.net)}`}
               </title>
               <rect
                 x={center - barWidth - 1.5}

@@ -29,6 +29,7 @@ import {
 } from '../../hooks/useAnalytics'
 import { useAssetSnapshots } from '../../hooks/useAssets'
 import { useCanonicalViewsDashboard } from '../../hooks/useCanonicalViews'
+import { useAnalyticsSettings } from '../../hooks/useSettings'
 import {
   useLoanTransactionMappings,
   useRecurringCategoryRulesDryRun,
@@ -119,6 +120,7 @@ export function HomePage() {
   const dryRun = useRecurringCategoryRulesDryRun()
   const unlinkedLoans = useLoanTransactionMappings({ linked: 'unlinked', page: 1, per_page: 1 })
   const recentTx = useTransactionList({ page: 1, per_page: 5, type: 'all' })
+  const settings = useAnalyticsSettings()
 
   // 히어로 — 실질 가용액 (vw_true_spendable_monthly)
   const spendableItems = canonical.data?.true_spendable_monthly ?? []
@@ -139,10 +141,18 @@ export function HomePage() {
     latestMonth && previousMonth && Math.abs(previousMonth.expense) > 0
       ? ((Math.abs(latestMonth.expense) - Math.abs(previousMonth.expense)) / Math.abs(previousMonth.expense)) * 100
       : null
-  // 저축률은 진행월(수입 추정 중) 왜곡을 피해 마지막 마감월 기준으로 보여준다
-  const savingsSource =
-    estimated && latestMonth && spendable && latestMonth.period === spendable.period ? previousMonth : latestMonth
+  // 저축률은 진행월 왜곡을 피해 마지막 완성월(is_complete_month) 기준으로 보여준다
+  const incompletePeriods = new Set(
+    (canonical.data?.monthly_cashflow ?? [])
+      .filter((item) => !item.is_complete_month)
+      .map((item) => item.period),
+  )
+  const savingsSource = canonical.data
+    ? [...cashflowItems].reverse().find((item) => !incompletePeriods.has(item.period)) ?? latestMonth
+    : latestMonth
   const savingsRate = savingsSource?.savings_rate != null ? savingsSource.savings_rate * 100 : null
+  const savingsTarget = settings.data?.effective.financial_targets.savings_rate_target ?? null
+  const savingsTargetPct = savingsTarget != null ? savingsTarget * 100 : null
 
   // 주의 신호
   const anomalyCount = anomalies.data?.total ?? null
@@ -261,8 +271,15 @@ export function HomePage() {
                 <Stat
                   label="저축률"
                   value={formatPct(savingsRate)}
-                  sub={savingsSource ? `${savingsSource.period} 마감 기준 · 목표 50%` : '목표 50%'}
-                  subTone={savingsRate != null && savingsRate >= 50 ? 'good' : 'neutral'}
+                  sub={[
+                    savingsSource ? `${savingsSource.period} 마감 기준` : null,
+                    savingsTargetPct != null ? `목표 ${formatPct(savingsTargetPct, 0)}` : null,
+                  ].filter(Boolean).join(' · ') || undefined}
+                  subTone={
+                    savingsRate != null && savingsTargetPct != null && savingsRate >= savingsTargetPct
+                      ? 'good'
+                      : 'neutral'
+                  }
                 />
               </>
             )}
@@ -277,6 +294,7 @@ export function HomePage() {
                 <ErrorState onRetry={() => void cashflow.refetch()} />
               ) : cashflowItems.length > 0 ? (
                 <CashflowChart
+                  incompletePeriods={incompletePeriods}
                   items={cashflowItems.map((item) => ({
                     period: item.period,
                     income: item.income,

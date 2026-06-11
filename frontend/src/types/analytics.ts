@@ -197,8 +197,27 @@ export interface PurchaseGateCandidateItem {
   confidence: string
   suggested_review_window: string
   review_status: PurchaseGateCandidateStatus
+  review_memo: string | null
+  reviewed_at: string | null
+  cooldown_until: string | null
   reasons: string[]
   assumptions: string[]
+}
+
+export interface PurchaseGateReviewPatchRequest {
+  review_status: PurchaseGateCandidateStatus
+  memo?: string | null
+  cooldown_days?: number | null
+}
+
+export interface PurchaseGateReviewResponse {
+  candidate_key: string
+  candidate_type: string
+  transaction_id: number
+  review_status: PurchaseGateCandidateStatus
+  memo: string | null
+  reviewed_at: string | null
+  cooldown_until: string | null
 }
 
 export interface PurchaseGateCandidatesResponse {

@@ -2,6 +2,7 @@ import { apiFetch } from '../lib/apiClient'
 import type {
   NetWorthHistoryResponse,
   InvestmentSummaryResponse,
+  InsuranceSummaryResponse,
   LoanSummaryResponse,
   AssetSnapshotsResponse,
   AssetSnapshotComparisonResponse,
@@ -11,15 +12,20 @@ import type {
   AssetSnapshotItemResponse,
   LoanRepaymentMetadataPatchRequest,
   LoanRepaymentMetadataResponse,
+  SnapshotComparisonMode,
 } from '../types/asset'
 
 export const assetApi = {
   snapshots: () => apiFetch<AssetSnapshotsResponse>('/assets/snapshots'),
   netWorthHistory: () => apiFetch<NetWorthHistoryResponse>('/assets/net-worth-history'),
-  snapshotCompare: () => apiFetch<AssetSnapshotComparisonResponse>('/assets/snapshot-compare'),
+  snapshotCompare: (comparisonMode?: SnapshotComparisonMode) =>
+    apiFetch<AssetSnapshotComparisonResponse>(
+      `/assets/snapshot-compare${comparisonMode ? `?comparison_mode=${comparisonMode}` : ''}`,
+    ),
   netWorthBreakdown: () => apiFetch<NetWorthBreakdownResponse>('/analytics/net-worth-breakdown'),
   liquidityHealth: () => apiFetch<AssetLiabilityHealthResponse>('/analytics/liquidity-health'),
   investments: () => apiFetch<InvestmentSummaryResponse>('/investments/summary'),
+  insurance: () => apiFetch<InsuranceSummaryResponse>('/insurance/summary'),
   loans: () => apiFetch<LoanSummaryResponse>('/loans/summary'),
   patchAssetLiquidity: (id: number, data: AssetLiquidityPatchRequest) =>
     apiFetch<AssetSnapshotItemResponse>(`/assets/snapshots/${id}/liquidity`, {
