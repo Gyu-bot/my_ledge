@@ -2,139 +2,186 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+ * Ledger DS tokens — docs/frontend-remake/04-design-system.md
+ * 다크 기본(:root), 라이트는 [data-theme="light"] 오버라이드.
+ * ───────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
-    --font-heading: -apple-system, 'Pretendard', 'Segoe UI', system-ui, sans-serif;
-    --font-body: -apple-system, 'Pretendard', 'Segoe UI', system-ui, sans-serif;
-    --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, monospace;
+    --ds-font-sans: 'Pretendard Variable', Pretendard, -apple-system, 'Segoe UI', system-ui, sans-serif;
+    --ds-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
-    --color-surface-base: #060810;
-    --color-surface-panel: #0b0f1a;
-    --color-surface-card: #0f1623;
-    --color-surface-popover: #152033;
-    --color-surface-bar: #080b12;
-    --color-surface-section: #0c1320;
-    --color-surface-input: #0a0d13;
-    --color-surface-tint: #0a1520;
-    --color-surface-selected: #0a1a2a;
-    --color-surface-edited: #08180e;
-    --color-surface-danger: #120a0a;
-    --color-surface-danger-muted: #0c0808;
-    --color-surface-danger-strong: #1a0a0a;
+    /* surfaces */
+    --ds-bg-base: #0b0e14;
+    --ds-bg-surface: #11151d;
+    --ds-bg-raised: #1d2330;
+    --ds-bg-inset: #161b26;
+    --ds-bg-selected: rgba(20, 184, 166, 0.12);
 
-    --color-border-default: #161f2e;
-    --color-border-subtle: #0d141f;
-    --color-border-strong: #202d40;
-    --color-border-faint: #091019;
-    --color-border-info: #1e3a5f;
+    /* borders */
+    --ds-border-subtle: #1d2330;
+    --ds-border-default: #262e3d;
+    --ds-border-strong: #333d4f;
 
-    --color-accent-default: #10b981;
-    --color-accent-strong: #059669;
-    --color-accent-dim: #0d2b1e;
-    --color-accent-muted: #1a3b2e;
-    --color-accent-bright: #6ee7b7;
+    /* text */
+    --ds-text-primary: #f4f6f9;
+    --ds-text-secondary: #c3cad6;
+    --ds-text-muted: #6b7689;
+    --ds-text-faint: #4a5568;
 
-    --color-danger-default: #f87171;
-    --color-danger-dim: #2d1a1a;
-    --color-danger-muted: #3b2020;
+    /* semantic: fg / bg(@~12%) / border(@~35%) */
+    --ds-accent-fg: #2dd4bf;
+    --ds-accent-bg: rgba(45, 212, 191, 0.12);
+    --ds-accent-border: rgba(45, 212, 191, 0.35);
 
-    --color-warn-default: #f59e0b;
-    --color-warn-dim: #2a1f0a;
-    --color-warn-muted: #3b2d10;
+    --ds-income-fg: #2dd4bf;
+    --ds-income-bg: rgba(45, 212, 191, 0.12);
+    --ds-income-border: rgba(45, 212, 191, 0.35);
 
-    --color-info-default: #60a5fa;
-    --color-info-bright: #a78bfa;
-    --color-info-dim: #0a1520;
-    --color-info-soft: #1e40af;
-    --color-info-muted: #1e3a5f;
+    --ds-expense-fg: #f87171;
+    --ds-expense-bg: rgba(248, 113, 113, 0.12);
+    --ds-expense-border: rgba(248, 113, 113, 0.35);
 
-    --color-text-primary: #dde5ef;
-    --color-text-secondary: #c2cddd;
-    --color-text-muted: #b2becf;
-    --color-text-faint: #b2becf;
-    --color-text-ghost: #718198;
-    --color-text-inverse: #ffffff;
+    --ds-transfer-fg: #60a5fa;
+    --ds-transfer-bg: rgba(96, 165, 250, 0.12);
+    --ds-transfer-border: rgba(96, 165, 250, 0.35);
 
-    --chart-accent: var(--color-accent-default);
-    --chart-accent-muted: var(--color-accent-muted);
-    --chart-accent-bright: var(--color-accent-bright);
-    --chart-danger: var(--color-danger-default);
-    --chart-danger-muted: var(--color-danger-dim);
-    --chart-neutral: var(--color-text-ghost);
-    --chart-neutral-muted: var(--color-text-secondary);
-    --chart-info: #2563a8;
-    --chart-info-soft: #1e40af;
-    --chart-warning: #92400e;
-    --chart-warning-muted: var(--color-warn-default);
-    --chart-tooltip-bg: var(--color-surface-popover);
-    --chart-tooltip-border: var(--color-border-strong);
-    --chart-tooltip-shadow: 0 14px 30px rgba(4, 8, 18, 0.45);
-    --chart-tooltip-text: var(--color-text-primary);
-    --chart-tooltip-label: var(--color-text-muted);
-    --chart-axis-text: var(--color-text-muted);
-    --chart-label-strong: rgba(255, 255, 255, 0.85);
-    --chart-label-muted: rgba(255, 255, 255, 0.45);
-    --chart-hover-accent: color-mix(in srgb, var(--color-accent-default) 18%, var(--color-surface-section));
-    --chart-hover-danger: color-mix(in srgb, var(--color-danger-default) 18%, var(--color-surface-section));
-    --chart-hover-default: color-mix(in srgb, var(--color-info-default) 14%, var(--color-surface-section));
-    --chart-category-finance: #5d93ff;
-    --chart-category-dating: #ff7a7a;
-    --chart-category-food: #2fd47c;
-    --chart-category-uncategorized: #98a8c5;
-    --chart-category-housing: #f4bf5a;
-    --chart-category-travel: #35d6ff;
-    --chart-category-auto: #ff8fd6;
-    --chart-category-culture: #b271ff;
-    --chart-category-other: #7e90ae;
-    --chart-category-fallback: #7e90ae;
-    --chart-treemap-1: var(--chart-category-finance);
-    --chart-treemap-2: var(--chart-category-dating);
-    --chart-treemap-3: var(--chart-category-food);
-    --chart-treemap-4: var(--chart-category-uncategorized);
-    --chart-treemap-5: var(--chart-category-housing);
-    --chart-treemap-6: var(--chart-category-travel);
-    --chart-treemap-7: var(--chart-category-auto);
-    --chart-treemap-8: var(--chart-category-culture);
+    --ds-warn-fg: #fbbf24;
+    --ds-warn-bg: rgba(251, 191, 36, 0.12);
+    --ds-warn-border: rgba(251, 191, 36, 0.35);
+
+    /* 추정치 전용 — 다른 의미로 사용 금지 */
+    --ds-estimate-fg: #a78bfa;
+    --ds-estimate-bg: rgba(167, 139, 250, 0.14);
+    --ds-estimate-border: rgba(167, 139, 250, 0.4);
+
+    --ds-focus-ring: rgba(45, 212, 191, 0.6);
+
+    /* charts */
+    --ds-chart-grid: #1d2330;
+    --ds-chart-axis: #6b7689;
+    --ds-chart-income: #2dd4bf;
+    --ds-chart-expense: #f87171;
+    --ds-chart-net: #c3cad6;
+    --ds-chart-1: #14b8a6;
+    --ds-chart-2: #60a5fa;
+    --ds-chart-3: #f59e0b;
+    --ds-chart-4: #f87171;
+    --ds-chart-5: #a78bfa;
+    --ds-chart-6: #34d399;
+    --ds-chart-7: #fb923c;
+    --ds-chart-8: #38bdf8;
+    --ds-chart-9: #f472b6;
+    --ds-chart-10: #a3e635;
+    --ds-chart-11: #c084fc;
+    --ds-chart-other: #94a3b8;
   }
 
-  *, *::before, *::after { box-sizing: border-box; }
-  html { font-size: 21px; }
+  [data-theme='light'] {
+    --ds-bg-base: #f4f6f9;
+    --ds-bg-surface: #ffffff;
+    --ds-bg-raised: #ffffff;
+    --ds-bg-inset: #e6e9ef;
+    --ds-bg-selected: rgba(13, 148, 136, 0.1);
+
+    --ds-border-subtle: #e6e9ef;
+    --ds-border-default: #c3cad6;
+    --ds-border-strong: #99a3b3;
+
+    --ds-text-primary: #11151d;
+    --ds-text-secondary: #333d4f;
+    --ds-text-muted: #4a5568;
+    --ds-text-faint: #6b7689;
+
+    --ds-accent-fg: #0d9488;
+    --ds-accent-bg: rgba(13, 148, 136, 0.1);
+    --ds-accent-border: rgba(13, 148, 136, 0.35);
+
+    --ds-income-fg: #0d9488;
+    --ds-income-bg: rgba(13, 148, 136, 0.1);
+    --ds-income-border: rgba(13, 148, 136, 0.35);
+
+    --ds-expense-fg: #dc2626;
+    --ds-expense-bg: rgba(220, 38, 38, 0.08);
+    --ds-expense-border: rgba(220, 38, 38, 0.3);
+
+    --ds-transfer-fg: #2563eb;
+    --ds-transfer-bg: rgba(37, 99, 235, 0.08);
+    --ds-transfer-border: rgba(37, 99, 235, 0.3);
+
+    --ds-warn-fg: #d97706;
+    --ds-warn-bg: rgba(217, 119, 6, 0.1);
+    --ds-warn-border: rgba(217, 119, 6, 0.35);
+
+    --ds-estimate-fg: #7c3aed;
+    --ds-estimate-bg: rgba(124, 58, 237, 0.08);
+    --ds-estimate-border: rgba(124, 58, 237, 0.3);
+
+    --ds-focus-ring: rgba(13, 148, 136, 0.55);
+
+    --ds-chart-grid: #e6e9ef;
+    --ds-chart-axis: #4a5568;
+    --ds-chart-income: #0d9488;
+    --ds-chart-expense: #dc2626;
+    --ds-chart-net: #333d4f;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px;
+  }
+
   body {
-    background-color: var(--color-surface-base);
-    color: var(--color-text-primary);
-    font-family: var(--font-body);
+    margin: 0;
+    background-color: var(--ds-bg-base);
+    color: var(--ds-text-primary);
+    font-family: var(--ds-font-sans);
     -webkit-font-smoothing: antialiased;
   }
-  input, select, textarea, button { font-family: inherit; }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--color-surface-panel); }
-  ::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 3px; }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ds-focus-ring);
+    outline-offset: 1px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--ds-bg-base);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ds-border-default);
+    border-radius: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer utilities {
-  .chart-tooltip-shell {
-    background: var(--chart-tooltip-bg);
-    border: 1px solid var(--chart-tooltip-border);
-    border-radius: 0.375rem;
-    color: var(--chart-tooltip-text);
-    box-shadow: var(--chart-tooltip-shadow);
-    font-size: 0.857rem;
-    line-height: 1.5;
+  /* 금액·수치 셀 필수 — 04-design-system.md §2.2 */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
-
-  .chart-tooltip-label {
-    color: var(--chart-tooltip-label);
-    font-size: 0.857rem;
-    line-height: 1.5;
-  }
-
-  .chart-tooltip-value {
-    color: var(--chart-tooltip-text);
-    font-size: 0.857rem;
-    line-height: 1.5;
-    font-weight: 600;
-  }
-
-  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--color-border-default) var(--color-surface-panel); }
-  .text-balance { text-wrap: balance; }
 }
