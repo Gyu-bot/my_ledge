@@ -5,9 +5,9 @@
 
 ## Current State
 
-- **Phase:** P2 제외 P0/P0.5/P1 구현 완료 후, `advisor-canonical-gap-analysis.md` 기반 전역 실행계획으로 재정렬됨. 다음 우선순위는 `Implentation-plan.md`의 T001부터 진행한다.
-- **Last Worker:** Codex (2026-05-31T02:41+0900, GitHub Actions CI workflow 추가)
-- **Branch:** codex/add-github-ci
+- **Phase:** `advisor-canonical-gap-analysis.md` 기반 T001-T011 backend/API/canonical surface 구현 완료, T012 일부 backend review API live. 다음 우선순위는 구매게이트 결제취소 상계와 review-focused UI 정리다.
+- **Last Worker:** Codex (2026-06-11T18:45+0900, docs/API 기능 문서 최신화)
+- **Branch:** main (local `origin/main` 대비 ahead 상태)
 - **Archive:** [2026-05-28-status-before-diet.md](archive/status/2026-05-28-status-before-diet.md)
 
 ## Start Here
@@ -21,6 +21,8 @@
 ## Recent Completed
 
 - [x] GitHub Actions CI workflow 추가: PR/push/workflow_dispatch에서 backend `uv` 기반 ruff/원격 재현 가능 pytest와 frontend npm 기반 lint/typecheck/test/build를 실행한다.
+- [x] Advisor canonical T001-T011 backend/API 구현: 음수 자산 제외, cash-equivalent fallback, profile snapshot, `vw_loan_account_canonical`, dashboard data coverage/complete-month, `vw_income_monthly_by_category`, insurance summary, BankSalad cashflow parity, financial targets, investment composition field가 live contract와 agent docs에 반영됨
+- [x] 구매게이트 backend review API 일부 live: canonical `transaction:{id}` key, review memo/status, `reviewed_at`, `cooldown_until` 저장이 가능하며 남은 범위는 frontend review placement와 결제취소/환불 상계 정합성임
 - [x] 대출 월상환 자동 추정·저장 backend 구현: 수동 `PATCH /api/v1/loans/{loan_id}/repayment-metadata`는 `monthly_payment_source` / `repayment_method_source`를 `manual`로 저장하고, 대출 연결 단건/일괄 저장 및 snapshot import 후 latest loan snapshot에 최근 관측월 median 기반 `monthly_payment`와 mixed-link 기반 `repayment_method='principal_interest'`를 자동 보강
 - [x] 구매게이트 정리: 고정비/필수/대출 연결/필요성 미분류 거래를 제외하고, 같은 거래의 여러 사유는 `transaction:{id}` 후보 1줄과 `candidate_types[]`/`reasons[]`로 통합
 - [x] STATUS 다이어트: 기존 긴 `docs/STATUS.md` 전체를 archive로 보존하고, 현재 파일은 handoff 중심 요약으로 축약
@@ -68,9 +70,9 @@
 
 ## Next Up
 
-1. `Implentation-plan.md` T001/T002: 음수 자산 중복 차감 제거와 현금성 자산 fallback 보강.
-2. `Implentation-plan.md` T003: `/loans/summary`를 agent loan structure surface로 문서 승격.
-3. 이후 T004~T007 순서로 profile, loan canonical view, data coverage, income composition을 진행한다.
+1. `Implentation-plan.md` T012: 구매게이트 후보 생성 전 결제취소/환불 상계. 완전 취소 원결제는 후보 제외, 부분 환불은 순지출 기준으로 판단한다.
+2. `Implentation-plan.md` T012: `/operations/purchase-review` 또는 insights 내 review-focused section 위치를 결정하고 snooze/dismiss 재노출 규칙을 frontend/backend에서 맞춘다.
+3. `Implentation-plan.md` T013/T014: backend analytics settings frontend와 운영 배포본 smoke capture를 필요 시 독립 작업으로 진행한다.
 
 ## Key Decisions
 
@@ -84,6 +86,7 @@
 - 2026-05-28: `vw_unclassified_work_queue`의 반복결제 미분류 신호는 같은 거래처 2건만으로 판단하지 않는다. 같은 날 분할 구매를 제외하기 위해 최소 2개 월, 최소 2개 거래일, 금액 변동계수 `<= 0.5`를 만족하는 거래처만 `missing_recurring_kind` 후보로 본다.
 - 2026-05-28: 반복결제 카테고리 자동분류는 전체 거래를 단순 카테고리로 덮지 않는다. 기존 `recurring_payment_kind`를 보존하고, 반복 후보 gate(최소 2개 월/2개 거래일/CV `<= 0.5`) 또는 `cost_kind='fixed'`인 거래에만 `recurring_category_rules`를 적용한다. `not_recurring`은 reviewed non-recurring 상태를 명시하기 위한 값으로 추가했다.
 - 2026-06-10: `Implentation-plan.md`를 전역 실행계획과 current backlog tracking 문서로 삼고, 기존 `docs/planned-work.md`와 advisor canonical gap priority plan은 archive로 이동한다.
+- 2026-06-11: `advisor-canonical-gap-analysis.md` 기반 T001-T011은 live backend/API/canonical surface로 반영되어 전역 실행계획에서 Done 처리한다. T012는 backend review 저장 API는 live지만, 결제취소/환불 netting과 user-facing review workflow가 남은 작업이다.
 - 2026-05-28: My Ledge core는 재무 어시스턴트의 말투/성격을 결정하지 않는다. 재무 어시스턴트가 사용할 canonical read model foundation과 `reason`/`confidence`/`assumptions`/`risk_level` 같은 판단 재료를 제공한다.
 - 2026-05-28: 다음 작업은 운영 검증만 계속 붙잡지 않고 기능 구현으로 넘어가되, 운영 smoke와 contract 검증은 각 구현 batch의 acceptance check로 유지한다.
 - 2026-05-28: 자산/투자/대출 snapshot은 우선 업로드될 때만 쌓이는 sparse 데이터로 본다.

@@ -46,10 +46,10 @@
 
 ## Current Priority Queue
 
-1. `T001` and `T002` are the next implementation batch. They fix real-data canonical calculation errors.
-2. `T003` is documentation-only and can be done adjacent to `T001`.
-3. `T004` through `T007` extend advisor-facing canonical evidence in focused backend/API PRs.
-4. Existing broad P2 asset lifecycle/source-priority work starts only after `T001` through `T007` land or are explicitly reprioritized.
+1. `T012` is the next focused correctness/workflow task: purchase gate refund netting plus user-facing review placement.
+2. `T013` is the next frontend settings task once the team wants a user-facing settings surface for existing backend analytics settings.
+3. `T014` is operational deployment smoke capture and can run independently of feature work.
+4. Existing broad P2 asset lifecycle/source-priority work starts only after `T012` through `T014` land or are explicitly reprioritized.
 
 ---
 
@@ -71,195 +71,203 @@
 
 #### Task T001. 음수 자산 중복 차감 제거와 canonical 순자산 정합성 보정
 - Priority: P0
-- Status: Ready
+- Status: Done
 - Depends on: T000
 - Acceptance Criteria:
-  - [ ] `vw_asset_snapshot_canonical.asset_total`이 `side='asset' AND amount >= 0`인 row만 합산한다.
-  - [ ] `negative_asset_excluded_total` 컬럼이 추가되어 음수 자산 row 제외분을 노출한다.
-  - [ ] 마이너스통장처럼 자산 측 음수 row와 부채 측 대출 row가 동시에 존재해도 순자산이 이중 차감되지 않는다.
-  - [ ] `GET /api/v1/analytics/net-worth-breakdown`와 `GET /api/v1/analytics/liquidity-health`의 Python 계산 경로가 canonical view 규칙과 일치한다.
-  - [ ] 제외가 발생한 snapshot에서는 응답 `assumptions`에 `negative_asset_rows_excluded` 또는 동등한 명시적 근거가 포함된다.
-  - [ ] backend regression test가 음수 자산 + 대응 부채 fixture를 포함한다.
-  - [ ] `docs/agents/canonical-read-surface-reference.md`와 `docs/backend-api-and-metrics-reference.md`에 새 컬럼과 해석 규칙이 문서화된다.
-  - [ ] 실데이터 workbook 기준 마이너스통장 중복 차감 해소분이 재현된다.
+  - [x] `vw_asset_snapshot_canonical.asset_total`이 `side='asset' AND amount >= 0`인 row만 합산한다.
+  - [x] `negative_asset_excluded_total` 컬럼이 추가되어 음수 자산 row 제외분을 노출한다.
+  - [x] 마이너스통장처럼 자산 측 음수 row와 부채 측 대출 row가 동시에 존재해도 순자산이 이중 차감되지 않는다.
+  - [x] `GET /api/v1/analytics/net-worth-breakdown`와 `GET /api/v1/analytics/liquidity-health`의 Python 계산 경로가 canonical view 규칙과 일치한다.
+  - [x] 제외가 발생한 snapshot에서는 응답 `assumptions`에 `negative_asset_rows_excluded` 또는 동등한 명시적 근거가 포함된다.
+  - [x] backend regression test가 음수 자산 + 대응 부채 fixture를 포함한다.
+  - [x] `docs/agents/canonical-read-surface-reference.md`와 `docs/backend-api-and-metrics-reference.md`에 새 컬럼과 해석 규칙이 문서화된다.
+  - [x] 실데이터 workbook 기준 마이너스통장 중복 차감 해소분이 재현된다.
 - Notes:
   - parser/raw table은 수정하지 않고 canonical/service 레이어에서 정규화한다.
   - `T002`와 같은 migration/PR로 묶어도 된다.
 
 #### Task T002. 현금성 자산 fallback 휴리스틱 보강
 - Priority: P0
-- Status: Ready
+- Status: Done
 - Depends on: T000
 - Acceptance Criteria:
-  - [ ] `vw_asset_snapshot_canonical.cash_equivalent_total`이 음수 자산 row를 제외한다.
-  - [ ] category fallback이 `자유입출금`, `전자금융`을 포함한다.
-  - [ ] product fallback이 `통장`을 포함하되 `청약`, `저금통`, `보험`, `연금`, `부동산` 같은 locked/non-cash 후보를 현금성으로 오분류하지 않는다.
-  - [ ] `backend/app/services/assets_service.py:_is_cash_equivalent_asset`가 DB view와 같은 판단 순서를 사용한다.
-  - [ ] 사용자 명시값 `is_cash_equivalent`와 `liquidity_tier`는 기존처럼 휴리스틱보다 우선한다.
-  - [ ] 실데이터 workbook 기준 `cash_equivalent_total`이 약 `310099`로 재현된다.
-  - [ ] `emergency_fund_months`가 이 사용자의 실제 비상금 부족 상태를 왜곡 없이 보여준다.
-  - [ ] backend regression test가 자유입출금/통장/음수 asset row 사례를 포함한다.
+  - [x] `vw_asset_snapshot_canonical.cash_equivalent_total`이 음수 자산 row를 제외한다.
+  - [x] category fallback이 `자유입출금`, `전자금융`을 포함한다.
+  - [x] product fallback이 `통장`을 포함하되 `청약`, `저금통`, `보험`, `연금`, `부동산` 같은 locked/non-cash 후보를 현금성으로 오분류하지 않는다.
+  - [x] `backend/app/services/assets_service.py:_is_cash_equivalent_asset`가 DB view와 같은 판단 순서를 사용한다.
+  - [x] 사용자 명시값 `is_cash_equivalent`와 `liquidity_tier`는 기존처럼 휴리스틱보다 우선한다.
+  - [x] 실데이터 workbook 기준 `cash_equivalent_total`이 약 `310099`로 재현된다.
+  - [x] `emergency_fund_months`가 이 사용자의 실제 비상금 부족 상태를 왜곡 없이 보여준다.
+  - [x] backend regression test가 자유입출금/통장/음수 asset row 사례를 포함한다.
 - Notes:
   - `T001`과 같은 canonical view 재생성 migration에서 처리하는 것이 좋다.
 
 #### Task T003. 대출 금리/잔액/만기 surface 문서 승격
 - Priority: P0
-- Status: Ready
+- Status: Done
 - Depends on: T000
 - Acceptance Criteria:
-  - [ ] `docs/agents/canonical-read-surface-reference.md`의 surface 선택표에 `대출 구조/금리/만기 -> GET /api/v1/loans/summary`가 추가된다.
-  - [ ] `/loans/summary`의 `interest_rate`, `balance`, `principal`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `maturity_date` 의미가 값 사전에 문서화된다.
-  - [ ] `docs/agent-integration/integration-guide.md`에서 대출 상환 부담과 대출 구조를 구분해 안내한다.
-  - [ ] `docs/backend-api-and-metrics-reference.md`에 금리는 snapshot 시점 값이며 상환 우선순위 판단은 agent 해석이라는 주의가 포함된다.
-  - [ ] 코드 변경 없이 문서 diff만 발생한다.
+  - [x] `docs/agents/canonical-read-surface-reference.md`의 surface 선택표에 `대출 구조/금리/만기 -> GET /api/v1/loans/summary`가 추가된다.
+  - [x] `/loans/summary`의 `interest_rate`, `balance`, `principal`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `maturity_date` 의미가 값 사전에 문서화된다.
+  - [x] `docs/agent-integration/integration-guide.md`에서 대출 상환 부담과 대출 구조를 구분해 안내한다.
+  - [x] `docs/backend-api-and-metrics-reference.md`에 금리는 snapshot 시점 값이며 상환 우선순위 판단은 agent 해석이라는 주의가 포함된다.
+  - [x] 코드 변경 없이 문서 diff만 발생한다.
 - Notes:
   - `GET /api/v1/loans/summary` 자체는 이미 live다.
 
 #### Task T004. 뱅샐현황 고객정보 profile snapshot 수집과 API 추가
 - Priority: P1
-- Status: Planned
+- Status: Done
 - Depends on: T001, T002
 - Acceptance Criteria:
-  - [ ] `backend/app/parsers/snapshots.py`가 `1.고객정보` 섹션에서 `gender`, `age`, `credit_score_kcb`를 파싱한다.
-  - [ ] 이름과 이메일은 저장하지 않는다.
-  - [ ] `1.고객정보` 섹션이 없는 workbook은 upload가 실패하지 않고 profile을 skip한다.
-  - [ ] `user_profile_snapshots` 테이블이 Alembic migration으로 추가된다.
-  - [ ] 같은 `snapshot_date` 재업로드 시 profile snapshot은 기존 snapshot replace 패턴을 따른다.
-  - [ ] `GET /api/v1/profile`이 최신 `gender`, `age`, `credit_score_kcb`, `snapshot_date`, `credit_score_history[]`를 반환한다.
-  - [ ] `GET /api/v1/schema`에서 신규 테이블 또는 API surface가 확인 가능하다.
-  - [ ] 실데이터 workbook 기준 `{gender: '남', age: 39, credit_score_kcb: 996}`가 반환된다.
-  - [ ] parser, upload service, API regression test가 추가된다.
-  - [ ] `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`가 갱신된다.
+  - [x] `backend/app/parsers/snapshots.py`가 `1.고객정보` 섹션에서 `gender`, `age`, `credit_score_kcb`를 파싱한다.
+  - [x] 이름과 이메일은 저장하지 않는다.
+  - [x] `1.고객정보` 섹션이 없는 workbook은 upload가 실패하지 않고 profile을 skip한다.
+  - [x] `user_profile_snapshots` 테이블이 Alembic migration으로 추가된다.
+  - [x] 같은 `snapshot_date` 재업로드 시 profile snapshot은 기존 snapshot replace 패턴을 따른다.
+  - [x] `GET /api/v1/profile`이 최신 `gender`, `age`, `credit_score_kcb`, `snapshot_date`, `credit_score_history[]`를 반환한다.
+  - [x] `GET /api/v1/schema`에서 신규 테이블 또는 API surface가 확인 가능하다.
+  - [x] 실데이터 workbook 기준 `{gender: '남', age: 39, credit_score_kcb: 996}`가 반환된다.
+  - [x] parser, upload service, API regression test가 추가된다.
+  - [x] `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`가 갱신된다.
 - Notes:
   - 나이와 신용점수는 advisor 판단 재료이며 My Ledge가 리파이낸싱 같은 조언을 생성하지 않는다.
 
 #### Task T005. 대출 계좌 canonical view `vw_loan_account_canonical` 추가
 - Priority: P1
-- Status: Planned
+- Status: Done
 - Depends on: T003
 - Acceptance Criteria:
-  - [ ] Alembic migration이 `vw_loan_account_canonical`을 생성한다.
-  - [ ] 최신 loan snapshot 선별은 lender/product_name 또는 안정 계좌 identity 기준으로 중복 snapshot 합산을 방지한다.
-  - [ ] view가 `loan_account_id`, `display_name`, `lender`, `product_name`, `loan_kind`, `snapshot_date`, `principal`, `balance`, `interest_rate`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `start_date`, `maturity_date`, `estimated_monthly_interest`를 제공한다.
-  - [ ] `loan_accounts`에 아직 매핑되지 않은 snapshot loan도 누락되지 않는다.
-  - [ ] `estimated_monthly_interest`는 `round(balance * interest_rate / 100 / 12)`로 계산하고 null 입력에서는 null을 반환한다.
-  - [ ] `backend/app/services/canonical_views.py`와 `/schema`에 view가 등록된다.
-  - [ ] 실데이터 workbook 기준 4.03% 주담대 월 이자 추정치가 약 `573000`이고 5.85% 신용대출이 최고 금리 row로 식별된다.
-  - [ ] schema/view regression test가 추가된다.
-  - [ ] agent/reference 문서에 단리 근사값이며 실제 상환 스케줄이 아니라는 해석 주의가 포함된다.
+  - [x] Alembic migration이 `vw_loan_account_canonical`을 생성한다.
+  - [x] 최신 loan snapshot 선별은 lender/product_name 또는 안정 계좌 identity 기준으로 중복 snapshot 합산을 방지한다.
+  - [x] view가 `loan_account_id`, `display_name`, `lender`, `product_name`, `loan_kind`, `snapshot_date`, `principal`, `balance`, `interest_rate`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `start_date`, `maturity_date`, `estimated_monthly_interest`를 제공한다.
+  - [x] `loan_accounts`에 아직 매핑되지 않은 snapshot loan도 누락되지 않는다.
+  - [x] `estimated_monthly_interest`는 `round(balance * interest_rate / 100 / 12)`로 계산하고 null 입력에서는 null을 반환한다.
+  - [x] `backend/app/services/canonical_views.py`와 `/schema`에 view가 등록된다.
+  - [x] 실데이터 workbook 기준 4.03% 주담대 월 이자 추정치가 약 `573000`이고 5.85% 신용대출이 최고 금리 row로 식별된다.
+  - [x] schema/view regression test가 추가된다.
+  - [x] agent/reference 문서에 단리 근사값이며 실제 상환 스케줄이 아니라는 해석 주의가 포함된다.
 - Notes:
   - dashboard API 포함은 1차 scope가 아니다. readonly SQL/canonical view와 문서 등재를 먼저 완료한다.
 
 #### Task T006. canonical dashboard 데이터 커버리지와 부분월 flag 추가
 - Priority: P1
-- Status: Planned
+- Status: Done
 - Depends on: T001, T002
 - Acceptance Criteria:
-  - [ ] `GET /api/v1/canonical-views/dashboard` 최상위 응답에 `data_coverage.first_transaction_date`와 `data_coverage.last_transaction_date`가 추가된다.
-  - [ ] `monthly_cashflow[]` row에 `is_complete_month`가 추가된다.
-  - [ ] `true_spendable_monthly[]` row에 `is_complete_month`가 추가된다.
-  - [ ] dashboard가 노출하는 fixed cost 계열 월별 row에도 동일한 complete-month 판단이 적용된다.
-  - [ ] complete-month 판단은 해당 월의 시작과 끝이 전체 거래 관측 범위 안에 모두 포함되는지로 계산한다.
-  - [ ] 진행월의 `income_basis='estimated'`와 `is_complete_month=false`가 서로 독립적으로 표현된다.
-  - [ ] 실데이터 workbook 기준 `2025-05=false`, `2025-06`부터 `2026-04=true`, `2026-05=false`가 재현된다.
-  - [ ] API schema와 API regression test가 추가된다.
-  - [ ] agent 문서에 `is_complete_month=false` 월을 baseline/추세 계산에서 제외하거나 부분월임을 명시하라는 규칙이 추가된다.
+  - [x] `GET /api/v1/canonical-views/dashboard` 최상위 응답에 `data_coverage.first_transaction_date`와 `data_coverage.last_transaction_date`가 추가된다.
+  - [x] `monthly_cashflow[]` row에 `is_complete_month`가 추가된다.
+  - [x] `true_spendable_monthly[]` row에 `is_complete_month`가 추가된다.
+  - [x] dashboard가 노출하는 fixed cost 계열 월별 row에도 동일한 complete-month 판단이 적용된다.
+  - [x] complete-month 판단은 해당 월의 시작과 끝이 전체 거래 관측 범위 안에 모두 포함되는지로 계산한다.
+  - [x] 진행월의 `income_basis='estimated'`와 `is_complete_month=false`가 서로 독립적으로 표현된다.
+  - [x] 실데이터 workbook 기준 `2025-05=false`, `2025-06`부터 `2026-04=true`, `2026-05=false`가 재현된다.
+  - [x] API schema와 API regression test가 추가된다.
+  - [x] agent 문서에 `is_complete_month=false` 월을 baseline/추세 계산에서 제외하거나 부분월임을 명시하라는 규칙이 추가된다.
 - Notes:
   - DB view 원본값은 바꾸지 않고 dashboard API enrichment로 처리한다.
 
 #### Task T007. 월별 수입 구성 canonical view 추가
 - Priority: P1
-- Status: Planned
+- Status: Done
 - Depends on: T006
 - Acceptance Criteria:
-  - [ ] Alembic migration이 `vw_income_monthly_by_category`를 생성한다.
-  - [ ] source는 `vw_transactions_effective`이고 `type='수입'`만 포함한다.
-  - [ ] view는 `period`, `effective_category_major`, `income_total`, `transaction_count`를 제공한다.
-  - [ ] category별 월 수입 합계가 같은 월의 `vw_monthly_cashflow.income_total`과 일치한다.
-  - [ ] 실데이터 workbook 기준 2026-02의 급여, 보험금, 기타 수입이 분리된다.
-  - [ ] `backend/app/services/canonical_views.py`와 `/schema`에 view가 등록된다.
-  - [ ] schema/view regression test가 추가된다.
-  - [ ] agent/reference 문서에 `급여` 카테고리는 BankSalad 또는 사용자 수정 effective category 기준이며 정기성 판단은 월별 분해를 보고 agent가 해석한다고 명시된다.
+  - [x] Alembic migration이 `vw_income_monthly_by_category`를 생성한다.
+  - [x] source는 `vw_transactions_effective`이고 `type='수입'`만 포함한다.
+  - [x] view는 `period`, `effective_category_major`, `income_total`, `transaction_count`를 제공한다.
+  - [x] category별 월 수입 합계가 같은 월의 `vw_monthly_cashflow.income_total`과 일치한다.
+  - [x] 실데이터 workbook 기준 2026-02의 급여, 보험금, 기타 수입이 분리된다.
+  - [x] `backend/app/services/canonical_views.py`와 `/schema`에 view가 등록된다.
+  - [x] schema/view regression test가 추가된다.
+  - [x] agent/reference 문서에 `급여` 카테고리는 BankSalad 또는 사용자 수정 effective category 기준이며 정기성 판단은 월별 분해를 보고 agent가 해석한다고 명시된다.
 - Notes:
   - 첫 PR에서는 `vw_monthly_cashflow`에 `salary_income_total`/`non_salary_income_total`을 추가하지 않는다. 명확한 consumer가 생기면 별도 task로 승격한다.
 
 #### Task T008. 보험 계약 snapshot 수집과 summary API
 - Priority: P1.5
-- Status: Planned
+- Status: Done
 - Depends on: T004
 - Acceptance Criteria:
-  - [ ] parser가 `4.보험현황`에서 보험사, 보험명, 계약상태, 총납입금, 계약일자, 만기일자를 파싱한다.
-  - [ ] `총계` row는 저장하지 않는다.
-  - [ ] `insurance_contracts` 테이블이 Alembic migration으로 추가된다.
-  - [ ] 같은 snapshot date 재업로드 시 보험 계약 snapshot은 replace 패턴을 따른다.
-  - [ ] `GET /api/v1/insurance/summary`가 최신 계약 목록을 반환한다.
-  - [ ] `monthly_premium_estimate`는 최근 마감월 보험 카테고리 지출 기반으로 계산하고 assumptions에 근거를 남긴다.
-  - [ ] 계약-거래 매핑은 제공하지 않는다고 문서화된다.
-  - [ ] parser, upload, API regression test가 추가된다.
-  - [ ] agent/reference 문서가 갱신된다.
+  - [x] parser가 `4.보험현황`에서 보험사, 보험명, 계약상태, 총납입금, 계약일자, 만기일자를 파싱한다.
+  - [x] `총계` row는 저장하지 않는다.
+  - [x] `insurance_contracts` 테이블이 Alembic migration으로 추가된다.
+  - [x] 같은 snapshot date 재업로드 시 보험 계약 snapshot은 replace 패턴을 따른다.
+  - [x] `GET /api/v1/insurance/summary`가 최신 계약 목록을 반환한다.
+  - [x] `monthly_premium_estimate`는 최근 마감월 보험 카테고리 지출 기반으로 계산하고 assumptions에 근거를 남긴다.
+  - [x] 계약-거래 매핑은 제공하지 않는다고 문서화된다.
+  - [x] parser, upload, API regression test가 추가된다.
+  - [x] agent/reference 문서가 갱신된다.
 - Notes:
   - 보험료 적정성 판단은 agent layer 해석이다. My Ledge는 계약과 추정 보험료 재료만 제공한다.
 
 #### Task T009. BankSalad 현금흐름현황 기반 import parity hardening
 - Priority: P1.5
-- Status: Planned
+- Status: Done
 - Depends on: T001, T002
 - Acceptance Criteria:
-  - [ ] `2.현금흐름현황`의 월별/카테고리별 집계 값을 저장하지 않고 검증 기준값으로만 읽는다.
-  - [ ] upload 또는 parity 검증 스크립트가 BankSalad 현금흐름현황과 DB 거래 재집계를 비교한다.
-  - [ ] 불일치는 upload 차단이 아니라 경고 리포트로 남긴다.
-  - [ ] 리포트에는 비교 월, category, BankSalad 값, DB 값, 차이가 포함된다.
-  - [ ] 수식 셀을 값으로 오독하지 않도록 숫자 값 영역만 사용한다.
-  - [ ] prepared workbook으로 parity smoke를 재현한다.
-  - [ ] 실패 시 upload log 또는 검증 리포트가 어느 row 범위를 비교했는지 남긴다.
+  - [x] `2.현금흐름현황`의 월별/카테고리별 집계 값을 저장하지 않고 검증 기준값으로만 읽는다.
+  - [x] upload 또는 parity 검증 스크립트가 BankSalad 현금흐름현황과 DB 거래 재집계를 비교한다.
+  - [x] 불일치는 upload 차단이 아니라 경고 리포트로 남긴다.
+  - [x] 리포트에는 비교 월, category, BankSalad 값, DB 값, 차이가 포함된다.
+  - [x] 수식 셀을 값으로 오독하지 않도록 숫자 값 영역만 사용한다.
+  - [x] prepared workbook으로 parity smoke를 재현한다.
+  - [x] 실패 시 upload log 또는 검증 리포트가 어느 row 범위를 비교했는지 남긴다.
 - Notes:
   - 기존 import parity hardening 항목을 실데이터 기반 외부 기준값 검증으로 구체화한 task다.
 
 #### Task T010. 미니멀 financial targets settings
 - Priority: P1.5
-- Status: Planned
+- Status: Done
 - Depends on: T001, T002, T006
 - Acceptance Criteria:
-  - [ ] `GET /api/v1/settings/analytics` 응답에 `financial_targets` 섹션이 추가된다.
-  - [ ] `PATCH /api/v1/settings/analytics`가 `emergency_fund_target_months`, `savings_rate_target`, `debt_strategy_preference`를 저장한다.
-  - [ ] `emergency_fund_target_months` 기본값은 3이다.
-  - [ ] `savings_rate_target` 기본값은 null이다.
-  - [ ] `debt_strategy_preference`는 `avalanche`, `snowball`, null만 허용한다.
-  - [ ] `/analytics/liquidity-health`가 `emergency_fund_target_months`와 `target_progress_ratio`를 echo한다.
-  - [ ] agent가 목표를 제안할 수는 있지만 저장은 사용자 명시 의사로만 한다는 규칙이 문서화된다.
-  - [ ] API settings regression test가 추가된다.
+  - [x] `GET /api/v1/settings/analytics` 응답에 `financial_targets` 섹션이 추가된다.
+  - [x] `PATCH /api/v1/settings/analytics`가 `emergency_fund_target_months`, `savings_rate_target`, `debt_strategy_preference`를 저장한다.
+  - [x] `emergency_fund_target_months` 기본값은 3이다.
+  - [x] `savings_rate_target` 기본값은 null이다.
+  - [x] `debt_strategy_preference`는 `avalanche`, `snowball`, null만 허용한다.
+  - [x] `/analytics/liquidity-health`가 `emergency_fund_target_months`와 `target_progress_ratio`를 echo한다.
+  - [x] agent가 목표를 제안할 수는 있지만 저장은 사용자 명시 의사로만 한다는 규칙이 문서화된다.
+  - [x] API settings regression test가 추가된다.
 - Notes:
   - budgets/goals 전체 기능은 P2에 남긴다. 이 task는 advisor가 목표 대비 현재 위치를 말할 수 있게 하는 최소 선행분이다.
 
 #### Task T011. 투자 집중도 보조 필드
 - Priority: P1.5
-- Status: Planned
+- Status: Done
 - Depends on: T000
 - Acceptance Criteria:
-  - [ ] `GET /api/v1/investments/summary` items에 `pct_of_investment_total`이 추가된다.
-  - [ ] 계산식은 `market_value / totals.market_value`이며 분모가 0이면 null을 반환한다.
-  - [ ] 성과/수익률/매수매도 attribution은 추가하지 않는다.
-  - [ ] agent/reference 문서에 snapshot 구성 비율일 뿐 투자 성과 분석이 아니라고 명시한다.
-  - [ ] API regression test가 추가된다.
-  - [ ] 실데이터 workbook 기준 알파벳 단일종목 집중도가 투자자산의 약 56%로 노출된다.
+  - [x] `GET /api/v1/investments/summary` items에 `pct_of_investment_total`이 추가된다.
+  - [x] 계산식은 `market_value / totals.market_value`이며 분모가 0이면 null을 반환한다.
+  - [x] 성과/수익률/매수매도 attribution은 추가하지 않는다.
+  - [x] agent/reference 문서에 snapshot 구성 비율일 뿐 투자 성과 분석이 아니라고 명시한다.
+  - [x] API regression test가 추가된다.
+  - [x] 실데이터 workbook 기준 알파벳 단일종목 집중도가 투자자산의 약 56%로 노출된다.
 - Notes:
   - 투자 성과/상품 배분 분석은 증권사 API 이후로 미룬다는 기존 결정은 유지한다.
 
-#### Task T012. 구매 게이트 review workflow
+#### Task T012. 구매 게이트 review workflow와 결제취소 상계
 - Priority: P1
 - Status: Planned
 - Depends on: T000
 - Acceptance Criteria:
   - [ ] `/operations/purchase-review` 또는 insights 내 review-focused section의 위치가 결정된다.
-  - [ ] purchase gate 후보에 review memo를 저장할 수 있다.
-  - [ ] 후보 review 상태에 `reviewed_at`이 기록된다.
-  - [ ] 후보 재노출 제어를 위한 `cooldown_until` 또는 동등한 상태가 저장된다.
+  - [x] purchase gate 후보에 review memo를 저장할 수 있다.
+  - [x] 후보 review 상태에 `reviewed_at`이 기록된다.
+  - [x] 후보 재노출 제어를 위한 `cooldown_until` 또는 동등한 상태가 저장된다.
   - [ ] snooze/dismiss 후보의 재노출 규칙이 backend와 frontend에서 일관된다.
-  - [ ] 기존 purchase gate 후보 생성 규칙은 고정비, 필수지출, 대출연결, 필요성 미분류 거래를 제외한다.
+  - [x] 기존 purchase gate 후보 생성 규칙은 고정비, 필수지출, 대출연결, 필요성 미분류 거래를 제외한다.
+  - [ ] `type='지출'`이면서 양수인 결제취소/환불 row를 같은 거래처/결제수단/통화/절대금액과 근접 날짜 기준으로 원결제 row와 상계한다.
+  - [ ] 완전 취소되어 순액이 0인 원결제는 purchase gate 후보에서 제외한다.
+  - [ ] 부분 환불은 원결제 금액이 아니라 환불 차감 후 순지출 기준으로 `min_candidate_amount`, `large_purchase_threshold`, spike 신호를 판단한다.
+  - [ ] 자동 매칭 신뢰도가 낮은 환불 의심 케이스는 임의 제외하지 않고 `assumptions` 또는 reason/signal로 드러낸다.
   - [ ] 관련 API contract 문서와 frontend wireframe 문서가 갱신된다.
-  - [ ] backend API test와 frontend interaction test 또는 browser smoke가 포함된다.
+  - [ ] backend API test가 `-150000` 원결제와 `+150000` 결제취소 fixture를 포함하고, 완전 취소 건이 후보에서 제외됨을 검증한다.
+  - [ ] backend API test가 부분 환불 fixture를 포함하고, 순지출 기준 후보 판단을 검증한다.
+  - [ ] frontend interaction test 또는 browser smoke가 포함된다.
 - Notes:
   - My Ledge는 구매 허용/금지 판단을 하지 않고 review queue와 근거만 제공한다.
+  - 결제취소/환불 상계는 구매 허용/금지 판단이 아니라 관측 거래가 실제 구매로 남았는지 정규화하는 전처리다.
+  - backend review 저장 API는 이미 live이며, 남은 범위는 review-focused frontend placement, frontend snooze/dismiss 일관성, refund netting이다.
 
 #### Task T013. Settings frontend
 - Priority: P1

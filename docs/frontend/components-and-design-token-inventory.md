@@ -34,8 +34,12 @@
   - `AssetsPage`
   - `InsightsPage`
   - `WorkbenchPage`
+  - `LoanMappingPage`
   - `InstallmentsPage`
+  - `AssetSettingsPage`
+  - `AutoClassificationPage`
   - `CanonicalViewsPage`
+  - `RecurringClassificationPage`
 
 ### `AppSidebar`
 
@@ -49,6 +53,7 @@
   - `/operations/workbench`
   - `/operations/loan-mapping`
   - `/operations/installments`
+  - `/operations/asset-settings`
   - `/operations/auto-classification`
   - `/operations/canonical-views`
   - `/operations/recurring-classification`
@@ -305,26 +310,16 @@
 - topbar meta:
   - 현재 page item count / total count
 
-### `AutoClassificationPage`
+### `LoanMappingPage`
 
 - blocks:
   - write access alert
-  - upload auto-apply toggles
-  - fixed/variable category rules table
-  - recurring category rules table
-  - loan merchant rules table
+  - linked/unlinked loan repayment candidate filters
+  - loan account metadata summary
+  - transaction-to-loan single link controls
+  - selected transaction bulk loan-link panel
 - topbar meta:
-  - 등록된 규칙 수
-
-### `RecurringClassificationPage`
-
-- blocks:
-  - write access alert
-  - selected group bulk classification panel
-  - recurring payment candidate table
-  - classification selects with `미분류`, `할부`, `매월 반복`, `반복 아님`
-- topbar meta:
-  - 현재 page item count / total count
+  - 연결/미연결 후보 count
 
 ### `InstallmentsPage`
 
@@ -336,6 +331,47 @@
   - monthly forecast summary table and schedule cards
 - topbar meta:
   - 등록된 할부 항목 수
+
+### `AssetSettingsPage`
+
+- blocks:
+  - write access alert
+  - latest snapshot asset row controls
+  - asset liquidity tier and cash-equivalent edit controls
+  - loan monthly payment and repayment-method metadata controls
+- topbar meta:
+  - snapshot 기준일
+
+### `AutoClassificationPage`
+
+- blocks:
+  - write access alert
+  - upload auto-apply toggles
+  - fixed/variable category rules table
+  - recurring category rules table
+  - loan merchant rules table
+- topbar meta:
+  - 등록된 규칙 수
+
+### `CanonicalViewsPage`
+
+- blocks:
+  - canonical dashboard KPI cards
+  - monthly cashflow and true-spendable rows
+  - loan repayment, recurring merchant, merchant baseline, unclassified queue tables
+  - schema/reference links to operational cleanup routes
+- topbar meta:
+  - canonical monthly row count
+
+### `RecurringClassificationPage`
+
+- blocks:
+  - write access alert
+  - selected group bulk classification panel
+  - recurring payment candidate table
+  - classification selects with `미분류`, `할부`, `매월 반복`, `반복 아님`
+- topbar meta:
+  - 현재 page item count / total count
 
 ## Token Coverage Summary
 

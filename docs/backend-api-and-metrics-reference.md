@@ -27,6 +27,8 @@
   - `schema.py`
   - `upload.py`
   - `data_management.py`
+  - `profile.py`
+  - `settings.py`
   - `transactions.py`
   - `assets.py`
   - `auto_classification.py`
@@ -41,6 +43,7 @@
 
 - `GET /api/v1/health`
 - `GET /api/v1/upload/logs`
+- `GET /api/v1/profile`
 - 모든 read-only transaction/assets/analytics endpoint
 - `GET /api/v1/loan-accounts`
 - `GET /api/v1/loan-transaction-links`
@@ -54,6 +57,8 @@
 
 - `GET /api/v1/schema`
 - `GET /api/v1/canonical-views/dashboard`
+- `GET /api/v1/settings/analytics`
+- `PATCH /api/v1/settings/analytics`
 - `GET /api/v1/auto-classification/settings`
 - `PATCH /api/v1/auto-classification/settings`
 - `GET /api/v1/auto-classification/category-rules`
@@ -72,6 +77,8 @@
 - `POST /api/v1/auto-classification/recurring-category-rules`
 - `DELETE /api/v1/auto-classification/recurring-category-rules/{rule_id}`
 - `POST /api/v1/auto-classification/apply/recurring-category-rules`
+- `GET /api/v1/auto-classification/recurring-category-rules/dry-run`
+- `POST /api/v1/auto-classification/apply/recurring-dry-run`
 - `POST /api/v1/upload`
 - `POST /api/v1/data/reset`
 - `POST /api/v1/transactions`
@@ -89,6 +96,9 @@
 - `PUT /api/v1/transactions/{transaction_id}/installment-link`
 - `DELETE /api/v1/transactions/{transaction_id}/installment-link`
 - `PUT /api/v1/transactions/installment-links/bulk`
+- `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
+- `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
+- `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
 ## Endpoints
 
@@ -1571,5 +1581,5 @@ Source: `app.services.analytics_service.get_spending_anomalies`
   - `reference_date`
   - `is_partial_period`
 - current frontend still contains some fallbacks for older backend contracts, especially around transaction filter options
-- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live scope is `analytics.spending_anomalies`
+- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live analytics scopes include `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, and `financial_targets`
 - upload file retention is live for `POST /api/v1/upload`: default `UPLOAD_DIR=/data/uploads`, keep latest 5 original files
