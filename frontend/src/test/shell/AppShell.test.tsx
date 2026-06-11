@@ -21,13 +21,13 @@ function renderShell(initialPath = '/') {
 }
 
 describe('AppShell', () => {
-  it('새 IA 내비게이션을 렌더한다 (최상위 4 + 데이터 8)', () => {
+  it('새 IA 내비게이션을 렌더한다 (최상위 4 + 데이터 9)', () => {
     renderShell()
     const nav = screen.getByRole('navigation', { name: '주 메뉴' })
     for (const label of ['홈', '지출', '자산·부채', '신호']) {
       expect(within(nav).getByText(label)).toBeInTheDocument()
     }
-    for (const label of ['인박스', '거래', '대출', '할부', '자산 메타', '규칙', '가져오기', '데이터 사전']) {
+    for (const label of ['인박스', '거래', '대출', '할부', '자산 메타', '규칙', '설정', '가져오기', '데이터 사전']) {
       expect(within(nav).getByText(label)).toBeInTheDocument()
     }
   })

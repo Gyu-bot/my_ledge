@@ -15,6 +15,7 @@ describe('router — 새 IA + 레거시 redirect', () => {
     ['/net-worth', '자산·부채'],
     ['/signals', '신호'],
     ['/data/inbox', '데이터 · 인박스'],
+    ['/data/settings', '데이터 · 설정'],
     ['/data/reference', '데이터 · 데이터 사전'],
   ])('%s → 페이지 타이틀 "%s"', (path, title) => {
     renderAt(path)

@@ -19,8 +19,8 @@
 | 섹션 | 데이터 | 세부 |
 |---|---|---|
 | 히어로 Stat "이번 달 쓸 수 있는 돈" | `useCanonicalViewsDashboard` → `true_spendable_monthly` 최신 | 값=`remaining_after_variable_spend`(진행월·추정 가능 시 `estimated_*`). `예상` 배지 → ProvenancePopover: `income_estimate_source` 라벨, `excluded_income_periods`, 관측값. 스파크=최근 6개월 |
-| 보조 Stat 4 | 순자산: `useAssetSnapshots` 최신(+기준일) / 수입·지출: `useMonthlyCashflow(6)` 최신 월 / 저축률: 동일(목표 50% 보조 표기) | 지출 MoM 델타는 직전 월 대비 계산 |
-| 현금흐름 12개월 | `useMonthlyCashflow(12)` | dual bar + net 라인. 카드 헤더 ▸지출 |
+| 보조 Stat 4 | 순자산: `useAssetSnapshots` 최신(+기준일) / 수입·지출: `useMonthlyCashflow(6)` 최신 월 / 저축률: **마지막 `is_complete_month=true` 월** 기준(휴리스틱 폐기), 목표는 `settings/analytics.financial_targets.savings_rate_target`(미설정 시 목표 줄 숨김) | 지출 MoM 델타는 직전 월 대비 계산 |
+| 현금흐름 12개월 | `useMonthlyCashflow(12)` + canonical `is_complete_month` | dual bar + net 라인. 미완성 월 바는 반투명+빗금. 카드 헤더 ▸지출 |
 | 주의 신호 | `useSpendingAnomalies(per_page:1)`·`useRecurringPayments(1,1)`·`useIncomeStability`·`useDiscretionaryVelocity` | 4행 요약. 기준 모드는 신호 페이지와 공유(전역 설정, localStorage). 각 행 ▸신호 해당 섹션 anchor |
 | 해야 할 일 | 인박스와 동일 3쿼리의 count만 | 미분류 N(고정비 후보 N)/승인 대기 N/대출 연결 후보 N + `CoverageGauge`. ▸인박스 탭 딥링크 |
 | 최근 거래 | `useTransactionList({per_page:5, type:'all'})` | read-only 리스트, ▸데이터·거래 |
@@ -38,20 +38,24 @@
 | 고정비 | `useFixedCostTrend` + `useFixedCostSummary` | SegmentedControl `고정/변동 ↔ 필수/재량`. 추이 차트 + 비율 segmented bar + 금액 카드. 미분류: `unclassified_total/count` → "미분류 ₩X·N건" 게이지 + ▸인박스(`?tab=unclassified&hint=cost_kind`) |
 | 거래처 | `useMerchantTreemap` | nested treemap, 노드 클릭 → 거래 내역 필터(거래처). 우측 Top N 목록(`useMerchantSpend`) |
 | 달력 | `useDailySpend(month)` | 월 선택(로컬 예외 ●), 일 클릭 → 거래 내역 필터(일) |
+| 수입 | `useCategoryBreakdown`/`useCategoryTimeline`의 `type=수입` 변형 (백엔드 `vw_income_monthly_by_category` REST 노출 시 교체) | 월별 수입 카테고리 스택 바 + 카테고리 합계 목록. 행 클릭 → 거래 내역 필터(수입) |
 
 **거래 내역 패널 (하단 공통):** `useTransactionList`(전역 기간+렌즈 선택 필터, 20행). 칼럼: 날짜/거래처/카테고리/금액. 활성 필터 칩 표시+개별 해제. 행 클릭 → `/data/transactions`에서 열기 딥링크.
 
 ## 3. 자산·부채 `/net-worth`
 
-**PageHeader:** 스냅샷 기준일 + 비교 메타(`useAssetSnapshotCompare`: baseline 날짜·경과일). `is_stale` → amber 배지 + 툴팁("스냅샷이 오래되었습니다 — 새 업로드 권장 ▸가져오기").
+**PageHeader:** 스냅샷 기준일 + 비교 메타(`useAssetSnapshotCompare`: baseline 날짜·경과일) + 비교 모드 select(`latest_available_vs_previous_available` 기본 / `last_closed_month_vs_previous_closed_month`). `is_stale` → amber 배지 + 툴팁("스냅샷이 오래되었습니다 — 새 업로드 권장 ▸가져오기").
 
 | 섹션 | 데이터 | 세부 |
 |---|---|---|
-| KPI 4 | `useAssetSnapshots`·`useLiquidityHealth` | 현금성 Stat 보조=비상금 N개월 (≥3 accent / <3 expense), ⓘ=산출 기준(현금성 자산·필수지출 기반) |
+| KPI 4 | `useAssetSnapshots`·`useLiquidityHealth` | 현금성 Stat 보조=비상금 N개월 (목표 대비 — 아래 유동성 보드 참조), 총자산 ⓘ=`negative_asset_excluded_total`(음수 자산 제외분) Provenance 행 |
 | 순자산 추이 | `useNetWorthHistory` | line+area. 포인트 hover=자산/부채/순자산 |
-| 순자산 구성 | `useNetWorthBreakdown` | 수평 bar, 부채는 `부채 ·` 접두 + expense색 |
-| 유동성 보드 | `useLiquidityHealth` + `useAssetSnapshots.asset_items` | 등급별 합계 3카드 + 자산별 목록(등급·현금성 배지). 미지정 자산 ⚠ 상단 + ▸자산 메타 편집 |
-| 대출 보드 | `useLoanSummary` | 총원금/총잔액 + 대출 카드: 표시명(없으면 상품명)·금융사·loan_kind, 잔액·금리, 월상환(ⓘ=`monthly_payment_source` 라벨: 수동 확정/연결 거래 추정·산출 기준), 상환 방식(ⓘ=derived 여부), 진행률 바=1-잔액/원금. ▸대출 관리 |
+| 순자산 구성 | `useNetWorthBreakdown` | 수평 bar, 부채는 `부채 ·` 접두 + expense색. ⓘ에 음수 자산 제외 표기 |
+| 신용점수 카드 | `useProfile` (신규 훅 — `GET /profile`) | KCB 점수 + `credit_score_history` 스파크라인 + 나이·성별 메타. ⓘ="BankSalad 고객정보 스냅샷, 이름·이메일 비저장". 데이터 없으면 카드 자체 숨김 |
+| 유동성 보드 | `useLiquidityHealth` + `useAssetSnapshots.asset_items` | 등급별 합계 3카드 + **비상금 목표 게이지**(`emergency_fund_months` / `emergency_fund_target_months`, `target_progress_ratio` — CoverageGauge 재사용, 목표 편집 ▸설정) + 자산별 목록(등급·현금성 배지). 미지정 자산 ⚠ 상단 + ▸자산 메타 편집 |
+| 대출 보드 | `useLoanSummary` | 총원금/총잔액 + 대출 카드: 표시명·금융사·loan_kind, 잔액·금리, 월상환(ⓘ=`monthly_payment_source`), **월 이자 추정**(`estimated_monthly_interest`, ⓘ="잔액×금리/12 단리 추정 — 상환 스케줄 아님"), 상환 방식, 진행률 바=1-잔액/원금, 만기일. 정렬: `debt_strategy_preference`(avalanche=금리 내림차순/snowball=잔액 오름차순/미설정=잔액 내림차순) + 정렬 기준 ⓘ. ▸대출 관리 |
+| 투자 보드 | `useInvestmentSummary` | 종목별 평가액·수익률·비중(`pct_of_investment_total`) 수평 bar. 총평가액 0이면 비중 `—` |
+| 보험 보드 | `useInsuranceSummary` (신규 훅 — `GET /insurance/summary`) | 계약 목록(보험사/상품/상태/총납입/계약일·만기일) + 월 보험료 추정(`monthly_premium_estimate` — ⓘ에 `assumptions[]` 전체). **evidence만 표시** — 적정성 판단 문구 금지(백엔드 계약). 계약 없으면 보드 숨김 |
 | 할부 잔여 | `useInstallmentForecast(6)` 요약 | Remaining 합계 + Missed 합계(⚠) 1행. ▸할부 관리 |
 
 ## 4. 신호 `/signals`
@@ -62,7 +66,7 @@
 |---|---|---|
 | KPI 3 | cashflow/incomeStability/anomalies | 저축률 / 수입 변동성(CV → 안정·보통·불안정, ⓘ=CV 수치) / 이상 카테고리 수 |
 | 재량 지출 속도 | `useDiscretionaryVelocity(as_of=오늘)` | ratio 대형 수치 + 심각도 배지(`risk_level` 4단계 매핑) + 현재 vs 기준선 + 진행률·커버리지·confidence 칩 + reasons[0]. ⓘ 팝오버에 전체 reasons |
-| 신호 피드 | 합성: ① 클라이언트 인사이트 룰(저축률/안정성) ② `useSpendingAnomalies`(페이지네이션) ③ `usePurchaseGateCandidates(pending)` | `SignalCard` 통일, 심각도 내림차순. 타입 필터 칩 `전체|이상 지출|구매 후보|상태`. 이상 지출 카드 액션: ▸지출 구성(카테고리 선택) / ▸거래 내역. 구매 게이트 카드: 후보 타입 배지들 + signals kv는 ⓘ로. assumptions는 피드 헤더 ⓘ 1곳 |
+| 신호 피드 | 합성: ① 클라이언트 인사이트 룰(저축률/안정성 — 목표는 `financial_targets`) ② `useSpendingAnomalies`(페이지네이션) ③ `usePurchaseGateCandidates(pending)` | `SignalCard` 통일, 심각도 내림차순. 타입 필터 칩 `전체|이상 지출|구매 후보|상태`. 이상 지출 카드 액션: ▸지출 구성(카테고리 선택) / ▸거래 내역. 구매 게이트 카드: 후보 타입 배지 + signals kv ⓘ + **리뷰 액션**(검토함/무시/스누즈 N일(기본 14)/메모 → `useReviewPurchaseGateCandidate` 신규 훅, `PATCH .../review`). 스누즈 카드는 `cooldown_until`까지 숨김, "스누즈됨 N건" 접힘 행. assumptions는 피드 헤더 ⓘ 1곳 |
 | 반복 결제 현황 | `useRecurringPayments` | 조회 전용 테이블(거래처/저장 분류+분포/주기/평균/횟수) + 진단 기준 ⓘ. 헤더 액션 `분류 바꾸기 ▸데이터·거래(그룹 보기)` |
 | 비교 | `useCategoryMoM` / `useMerchantSpend` | 탭 전환, 각자 기간 컨트롤(MoM 기준월, 거래처 1/3/6/12개월) |
 
@@ -122,16 +126,27 @@
   - 반복결제: 카테고리 → 반복 성격. "반복 후보/고정비 게이트 통과 거래만".
 - 대출 매칭 규칙은 교차 링크 카드(`▸대출 > 규칙`).
 
+### 5.6b 설정 `/data/settings` (신규 — 07 동기화)
+
+- 데이터: `useAnalyticsSettings` / `usePatchAnalyticsSettings` (신규 훅 — `GET/PATCH /settings/analytics`).
+- **재무 목표 카드**: 비상금 목표 개월(1~120, 기본 3) / 저축률 목표(0~1, nullable — 비우면 각 화면의 목표 표기 숨김) / 부채 상환 전략(avalanche·snowball·미설정 라디오) → 저장.
+- **분석 파라미터 아코디언**: 백엔드 섹션 구조 그대로(`spending_anomalies`/`discretionary_velocity`/`purchase_gate`/`recurring_dry_run`/`asset_liability_health`(월상환 추정 lookback 1~24)/`bulk_operations`).
+- 각 필드는 default(흐림 placeholder)·saved(입력값)·effective(적용값 뱃지) 3값 구분 — 백엔드 응답 구조 그대로 표현.
+- 저장 → Toast + 목표를 소비하는 화면(홈/자산·부채/신호) 쿼리 invalidate.
+
 ### 5.7 가져오기 `/data/import`
 
-- 업로드 카드: 드래그&드롭(xlsx, 20MB) + 스냅샷 기준일(필수, 비면 실행 비활성+사유) → 실행(`useUploadFile`). 결과 인라인: success/partial/failed + 신규/스킵 + partial 사유(`error_message`).
+- 업로드 카드: 드래그&드롭(xlsx, 20MB) + 스냅샷 기준일(필수, 비면 실행 비활성+사유) → 실행(`useUploadFile`). 결과 인라인: success/partial/failed + 거래 신규/스킵 + **스냅샷 4종 카운트(자산/보험/투자/대출 — `snapshots.insurance_contracts` 포함)** + partial 사유(`error_message`).
+- 관측 데이터 범위 행: canonical `data_coverage`(first/last transaction date) — "이 범위 밖 월은 미완성으로 표시됩니다" ⓘ.
 - 이력 테이블 10건(`useUploadLogs`).
-- Danger Zone(기본 접힘, expense 보더): 범위 라디오(거래만/거래+스냅샷) + 확인 문구 타이핑 + 실행(`useResetData`) → `ConfirmDanger` 패턴. "업로드 이력은 보존" 안내.
+- Danger Zone(기본 접힘, expense 보더): 범위 라디오(거래만 / 거래+스냅샷 — **자산·보험·투자·대출 스냅샷 포함** 문구) + 확인 문구 타이핑 + 실행(`useResetData`) → `ConfirmDanger` 패턴. "업로드 이력은 보존" 안내.
 
 ### 5.8 데이터 사전 `/data/reference`
 
-- canonical KPI 4 + 월별 현금흐름 테이블 + 실질 가용액 월별 카드(예상 배지·출처·제외 월·관측 — 홈 히어로와 동일 데이터의 검증 뷰) + 대출 상환/반복 거래처/거래처 기준선/분류 품질 큐 4열(`useCanonicalViewsDashboard`).
-- View reference(`useSchemaDocument`): view명(mono)/라벨/컬럼/AI 권장.
+- canonical KPI 4 + 월별 현금흐름 테이블(**`is_complete_month=false` 행에 〔진행중〕 배지**) + 실질 가용액 월별 카드(예상 배지·출처·제외 월·관측 — 홈 히어로와 동일 데이터의 검증 뷰) + 대출 상환/반복 거래처/거래처 기준선/분류 품질 큐 4열(`useCanonicalViewsDashboard`).
+- 헤더에 관측 범위(`data_coverage`) 표기.
+- View reference(`useSchemaDocument`): view명(mono)/라벨/컬럼/AI 권장 — `vw_loan_account_canonical`, `vw_income_monthly_by_category` 등 신규 view 라벨 추가.
+- import parity 검증 노트: `2.현금흐름현황` 벤치마크는 검증 증거 전용(비저장)이며 불일치는 경고로만 기록됨 — 경고 노출 UI는 백엔드 표면 확정 후 후속.
 - 헤더 설명: "외부 에이전트가 보는 것과 같은 canonical 수치입니다."
 - 큐 항목 ▸인박스 딥링크 (기존 작업 연결 카드 대체).
 

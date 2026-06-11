@@ -13,6 +13,8 @@
 | [03-wireframes.md](03-wireframes.md) | 새 페이지별 와이어프레임 (데스크톱 + 모바일) | 설계 |
 | [04-design-system.md](04-design-system.md) | 디자인 원칙, 파운데이션(컬러/타이포/스페이싱), 컴포넌트 시스템 | 설계 |
 | [05-detail-design.md](05-detail-design.md) | 페이지·컴포넌트 세부 스펙 (상태, 인터랙션, 데이터 매핑) | 설계 |
+| [06-implementation-plan.md](06-implementation-plan.md) | 구현 단계 계획 (Phase 0~3) | 계획 |
+| [07-backend-sync-20260611.md](07-backend-sync-20260611.md) | main `8c77fed` 백엔드 신규 surface 반영 델타 (profile/보험/투자 비중/완성월 플래그/재무 목표/리뷰 워크플로 등) | 변경 기록 |
 
 ## 설계 전제
 

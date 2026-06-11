@@ -9,6 +9,7 @@ import {
   Inbox,
   Landmark,
   Scale,
+  Settings,
   SlidersHorizontal,
   Table2,
   Upload,
@@ -40,6 +41,7 @@ export const DATA_NAV: NavItem[] = [
   { path: '/data/installments', label: '할부', Icon: CreditCard },
   { path: '/data/assets', label: '자산 메타', Icon: WalletCards },
   { path: '/data/rules', label: '규칙', Icon: SlidersHorizontal },
+  { path: '/data/settings', label: '설정', Icon: Settings },
   { path: '/data/import', label: '가져오기', Icon: Upload },
   { path: '/data/reference', label: '데이터 사전', Icon: BookOpen },
 ]

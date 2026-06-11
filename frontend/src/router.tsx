@@ -70,10 +70,17 @@ const STUBS: Array<{ path: string; title: string; description: string; planned: 
     wireframeRef: 'docs/frontend-remake/03-wireframes.md §10',
   },
   {
+    path: 'data/settings',
+    title: '데이터 · 설정',
+    description: '분석 파라미터와 재무 목표(비상금·저축률·부채 전략).',
+    planned: ['재무 목표 (settings/analytics.financial_targets)', '섹션별 분석 파라미터 — default/saved/effective 구분'],
+    wireframeRef: 'docs/frontend-remake/03-wireframes.md §10b',
+  },
+  {
     path: 'data/import',
     title: '데이터 · 가져오기',
     description: 'BankSalad 엑셀 업로드와 데이터 초기화.',
-    planned: ['업로드 (스냅샷 기준일 필수)', '업로드 이력 10건', 'Danger Zone (확인 문구 초기화)'],
+    planned: ['업로드 (스냅샷 기준일 필수, 자산·보험·투자·대출 카운트)', '업로드 이력 10건 · 관측 데이터 범위', 'Danger Zone (확인 문구 초기화)'],
     wireframeRef: 'docs/frontend-remake/03-wireframes.md §11',
   },
   {
