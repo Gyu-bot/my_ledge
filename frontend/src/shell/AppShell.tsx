@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Lock, Moon, Sun } from 'lucide-react'
 import { useWriteAccess } from '../hooks/useWriteAccess'
 import { cn } from '../lib/utils'
+import { Toaster } from '../ds/toast'
 import { DATA_NAV, DATA_ROOT, MAIN_NAV, isNavActive, type NavItem } from './navigation'
 
 type Theme = 'dark' | 'light'
@@ -139,6 +140,8 @@ export function AppShell() {
           )
         })}
       </nav>
+
+      <Toaster />
     </div>
   )
 }

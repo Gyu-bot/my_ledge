@@ -386,7 +386,11 @@ const ROUTES = [
     items: [],
   })],
   ['/api/v1/auto-classification/recurring-category-rules/dry-run', () => ({
-    items: [{ merchant: '넷플릭스' }, { merchant: '유튜브 프리미엄' }, { merchant: '쿠팡 와우' }],
+    items: [
+      { merchant: '넷플릭스', proposed_kind: 'monthly_recurring', confidence: 0.92, reason: '매월 같은 금액 12회 관측', category_hint: '구독', apply_scope_options: ['all_matching', 'future_only'], matched_transactions: [{ id: 1, date: `${PERIODS[10]}-15`, amount: -17000 }, { id: 2, date: `${PERIODS[11]}-15`, amount: -17000 }] },
+      { merchant: '애플스토어', proposed_kind: 'installment', confidence: 0.85, reason: '3회 분할 결제 패턴', category_hint: '쇼핑', apply_scope_options: ['future_only'], matched_transactions: [{ id: 3, date: `${PERIODS[9]}-08`, amount: -330000 }] },
+      { merchant: '쿠팡 와우', proposed_kind: 'monthly_recurring', confidence: 0.88, reason: '월 구독료 9회', category_hint: '구독', apply_scope_options: ['all_matching', 'future_only'], matched_transactions: [{ id: 4, date: `${PERIODS[11]}-03`, amount: -7890 }] },
+    ],
   })],
   ['/api/v1/loan-transaction-links', () => ({ total: 5, page: 1, per_page: 1, items: [] })],
   ['/api/v1/transactions/by-category/timeline', (params) => {
@@ -409,6 +413,64 @@ const ROUTES = [
     }
   }],
   ['/api/v1/transactions/by-category', (params) => categoryAggregate(params, params.get('level') ?? 'major')],
+  ['/api/v1/transactions/filter-options', () => ({
+    category_options: CATEGORIES,
+    category_minor_options: ['배달', '외식', '카페', '구독'],
+    category_minor_options_by_major: { 식비: ['배달', '외식', '카페'], 구독: ['OTT', '음악'] },
+    payment_method_options: ['카드 A', '카드 B', '현금'],
+  })],
+  ['/api/v1/loan-accounts', () => ({
+    items: [
+      { loan_account_id: 1, lender: '국민은행', product_name: '주택담보대출', display_name_user: '우리집 주담대', display_name: '우리집 주담대', loan_kind: 'equal_principal_interest', loan_start_date: '2023-01-01', loan_maturity_date: '2053-01-01', latest_snapshot_date: `${CURRENT}-07`, latest_balance: '240000000', latest_interest_rate: '3.85' },
+      { loan_account_id: 2, lender: '카카오뱅크', product_name: '마이너스 통장', display_name_user: null, display_name: '카카오뱅크 마이너스 통장', loan_kind: 'overdraft', loan_start_date: '2025-03-01', loan_maturity_date: '2027-03-01', latest_snapshot_date: `${CURRENT}-07`, latest_balance: '23000000', latest_interest_rate: '5.2' },
+    ],
+  })],
+  ['/api/v1/loan-transaction-links', (params) => {
+    const linked = params.get('linked') ?? 'all'
+    const candidates = TRANSACTIONS.filter((row) => row.type === '지출' && (row.merchant.includes('대출') || row.category === '금융')).slice(0, 18)
+    const items = candidates
+      .map((row, index) => ({
+        transaction_id: row.id, date: row.date, time: row.time, type: row.type,
+        effective_category_major: row.effective_category_major, effective_category_minor: row.effective_category_minor,
+        description: row.description, merchant: row.merchant, amount: row.amount, currency: 'KRW',
+        payment_method: row.payment_method, memo: null,
+        link: index % 3 === 0 ? { transaction_id: row.id, loan_account_id: 1, lender: '국민은행', product_name: '주택담보대출', display_name_user: '우리집 주담대', display_name: '우리집 주담대', loan_kind: 'equal_principal_interest', repayment_type: 'mixed', source: 'manual', memo: null, created_at: '', updated_at: '' } : null,
+      }))
+      .filter((item) => linked === 'all' || (linked === 'linked' ? item.link : !item.link))
+    const page = Number(params.get('page') ?? 1)
+    const perPage = Number(params.get('per_page') ?? 40)
+    return { total: items.length, page, per_page: perPage, items: items.slice((page - 1) * perPage, page * perPage) }
+  }],
+  ['/api/v1/installment-plans', () => ({
+    items: [
+      { id: 1, display_name: '맥북 6개월 할부', merchant: '애플스토어', payment_method: '카드 A', total_installments: 6, monthly_amount: 330000, first_payment_date: `${PERIODS[9]}-08`, memo: null, status: 'active', linked_installment_count: 2, created_at: '', updated_at: '' },
+    ],
+  })],
+  ['/api/v1/installment-transaction-links', (params) => {
+    const candidates = TRANSACTIONS.filter((row) => row.type === '지출' && row.merchant.includes('애플')).slice(0, 10)
+    const items = candidates.map((row, index) => ({
+      transaction_id: row.id, date: row.date, time: row.time, type: row.type,
+      effective_category_major: row.effective_category_major, effective_category_minor: row.effective_category_minor,
+      description: row.description, merchant: row.merchant, amount: row.amount, currency: 'KRW',
+      payment_method: row.payment_method, memo: null, recurring_payment_kind: 'installment',
+      link: index === 0 ? { transaction_id: row.id, installment_plan_id: 1, installment_plan_display_name: '맥북 6개월 할부', total_installments: 6, installment_number: 1, monthly_amount: 330000, due_date: `${PERIODS[9]}-08`, source: 'manual', memo: null, created_at: '', updated_at: '' } : null,
+    }))
+    const page = Number(params.get('page') ?? 1)
+    const perPage = Number(params.get('per_page') ?? 40)
+    return { total: items.length, page, per_page: perPage, items: items.slice((page - 1) * perPage, page * perPage) }
+  }],
+  ['/api/v1/auto-classification/settings', () => ({ apply_cost_rules_on_upload: true, apply_loan_rules_on_upload: true, apply_recurring_rules_on_upload: false })],
+  ['/api/v1/auto-classification/category-rules', () => ({ items: [{ id: 1, category_major: '구독', category_minor: null, cost_kind: 'fixed', fixed_cost_necessity: 'discretionary', spend_necessity: 'discretionary', created_at: '', updated_at: '' }] })],
+  ['/api/v1/auto-classification/merchant-alias-rules', () => ({ items: [{ id: 1, alias_pattern: '쿠팡이츠', normalized_merchant: '쿠팡이츠', created_at: '', updated_at: '' }] })],
+  ['/api/v1/auto-classification/loan-merchant-rules', () => ({ items: [{ id: 1, merchant: '국민은행 대출이자', match_field: 'merchant', loan_account_id: 1, repayment_type: 'interest', lender: '국민은행', product_name: '주택담보대출', display_name: '우리집 주담대', memo: null, created_at: '', updated_at: '' }] })],
+  ['/api/v1/auto-classification/recurring-category-rules', () => ({ items: [{ id: 1, category_major: '구독', category_minor: null, recurring_payment_kind: 'monthly_recurring', created_at: '', updated_at: '' }] })],
+  ['/api/v1/schema', () => ({
+    tables: [],
+    views: [
+      'vw_monthly_cashflow', 'vw_loan_repayment_monthly', 'vw_true_spendable_monthly', 'vw_merchant_monthly_baseline',
+      'vw_recurring_merchant_monthly', 'vw_unclassified_work_queue', 'vw_loan_account_canonical', 'vw_income_monthly_by_category',
+    ].map((name) => ({ name, kind: 'view', description: null, recommended_for_ai: true, columns: [{ name: 'period', type: 'text', nullable: false }, { name: 'amount', type: 'numeric', nullable: true }] })),
+  })],
   ['/api/v1/transactions', (params) => {
     const type = params.get('type')
     const category = params.get('category_major')
