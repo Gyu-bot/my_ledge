@@ -52,7 +52,19 @@ class TransactionSummaryItem(BaseModel):
     amount: int
 
 
+class TransactionSummaryBasis(BaseModel):
+    aggregation_surface: str
+    amount_sign_convention: str
+    included_types: list[str]
+    excluded_types: list[str]
+    includes_loan_repayments: bool
+    excludes_deleted: bool
+    excludes_merged: bool
+    canonical_cashflow_equivalent: bool
+
+
 class TransactionSummaryResponse(BaseModel):
+    basis: TransactionSummaryBasis
     items: list[TransactionSummaryItem]
 
 

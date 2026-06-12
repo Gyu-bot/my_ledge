@@ -9,9 +9,10 @@ import {
   useMonthlyCashflow, useIncomeStability,
   useRecurringPayments, useSpendingAnomalies,
   useMerchantSpend, useCategoryMoM,
-  useDiscretionaryVelocity, usePurchaseGateCandidates,
+  useDiscretionaryVelocity, usePurchaseGateCandidates, useReviewPurchaseGateCandidate,
 } from '../hooks/useAnalytics'
 import { useChromeContext } from '../components/layout/chromeContext'
+import { useWriteAccess } from '../hooks/useWriteAccess'
 import { formatKRW, formatKRWCompact, formatPct } from '../lib/utils'
 import type {
   AnalyticsRiskLevel,
@@ -101,6 +102,8 @@ export function InsightsPage() {
   )
   const discretionaryVelocity = useDiscretionaryVelocity({ as_of_date: partialEndDate })
   const purchaseGateCandidates = usePurchaseGateCandidates({ status: 'pending', limit: 5 })
+  const reviewPurchaseGateCandidate = useReviewPurchaseGateCandidate()
+  const canWrite = useWriteAccess()
   const merchants = useMerchantSpend({ months: merchantMonths, limit: 5 })
   const categoryMoM = useCategoryMoM({
     start_month: allMonths[Math.max(0, allMonths.indexOf(categoryBaseMonth) - 1)],
@@ -268,6 +271,30 @@ export function InsightsPage() {
                      ))}
                    </div>
                    {item.reasons[0] && <div className="text-micro text-text-faint mt-2">{item.reasons[0]}</div>}
+                   <div className="flex flex-wrap gap-1.5 mt-2">
+                     <button
+                       type="button"
+                       disabled={!canWrite || reviewPurchaseGateCandidate.isPending}
+                       onClick={() => reviewPurchaseGateCandidate.mutate({
+                         candidateKey: item.candidate_key,
+                         payload: { review_status: 'snoozed', cooldown_days: 7 },
+                       })}
+                       className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded px-2 py-1 disabled:opacity-50"
+                     >
+                       7일 숨김
+                     </button>
+                     <button
+                       type="button"
+                       disabled={!canWrite || reviewPurchaseGateCandidate.isPending}
+                       onClick={() => reviewPurchaseGateCandidate.mutate({
+                         candidateKey: item.candidate_key,
+                         payload: { review_status: 'dismissed' },
+                       })}
+                       className="text-micro text-text-secondary bg-surface-bar border border-border-strong rounded px-2 py-1 disabled:opacity-50"
+                     >
+                       닫기
+                     </button>
+                   </div>
                  </div>
                  )
                })}

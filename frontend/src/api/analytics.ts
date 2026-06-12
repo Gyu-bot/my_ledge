@@ -5,7 +5,7 @@ import type {
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
   SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
   DiscretionaryVelocityResponse, DiscretionaryVelocityQuery,
-  PurchaseGateCandidatesResponse, PurchaseGateCandidatesQuery,
+  PurchaseGateCandidatesResponse, PurchaseGateCandidatesQuery, PurchaseGateReviewPatchRequest,
 } from '../types/analytics'
 
 function buildQuery(params: object): string {
@@ -81,10 +81,17 @@ export const analyticsApi = {
 
   purchaseGateCandidates: (params: PurchaseGateCandidatesQuery = {}) => {
     const { status, limit, ...rest } = params
-    return apiFetch<PurchaseGateCandidatesResponse>(`/analytics/purchase-gate-candidates${buildQuery({
+    return apiFetch<PurchaseGateCandidatesResponse>(`/analytics/spending-review-candidates${buildQuery({
       ...rest,
       review_status: status,
       per_page: limit,
     })}`)
   },
+
+  reviewPurchaseGateCandidate: (candidateKey: string, payload: PurchaseGateReviewPatchRequest) =>
+    apiFetch(`/analytics/purchase-gate-candidates/${encodeURIComponent(candidateKey)}/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 }

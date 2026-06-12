@@ -26,8 +26,20 @@ class LoanAccountCandidateResponse(BaseModel):
     loan_kind: LoanKind = "unknown"
     loan_start_date: date | None
     loan_maturity_date: date | None
+    as_of_date: date | None = None
     latest_snapshot_date: date | None
+    is_active: bool = False
+    is_matured: bool = False
+    is_stale: bool = False
+    lifecycle_status: str = "no_snapshot"
     latest_balance: Decimal | None
+    last_observed_balance: Decimal | None = None
+    last_observed_principal: Decimal | None = None
+    last_observed_snapshot_date: date | None = None
+    included_in_active_summary: bool = False
+    excluded_from_summary_reason: str | None = None
+    stable_identity_status: str = "stable_lender_product"
+    stable_identity_reason: str | None = None
     latest_interest_rate: Decimal | None
 
 

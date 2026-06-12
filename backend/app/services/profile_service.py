@@ -31,6 +31,9 @@ async def get_profile(db_session: AsyncSession) -> ProfileResponse:
             age=None,
             credit_score_kcb=None,
             credit_score_history=[],
+            has_snapshot=False,
+            missing_reason="never_imported",
+            source_section_found=None,
         )
     return ProfileResponse(
         snapshot_date=latest.snapshot_date,
@@ -38,4 +41,7 @@ async def get_profile(db_session: AsyncSession) -> ProfileResponse:
         age=latest.age,
         credit_score_kcb=latest.credit_score_kcb,
         credit_score_history=credit_score_history,
+        has_snapshot=True,
+        missing_reason=None,
+        source_section_found=True,
     )

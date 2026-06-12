@@ -14,3 +14,7 @@ class ProfileResponse(BaseModel):
     age: int | None
     credit_score_kcb: int | None
     credit_score_history: list[CreditScoreHistoryItem]
+    has_snapshot: bool = False
+    missing_reason: str | None = None
+    expected_source: str = "BankSalad 1.고객정보"
+    source_section_found: bool | None = None

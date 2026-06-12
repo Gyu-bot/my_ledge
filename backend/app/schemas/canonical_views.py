@@ -23,6 +23,12 @@ class CanonicalMonthlyCashflowItem(BaseModel):
     unclassified_expense_total: int
     net_cashflow: int
     savings_rate: float | None
+    savings_rate_basis: Literal[
+        "observed_closed_month",
+        "observed_partial_month",
+        "insufficient_partial_month_income",
+        "no_income",
+    ] = "observed_closed_month"
 
 
 class CanonicalTrueSpendableMonthlyItem(BaseModel):
@@ -106,6 +112,9 @@ class CanonicalUnclassifiedWorkQueueItem(BaseModel):
     merchant_expense_count: int
     priority_score: int
     priority_reason: str
+    issue_types: list[str] = Field(default_factory=list)
+    primary_issue_type: str | None = None
+    recurrence_signal: dict[str, bool | int] = Field(default_factory=dict)
 
 
 class CanonicalDataCoverage(BaseModel):

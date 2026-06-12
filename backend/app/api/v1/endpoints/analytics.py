@@ -220,6 +220,47 @@ async def get_analytics_purchase_gate_candidates(
     per_page: int = Query(default=10, ge=1, le=100),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> PurchaseGateCandidatesResponse:
+    return await _get_purchase_review_candidates(
+        db_session=db_session,
+        start_date=start_date,
+        end_date=end_date,
+        review_status=review_status,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.get(
+    "/analytics/spending-review-candidates",
+    response_model=PurchaseGateCandidatesResponse,
+)
+async def get_analytics_spending_review_candidates(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    review_status: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=10, ge=1, le=100),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> PurchaseGateCandidatesResponse:
+    return await _get_purchase_review_candidates(
+        db_session=db_session,
+        start_date=start_date,
+        end_date=end_date,
+        review_status=review_status,
+        page=page,
+        per_page=per_page,
+    )
+
+
+async def _get_purchase_review_candidates(
+    *,
+    db_session: AsyncSession,
+    start_date: date | None,
+    end_date: date | None,
+    review_status: str | None,
+    page: int,
+    per_page: int,
+) -> PurchaseGateCandidatesResponse:
     settings = await get_analytics_settings(db_session)
     return await get_purchase_gate_candidates(
         db_session,

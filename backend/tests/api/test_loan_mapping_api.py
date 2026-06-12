@@ -68,11 +68,65 @@ async def test_loan_accounts_endpoint_returns_snapshot_candidates(
             "loan_kind": "unknown",
             "loan_start_date": "2021-06-01",
             "loan_maturity_date": "2051-05-31",
+            "as_of_date": "2026-05-31",
             "latest_snapshot_date": "2026-05-31",
+            "is_active": True,
+            "is_matured": False,
+            "is_stale": False,
+            "lifecycle_status": "active",
             "latest_balance": "209500000.00",
+            "last_observed_balance": "209500000.00",
+            "last_observed_principal": None,
+            "last_observed_snapshot_date": "2026-05-31",
+            "included_in_active_summary": True,
+            "excluded_from_summary_reason": None,
+            "stable_identity_status": "stable_lender_product",
+            "stable_identity_reason": None,
             "latest_interest_rate": "3.45",
         }
     ]
+
+
+async def test_loan_accounts_mark_matured_missing_snapshot_as_historical(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            Loan(
+                snapshot_date=date(2026, 3, 31),
+                lender="종료은행",
+                product_name="만기대출",
+                principal="1000000.00",
+                balance="1000000.00",
+                maturity_date=date(2026, 4, 30),
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="국민은행",
+                product_name="활성대출",
+                principal="10000000.00",
+                balance="9500000.00",
+                maturity_date=date(2030, 12, 31),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get("/api/v1/loan-accounts")
+
+    assert response.status_code == 200
+    items = {item["product_name"]: item for item in response.json()["items"]}
+    matured = items["만기대출"]
+    assert matured["as_of_date"] == "2026-05-31"
+    assert matured["latest_snapshot_date"] == "2026-03-31"
+    assert matured["is_stale"] is True
+    assert matured["is_matured"] is True
+    assert matured["is_active"] is False
+    assert matured["lifecycle_status"] == "past_maturity_with_last_observed_balance"
+    assert matured["included_in_active_summary"] is False
+    assert matured["excluded_from_summary_reason"] == "matured_missing_from_latest_snapshot"
+    assert matured["last_observed_balance"] == "1000000.00"
 
 
 async def test_loan_account_metadata_endpoint_updates_display_name_and_kind(

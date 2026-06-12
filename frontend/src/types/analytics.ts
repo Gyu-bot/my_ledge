@@ -121,6 +121,11 @@ export interface SpendingAnomalyItem {
   amount: number
   baseline_avg: number
   delta_pct: number | null
+  delta_pct_raw?: number | null
+  delta_pct_display?: number | null
+  delta_display_capped?: boolean
+  baseline_quality?: string
+  anomaly_mode?: string
   anomaly_score: number
   reason: string
 }
@@ -197,6 +202,15 @@ export interface PurchaseGateCandidateItem {
   confidence: string
   suggested_review_window: string
   review_status: PurchaseGateCandidateStatus
+  review_memo?: string | null
+  reviewed_at?: string | null
+  cooldown_until?: string | null
+  review_timing?: 'post_transaction'
+  candidate_purpose?: 'future_friction_rule_candidate'
+  future_friction_suggestion?: {
+    condition?: Record<string, unknown>
+    action?: string
+  } | null
   reasons: string[]
   assumptions: string[]
 }
@@ -212,4 +226,10 @@ export interface PurchaseGateCandidatesResponse {
 export interface PurchaseGateCandidatesQuery {
   status?: PurchaseGateCandidateStatus
   limit?: number
+}
+
+export interface PurchaseGateReviewPatchRequest {
+  review_status: PurchaseGateCandidateStatus
+  memo?: string | null
+  cooldown_days?: number | null
 }

@@ -310,6 +310,140 @@ async def test_purchase_gate_candidates_include_spike_types_and_saved_review_sta
     assert reviewed_payload["items"][0]["review_status"] == "reviewed"
 
 
+async def test_spending_review_candidates_alias_matches_legacy_purchase_gate_contract(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        _transaction(
+            tx_date=date(2026, 4, 10),
+            tx_time=time(10, 0),
+            tx_type="지출",
+            category_major="생활",
+            category_minor="가전",
+            description="새 가전 구매",
+            merchant="새가전",
+            amount=-220_000,
+            payment_method="카드",
+            cost_kind="variable",
+            spend_necessity="discretionary",
+        )
+    )
+    await db_session.commit()
+
+    params = {"start_date": "2026-04-01", "end_date": "2026-04-30"}
+    legacy = await async_client.get(
+        "/api/v1/analytics/purchase-gate-candidates",
+        params=params,
+    )
+    alias = await async_client.get(
+        "/api/v1/analytics/spending-review-candidates",
+        params=params,
+    )
+
+    assert alias.status_code == 200
+    assert alias.json() == legacy.json()
+    item = alias.json()["items"][0]
+    assert item["review_timing"] == "post_transaction"
+    assert item["candidate_purpose"] == "future_friction_rule_candidate"
+    assert item["future_friction_suggestion"]["condition"]["merchant"] == "새가전"
+    assert item["future_friction_suggestion"]["action"] == "review_before_repeat_spend"
+
+
+async def test_purchase_gate_candidates_net_full_refunds_out_of_review_queue(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 4, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="취소된 큰 지출",
+                merchant="취소상점",
+                amount=-150_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 12),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="취소된 큰 지출 환불",
+                merchant="취소상점",
+                amount=150_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/purchase-gate-candidates",
+        params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+
+
+async def test_purchase_gate_candidates_use_net_amount_for_partial_refunds(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 4, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="부분 환불 큰 지출",
+                merchant="부분환불상점",
+                amount=-180_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 12),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="부분 환불",
+                merchant="부분환불상점",
+                amount=80_000,
+                payment_method="카드",
+                cost_kind="variable",
+                spend_necessity="discretionary",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/purchase-gate-candidates",
+        params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["amount"] == 100_000
+    assert payload["items"][0]["signals"]["refund_netting_refund_total"] == 80_000
+    assert any("부분 환불" in reason for reason in payload["items"][0]["reasons"])
+
+
 async def test_monthly_cashflow_endpoint_returns_monthly_series(
     async_client: AsyncClient,
     db_session: AsyncSession,
@@ -1354,3 +1488,51 @@ async def test_spending_anomalies_endpoint_partial_period_uses_same_day_cutoff(
     assert payload["reference_date"] == "2026-04-07"
     assert payload["is_partial_period"] is True
     assert "부분 기간 비교" in payload["assumptions"]
+
+
+async def test_spending_anomalies_separate_raw_sparse_delta_from_display_reason(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all([
+        _transaction(
+            tx_date=date(2026, 2, 5),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="취미",
+            category_minor=None,
+            description="소액 기준",
+            amount=-100,
+            payment_method=None,
+        ),
+        _transaction(
+            tx_date=date(2026, 3, 5),
+            tx_time=time(9, 0),
+            tx_type="지출",
+            category_major="취미",
+            category_minor=None,
+            description="큰 구매",
+            amount=-150_000,
+            payment_method=None,
+        ),
+    ])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/analytics/spending-anomalies",
+        params={
+            "end_date": "2026-03-31",
+            "baseline_months": 1,
+            "anomaly_threshold": 0.5,
+            "min_delta_amount": 1000,
+        },
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["delta_pct_raw"] == 149900.0
+    assert item["delta_pct_display"] is None
+    assert item["delta_display_capped"] is True
+    assert item["baseline_quality"] == "sparse_baseline"
+    assert item["anomaly_mode"] == "sparse_baseline_spike"
+    assert "149900" not in item["reason"]

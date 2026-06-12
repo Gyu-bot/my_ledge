@@ -506,6 +506,16 @@ async def test_summary_and_breakdown_endpoints_use_effective_rules(
 
     assert summary.status_code == 200
     assert summary.json() == {
+        "basis": {
+            "aggregation_surface": "raw_transactions_effective",
+            "amount_sign_convention": "raw_signed_amount",
+            "included_types": ["지출"],
+            "excluded_types": ["수입", "이체"],
+            "includes_loan_repayments": True,
+            "excludes_deleted": True,
+            "excludes_merged": True,
+            "canonical_cashflow_equivalent": False,
+        },
         "items": [
             {"period": "2026-02", "amount": -50},
             {"period": "2026-03", "amount": -80},

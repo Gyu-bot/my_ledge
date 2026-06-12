@@ -601,6 +601,15 @@ async def get_spending_anomalies(
 
         delta = target_amount - baseline_avg
         delta_pct = _safe_ratio(delta * 100, baseline_avg)
+        delta_pct_display = delta_pct
+        delta_display_capped = False
+        baseline_quality = "sufficient"
+        anomaly_mode = "standard"
+        if baseline_avg < min_delta_amount:
+            baseline_quality = "sparse_baseline"
+            anomaly_mode = "sparse_baseline_spike"
+            delta_pct_display = None
+            delta_display_capped = True
         abs_delta = abs(delta)
 
         if b_stdev > 0:
@@ -615,10 +624,12 @@ async def get_spending_anomalies(
         if anomaly_score < anomaly_threshold:
             continue
 
-        if delta > 0:
-            reason = f"지출 급증 (+{round(delta_pct or 0):.0f}%)"
+        if anomaly_mode == "sparse_baseline_spike":
+            reason = "지출 급증 (baseline이 작아 비율 표시는 생략)"
+        elif delta > 0:
+            reason = f"지출 급증 (+{round(delta_pct_display or 0):.0f}%)"
         else:
-            reason = f"지출 급감 ({round(delta_pct or 0):.0f}%)"
+            reason = f"지출 급감 ({round(delta_pct_display or 0):.0f}%)"
 
         items.append(
             SpendingAnomalyItem(
@@ -627,6 +638,11 @@ async def get_spending_anomalies(
                 amount=target_amount,
                 baseline_avg=baseline_avg,
                 delta_pct=delta_pct,
+                delta_pct_raw=delta_pct,
+                delta_pct_display=delta_pct_display,
+                delta_display_capped=delta_display_capped,
+                baseline_quality=baseline_quality,
+                anomaly_mode=anomaly_mode,
                 anomaly_score=anomaly_score,
                 reason=reason,
             )
@@ -790,11 +806,17 @@ async def get_purchase_gate_candidates(
         tx_type="지출",
     )
 
-    eligible_rows = [row for row in rows if _is_purchase_gate_queue_row(row)]
-    current_rows = [row for row in eligible_rows if ref_start <= row["date"] <= ref_end]
+    eligible_rows = [row for row in rows if _is_purchase_gate_base_row(row)]
+    refund_netting = _build_purchase_gate_refund_netting(eligible_rows)
+    purchase_rows = [
+        row
+        for row in eligible_rows
+        if row["amount"] < 0 and _purchase_gate_net_amount(row, refund_netting) > 0
+    ]
+    current_rows = [row for row in purchase_rows if ref_start <= row["date"] <= ref_end]
     prior_merchants = {
         row["merchant"] or row["description"] or "미분류"
-        for row in eligible_rows
+        for row in purchase_rows
         if row["date"] < ref_start
     }
     prior_merchant_monthly: dict[tuple[str, str], int] = defaultdict(int)
@@ -802,10 +824,10 @@ async def get_purchase_gate_candidates(
     current_merchant_total: dict[str, int] = defaultdict(int)
     current_discretionary_category_total: dict[str, int] = defaultdict(int)
 
-    for row in eligible_rows:
+    for row in purchase_rows:
         merchant = row["merchant"] or row["description"] or "미분류"
         category = row["effective_category_major"] or "미분류"
-        amount = max(0, -row["amount"])
+        amount = _purchase_gate_net_amount(row, refund_netting)
         row_period = _month_key(row["date"])
         if ref_start <= row["date"] <= ref_end:
             current_merchant_total[merchant] += amount
@@ -825,6 +847,7 @@ async def get_purchase_gate_candidates(
         if merchant in excluded_merchants or category in excluded_categories:
             continue
         amount = max(0, -row["amount"])
+        amount = _purchase_gate_net_amount(row, refund_netting)
         if amount < settings.min_candidate_amount:
             continue
         base = {
@@ -833,6 +856,7 @@ async def get_purchase_gate_candidates(
             "merchant": merchant,
             "amount": amount,
             "category": category,
+            "refund_total": refund_netting.get(int(row["id"]), 0),
         }
         if "large_oneoff" in enabled and amount >= settings.large_purchase_threshold:
             _append_purchase_candidate_reason(
@@ -1229,13 +1253,75 @@ def _parse_candidate_key(candidate_key: str) -> tuple[str, int, str]:
     return candidate_type, transaction_id, _canonical_candidate_key(transaction_id)
 
 
-def _is_purchase_gate_queue_row(row: RowMapping) -> bool:
+def _is_purchase_gate_base_row(row: RowMapping) -> bool:
     return (
         row["loan_account_id"] is None
         and row["cost_kind"] != "fixed"
         and row["spend_necessity"] == "discretionary"
-        and max(0, -row["amount"]) > 0
+        and row["amount"] != 0
     )
+
+
+def _is_purchase_gate_queue_row(row: RowMapping) -> bool:
+    return _is_purchase_gate_base_row(row) and max(0, -row["amount"]) > 0
+
+
+def _refund_match_key(row: RowMapping) -> tuple[str, str, str]:
+    merchant = row["merchant"] or row["description"] or "미분류"
+    return (
+        merchant,
+        row["payment_method"] or "",
+        row["currency"] or "KRW",
+    )
+
+
+def _build_purchase_gate_refund_netting(rows: list[RowMapping]) -> dict[int, int]:
+    refunds_by_key: dict[tuple[str, str, str], list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        if row["amount"] > 0:
+            refunds_by_key[_refund_match_key(row)].append(
+                {
+                    "id": int(row["id"]),
+                    "date": row["date"],
+                    "remaining": int(row["amount"]),
+                }
+            )
+    for refunds in refunds_by_key.values():
+        refunds.sort(key=lambda item: (item["date"], item["id"]))
+
+    netted: dict[int, int] = {}
+    purchase_rows = sorted(
+        [row for row in rows if row["amount"] < 0],
+        key=lambda row: (row["date"], row["id"]),
+    )
+    for row in purchase_rows:
+        purchase_id = int(row["id"])
+        purchase_amount = -int(row["amount"])
+        remaining_purchase = purchase_amount
+        refund_total = 0
+        for refund in refunds_by_key.get(_refund_match_key(row), []):
+            refund_date = refund["date"]
+            if refund_date < row["date"] or (refund_date - row["date"]).days > 14:
+                continue
+            remaining_refund = int(refund["remaining"])
+            if remaining_refund <= 0:
+                continue
+            applied = min(remaining_purchase, remaining_refund)
+            remaining_purchase -= applied
+            refund["remaining"] = remaining_refund - applied
+            refund_total += applied
+            if remaining_purchase == 0:
+                break
+        if refund_total:
+            netted[purchase_id] = refund_total
+    return netted
+
+
+def _purchase_gate_net_amount(
+    row: RowMapping,
+    refund_netting: dict[int, int],
+) -> int:
+    return max(0, -int(row["amount"]) - refund_netting.get(int(row["id"]), 0))
 
 
 def _append_purchase_candidate_reason(
@@ -1311,6 +1397,14 @@ def _purchase_candidate_item(
     settings: PurchaseGateSettings,
 ) -> PurchaseGateCandidateItem:
     transaction_id = int(base["transaction_id"])
+    item_signals = dict(signals)
+    item_reasons = list(reasons)
+    refund_total = int(base.get("refund_total") or 0)
+    if refund_total > 0:
+        item_signals["refund_netting_refund_total"] = refund_total
+        item_reasons.append(
+            f"부분 환불/결제취소 {refund_total:,}원을 차감한 순지출 기준입니다."
+        )
     return PurchaseGateCandidateItem(
         candidate_type=candidate_type,
         candidate_types=candidate_types,
@@ -1320,16 +1414,24 @@ def _purchase_candidate_item(
         merchant=str(base["merchant"]),
         amount=int(base["amount"]),
         category=str(base["category"]),
-        signals=signals,
+        signals=item_signals,
         risk_level=risk_level,
         review_priority=risk_level,
         confidence="medium",
         suggested_review_window=f"{settings.review_cooldown_days}d",
-        reasons=reasons,
+        reasons=item_reasons,
         assumptions=[
             "My Ledge는 후보와 근거만 제공하고 최종 구매 판단은 하지 않습니다."
         ],
         review_status="pending",
+        future_friction_suggestion={
+            "condition": {
+                "merchant": str(base["merchant"]),
+                "min_amount": int(base["amount"]),
+                "candidate_types": candidate_types,
+            },
+            "action": "review_before_repeat_spend",
+        },
     )
 
 

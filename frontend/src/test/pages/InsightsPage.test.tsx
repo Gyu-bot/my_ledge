@@ -9,6 +9,7 @@ const useCategoryMoMMock = vi.fn()
 const useRecurringPaymentsMock = vi.fn()
 const useDiscretionaryVelocityMock = vi.fn()
 const usePurchaseGateCandidatesMock = vi.fn()
+const reviewPurchaseGateCandidateMock = vi.fn()
 
 vi.mock('../../hooks/useAnalytics', () => ({
   useMonthlyCashflow: () => ({
@@ -27,12 +28,20 @@ vi.mock('../../hooks/useAnalytics', () => ({
   useCategoryMoM: (params: unknown) => useCategoryMoMMock(params),
   useDiscretionaryVelocity: (...args: unknown[]) => useDiscretionaryVelocityMock(...args),
   usePurchaseGateCandidates: (...args: unknown[]) => usePurchaseGateCandidatesMock(...args),
+  useReviewPurchaseGateCandidate: () => ({
+    mutate: reviewPurchaseGateCandidateMock,
+    isPending: false,
+  }),
 }))
 
 const useSpendingAnomaliesMock = vi.fn()
 
 vi.mock('../../components/layout/chromeContext', () => ({
   useChromeContext: () => ({ setMetaBadge: vi.fn() }),
+}))
+
+vi.mock('../../hooks/useWriteAccess', () => ({
+  useWriteAccess: () => true,
 }))
 
 function wrap(ui: React.ReactNode) {
@@ -54,6 +63,7 @@ describe('InsightsPage', () => {
     useSpendingAnomaliesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
     useDiscretionaryVelocityMock.mockImplementation(() => ({ data: undefined, isLoading: false }))
     usePurchaseGateCandidatesMock.mockImplementation(() => ({ data: { total: 0, items: [], assumptions: '' }, isLoading: false }))
+    reviewPurchaseGateCandidateMock.mockReset()
   })
 
   afterEach(() => {
@@ -232,5 +242,53 @@ describe('InsightsPage', () => {
     expect(screen.getByText('리뷰 후보')).toBeInTheDocument()
     expect(screen.getByText('new_merchant: true')).toBeInTheDocument()
     expect(screen.queryByText(/구매 허용|구매 금지/)).not.toBeInTheDocument()
+  })
+
+  it('lets users snooze or dismiss pending purchase review candidates', () => {
+    usePurchaseGateCandidatesMock.mockImplementation(() => ({
+      data: {
+        total: 1,
+        assumptions: '구매 허용/금지가 아니라 리뷰 후보만 제공합니다.',
+        page: 1,
+        per_page: 5,
+        items: [
+          {
+            candidate_type: 'new_merchant',
+            candidate_types: ['new_merchant'],
+            transaction_id: 42,
+            candidate_key: 'transaction:42',
+            merchant: '새거래처',
+            date: '2026-04-07',
+            amount: 145000,
+            category: '생활',
+            signals: {},
+            risk_level: 'watch',
+            review_priority: 'medium',
+            confidence: 'medium',
+            suggested_review_window: '14일',
+            review_status: 'pending',
+            review_timing: 'post_transaction',
+            candidate_purpose: 'future_friction_rule_candidate',
+            reasons: ['새 거래처의 큰 재량 지출 후보입니다.'],
+            assumptions: ['기본 기준 100,000원'],
+          },
+        ],
+      },
+      isLoading: false,
+    }))
+
+    wrap(<InsightsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '7일 숨김' }))
+    expect(reviewPurchaseGateCandidateMock).toHaveBeenCalledWith({
+      candidateKey: 'transaction:42',
+      payload: { review_status: 'snoozed', cooldown_days: 7 },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    expect(reviewPurchaseGateCandidateMock).toHaveBeenCalledWith({
+      candidateKey: 'transaction:42',
+      payload: { review_status: 'dismissed' },
+    })
   })
 })

@@ -31,6 +31,7 @@ from app.services.settings_service import get_analytics_settings
 async def list_loan_accounts(db_session: AsyncSession) -> LoanAccountsResponse:
     accounts = await _load_persisted_accounts(db_session)
     latest_snapshots = await _load_latest_loan_snapshots(db_session)
+    as_of_date = await db_session.scalar(select(func.max(Loan.snapshot_date)))
 
     account_by_key = {
         _account_key(account.lender, account.product_name): account
@@ -52,6 +53,7 @@ async def list_loan_accounts(db_session: AsyncSession) -> LoanAccountsResponse:
                 snapshot=snapshot_by_key.get(key),
                 lender=key[0],
                 product_name=key[1],
+                as_of_date=as_of_date,
             )
             for key in all_keys
         ]
@@ -77,6 +79,7 @@ async def update_loan_account_metadata(
         snapshot=snapshot,
         lender=account.lender,
         product_name=account.product_name,
+        as_of_date=await db_session.scalar(select(func.max(Loan.snapshot_date))),
     )
 
 
@@ -329,6 +332,7 @@ async def _load_latest_loan_snapshots(
             Loan.lender,
             Loan.product_name,
             Loan.snapshot_date,
+            Loan.principal,
             Loan.balance,
             Loan.interest_rate,
             Loan.start_date,
@@ -347,6 +351,7 @@ async def _load_latest_loan_snapshots(
             "lender": lender,
             "product_name": product_name,
             "latest_snapshot_date": snapshot_date,
+            "latest_principal": principal,
             "latest_balance": balance,
             "latest_interest_rate": interest_rate,
             "loan_start_date": start_date,
@@ -356,6 +361,7 @@ async def _load_latest_loan_snapshots(
             lender,
             product_name,
             snapshot_date,
+            principal,
             balance,
             interest_rate,
             start_date,
@@ -374,6 +380,7 @@ async def _load_latest_loan_snapshot_for_key(
             Loan.lender,
             Loan.product_name,
             Loan.snapshot_date,
+            Loan.principal,
             Loan.balance,
             Loan.interest_rate,
             Loan.start_date,
@@ -391,6 +398,7 @@ async def _load_latest_loan_snapshot_for_key(
         snapshot_lender,
         snapshot_product_name,
         snapshot_date,
+        principal,
         balance,
         interest_rate,
         start_date,
@@ -400,6 +408,7 @@ async def _load_latest_loan_snapshot_for_key(
         "lender": snapshot_lender,
         "product_name": snapshot_product_name,
         "latest_snapshot_date": snapshot_date,
+        "latest_principal": principal,
         "latest_balance": balance,
         "latest_interest_rate": interest_rate,
         "loan_start_date": start_date,
@@ -851,18 +860,63 @@ def _build_account_candidate(
     snapshot: dict[str, object] | None,
     lender: str,
     product_name: str,
+    as_of_date: date | None,
 ) -> LoanAccountCandidateResponse:
     latest_snapshot_date = None
+    latest_principal = None
     latest_balance = None
     latest_interest_rate = None
     loan_start_date = None
     loan_maturity_date = None
     if snapshot is not None:
         latest_snapshot_date = snapshot["latest_snapshot_date"]
+        latest_principal = snapshot["latest_principal"]
         latest_balance = snapshot["latest_balance"]
         latest_interest_rate = snapshot["latest_interest_rate"]
         loan_start_date = snapshot["loan_start_date"]
         loan_maturity_date = snapshot["loan_maturity_date"]
+
+    resolved_latest_snapshot_date = (
+        latest_snapshot_date if isinstance(latest_snapshot_date, date) else None
+    )
+    resolved_maturity_date = (
+        loan_maturity_date if isinstance(loan_maturity_date, date) else None
+    )
+    observed_balance = latest_balance if isinstance(latest_balance, Decimal) else None
+    observed_principal = (
+        latest_principal if isinstance(latest_principal, Decimal) else None
+    )
+    is_stale = (
+        as_of_date is not None
+        and resolved_latest_snapshot_date is not None
+        and resolved_latest_snapshot_date < as_of_date
+    )
+    is_matured = (
+        as_of_date is not None
+        and resolved_maturity_date is not None
+        and resolved_maturity_date < as_of_date
+    )
+    has_observed_debt = (observed_balance or Decimal("0")) > 0 or (
+        observed_principal or Decimal("0")
+    ) > 0
+    if is_matured and is_stale and has_observed_debt:
+        lifecycle_status = "past_maturity_with_last_observed_balance"
+    elif is_matured and is_stale:
+        lifecycle_status = "matured_and_missing_from_latest_snapshot"
+    elif is_matured:
+        lifecycle_status = "matured"
+    elif is_stale:
+        lifecycle_status = "stale_missing_from_latest_snapshot"
+    elif resolved_latest_snapshot_date is not None:
+        lifecycle_status = "active"
+    else:
+        lifecycle_status = "metadata_only_no_snapshot"
+    is_active = lifecycle_status == "active"
+    excluded_reason = None if is_active else (
+        "matured_missing_from_latest_snapshot"
+        if is_matured and is_stale
+        else "not_in_latest_snapshot"
+    )
 
     return LoanAccountCandidateResponse(
         loan_account_id=account.id if account is not None else None,
@@ -879,10 +933,20 @@ def _build_account_candidate(
         loan_maturity_date=loan_maturity_date
         if isinstance(loan_maturity_date, date)
         else None,
-        latest_snapshot_date=latest_snapshot_date
-        if isinstance(latest_snapshot_date, date)
-        else None,
-        latest_balance=latest_balance if isinstance(latest_balance, Decimal) else None,
+        as_of_date=as_of_date,
+        latest_snapshot_date=resolved_latest_snapshot_date,
+        is_active=is_active,
+        is_matured=is_matured,
+        is_stale=is_stale,
+        lifecycle_status=lifecycle_status,
+        latest_balance=observed_balance,
+        last_observed_balance=observed_balance,
+        last_observed_principal=observed_principal,
+        last_observed_snapshot_date=resolved_latest_snapshot_date,
+        included_in_active_summary=is_active,
+        excluded_from_summary_reason=excluded_reason,
+        stable_identity_status="stable_lender_product",
+        stable_identity_reason=None,
         latest_interest_rate=latest_interest_rate
         if isinstance(latest_interest_rate, Decimal)
         else None,

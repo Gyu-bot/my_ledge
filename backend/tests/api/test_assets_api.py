@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 
 from httpx import AsyncClient
 from sqlalchemy import delete
@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.loan import Loan
+from app.models.transaction import Transaction
 from app.services import assets_service
 from app.services.upload_service import import_transactions_from_workbook
 
@@ -90,6 +91,9 @@ async def test_loans_summary_uses_latest_snapshot_by_default(
     assert response.status_code == 200
     payload = response.json()
     assert payload["snapshot_date"] == "2026-03-24"
+    assert payload["as_of_date"] == "2026-03-24"
+    assert payload["summary_scope"] == "active_loans_only"
+    assert payload["excluded_historical_count"] == 0
     assert payload["totals"]["balance"] == "222317572.00"
     assert len(payload["items"]) == 4
 
@@ -434,6 +438,109 @@ async def test_liquidity_health_echoes_financial_target_settings(
     assert payload["target_progress_ratio"] == 0.5
 
 
+async def test_liquidity_health_derives_closed_month_defaults_and_source_metadata(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            AssetSnapshot(
+                snapshot_date=date(2026, 4, 30),
+                side="asset",
+                category="자유입출금 자산",
+                product_name="생활통장",
+                amount="1200000.00",
+            ),
+            Loan(
+                snapshot_date=date(2026, 4, 30),
+                lender="국민은행",
+                product_name="신용대출",
+                balance="10000000.00",
+                monthly_payment="300000.00",
+            ),
+            Transaction(
+                date=date(2026, 2, 25),
+                time=time(9, 0),
+                type="수입",
+                category_major="급여",
+                description="월급",
+                merchant="회사",
+                amount=3_000_000,
+                currency="KRW",
+                source="import",
+            ),
+            Transaction(
+                date=date(2026, 3, 25),
+                time=time(9, 0),
+                type="수입",
+                category_major="급여",
+                description="월급",
+                merchant="회사",
+                amount=3_200_000,
+                currency="KRW",
+                source="import",
+            ),
+            Transaction(
+                date=date(2026, 4, 5),
+                time=time(9, 0),
+                type="지출",
+                category_major="주거",
+                description="월세",
+                merchant="집주인",
+                amount=-700_000,
+                currency="KRW",
+                spend_necessity="essential",
+                source="import",
+            ),
+            Transaction(
+                date=date(2026, 4, 10),
+                time=time(9, 0),
+                type="지출",
+                category_major="금융",
+                description="대출상환",
+                merchant="국민은행",
+                amount=-300_000,
+                currency="KRW",
+                source="import",
+            ),
+            Transaction(
+                date=date(2026, 5, 10),
+                time=time(9, 0),
+                type="수입",
+                category_major="급여",
+                description="진행월 일부",
+                merchant="회사",
+                amount=100_000,
+                currency="KRW",
+                source="import",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    health = await async_client.get("/api/v1/analytics/liquidity-health")
+
+    assert health.status_code == 200
+    payload = health.json()
+    assert payload["monthly_income"] == "3100000.00"
+    assert payload["monthly_required_spend"] == "1000000.00"
+    assert payload["monthly_income_source"] == "closed_month_income_median"
+    assert payload["monthly_required_spend_source"] == "closed_month_required_spend"
+    assert payload["derived_from_periods"] == ["2026-02", "2026-03", "2026-04"]
+    assert payload["manual_input_overrides"] == []
+    assert payload["emergency_fund_months"] == 1.2
+    assert payload["debt_payment_ratio"] == 0.0968
+
+    manual = await async_client.get(
+        "/api/v1/analytics/liquidity-health",
+        params={"monthly_income": 4_000_000},
+    )
+    assert manual.status_code == 200
+    assert manual.json()["monthly_income"] == "4000000.00"
+    assert manual.json()["monthly_income_source"] == "manual_query_param"
+    assert manual.json()["manual_input_overrides"] == ["monthly_income"]
+
+
 async def test_insurance_summary_uses_latest_snapshot_and_closed_month_premium(
     async_client: AsyncClient,
     db_session: AsyncSession,
@@ -460,3 +567,20 @@ async def test_insurance_summary_uses_latest_snapshot_and_closed_month_premium(
         "monthly_premium_estimate uses the latest closed month insurance-category spending"
         in payload["monthly_premium_estimate"]["assumptions"]
     )
+
+
+async def test_insurance_summary_empty_state_explains_missing_snapshot(
+    async_client: AsyncClient,
+) -> None:
+    response = await async_client.get("/api/v1/insurance/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["has_contract_snapshot"] is False
+    assert payload["missing_reason"] == "never_imported"
+    assert payload["expected_source"] == "BankSalad 4.보험현황"
+    assert payload["monthly_premium_estimate"]["basis"] == {
+        "is_estimated": False,
+        "missing_reason": "insurance_contract_snapshot_missing",
+        "expected_source": "transactions effective category 보험",
+    }

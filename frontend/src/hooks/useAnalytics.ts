@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
 import type {
   CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
   DiscretionaryVelocityQuery, PurchaseGateCandidatesQuery,
+  PurchaseGateReviewPatchRequest,
 } from '../types/analytics'
 
 export function useMonthlyCashflow(months = 6) {
@@ -74,5 +75,16 @@ export function usePurchaseGateCandidates(params: PurchaseGateCandidatesQuery = 
   return useQuery({
     queryKey: ['analytics', 'purchaseGateCandidates', params],
     queryFn: () => analyticsApi.purchaseGateCandidates(params),
+  })
+}
+
+export function useReviewPurchaseGateCandidate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ candidateKey, payload }: { candidateKey: string; payload: PurchaseGateReviewPatchRequest }) =>
+      analyticsApi.reviewPurchaseGateCandidate(candidateKey, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analytics', 'purchaseGateCandidates'] })
+    },
   })
 }

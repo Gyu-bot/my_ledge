@@ -38,11 +38,15 @@ class AssetLiabilityHealthResponse(BaseModel):
     liability_total: Decimal
     net_worth: Decimal
     monthly_required_spend: Decimal
+    monthly_required_spend_source: str = "manual_query_param"
     emergency_fund_months: float | None
     emergency_fund_target_months: int
     target_progress_ratio: float | None
     monthly_debt_payment: Decimal
     monthly_income: Decimal
+    monthly_income_source: str = "manual_query_param"
+    derived_from_periods: list[str] = Field(default_factory=list)
+    manual_input_overrides: list[str] = Field(default_factory=list)
     debt_payment_ratio: float | None
     debt_to_asset_ratio: float | None
     confidence: str
@@ -144,10 +148,14 @@ class InsurancePremiumEstimateResponse(BaseModel):
     period: str | None
     amount: Decimal | None
     assumptions: list[str]
+    basis: dict[str, object] | None = None
 
 
 class InsuranceSummaryResponse(BaseModel):
     snapshot_date: date | None
+    has_contract_snapshot: bool = False
+    missing_reason: str | None = None
+    expected_source: str = "BankSalad 4.보험현황"
     items: list[InsuranceContractItemResponse]
     monthly_premium_estimate: InsurancePremiumEstimateResponse
 
@@ -200,5 +208,8 @@ class LoanTotalsResponse(BaseModel):
 
 class LoanSummaryResponse(BaseModel):
     snapshot_date: date | None
+    as_of_date: date | None = None
+    summary_scope: str = "active_loans_only"
+    excluded_historical_count: int = 0
     items: list[LoanItemResponse]
     totals: LoanTotalsResponse
