@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { TransactionsPage } from '../../features/data/TransactionsPage'
 
 const mutationMocks = vi.hoisted(() => ({
+  bulkUpdate: vi.fn(),
   bulkRestorePreview: vi.fn(),
   bulkRestore: vi.fn(),
 }))
@@ -23,7 +24,10 @@ vi.mock('../../hooks/useTransactions', () => {
     useUpdateTransaction: noop,
     useDeleteTransaction: noop,
     useRestoreTransaction: noop,
-    useBulkUpdateTransactions: noop,
+    useBulkUpdateTransactions: () => ({
+      mutateAsync: mutationMocks.bulkUpdate.mockResolvedValue({ updated: 1 }),
+      isPending: false,
+    }),
     useBulkDeletePreview: noop,
     useBulkDeleteTransactions: noop,
     useBulkRestorePreview: () => ({
@@ -85,6 +89,7 @@ function renderPage(path = '/data/transactions') {
 
 describe('TransactionsPage', () => {
   beforeEach(() => {
+    mutationMocks.bulkUpdate.mockClear()
     mutationMocks.bulkRestorePreview.mockClear()
     mutationMocks.bulkRestore.mockClear()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -114,6 +119,22 @@ describe('TransactionsPage', () => {
     fireEvent.click(screen.getByLabelText('쿠팡이츠 선택'))
     expect(screen.getByText('1건 선택됨')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '일괄 적용' })).toBeInTheDocument()
+  })
+
+  it('선택 거래의 거래처와 반복여부를 일괄 수정한다', async () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('쿠팡이츠 선택'))
+    fireEvent.change(screen.getByLabelText('일괄 거래처'), { target: { value: 'Apple Services' } })
+    fireEvent.change(screen.getByLabelText('일괄 반복여부'), { target: { value: 'monthly_recurring' } })
+    fireEvent.click(screen.getByRole('button', { name: '일괄 적용' }))
+
+    await waitFor(() => {
+      expect(mutationMocks.bulkUpdate).toHaveBeenCalledWith({
+        ids: [1],
+        merchant: 'Apple Services',
+        recurring_payment_kind: 'monthly_recurring',
+      })
+    })
   })
 
   it('bulk restore는 preview 확인 후 실행한다', async () => {
