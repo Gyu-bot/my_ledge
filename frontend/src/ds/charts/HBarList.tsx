@@ -31,7 +31,7 @@ export function HBarList({
   const max = maxAmount ?? Math.max(...items.map((item) => Math.abs(item.amount)), 1)
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      {items.map((item) => {
+      {items.map((item, index) => {
         const ratio = Math.min(1, Math.abs(item.amount) / max)
         const selected = selectedLabel === item.label
         const row = (
@@ -64,7 +64,7 @@ export function HBarList({
         )
         return onSelect ? (
           <button
-            key={item.label}
+            key={`${item.label}-${index}`}
             type="button"
             onClick={() => onSelect(item.label)}
             className={cn(
@@ -75,7 +75,7 @@ export function HBarList({
             {row}
           </button>
         ) : (
-          <div key={item.label} className="px-2 py-1.5">
+          <div key={`${item.label}-${index}`} className="px-2 py-1.5">
             {row}
           </div>
         )

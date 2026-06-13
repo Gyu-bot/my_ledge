@@ -41,8 +41,8 @@ export function LineArea({ points, height = 220, ariaLabel }: LineAreaProps) {
 
   return (
     <svg width="100%" viewBox={`0 0 ${WIDTH} ${height}`} role="img" aria-label={ariaLabel}>
-      {[max, (max + min) / 2, min].map((value) => (
-        <g key={value}>
+      {[max, (max + min) / 2, min].map((value, index) => (
+        <g key={`${value}-${index}`}>
           <line x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={yOf(value)} y2={yOf(value)} stroke="var(--ds-chart-grid)" />
           <text x={PAD_LEFT - 6} y={yOf(value) + 3} textAnchor="end" fontSize={10} fill="var(--ds-chart-axis)">
             {formatWonCompact(value)}
@@ -58,7 +58,7 @@ export function LineArea({ points, height = 220, ariaLabel }: LineAreaProps) {
         strokeLinejoin="round"
       />
       {points.map((point, index) => (
-        <g key={point.label}>
+        <g key={`${point.label}-${index}`}>
           <circle cx={xOf(index)} cy={yOf(point.value)} r={2.5} fill="var(--ds-accent-fg)">
             <title>{`${point.label} · ${formatWon(point.value)}`}</title>
           </circle>
