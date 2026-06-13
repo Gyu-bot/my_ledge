@@ -31,8 +31,9 @@ my_ledge/
     ├── package.json
     ├── vite.config.ts
     └── src/
-        ├── pages/           # 라우트별 페이지 컴포넌트
-        ├── components/      # 재사용 컴포넌트
+        ├── features/        # 라우트별 feature page
+        ├── ds/              # Ledger DS primitive와 chart primitive
+        ├── shell/           # App shell, navigation, page header
         ├── hooks/           # 커스텀 훅 (React Query 등)
         ├── api/             # API 호출 함수
         └── types/           # TypeScript 타입
@@ -371,21 +372,36 @@ SELECT COALESCE(category_major_user, category_major) AS category_major,
 
 | 경로 | 페이지 | 핵심 컴포넌트 |
 |---|---|---|
-| `/` | 개요 | KPI, 월간 현금흐름, 주의 신호, 카테고리 Top 5, 최근 거래 |
-| `/analysis/spending` | 지출 분석 | 범위 슬라이더, 카테고리 추이, breakdown, 고정비 요약, 거래처 treemap, 일별 달력, 거래 테이블 |
-| `/analysis/assets` | 자산 현황 | 순자산 추이, 자산 구성, 투자/대출 요약 |
-| `/analysis/insights` | 인사이트 | 핵심 인사이트, 반복 결제, 이상 지출, 거래처 Top, 카테고리 MoM |
-| `/operations/workbench` | 거래 작업대 | 필터 바, 거래 편집 테이블, 업로드, 업로드 이력, Danger Zone |
-| `/operations/loan-mapping` | 대출 연결 | 대출 상환 후보 지출 거래, 현재 연결 계좌, 상환 성격, 다건 연결 |
-| `/operations/recurring-classification` | 반복 결제 분류 | 반복 결제 후보, 할부/매월 반복 수동 분류, 그룹 단위 저장 |
+| `/` | 홈 | KPI, 월간 현금흐름, 주의 신호, 작업 queue, 최근 거래 |
+| `/spending` | 지출 | 기간 컨트롤, 카테고리 추이, breakdown, 고정비 요약, 거래처 treemap, 일별 달력, 거래 테이블 |
+| `/net-worth` | 자산·부채 | 순자산 추이, 자산 구성, 유동성, 투자/대출/보험/할부 요약 |
+| `/signals` | 신호 | 저축률, 수입 변동성, 이상 지출, 재량 지출 속도, 구매 게이트, 반복 결제 |
+| `/data/inbox` | 데이터 인박스 | 미분류/반복 승인/대출 연결/구매 게이트 작업 queue |
+| `/data/transactions` | 거래 | 필터 바, 행/그룹 보기, 거래 편집, bulk update/delete/restore |
+| `/data/loans` | 대출 | 대출 계좌 metadata, 상환 후보, 연결 계좌, 상환 성격, 다건 연결 |
+| `/data/installments` | 할부 | 할부 계획, 거래 후보, 회차 연결, 월별 forecast |
+| `/data/assets` | 자산 메타 | 자산 유동성/현금성 metadata, 대출 월상환/상환방식 metadata |
+| `/data/rules` | 규칙 | 자동분류, 반복 카테고리, 거래처 alias, 대출 거래처 rule |
+| `/data/settings` | 설정 | 재무 목표, 분석 파라미터 default/saved/effective |
+| `/data/import` | 가져오기 | 업로드, 업로드 이력, Danger Zone |
+| `/data/reference` | 데이터 사전 | schema, canonical view, backend read surface |
 
 호환용 redirect만 유지:
 
-- `/spending` → `/analysis/spending`
-- `/assets` → `/analysis/assets`
+- `/analysis/spending` → `/spending`
+- `/analysis/assets` → `/net-worth`
+- `/analysis/insights` → `/signals`
+- `/operations/workbench` → `/data/transactions`
+- `/operations/loan-mapping` → `/data/loans`
+- `/operations/installments` → `/data/installments`
+- `/operations/asset-settings` → `/data/assets`
+- `/operations/auto-classification` → `/data/rules`
+- `/operations/canonical-views` → `/data/reference`
+- `/operations/recurring-classification` → `/data/transactions?view=groups`
+- `/assets` → `/net-worth`
 - `/income` → `/`
 - `/transfers` → `/`
-- `/data` → `/operations/workbench`
+- `/data` → `/data/inbox`
 
 ---
 
