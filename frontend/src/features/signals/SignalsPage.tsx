@@ -40,16 +40,27 @@ const SEVERITY_BADGE: Record<Severity, { variant: BadgeVariant; label: string }>
 }
 
 function riskLabel(level: AnalyticsRiskLevel): string {
+  if (level === 'needs_classification') return '분류 필요'
+  if (level === 'unknown') return '불명'
   if (level === 'high' || level === 'critical') return '높음'
   if (level === 'warning') return '주의'
   if (level === 'watch') return '관찰'
+  if (level === 'normal') return '정상'
   return '낮음'
 }
 
 function riskVariant(level: AnalyticsRiskLevel): BadgeVariant {
+  if (level === 'needs_classification' || level === 'unknown') return 'neutral'
   if (level === 'high' || level === 'critical') return 'expense'
   if (level === 'warning' || level === 'watch') return 'warn'
   return 'accent'
+}
+
+function confidenceLabel(value: string): string {
+  if (value === 'high') return '높음'
+  if (value === 'medium') return '보통'
+  if (value === 'low') return '낮음'
+  return value || EM_DASH
 }
 
 function gateTypeLabel(value: string): string {
@@ -283,9 +294,15 @@ export function SignalsPage() {
                 {velocityData && (
                   <div className="tnum mt-2 flex flex-wrap gap-2 text-micro text-text-muted">
                     <span>진행률 {formatPct(velocityData.month_progress_ratio * 100, 0)}</span>
-                    <span>커버리지 {formatPct(velocityData.classification_coverage_ratio * 100, 0)}</span>
+                    <span>
+                      커버리지 {
+                        velocityData.classification_coverage_ratio != null
+                          ? formatPct(velocityData.classification_coverage_ratio * 100, 0)
+                          : EM_DASH
+                      }
+                    </span>
                     <span className="inline-flex items-center gap-1">
-                      conf {formatPct(velocityData.confidence * 100, 0)}
+                      신뢰도 {confidenceLabel(velocityData.confidence)}
                       <Provenance title="재량 지출 속도" note={velocityData.reasons.join(' · ') || undefined} />
                     </span>
                   </div>

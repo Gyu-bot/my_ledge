@@ -10,4 +10,8 @@ export interface ProfileResponse {
   age: number | null
   credit_score_kcb: number | null
   credit_score_history: CreditScoreHistoryItem[]
+  has_snapshot: boolean
+  missing_reason: string | null
+  expected_source: string
+  source_section_found: boolean | null
 }

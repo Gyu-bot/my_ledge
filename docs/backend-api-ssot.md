@@ -120,7 +120,7 @@
 |---|---|---|---|
 | `GET` | `/api/v1/transactions` | live | pagination, search, edited/deleted/merged filters 지원 |
 | `GET` | `/api/v1/transactions/filter-options` | live | category/payment method distinct options |
-| `GET` | `/api/v1/transactions/summary` | live | `group_by=month|week|day` |
+| `GET` | `/api/v1/transactions/summary` | live | `group_by=month|week|day`; response includes `basis` metadata for raw signed aggregation |
 | `GET` | `/api/v1/transactions/by-category` | live | `level=major|minor`, `type=지출|수입|이체|all` |
 | `GET` | `/api/v1/transactions/by-category/timeline` | live | timeline aggregate |
 | `GET` | `/api/v1/transactions/payment-methods` | live | payment method aggregate |
@@ -163,11 +163,11 @@
 | `GET` | `/api/v1/assets/net-worth-history` | live | query param 없음 |
 | `GET` | `/api/v1/assets/snapshot-compare` | live | `comparison_mode` optional, default `latest_available_vs_previous_available` |
 | `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest; items include `pct_of_investment_total` |
-| `GET` | `/api/v1/insurance/summary` | live | optional `snapshot_date`; omitted면 latest; latest insurance contracts + recent closed-month insurance premium estimate |
-| `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest; loan structure/rate/balance/maturity surface for agents |
-| `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots |
+| `GET` | `/api/v1/insurance/summary` | live | optional `snapshot_date`; omitted면 latest; latest insurance contracts + recent closed-month insurance premium estimate + empty-state metadata |
+| `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest; active-loans-only scope metadata |
+| `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots, with active/historical lifecycle metadata |
 | `GET` | `/api/v1/analytics/net-worth-breakdown` | live | optional `snapshot_date`; latest if omitted |
-| `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income`; echoes financial target months/progress |
+| `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income`; omitted spend/income derive from closed-month data and expose source metadata |
 | `PATCH` | `/api/v1/assets/snapshots/{asset_snapshot_id}/liquidity` | live | API key required, update `liquidity_tier` and `is_cash_equivalent` |
 | `PATCH` | `/api/v1/loans/{loan_id}/repayment-metadata` | live | API key required, update `monthly_payment` / `repayment_method` and mark changed fields as `manual` source |
 
@@ -186,6 +186,7 @@
 | `GET` | `/api/v1/analytics/spending-anomalies` | live | P1 shipped |
 | `GET` | `/api/v1/analytics/discretionary-velocity` | live | discretionary spend pace against closed-month prorated baseline |
 | `GET` | `/api/v1/analytics/purchase-gate-candidates` | live | discretionary purchase review queue; one row per transaction; optional `review_status` |
+| `GET` | `/api/v1/analytics/spending-review-candidates` | live | preferred alias for post-transaction spending review candidates; same contract as legacy purchase-gate path |
 | `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist review status, memo, reviewed_at, cooldown_until under canonical `transaction:{transaction_id}` key |
 
 ## Key Contract Notes
@@ -299,6 +300,7 @@
   - `baseline_months` default `3`
 - `PATCH` 에서 값을 지정하면 저장되고, `null` 로 보내면 해당 저장값을 삭제해 code default로 되돌린다.
 - `GET /api/v1/analytics/spending-anomalies` 의 설정 해석 순서는 `명시적 query param > persisted setting > code default` 다.
+- sparse baseline에서는 `delta_pct_raw`와 user-facing `delta_pct_display`/`reason`이 분리된다. 매우 작은 baseline에서 과도한 percentage를 그대로 문장화하지 않는다.
 - `discretionary_velocity` 기본값은 `baseline_months=6`, `warning_velocity_ratio=1.2`, `high_velocity_ratio=1.5`, `minimum_classification_coverage=0.7`.
 - `purchase_gate` 기본값은 큰 지출 `100000`, 새 거래처 lookback 6개월, spike ratio `merchant=2.0`, `discretionary=1.5`, review cooldown 14일.
 - `bulk_operations`는 preview/confirmation 기본 ON, `max_bulk_rows_without_extra_confirmation=100`.

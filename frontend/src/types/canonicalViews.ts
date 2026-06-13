@@ -16,6 +16,11 @@ export interface CanonicalMonthlyCashflowItem {
   unclassified_expense_total: number
   net_cashflow: number
   savings_rate: number | null
+  savings_rate_basis:
+    | 'observed_closed_month'
+    | 'observed_partial_month'
+    | 'insufficient_partial_month_income'
+    | 'no_income'
   is_complete_month: boolean
 }
 
@@ -94,6 +99,9 @@ export interface CanonicalUnclassifiedWorkQueueItem {
   merchant_expense_count: number
   priority_score: number
   priority_reason: string
+  issue_types: string[]
+  primary_issue_type: string | null
+  recurrence_signal: Record<string, boolean | number>
 }
 
 export interface CanonicalDataCoverage {

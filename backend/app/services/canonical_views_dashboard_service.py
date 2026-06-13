@@ -90,6 +90,31 @@ def _apply_complete_month_flags(
     ]
 
 
+def _apply_cashflow_basis(
+    items: list[CanonicalMonthlyCashflowItem],
+) -> list[CanonicalMonthlyCashflowItem]:
+    enriched: list[CanonicalMonthlyCashflowItem] = []
+    for item in items:
+        if item.income_total <= 0 or item.savings_rate is None:
+            basis = "no_income"
+        elif item.is_complete_month:
+            basis = "observed_closed_month"
+        else:
+            estimated_income, _, _, _ = _estimate_income_from_closed_months(
+                items,
+                current_period=item.period,
+            )
+            if (
+                estimated_income is not None
+                and item.income_total < estimated_income * INCOME_ESTIMATE_THRESHOLD_RATIO
+            ):
+                basis = "insufficient_partial_month_income"
+            else:
+                basis = "observed_partial_month"
+        enriched.append(item.model_copy(update={"savings_rate_basis": basis}))
+    return enriched
+
+
 def _estimate_income_from_closed_months(
     monthly_cashflow: list[CanonicalMonthlyCashflowItem],
     *,
@@ -183,14 +208,100 @@ def _enrich_true_spendable_items(
     return enriched
 
 
+def _queue_issue_types(item: CanonicalUnclassifiedWorkQueueItem) -> list[str]:
+    issues: list[str] = []
+    if item.needs_cost_kind:
+        issues.append("cost_kind")
+    if item.needs_fixed_cost_necessity or item.needs_spend_necessity:
+        issues.append("spend_necessity")
+    if item.needs_recurring_payment_kind:
+        issues.append("recurring_kind")
+    if item.needs_loan_link_review:
+        issues.append("loan_link")
+    return issues
+
+
+def _primary_issue_type(item: CanonicalUnclassifiedWorkQueueItem) -> str | None:
+    if item.needs_loan_link_review:
+        return "loan_link"
+    issues = _queue_issue_types(item)
+    return issues[0] if issues else None
+
+
+def _enrich_unclassified_queue_items(
+    items: list[CanonicalUnclassifiedWorkQueueItem],
+) -> list[CanonicalUnclassifiedWorkQueueItem]:
+    enriched: list[CanonicalUnclassifiedWorkQueueItem] = []
+    for item in items:
+        issue_types = _queue_issue_types(item)
+        enriched.append(
+            item.model_copy(
+                update={
+                    "issue_types": issue_types,
+                    "primary_issue_type": _primary_issue_type(item),
+                    "recurrence_signal": {
+                        "has_monthly_pattern": item.needs_recurring_payment_kind,
+                        "active_month_count": item.merchant_expense_count
+                        if item.needs_recurring_payment_kind
+                        else 0,
+                        "same_month_repeat_only": False,
+                    },
+                }
+            )
+        )
+    return enriched
+
+
+def _filter_unclassified_queue_items(
+    items: list[CanonicalUnclassifiedWorkQueueItem],
+    *,
+    issue_types: str | None,
+    period_from: str | None,
+    period_to: str | None,
+    current_only: bool,
+    reference_date: date,
+) -> list[CanonicalUnclassifiedWorkQueueItem]:
+    requested_issues = {
+        item.strip()
+        for item in (issue_types or "").split(",")
+        if item.strip()
+    }
+    current_period = _reference_period(reference_date)
+    filtered = items
+    if requested_issues:
+        filtered = [
+            item
+            for item in filtered
+            if requested_issues.intersection(item.issue_types)
+        ]
+    if current_only:
+        filtered = [
+            item for item in filtered if _reference_period(item.date) == current_period
+        ]
+    if period_from is not None:
+        filtered = [
+            item for item in filtered if _reference_period(item.date) >= period_from
+        ]
+    if period_to is not None:
+        filtered = [
+            item for item in filtered if _reference_period(item.date) <= period_to
+        ]
+    return filtered
+
+
 async def get_canonical_views_dashboard(
     db_session: AsyncSession,
     *,
     months: int = 12,
     merchant_limit: int = 10,
     queue_limit: int = 10,
+    issue_types: str | None = None,
+    period_from: str | None = None,
+    period_to: str | None = None,
+    current_only: bool = False,
     reference_date: date | None = None,
 ) -> CanonicalViewsDashboardResponse:
+    resolved_reference_date = reference_date or date.today()
     monthly_cashflow = await _fetch_rows(
         db_session,
         """
@@ -282,6 +393,7 @@ async def get_canonical_views_dashboard(
         monthly_cashflow_items,
         data_coverage,
     )
+    monthly_cashflow_items = _apply_cashflow_basis(monthly_cashflow_items)
     true_spendable_items = _to_items(
         true_spendable,
         CanonicalTrueSpendableMonthlyItem,
@@ -291,13 +403,28 @@ async def get_canonical_views_dashboard(
         data_coverage,
     )
 
+    unclassified_queue_items = _enrich_unclassified_queue_items(
+        _to_items(
+            unclassified_queue,
+            CanonicalUnclassifiedWorkQueueItem,
+        )
+    )
+    unclassified_queue_items = _filter_unclassified_queue_items(
+        unclassified_queue_items,
+        issue_types=issue_types,
+        period_from=period_from,
+        period_to=period_to,
+        current_only=current_only,
+        reference_date=resolved_reference_date,
+    )
+
     return CanonicalViewsDashboardResponse(
         data_coverage=data_coverage,
         monthly_cashflow=monthly_cashflow_items,
         true_spendable_monthly=_enrich_true_spendable_items(
             true_spendable_items,
             monthly_cashflow=monthly_cashflow_items,
-            reference_date=reference_date or date.today(),
+            reference_date=resolved_reference_date,
         ),
         loan_repayment_monthly=_to_items(
             loan_repayments,
@@ -311,8 +438,5 @@ async def get_canonical_views_dashboard(
             recurring_merchants,
             CanonicalRecurringMerchantMonthlyItem,
         ),
-        unclassified_work_queue=_to_items(
-            unclassified_queue,
-            CanonicalUnclassifiedWorkQueueItem,
-        ),
+        unclassified_work_queue=unclassified_queue_items,
     )

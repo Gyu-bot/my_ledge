@@ -1,6 +1,7 @@
 import calendar
 from datetime import date
 from decimal import Decimal
+from statistics import median
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, case, func, select
@@ -282,6 +283,35 @@ async def get_asset_liability_health(
         analytics_settings.effective.financial_targets.emergency_fund_target_months
     )
     breakdown = await get_net_worth_breakdown(db_session, snapshot_date)
+    manual_input_overrides: list[str] = []
+    if monthly_required_spend is not None:
+        manual_input_overrides.append("monthly_required_spend")
+    if monthly_income is not None:
+        manual_input_overrides.append("monthly_income")
+    derived_defaults = await _derive_liquidity_health_defaults(db_session)
+    required_spend = (
+        monthly_required_spend
+        if monthly_required_spend is not None
+        else derived_defaults["monthly_required_spend"]
+    )
+    income = (
+        monthly_income
+        if monthly_income is not None
+        else derived_defaults["monthly_income"]
+    )
+    money_scale = Decimal("0.01")
+    required_spend = required_spend.quantize(money_scale)
+    income = income.quantize(money_scale)
+    monthly_required_spend_source = (
+        "manual_query_param"
+        if monthly_required_spend is not None
+        else derived_defaults["monthly_required_spend_source"]
+    )
+    monthly_income_source = (
+        "manual_query_param"
+        if monthly_income is not None
+        else derived_defaults["monthly_income_source"]
+    )
     if breakdown.snapshot_date is None:
         return AssetLiabilityHealthResponse(
             snapshot_date=None,
@@ -290,12 +320,16 @@ async def get_asset_liability_health(
             negative_asset_excluded_total=Decimal("0"),
             liability_total=Decimal("0"),
             net_worth=Decimal("0"),
-            monthly_required_spend=monthly_required_spend or Decimal("0"),
+            monthly_required_spend=required_spend,
+            monthly_required_spend_source=monthly_required_spend_source,
             emergency_fund_months=None,
             emergency_fund_target_months=emergency_fund_target_months,
             target_progress_ratio=None,
             monthly_debt_payment=Decimal("0"),
-            monthly_income=monthly_income or Decimal("0"),
+            monthly_income=income,
+            monthly_income_source=monthly_income_source,
+            derived_from_periods=derived_defaults["derived_from_periods"],
+            manual_input_overrides=manual_input_overrides,
             debt_payment_ratio=None,
             debt_to_asset_ratio=None,
             confidence="low",
@@ -323,8 +357,6 @@ async def get_asset_liability_health(
         )
     )
     monthly_debt_payment = Decimal(loan_result.scalar_one_or_none() or 0)
-    required_spend = monthly_required_spend or Decimal("0")
-    income = monthly_income or Decimal("0")
     assumptions = [
         "cash equivalents use user-confirmed flags first and conservative category/name heuristics when missing",
         "debt burden uses loan monthly_payment when available",
@@ -341,6 +373,7 @@ async def get_asset_liability_health(
         liability_total=breakdown.liability_total,
         net_worth=breakdown.net_worth,
         monthly_required_spend=required_spend,
+        monthly_required_spend_source=monthly_required_spend_source,
         emergency_fund_months=emergency_fund_months,
         emergency_fund_target_months=emergency_fund_target_months,
         target_progress_ratio=_safe_ratio(
@@ -351,6 +384,9 @@ async def get_asset_liability_health(
         else None,
         monthly_debt_payment=monthly_debt_payment,
         monthly_income=income,
+        monthly_income_source=monthly_income_source,
+        derived_from_periods=derived_defaults["derived_from_periods"],
+        manual_input_overrides=manual_input_overrides,
         debt_payment_ratio=_safe_ratio(monthly_debt_payment, income),
         debt_to_asset_ratio=_safe_ratio(
             breakdown.liability_total, breakdown.asset_total
@@ -372,11 +408,18 @@ async def get_insurance_summary(
     if resolved_snapshot_date is None:
         return InsuranceSummaryResponse(
             snapshot_date=None,
+            has_contract_snapshot=False,
+            missing_reason="never_imported",
             items=[],
             monthly_premium_estimate=InsurancePremiumEstimateResponse(
                 period=None,
                 amount=None,
                 assumptions=["insurance contract snapshot is missing"],
+                basis={
+                    "is_estimated": False,
+                    "missing_reason": "insurance_contract_snapshot_missing",
+                    "expected_source": "transactions effective category 보험",
+                },
             ),
         )
 
@@ -395,6 +438,8 @@ async def get_insurance_summary(
     ]
     return InsuranceSummaryResponse(
         snapshot_date=resolved_snapshot_date,
+        has_contract_snapshot=True,
+        missing_reason=None,
         items=items,
         monthly_premium_estimate=await _estimate_monthly_insurance_premium(
             db_session,
@@ -531,6 +576,9 @@ async def get_loan_summary(
     ]
     return LoanSummaryResponse(
         snapshot_date=resolved_snapshot_date,
+        as_of_date=resolved_snapshot_date,
+        summary_scope="active_loans_only",
+        excluded_historical_count=0,
         items=items,
         totals=LoanTotalsResponse(
             principal=sum((item.principal or Decimal("0")) for item in items),
@@ -605,7 +653,79 @@ async def _estimate_monthly_insurance_premium(
             "effective category uses category_major_user before category_major",
             "refunds and cancellations offset the estimate through net spend",
         ],
+        basis={
+            "is_estimated": True,
+            "source": "latest_closed_month_insurance_spend",
+            "expected_source": "transactions effective category 보험",
+        },
     )
+
+
+async def _derive_liquidity_health_defaults(
+    db_session: AsyncSession,
+) -> dict[str, object]:
+    latest_transaction_date = await db_session.scalar(
+        select(func.max(Transaction.date))
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+    )
+    if latest_transaction_date is None:
+        return {
+            "monthly_income": Decimal("0"),
+            "monthly_income_source": "missing_transaction_history",
+            "monthly_required_spend": Decimal("0"),
+            "monthly_required_spend_source": "missing_transaction_history",
+            "derived_from_periods": [],
+        }
+
+    current_period = latest_transaction_date.strftime("%Y-%m")
+    income_rows = await db_session.execute(
+        select(Transaction.date, Transaction.amount)
+        .where(Transaction.type == "수입")
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+    )
+    income_by_period: dict[str, Decimal] = {}
+    for tx_date, amount in income_rows.all():
+        period = tx_date.strftime("%Y-%m")
+        if period >= current_period:
+            continue
+        income_by_period[period] = income_by_period.get(period, Decimal("0")) + Decimal(
+            amount or 0
+        )
+    monthly_income = (
+        Decimal(str(median(income_by_period.values())))
+        if income_by_period
+        else Decimal("0")
+    )
+    _, closed_month_end = _recent_closed_month_bounds(latest_transaction_date)
+    closed_period = closed_month_end.strftime("%Y-%m")
+    required_spend_result = await db_session.execute(
+        select(func.sum(-Transaction.amount))
+        .where(Transaction.type == "지출")
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .where(Transaction.date >= date(closed_month_end.year, closed_month_end.month, 1))
+        .where(Transaction.date <= closed_month_end)
+        .where(Transaction.spend_necessity == "essential")
+    )
+    essential_spend = Decimal(required_spend_result.scalar_one_or_none() or 0)
+    monthly_debt_payment = Decimal(
+        await db_session.scalar(select(func.sum(Loan.monthly_payment))) or 0
+    )
+    derived_periods = sorted(set(income_by_period) | {closed_period})
+    money_scale = Decimal("0.01")
+    return {
+        "monthly_income": monthly_income.quantize(money_scale),
+        "monthly_income_source": "closed_month_income_median"
+        if income_by_period
+        else "missing_closed_month_income",
+        "monthly_required_spend": (essential_spend + monthly_debt_payment).quantize(
+            money_scale
+        ),
+        "monthly_required_spend_source": "closed_month_required_spend",
+        "derived_from_periods": derived_periods,
+    }
 
 
 def _recent_closed_month_bounds(value: date) -> tuple[date, date]:

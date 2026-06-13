@@ -27,6 +27,8 @@
   - `schema.py`
   - `upload.py`
   - `data_management.py`
+  - `profile.py`
+  - `settings.py`
   - `transactions.py`
   - `assets.py`
   - `auto_classification.py`
@@ -41,6 +43,7 @@
 
 - `GET /api/v1/health`
 - `GET /api/v1/upload/logs`
+- `GET /api/v1/profile`
 - 모든 read-only transaction/assets/analytics endpoint
 - `GET /api/v1/loan-accounts`
 - `GET /api/v1/loan-transaction-links`
@@ -54,6 +57,8 @@
 
 - `GET /api/v1/schema`
 - `GET /api/v1/canonical-views/dashboard`
+- `GET /api/v1/settings/analytics`
+- `PATCH /api/v1/settings/analytics`
 - `GET /api/v1/auto-classification/settings`
 - `PATCH /api/v1/auto-classification/settings`
 - `GET /api/v1/auto-classification/category-rules`
@@ -72,6 +77,8 @@
 - `POST /api/v1/auto-classification/recurring-category-rules`
 - `DELETE /api/v1/auto-classification/recurring-category-rules/{rule_id}`
 - `POST /api/v1/auto-classification/apply/recurring-category-rules`
+- `GET /api/v1/auto-classification/recurring-category-rules/dry-run`
+- `POST /api/v1/auto-classification/apply/recurring-dry-run`
 - `POST /api/v1/upload`
 - `POST /api/v1/data/reset`
 - `POST /api/v1/transactions`
@@ -89,6 +96,9 @@
 - `PUT /api/v1/transactions/{transaction_id}/installment-link`
 - `DELETE /api/v1/transactions/{transaction_id}/installment-link`
 - `PUT /api/v1/transactions/installment-links/bulk`
+- `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`
+- `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
+- `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
 ## Endpoints
 
@@ -226,6 +236,10 @@
   - `age`
   - `credit_score_kcb`
   - `credit_score_history[]`
+  - `has_snapshot`
+  - `missing_reason`
+  - `expected_source`
+  - `source_section_found`
 - Notes:
   - parser stores `gender`, `age`, and KCB credit score only.
   - name and email from the workbook are intentionally not stored.
@@ -303,11 +317,20 @@
   - `type` default `all`
 - Response model: `TransactionSummaryResponse`
 - Response shape:
+  - `basis`
+    - `aggregation_surface`
+    - `amount_sign_convention`
+    - `included_types`
+    - `excluded_types`
+    - `includes_loan_repayments`
+    - `excludes_deleted`
+    - `excludes_merged`
+    - `canonical_cashflow_equivalent`
   - `items[]`
     - `period`
     - `amount`
 - Notes:
-  - sums raw signed `amount`
+  - sums raw signed `amount`; this is not necessarily equivalent to canonical cashflow because loan repayments, transfers, deleted rows, and merged rows have endpoint-specific rules
 
 #### `GET /api/v1/transactions/by-category`
 
@@ -457,8 +480,20 @@
     - `loan_kind`
     - `loan_start_date`
     - `loan_maturity_date`
+    - `as_of_date`
     - `latest_snapshot_date`
+    - `is_active`
+    - `is_matured`
+    - `is_stale`
+    - `lifecycle_status`
     - `latest_balance`
+    - `last_observed_balance`
+    - `last_observed_principal`
+    - `last_observed_snapshot_date`
+    - `included_in_active_summary`
+    - `excluded_from_summary_reason`
+    - `stable_identity_status`
+    - `stable_identity_reason`
     - `latest_interest_rate`
 - Behavior:
   - combines persisted `loan_accounts` with latest `loans` snapshot rows
@@ -467,6 +502,7 @@
   - `display_name` prefers user-managed `display_name_user`
   - `loan_kind` is one of `unknown`, `overdraft`, `equal_principal_interest`, `equal_principal`, `bullet`, `other`
   - `loan_start_date` and `loan_maturity_date` come from the latest `loans` snapshot for the same `lender + product_name`
+  - `/loan-accounts` is an inventory surface: rows missing from the latest global loan snapshot can remain visible with stale/matured lifecycle metadata instead of being treated as active balances
 
 #### `PATCH /api/v1/loan-accounts`
 
@@ -785,11 +821,15 @@
   - `liability_total`
   - `net_worth`
   - `monthly_required_spend`
+  - `monthly_required_spend_source`
   - `emergency_fund_months`
   - `emergency_fund_target_months`
   - `target_progress_ratio`
   - `monthly_debt_payment`
   - `monthly_income`
+  - `monthly_income_source`
+  - `derived_from_periods`
+  - `manual_input_overrides`
   - `debt_payment_ratio`
   - `debt_to_asset_ratio`
   - `confidence`
@@ -798,6 +838,7 @@
   - cash equivalents use `asset_snapshots.is_cash_equivalent=true` first
   - when `is_cash_equivalent` is null, `liquidity_tier='immediate'` counts as cash-equivalent; `near_liquid` and `illiquid` do not count in the base emergency-fund months
   - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption; `자유입출금`, `전자금융`, and `통장` count only when locked markers such as `청약`, `저금통`, `보험`, `연금`, or `부동산` are absent
+  - if `monthly_income` or `monthly_required_spend` is omitted, defaults are derived from closed-month transaction data; explicit query params override derived values and are listed in `manual_input_overrides`
   - negative asset rows are excluded from cash-equivalent totals and add `negative_asset_rows_excluded` to assumptions
   - `emergency_fund_target_months` comes from effective `settings/analytics.financial_targets`; `target_progress_ratio = emergency_fund_months / emergency_fund_target_months` when required spend is available
   - same-date snapshot re-import preserves user-confirmed `liquidity_tier` / `is_cash_equivalent` and loan repayment metadata by stable snapshot row identity
@@ -838,6 +879,9 @@
 - Response model: `InvestmentSummaryResponse`
 - Response shape:
   - `snapshot_date`
+  - `has_contract_snapshot`
+  - `missing_reason`
+  - `expected_source`
   - `items[]`
     - `product_type`
     - `broker`
@@ -874,6 +918,7 @@
     - `period`
     - `amount`
     - `assumptions[]`
+    - `basis`
 - Behavior:
   - upload parses `4.보험현황` by marker text and stores contract snapshots in `insurance_contracts`
   - same snapshot-date re-upload replaces insurance contracts for that date
@@ -1102,6 +1147,11 @@
     - `amount`
     - `baseline_avg`
     - `delta_pct`
+    - `delta_pct_raw`
+    - `delta_pct_display`
+    - `delta_display_capped`
+    - `baseline_quality`
+    - `anomaly_mode`
     - `anomaly_score`
     - `reason`
   - `comparison_mode`
@@ -1112,6 +1162,7 @@
   - if `end_date` omitted, uses last closed month end
   - if partial date provided, baseline months use same day cutoff
   - setting precedence is explicit query param, then persisted analytics setting, then code default
+  - sparse baseline spikes keep raw `delta_pct`/`delta_pct_raw` for machines but cap or null `delta_pct_display` and use a stable user-facing `reason`
 
 #### `GET /api/v1/analytics/discretionary-velocity`
 
@@ -1122,6 +1173,10 @@
 - Calculation excludes loan-linked repayments and uses `spend_necessity='discretionary'`; classification coverage below the configured minimum lowers confidence instead of producing a strong warning.
 
 #### `GET /api/v1/analytics/purchase-gate-candidates`
+
+Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/analytics/spending-review-candidates` for new clients.
+
+#### `GET /api/v1/analytics/spending-review-candidates`
 
 - Purpose: expose a discretionary purchase review queue without deciding whether a purchase is allowed.
 - Query params:
@@ -1134,8 +1189,9 @@
   - `cost_kind != 'fixed'`
   - `spend_necessity == 'discretionary'`
   - amount meets the effective minimum candidate amount
-- Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, and `cooldown_until`.
+- Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing='post_transaction'`, `candidate_purpose='future_friction_rule_candidate'`, and `future_friction_suggestion`.
 - `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
+- Positive `type='지출'` cancellation/refund rows are matched to nearby same merchant/payment/currency purchase rows before scoring. Fully refunded purchases are excluded; partial refunds are scored by net spend and expose `refund_netting_refund_total`.
 
 #### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
@@ -1571,5 +1627,5 @@ Source: `app.services.analytics_service.get_spending_anomalies`
   - `reference_date`
   - `is_partial_period`
 - current frontend still contains some fallbacks for older backend contracts, especially around transaction filter options
-- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live scope is `analytics.spending_anomalies`
+- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live analytics scopes include `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, and `financial_targets`
 - upload file retention is live for `POST /api/v1/upload`: default `UPLOAD_DIR=/data/uploads`, keep latest 5 original files

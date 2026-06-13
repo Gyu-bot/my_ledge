@@ -22,6 +22,10 @@ async def get_canonical_dashboard(
     months: int = Query(default=12, ge=1, le=36),
     merchant_limit: int = Query(default=10, ge=1, le=50),
     queue_limit: int = Query(default=10, ge=1, le=50),
+    issue_types: str | None = Query(default=None),
+    period_from: str | None = Query(default=None),
+    period_to: str | None = Query(default=None),
+    current_only: bool = Query(default=False),
     reference_date: date | None = Query(default=None),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> CanonicalViewsDashboardResponse:
@@ -30,5 +34,9 @@ async def get_canonical_dashboard(
         months=months,
         merchant_limit=merchant_limit,
         queue_limit=queue_limit,
+        issue_types=issue_types,
+        period_from=period_from,
+        period_to=period_to,
+        current_only=current_only,
         reference_date=reference_date,
     )

@@ -52,6 +52,8 @@ readonly DB role 요구사항:
 - `GET /api/v1/schema`
 - `GET /api/v1/canonical-views/dashboard`
 - `GET /api/v1/upload/logs`
+- `GET /api/v1/profile`
+- `GET /api/v1/settings/analytics`
 - `GET /api/v1/transactions`
 - `GET /api/v1/transactions/filter-options`
 - `GET /api/v1/transactions/summary`

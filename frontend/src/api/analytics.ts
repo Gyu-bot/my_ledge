@@ -82,7 +82,7 @@ export const analyticsApi = {
 
   purchaseGateCandidates: (params: PurchaseGateCandidatesQuery = {}) => {
     const { status, limit, ...rest } = params
-    return apiFetch<PurchaseGateCandidatesResponse>(`/analytics/purchase-gate-candidates${buildQuery({
+    return apiFetch<PurchaseGateCandidatesResponse>(`/analytics/spending-review-candidates${buildQuery({
       ...rest,
       review_status: status,
       per_page: limit,

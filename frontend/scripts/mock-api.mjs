@@ -223,8 +223,9 @@ const ROUTES = [
   })],
   ['/api/v1/analytics/discretionary-velocity', () => ({
     period: CURRENT, as_of_date: `${CURRENT}-10`, month_progress_ratio: 0.33,
-    discretionary_spend: 820_000, baseline_spend_at_same_progress: 625_000,
-    velocity_ratio: 1.31, risk_level: 'watch', confidence: 0.81,
+    discretionary_spend: 820_000, baseline_monthly_spend: 1_890_000,
+    baseline_spend_at_same_progress: 625_000,
+    velocity_ratio: 1.31, risk_level: 'warning', confidence: 'medium',
     reasons: ['재량 지출이 같은 진행률의 기준선보다 31% 빠릅니다'], assumptions: [],
     unclassified_spend: 120_000, classification_coverage_ratio: 0.76,
   })],
@@ -317,9 +318,13 @@ const ROUTES = [
   ['/api/v1/analytics/liquidity-health', () => ({
     snapshot_date: `${CURRENT}-07`, cash_equivalent_total: '18200000', asset_total: '684000000',
     negative_asset_excluded_total: '1200000', liability_total: '263000000', net_worth: '421000000',
-    monthly_required_spend: '5300000', emergency_fund_months: 3.4,
+    monthly_required_spend: '5300000', monthly_required_spend_source: 'derived_closed_month_transactions',
+    emergency_fund_months: 3.4,
     emergency_fund_target_months: 4, target_progress_ratio: 0.85,
     monthly_debt_payment: '1420000', monthly_income: '5050000',
+    monthly_income_source: 'derived_closed_month_transactions',
+    derived_from_periods: PERIODS.slice(-6, -1),
+    manual_input_overrides: [],
     debt_payment_ratio: 0.28, debt_to_asset_ratio: 0.38,
     confidence: 'medium', assumptions: ['negative_asset_rows_excluded', '현금성 분류 휴리스틱 적용'],
   })],
@@ -338,7 +343,8 @@ const ROUTES = [
     comparison_label: '이전 스냅샷 대비',
   })],
   ['/api/v1/loans/summary', () => ({
-    snapshot_date: `${CURRENT}-07`,
+    snapshot_date: `${CURRENT}-07`, as_of_date: `${CURRENT}-07`,
+    summary_scope: 'active_loans_only', excluded_historical_count: 0,
     totals: { principal: '300000000', balance: '263000000' },
     items: [
       { id: 1, loan_type: '은행 대출', lender: '국민은행', product_name: '주택담보대출', principal: '300000000', balance: '240000000', interest_rate: '3.85', monthly_payment: '1420000', repayment_method: 'principal_interest', monthly_payment_source: 'estimated_from_linked_transactions', repayment_method_source: 'derived_from_loan_account', loan_kind: 'equal_principal_interest', start_date: '2023-01-01', maturity_date: '2053-01-01' },
@@ -356,14 +362,23 @@ const ROUTES = [
   })],
   ['/api/v1/insurance/summary', () => ({
     snapshot_date: `${CURRENT}-07`,
+    has_contract_snapshot: true,
+    missing_reason: null,
+    expected_source: 'BankSalad 4.보험현황',
     items: [
       { id: 1, snapshot_date: `${CURRENT}-07`, insurer: '한화생명', product_name: '종신보험', contract_status: '유지', total_paid: '8400000', contract_date: '2020-05-01', maturity_date: null },
       { id: 2, snapshot_date: `${CURRENT}-07`, insurer: '삼성화재', product_name: '실손의료보험', contract_status: '유지', total_paid: '3120000', contract_date: '2021-02-01', maturity_date: '2049-05-01' },
     ],
-    monthly_premium_estimate: { period: PERIODS[11], amount: '214000', assumptions: ['최근 마감월 보험 카테고리 지출 기반', '환불/취소 상계 반영'] },
+    monthly_premium_estimate: {
+      period: PERIODS[11],
+      amount: '214000',
+      assumptions: ['최근 마감월 보험 카테고리 지출 기반', '환불/취소 상계 반영'],
+      basis: { source: 'closed_month_insurance_category_spend' },
+    },
   })],
   ['/api/v1/profile', () => ({
     snapshot_date: `${CURRENT}-07`, gender: '남', age: 34, credit_score_kcb: 942,
+    has_snapshot: true, missing_reason: null, expected_source: 'BankSalad 1.고객정보', source_section_found: true,
     credit_score_history: [
       { snapshot_date: `${PERIODS[7]}-01`, credit_score_kcb: 921 },
       { snapshot_date: `${PERIODS[9]}-01`, credit_score_kcb: 931 },
@@ -371,10 +386,24 @@ const ROUTES = [
     ],
   })],
   ['/api/v1/settings/analytics', () => ({
-    defaults: {}, saved: {},
+    defaults: {
+      financial_targets: { emergency_fund_target_months: 4, savings_rate_target: 0.5, debt_strategy_preference: 'avalanche' },
+      spending_anomalies: { min_delta_amount: 100000, anomaly_threshold: 0.5, baseline_months: 3 },
+      discretionary_velocity: { baseline_months: 6, outlier_policy: 'exclude_outliers', warning_velocity_ratio: 1.2, high_velocity_ratio: 1.5, minimum_classification_coverage: 0.7, baseline_mode: 'closed_months', excluded_category_names: [], excluded_merchants: [] },
+      purchase_gate: { large_purchase_threshold: 100000, min_candidate_amount: 50000, new_merchant_lookback_months: 6, merchant_spike_ratio: 2, discretionary_spike_ratio: 1.5, review_cooldown_days: 14, candidate_risk_threshold: 'watch', enabled_candidate_types: ['large_oneoff', 'new_merchant', 'merchant_spike', 'discretionary_spike'], excluded_category_names: [], excluded_merchants: [] },
+      recurring_dry_run: { min_occurrences: 2, min_distinct_months: 2, min_distinct_days: 2, max_amount_cv: 0.5, monthly_interval_days_min: 25, monthly_interval_days_max: 35, weekly_interval_days_min: 6, weekly_interval_days_max: 8, minimum_confidence: 0.7, default_apply_scope: 'all_matching', upload_auto_apply: false },
+      asset_liability_health: { emergency_fund_included_tiers: ['immediate'], show_near_liquid_as_secondary: true, monthly_payment_estimate_lookback_months: 6, monthly_payment_min_observations: 2, debt_payment_confidence_requires_user_confirmation: true },
+      bulk_operations: { require_preview: true, require_confirmation: true, show_undo_after_delete: true, max_bulk_rows_without_extra_confirmation: 100 },
+    },
+    saved: {},
     effective: {
       financial_targets: { emergency_fund_target_months: 4, savings_rate_target: 0.5, debt_strategy_preference: 'avalanche' },
-      spending_anomalies: {}, discretionary_velocity: {}, purchase_gate: {}, recurring_dry_run: {}, asset_liability_health: {}, bulk_operations: {},
+      spending_anomalies: { min_delta_amount: 100000, anomaly_threshold: 0.5, baseline_months: 3 },
+      discretionary_velocity: { baseline_months: 6, outlier_policy: 'exclude_outliers', warning_velocity_ratio: 1.2, high_velocity_ratio: 1.5, minimum_classification_coverage: 0.7, baseline_mode: 'closed_months', excluded_category_names: [], excluded_merchants: [] },
+      purchase_gate: { large_purchase_threshold: 100000, min_candidate_amount: 50000, new_merchant_lookback_months: 6, merchant_spike_ratio: 2, discretionary_spike_ratio: 1.5, review_cooldown_days: 14, candidate_risk_threshold: 'watch', enabled_candidate_types: ['large_oneoff', 'new_merchant', 'merchant_spike', 'discretionary_spike'], excluded_category_names: [], excluded_merchants: [] },
+      recurring_dry_run: { min_occurrences: 2, min_distinct_months: 2, min_distinct_days: 2, max_amount_cv: 0.5, monthly_interval_days_min: 25, monthly_interval_days_max: 35, weekly_interval_days_min: 6, weekly_interval_days_max: 8, minimum_confidence: 0.7, default_apply_scope: 'all_matching', upload_auto_apply: false },
+      asset_liability_health: { emergency_fund_included_tiers: ['immediate'], show_near_liquid_as_secondary: true, monthly_payment_estimate_lookback_months: 6, monthly_payment_min_observations: 2, debt_payment_confidence_requires_user_confirmation: true },
+      bulk_operations: { require_preview: true, require_confirmation: true, show_undo_after_delete: true, max_bulk_rows_without_extra_confirmation: 100 },
     },
   })],
   ['/api/v1/installments/forecast', () => ({

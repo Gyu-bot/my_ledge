@@ -30,8 +30,9 @@ vi.mock('../../hooks/useAnalytics', () => ({
   useDiscretionaryVelocity: () =>
     query({
       period: '2026-06', as_of_date: '2026-06-10', month_progress_ratio: 0.33,
-      discretionary_spend: 820_000, baseline_spend_at_same_progress: 625_000,
-      velocity_ratio: 1.31, risk_level: 'watch', confidence: 0.81,
+      discretionary_spend: 820_000, baseline_monthly_spend: 1_890_000,
+      baseline_spend_at_same_progress: 625_000,
+      velocity_ratio: 1.31, risk_level: 'watch', confidence: 'medium',
       reasons: ['기준선보다 31% 빠릅니다'], assumptions: [], unclassified_spend: 0,
       classification_coverage_ratio: 0.76,
     }),

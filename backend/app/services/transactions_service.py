@@ -26,6 +26,7 @@ from app.schemas.transaction import (
     TransactionListResponse,
     TransactionResponse,
     TransactionSourceFilter,
+    TransactionSummaryBasis,
     TransactionSummaryItem,
     TransactionSummaryResponse,
     TransactionTypeFilter,
@@ -161,6 +162,16 @@ async def summarize_transactions(
         grouped[_period_key(transaction["date"], group_by)] += transaction["amount"]
 
     return TransactionSummaryResponse(
+        basis=TransactionSummaryBasis(
+            aggregation_surface="raw_transactions_effective",
+            amount_sign_convention="raw_signed_amount",
+            included_types=_included_transaction_types(tx_type),
+            excluded_types=_excluded_transaction_types(tx_type),
+            includes_loan_repayments=tx_type in {"all", "지출"},
+            excludes_deleted=True,
+            excludes_merged=True,
+            canonical_cashflow_equivalent=False,
+        ),
         items=[
             TransactionSummaryItem(period=period, amount=amount)
             for period, amount in sorted(grouped.items())
@@ -790,3 +801,17 @@ def _period_key(tx_date: date, group_by: TransactionGroupBy) -> str:
         iso_year, iso_week, _ = tx_date.isocalendar()
         return f"{iso_year}-W{iso_week:02d}"
     return tx_date.strftime("%Y-%m")
+
+
+def _included_transaction_types(tx_type: TransactionTypeFilter) -> list[str]:
+    if tx_type == "all":
+        return ["지출", "수입", "이체"]
+    return [tx_type]
+
+
+def _excluded_transaction_types(tx_type: TransactionTypeFilter) -> list[str]:
+    return [
+        item
+        for item in ["지출", "수입", "이체"]
+        if item not in _included_transaction_types(tx_type)
+    ]

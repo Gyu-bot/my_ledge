@@ -267,6 +267,7 @@ async def test_canonical_dashboard_returns_view_rows(
     assert body["monthly_cashflow"][-1]["loan_repayment_total"] == 500000
     assert body["monthly_cashflow"][-1]["discretionary_variable_total"] == 1000000
     assert body["monthly_cashflow"][-1]["income_total"] == 1521
+    assert body["monthly_cashflow"][-1]["savings_rate_basis"] == "insufficient_partial_month_income"
     assert (
         body["true_spendable_monthly"][0]["remaining_after_variable_spend"] == -3498479
     )
@@ -278,6 +279,42 @@ async def test_canonical_dashboard_returns_view_rows(
     assert body["unclassified_work_queue"][0]["transaction_id"] == 42
     assert body["unclassified_work_queue"][0]["needs_fixed_cost_necessity"] is False
     assert body["unclassified_work_queue"][0]["needs_loan_link_review"] is True
+    assert body["unclassified_work_queue"][0]["issue_types"] == [
+        "cost_kind",
+        "spend_necessity",
+        "recurring_kind",
+        "loan_link",
+    ]
+    assert body["unclassified_work_queue"][0]["primary_issue_type"] == "loan_link"
+    assert body["unclassified_work_queue"][0]["recurrence_signal"] == {
+        "has_monthly_pattern": True,
+        "active_month_count": 2,
+        "same_month_repeat_only": False,
+    }
+
+
+async def test_canonical_dashboard_filters_unclassified_queue_by_issue_and_period(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    await _create_sample_canonical_views(db_session)
+
+    loan_link_response = await async_client.get(
+        "/api/v1/canonical-views/dashboard",
+        headers=api_headers,
+        params={"issue_types": "loan_link", "period_from": "2026-05", "period_to": "2026-05"},
+    )
+    cost_kind_response = await async_client.get(
+        "/api/v1/canonical-views/dashboard",
+        headers=api_headers,
+        params={"issue_types": "cost_kind", "period_from": "2026-06"},
+    )
+
+    assert loan_link_response.status_code == 200
+    assert len(loan_link_response.json()["unclassified_work_queue"]) == 1
+    assert cost_kind_response.status_code == 200
+    assert cost_kind_response.json()["unclassified_work_queue"] == []
 
 
 async def test_canonical_dashboard_estimates_income_for_partial_current_month(

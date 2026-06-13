@@ -121,6 +121,11 @@ export interface SpendingAnomalyItem {
   amount: number
   baseline_avg: number
   delta_pct: number | null
+  delta_pct_raw?: number | null
+  delta_pct_display?: number | null
+  delta_display_capped?: boolean
+  baseline_quality?: string
+  anomaly_mode?: string
   anomaly_score: number
   reason: string
 }
@@ -146,22 +151,31 @@ export interface SpendingAnomaliesQuery {
   end_date?: string
 }
 
-export type AnalyticsRiskLevel = 'low' | 'watch' | 'warning' | 'high' | 'critical'
+export type AnalyticsRiskLevel =
+  | 'normal'
+  | 'low'
+  | 'watch'
+  | 'warning'
+  | 'high'
+  | 'critical'
+  | 'needs_classification'
+  | 'unknown'
 
 export interface DiscretionaryVelocityResponse {
   period: string
   as_of_date: string
   month_progress_ratio: number
   discretionary_spend: number
+  baseline_monthly_spend: number
   baseline_spend_at_same_progress: number
   velocity_ratio: number | null
   risk_level: AnalyticsRiskLevel
   review_priority?: number | null
-  confidence: number
+  confidence: string
   reasons: string[]
   assumptions: string[]
   unclassified_spend: number
-  classification_coverage_ratio: number
+  classification_coverage_ratio: number | null
   income_basis?: 'observed' | 'estimated' | string | null
 }
 
@@ -197,9 +211,15 @@ export interface PurchaseGateCandidateItem {
   confidence: string
   suggested_review_window: string
   review_status: PurchaseGateCandidateStatus
-  review_memo: string | null
-  reviewed_at: string | null
-  cooldown_until: string | null
+  review_memo?: string | null
+  reviewed_at?: string | null
+  cooldown_until?: string | null
+  review_timing?: 'post_transaction'
+  candidate_purpose?: 'future_friction_rule_candidate'
+  future_friction_suggestion?: {
+    condition?: Record<string, unknown>
+    action?: string
+  } | null
   reasons: string[]
   assumptions: string[]
 }

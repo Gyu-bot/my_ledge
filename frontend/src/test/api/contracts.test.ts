@@ -45,7 +45,7 @@ describe('frontend query contract adapters', () => {
     expect(fetchMock.mock.calls[4][0]).not.toContain('months=')
     expect(fetchMock.mock.calls[5][0]).toContain('/analytics/discretionary-velocity?')
     expect(fetchMock.mock.calls[5][0]).toContain('as_of_date=2026-04-08')
-    expect(fetchMock.mock.calls[6][0]).toContain('/analytics/purchase-gate-candidates?')
+    expect(fetchMock.mock.calls[6][0]).toContain('/analytics/spending-review-candidates?')
     expect(fetchMock.mock.calls[6][0]).toContain('review_status=pending')
     expect(fetchMock.mock.calls[6][0]).toContain('per_page=5')
     expect(fetchMock.mock.calls[7][0]).toContain('/auto-classification/recurring-category-rules/dry-run')

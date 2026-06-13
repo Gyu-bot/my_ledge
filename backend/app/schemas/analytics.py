@@ -141,6 +141,11 @@ class SpendingAnomalyItem(BaseModel):
     amount: int
     baseline_avg: int
     delta_pct: float | None
+    delta_pct_raw: float | None = None
+    delta_pct_display: float | None = None
+    delta_display_capped: bool = False
+    baseline_quality: str = "sufficient"
+    anomaly_mode: str = "standard"
     anomaly_score: float
     reason: str
 
@@ -193,6 +198,11 @@ class PurchaseGateCandidateItem(BaseModel):
     review_memo: str | None = None
     reviewed_at: datetime | None = None
     cooldown_until: datetime | None = None
+    review_timing: Literal["post_transaction"] = "post_transaction"
+    candidate_purpose: Literal["future_friction_rule_candidate"] = (
+        "future_friction_rule_candidate"
+    )
+    future_friction_suggestion: dict[str, object] | None = None
 
 
 class PurchaseGateCandidatesResponse(BaseModel):

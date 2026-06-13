@@ -139,8 +139,20 @@ export interface LoanAccountCandidate {
   loan_kind: LoanKind
   loan_start_date: string | null
   loan_maturity_date: string | null
+  as_of_date: string | null
   latest_snapshot_date: string | null
+  is_active: boolean
+  is_matured: boolean
+  is_stale: boolean
+  lifecycle_status: string
   latest_balance: string | null
+  last_observed_balance: string | null
+  last_observed_principal: string | null
+  last_observed_snapshot_date: string | null
+  included_in_active_summary: boolean
+  excluded_from_summary_reason: string | null
+  stable_identity_status: string
+  stable_identity_reason: string | null
   latest_interest_rate: string | null
 }
 

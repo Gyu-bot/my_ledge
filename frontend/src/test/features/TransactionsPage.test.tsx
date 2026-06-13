@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { TransactionsPage } from '../../features/data/TransactionsPage'
+
+const mutationMocks = vi.hoisted(() => ({
+  bulkRestorePreview: vi.fn(),
+  bulkRestore: vi.fn(),
+}))
 
 vi.mock('../../hooks/useTransactions', () => {
   const noop = () => ({ mutateAsync: vi.fn().mockResolvedValue({ updated: 1 }), isPending: false })
@@ -21,8 +26,29 @@ vi.mock('../../hooks/useTransactions', () => {
     useBulkUpdateTransactions: noop,
     useBulkDeletePreview: noop,
     useBulkDeleteTransactions: noop,
-    useBulkRestorePreview: noop,
-    useBulkRestoreTransactions: noop,
+    useBulkRestorePreview: () => ({
+      mutateAsync: mutationMocks.bulkRestorePreview.mockResolvedValue({
+        count: 1,
+        period_start: '2026-06-09',
+        period_end: '2026-06-09',
+        expense_total: -23000,
+        representative_merchants: ['쿠팡이츠'],
+      }),
+      isPending: false,
+    }),
+    useBulkRestoreTransactions: () => ({
+      mutateAsync: mutationMocks.bulkRestore.mockResolvedValue({
+        updated: 1,
+        preview: {
+          count: 1,
+          period_start: '2026-06-09',
+          period_end: '2026-06-09',
+          expense_total: -23000,
+          representative_merchants: ['쿠팡이츠'],
+        },
+      }),
+      isPending: false,
+    }),
   }
 })
 
@@ -33,6 +59,24 @@ vi.mock('../../hooks/useAnalytics', () => ({
   }),
 }))
 
+vi.mock('../../hooks/useSettings', () => ({
+  useAnalyticsSettings: () => ({
+    data: {
+      effective: {
+        bulk_operations: {
+          require_preview: true,
+          require_confirmation: true,
+          show_undo_after_delete: true,
+          max_bulk_rows_without_extra_confirmation: 100,
+        },
+      },
+    },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}))
+
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => true }))
 
 function renderPage(path = '/data/transactions') {
@@ -40,6 +84,16 @@ function renderPage(path = '/data/transactions') {
 }
 
 describe('TransactionsPage', () => {
+  beforeEach(() => {
+    mutationMocks.bulkRestorePreview.mockClear()
+    mutationMocks.bulkRestore.mockClear()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('행 보기: 거래 테이블과 필터 바를 렌더한다', () => {
     renderPage()
     expect(screen.getByText('필터')).toBeInTheDocument()
@@ -60,6 +114,18 @@ describe('TransactionsPage', () => {
     fireEvent.click(screen.getByLabelText('쿠팡이츠 선택'))
     expect(screen.getByText('1건 선택됨')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '일괄 적용' })).toBeInTheDocument()
+  })
+
+  it('bulk restore는 preview 확인 후 실행한다', async () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('쿠팡이츠 선택'))
+    fireEvent.click(screen.getByRole('button', { name: '복원' }))
+
+    await waitFor(() => {
+      expect(mutationMocks.bulkRestorePreview).toHaveBeenCalledWith({ ids: [1] })
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('1건 복원'))
+      expect(mutationMocks.bulkRestore).toHaveBeenCalledWith({ ids: [1] })
+    })
   })
 
   it('?view=groups 면 그룹 보기(반복 결제)를 렌더한다', () => {

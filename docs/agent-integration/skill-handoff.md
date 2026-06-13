@@ -98,8 +98,10 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - `my_ledge_get_schema`
 - `my_ledge_get_canonical_dashboard`
 - `my_ledge_query_readonly_sql`
+- `my_ledge_get_profile`
 - `my_ledge_get_transactions`
 - `my_ledge_get_analytics`
+- `my_ledge_get_insurance_summary`
 - `my_ledge_upload_workbook`
 - `my_ledge_update_transaction`
 - `my_ledge_bulk_update_transactions`

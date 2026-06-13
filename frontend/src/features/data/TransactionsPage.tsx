@@ -27,8 +27,14 @@ import {
   useUpdateTransaction,
 } from '../../hooks/useTransactions'
 import { useRecurringPayments } from '../../hooks/useAnalytics'
+import { useAnalyticsSettings } from '../../hooks/useSettings'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
-import type { RecurringPaymentKind, SpendNecessity, TransactionResponse } from '../../types/transaction'
+import type {
+  RecurringPaymentKind,
+  SpendNecessity,
+  TransactionBulkMutationPreview,
+  TransactionResponse,
+} from '../../types/transaction'
 
 const PAGE_SIZE = 40
 
@@ -114,6 +120,8 @@ function RowsView() {
   const bulkDelete = useBulkDeleteTransactions()
   const bulkRestorePreview = useBulkRestorePreview()
   const bulkRestore = useBulkRestoreTransactions()
+  const settings = useAnalyticsSettings()
+  const bulkSettings = settings.data?.effective.bulk_operations
 
   const rows = list.data?.items ?? []
   const detailTx = rows.find((tx) => tx.id === detailId) ?? null
@@ -180,20 +188,35 @@ function RowsView() {
     }
   }
 
+  function shouldPreviewBulk() {
+    return bulkSettings?.require_preview !== false
+  }
+
+  function shouldConfirmBulk(ids: number[]) {
+    if (!bulkSettings) return true
+    return bulkSettings.require_confirmation || ids.length > bulkSettings.max_bulk_rows_without_extra_confirmation
+  }
+
+  function bulkPreviewMessage(actionLabel: string, ids: number[], preview: TransactionBulkMutationPreview | null) {
+    if (!preview) return `${ids.length}건 ${actionLabel}할까요?`
+    const merchants = preview.representative_merchants.join(', ') || '없음'
+    return `${preview.count}건 ${actionLabel} · ${preview.period_start ?? '—'}~${preview.period_end ?? '—'} · ${formatWon(preview.expense_total)}\n대표: ${merchants}\n\n${actionLabel}할까요?`
+  }
+
   async function bulkDeleteFlow() {
     const ids = [...selected]
     if (ids.length === 0) return
     try {
-      const preview = await bulkDeletePreview.mutateAsync({ ids })
-      const ok = window.confirm(
-        `${preview.count}건 삭제 · ${preview.period_start ?? '—'}~${preview.period_end ?? '—'} · ₩${formatWon(preview.expense_total)}\n대표: ${preview.representative_merchants.join(', ') || '없음'}\n\n삭제할까요?`,
-      )
-      if (!ok) return
+      const preview = shouldPreviewBulk() ? await bulkDeletePreview.mutateAsync({ ids }) : null
+      if (shouldConfirmBulk(ids) && !window.confirm(bulkPreviewMessage('삭제', ids, preview))) return
       const result = await bulkDelete.mutateAsync({ ids })
       setSelected(new Set())
-      toast.success(`${result.updated}건 삭제 완료`, {
-        action: { label: '방금 삭제 복원', onClick: () => void undoDelete(ids) },
-      })
+      toast.success(
+        `${result.updated}건 삭제 완료`,
+        bulkSettings?.show_undo_after_delete === false
+          ? undefined
+          : { action: { label: '방금 삭제 복원', onClick: () => void undoDelete(ids) } },
+      )
     } catch (error) {
       toast.error('일괄 삭제 실패', { description: String(error) })
     }
@@ -212,7 +235,8 @@ function RowsView() {
     const ids = [...selected]
     if (ids.length === 0) return
     try {
-      await bulkRestorePreview.mutateAsync({ ids })
+      const preview = shouldPreviewBulk() ? await bulkRestorePreview.mutateAsync({ ids }) : null
+      if (shouldConfirmBulk(ids) && !window.confirm(bulkPreviewMessage('복원', ids, preview))) return
       const result = await bulkRestore.mutateAsync({ ids })
       setSelected(new Set())
       toast.success(`${result.updated}건 복원 완료`)
