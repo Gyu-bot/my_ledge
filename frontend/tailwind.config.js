@@ -1,80 +1,92 @@
 /** @type {import('tailwindcss').Config} */
+// Ledger DS theme — docs/frontend-remake/04-design-system.md
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
+    fontFamily: {
+      sans: ['Pretendard Variable', 'Pretendard', '-apple-system', 'Segoe UI', 'system-ui', 'sans-serif'],
+      mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+    },
     extend: {
       fontSize: {
-        // Semantic type scale — rem-based, scales with html { font-size }
-        // Base reference: 14px html = original sizes; 21px html = 1.5× scale
-        'nano':    ['0.571rem', { lineHeight: '1.2' }],  // ~8px  → badge labels, status tags
-        'micro':   ['0.643rem', { lineHeight: '1.3' }],  // ~9px  → table headers, timestamps
-        'pagination': ['0.571rem', { lineHeight: '1.2' }], // compact pagination controls + counters
-        'caption': ['0.714rem', { lineHeight: '1.4' }],  // ~10px → secondary labels, descriptions
-        'label':   ['0.786rem', { lineHeight: '1.5' }],  // ~11px → section titles, nav items
-        'body-sm': ['0.857rem', { lineHeight: '1.5' }],  // ~12px → compact body, dropdowns
-        'body-md': ['0.929rem', { lineHeight: '1.5' }],  // ~13px → UI chrome, brand name
-        'body':    ['1rem',     { lineHeight: '1.5' }],  // ~14px → primary body content
-        'kpi':     ['1.286rem', { lineHeight: '1.3' }],  // ~18px → KPI values
-        'display': ['1.714rem', { lineHeight: '1.2' }],  // ~24px → large display text
+        // px 기준 타입 스케일 (html 16px). micro(11px) 미만 금지.
+        display: ['2rem', { lineHeight: '2.375rem', fontWeight: '700' }], // 32/38
+        kpi: ['1.5rem', { lineHeight: '1.875rem', fontWeight: '700' }], // 24/30
+        title: ['1.125rem', { lineHeight: '1.625rem', fontWeight: '600' }], // 18/26
+        section: ['0.9375rem', { lineHeight: '1.375rem', fontWeight: '600' }], // 15/22
+        body: ['0.875rem', { lineHeight: '1.375rem' }], // 14/22
+        label: ['0.8125rem', { lineHeight: '1.125rem' }], // 13/18
+        caption: ['0.75rem', { lineHeight: '1rem' }], // 12/16
+        micro: ['0.6875rem', { lineHeight: '0.875rem' }], // 11/14
       },
       colors: {
-        surface: {
-          base: 'var(--color-surface-base)',
-          panel: 'var(--color-surface-panel)',
-          card: 'var(--color-surface-card)',
-          popover: 'var(--color-surface-popover)',
-          bar: 'var(--color-surface-bar)',
-          section: 'var(--color-surface-section)',
-          input: 'var(--color-surface-input)',
-          tint: 'var(--color-surface-tint)',
-          selected: 'var(--color-surface-selected)',
-          edited: 'var(--color-surface-edited)',
-          danger: 'var(--color-surface-danger)',
-          'danger-muted': 'var(--color-surface-danger-muted)',
-          'danger-strong': 'var(--color-surface-danger-strong)',
+        bg: {
+          base: 'var(--ds-bg-base)',
+          surface: 'var(--ds-bg-surface)',
+          raised: 'var(--ds-bg-raised)',
+          inset: 'var(--ds-bg-inset)',
+          selected: 'var(--ds-bg-selected)',
         },
         border: {
-          DEFAULT: 'var(--color-border-default)',
-          subtle: 'var(--color-border-subtle)',
-          strong: 'var(--color-border-strong)',
-          faint: 'var(--color-border-faint)',
-          info: 'var(--color-border-info)',
-        },
-        accent: {
-          DEFAULT: 'var(--color-accent-default)',
-          strong: 'var(--color-accent-strong)',
-          dim: 'var(--color-accent-dim)',
-          muted: 'var(--color-accent-muted)',
-          bright: 'var(--color-accent-bright)',
-        },
-        danger: {
-          DEFAULT: 'var(--color-danger-default)',
-          dim: 'var(--color-danger-dim)',
-          muted: 'var(--color-danger-muted)',
-        },
-        warn: {
-          DEFAULT: 'var(--color-warn-default)',
-          dim: 'var(--color-warn-dim)',
-          muted: 'var(--color-warn-muted)',
-        },
-        info: {
-          DEFAULT: 'var(--color-info-default)',
-          bright: 'var(--color-info-bright)',
-          dim: 'var(--color-info-dim)',
-          soft: 'var(--color-info-soft)',
-          muted: 'var(--color-info-muted)',
+          subtle: 'var(--ds-border-subtle)',
+          DEFAULT: 'var(--ds-border-default)',
+          strong: 'var(--ds-border-strong)',
         },
         text: {
-          primary: 'var(--color-text-primary)',
-          secondary: 'var(--color-text-secondary)',
-          muted: 'var(--color-text-muted)',
-          faint: 'var(--color-text-faint)',
-          ghost: 'var(--color-text-ghost)',
-          inverse: 'var(--color-text-inverse)',
+          primary: 'var(--ds-text-primary)',
+          secondary: 'var(--ds-text-secondary)',
+          muted: 'var(--ds-text-muted)',
+          faint: 'var(--ds-text-faint)',
+        },
+        accent: {
+          DEFAULT: 'var(--ds-accent-fg)',
+          bg: 'var(--ds-accent-bg)',
+          border: 'var(--ds-accent-border)',
+        },
+        income: {
+          DEFAULT: 'var(--ds-income-fg)',
+          bg: 'var(--ds-income-bg)',
+          border: 'var(--ds-income-border)',
+        },
+        expense: {
+          DEFAULT: 'var(--ds-expense-fg)',
+          bg: 'var(--ds-expense-bg)',
+          border: 'var(--ds-expense-border)',
+        },
+        transfer: {
+          DEFAULT: 'var(--ds-transfer-fg)',
+          bg: 'var(--ds-transfer-bg)',
+          border: 'var(--ds-transfer-border)',
+        },
+        warn: {
+          DEFAULT: 'var(--ds-warn-fg)',
+          bg: 'var(--ds-warn-bg)',
+          border: 'var(--ds-warn-border)',
+        },
+        estimate: {
+          DEFAULT: 'var(--ds-estimate-fg)',
+          bg: 'var(--ds-estimate-bg)',
+          border: 'var(--ds-estimate-border)',
         },
       },
       borderRadius: {
-        card: '10px',
+        sm: '6px',
+        md: '10px',
+        lg: '16px',
+      },
+      boxShadow: {
+        raised: '0 4px 16px rgba(0, 0, 0, 0.24)',
+      },
+      maxWidth: {
+        content: '1280px',
+      },
+      ringColor: {
+        DEFAULT: 'var(--ds-focus-ring)',
+      },
+      transitionDuration: {
+        fast: '120ms',
+        base: '200ms',
+        slow: '320ms',
       },
     },
   },

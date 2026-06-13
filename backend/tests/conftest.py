@@ -46,22 +46,34 @@ def _workbook_path(filename: str) -> Path:
 
 @pytest.fixture
 def sample_workbook_bytes() -> bytes:
-    return _workbook_path("finance_sample.xlsx").read_bytes()
+    try:
+        return _workbook_path("finance_sample.xlsx").read_bytes()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture
 def rolling_window_workbook_bytes() -> bytes:
-    return _workbook_path("sample_260324.xlsx").read_bytes()
+    try:
+        return _workbook_path("sample_260324.xlsx").read_bytes()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture
 def rolling_window_workbook_v2_bytes() -> bytes:
-    return _workbook_path("sample_260326.xlsx").read_bytes()
+    try:
+        return _workbook_path("sample_260326.xlsx").read_bytes()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture
 def latest_workbook_bytes() -> bytes:
-    return _workbook_path("sample_260407.xlsx").read_bytes()
+    try:
+        return _workbook_path("sample_260407.xlsx").read_bytes()
+    except FileNotFoundError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture(autouse=True)

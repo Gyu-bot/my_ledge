@@ -20,17 +20,19 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 고정비/변동비, 필수/재량 지출, 반복 결제 분류
   - 카테고리 기반 고정비/반복결제 자동분류, 거래처 정규화, 거래처 기반 대출 자동연결 규칙
   - advisor용 canonical view, 재량 지출 속도, 구매 게이트, 유동성 health, import parity 검증
-  - 메인 대시보드
+  - 홈 대시보드
   - 지출 분석
-  - 자산 현황
-  - 인사이트
+  - 자산·부채
+  - 신호
+  - 데이터 인박스
   - 거래 작업대
-  - 대출 연결
+  - 대출 관리
   - 할부 관리
-  - 자산 설정
-  - 자동분류
-  - 캐노니컬 뷰
-  - 반복 결제 분류
+  - 자산 메타
+  - 규칙
+  - 설정
+  - 가져오기
+  - 데이터 사전
 
 제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), 협업 규칙은 [AGENTS.md](AGENTS.md), 현재 작업 현황은 [docs/STATUS.md](docs/STATUS.md)를 기준으로 본다.
 아직 구현되지 않았지만 계획으로 유지하는 backlog는 [Implentation-plan.md](Implentation-plan.md)에서 관리한다.
@@ -60,18 +62,20 @@ My Ledge는 BankSalad 엑셀 파일을 개인 재무 분석용 DB로 바꾸고, 
 | 경로 | 화면 | 핵심 표시 항목 |
 |---|---|---|
 | `/` | 개요 | 순자산, 이번 달 지출, 이번 달 수입, 저축률, 최근 6개월 현금흐름, 이상 지출/반복 결제/수입 안정성 주의 신호, 이번 달 카테고리 Top 5, 최근 거래 |
-| `/analysis/spending` | 지출 분석 | 월별 카테고리 추이, 상세 기간 필터, 대분류/소분류 breakdown, 고정비/변동비 및 필수/비필수 고정비, 거래처 treemap, 일별 지출 달력, 기간 내 거래 테이블 |
-| `/analysis/assets` | 자산 현황 | 순자산/총자산/총부채/투자 평가액 KPI, 순자산 시계열, snapshot 비교 배지, 투자 원금/평가액/수익률, 브로커별 투자 비중, 대출 원금/잔액/금리 |
-| `/analysis/insights` | 인사이트 | 저축률, 수입 변동성, 이상 지출 카테고리 수, 핵심 인사이트, 반복 결제 후보와 저장된 반복분류, 이상 지출, 거래처 소비 Top 5, 카테고리 MoM |
-| `/operations/workbench` | 거래 작업대 | write access 상태, 거래 필터, 선택 거래 bulk edit, 거래 테이블, 업로드, 최근 업로드 이력, 거래/스냅샷 reset |
-| `/operations/loan-mapping` | 대출 연결 | 대출 상환 후보 거래, 현재 연결 대출 계좌, 연결 출처, 상환 유형, 대출 신규일/만기일, 다건 연결 |
-| `/operations/installments` | 할부 관리 | 할부 항목 생성/수정, 거래 후보 검색, 단건/일괄 회차 연결, 월별 잔여 할부 forecast |
-| `/operations/asset-settings` | 자산 설정 | 최신 자산 row의 유동성 tier/현금성 여부 편집, 대출 월상환액/상환방식 metadata 보강 |
-| `/operations/auto-classification` | 자동분류 | 업로드 후 자동 적용 옵션, 고정비/변동비 category rule, 반복결제 category rule, 거래처 대출 연결 rule, 기존 데이터 일괄 적용 |
-| `/operations/canonical-views` | 캐노니컬 뷰 | `/api/v1/canonical-views/dashboard` 기반 실제 canonical row KPI/차트/테이블, `/api/v1/schema` 기반 view reference, 분류 품질 작업 연결 |
-| `/operations/recurring-classification` | 반복 결제 분류 | 반복 후보 요약, 선택 그룹 bulk classification, 거래처별 반복 후보 테이블, `할부` / `매월 반복` / `반복 아님` / 미분류 선택 |
+| `/spending` | 지출 | 월별 카테고리 추이, 범위 선택, 수입 포함 전환, 카테고리/소분류 breakdown, 고정비/변동비 요약, 거래처 treemap, 일별 달력, 거래 테이블 |
+| `/net-worth` | 자산·부채 | 순자산/총자산/총부채/현금성 KPI, 순자산 시계열, 자산 구성, 유동성 health, 대출 카드, 투자 구성, 보험/할부 요약 |
+| `/signals` | 신호 | 저축률, 수입 변동성, 이상 지출, 재량 지출 속도, 구매 게이트 후보, 반복 결제, 거래처/카테고리 신호 |
+| `/data/inbox` | 데이터 인박스 | 미분류 거래, 반복 분류 승인 대기, 대출 연결 후보, 구매 게이트 후보 등 운영 queue |
+| `/data/transactions` | 거래 | 필터, 행 보기/그룹 보기, 거래 편집, bulk update/delete/restore, 반복 그룹 작업 |
+| `/data/loans` | 대출 | 대출 계좌 metadata, 상환 거래 후보, 연결/해제, 다건 연결, 상환 성격 관리 |
+| `/data/installments` | 할부 | 할부 계획 생성/수정, 거래 후보 검색, 회차 연결, 월별 forecast |
+| `/data/assets` | 자산 메타 | 최신 자산 row의 유동성 tier/현금성 여부 편집, 대출 월상환액/상환방식 metadata 보강 |
+| `/data/rules` | 규칙 | category/recurring/merchant alias/loan merchant rule 관리와 일괄 적용 |
+| `/data/settings` | 설정 | 재무 목표와 분석 파라미터 effective/default/saved 값 확인 |
+| `/data/import` | 가져오기 | BankSalad 엑셀 업로드, 업로드 이력, 거래/스냅샷 초기화 |
+| `/data/reference` | 데이터 사전 | canonical/dashboard/schema read surface와 데이터 coverage reference |
 
-호환용 redirect는 `/spending` -> `/analysis/spending`, `/assets` -> `/analysis/assets`, `/income` -> `/`, `/transfers` -> `/`, `/data` -> `/operations/workbench`로 유지한다.
+호환용 redirect는 구 `/analysis/*`, `/operations/*`, `/assets`, `/income`, `/transfers`, `/data` 경로를 새 IA의 canonical route로 보낸다.
 
 ## 주요 지표 의미
 

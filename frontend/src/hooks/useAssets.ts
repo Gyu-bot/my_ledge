@@ -3,15 +3,17 @@ import { assetApi } from '../api/assets'
 import type {
   AssetLiquidityPatchRequest,
   LoanRepaymentMetadataPatchRequest,
+  SnapshotComparisonMode,
 } from '../types/asset'
 
 export const assetKeys = {
   snapshots: () => ['assets', 'snapshots'] as const,
   netWorthHistory: () => ['assets', 'netWorthHistory'] as const,
-  snapshotCompare: () => ['assets', 'snapshotCompare'] as const,
+  snapshotCompare: (mode?: SnapshotComparisonMode) => ['assets', 'snapshotCompare', mode ?? 'default'] as const,
   netWorthBreakdown: () => ['assets', 'netWorthBreakdown'] as const,
   liquidityHealth: () => ['assets', 'liquidityHealth'] as const,
   investments: () => ['assets', 'investments'] as const,
+  insurance: () => ['assets', 'insurance'] as const,
   loans: () => ['assets', 'loans'] as const,
 }
 
@@ -23,8 +25,11 @@ export function useNetWorthHistory() {
   return useQuery({ queryKey: assetKeys.netWorthHistory(), queryFn: assetApi.netWorthHistory })
 }
 
-export function useAssetSnapshotCompare() {
-  return useQuery({ queryKey: assetKeys.snapshotCompare(), queryFn: assetApi.snapshotCompare })
+export function useAssetSnapshotCompare(mode?: SnapshotComparisonMode) {
+  return useQuery({
+    queryKey: assetKeys.snapshotCompare(mode),
+    queryFn: () => assetApi.snapshotCompare(mode),
+  })
 }
 
 export function useNetWorthBreakdown() {
@@ -37,6 +42,10 @@ export function useLiquidityHealth() {
 
 export function useInvestmentSummary() {
   return useQuery({ queryKey: assetKeys.investments(), queryFn: assetApi.investments })
+}
+
+export function useInsuranceSummary() {
+  return useQuery({ queryKey: assetKeys.insurance(), queryFn: assetApi.insurance })
 }
 
 export function useLoanSummary() {

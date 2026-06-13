@@ -2,7 +2,7 @@ export interface UploadResponse {
   status: string
   upload_id: number
   transactions: { total: number; new: number; skipped: number }
-  snapshots: { asset_snapshots: number; investments: number; loans: number }
+  snapshots: { asset_snapshots: number; insurance_contracts: number; investments: number; loans: number }
   error_message: string | null
 }
 

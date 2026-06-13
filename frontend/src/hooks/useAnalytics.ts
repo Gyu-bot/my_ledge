@@ -79,12 +79,12 @@ export function usePurchaseGateCandidates(params: PurchaseGateCandidatesQuery = 
 }
 
 export function useReviewPurchaseGateCandidate() {
-  const queryClient = useQueryClient()
+  const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ candidateKey, payload }: { candidateKey: string; payload: PurchaseGateReviewPatchRequest }) =>
-      analyticsApi.reviewPurchaseGateCandidate(candidateKey, payload),
+    mutationFn: ({ candidateKey, data }: { candidateKey: string; data: PurchaseGateReviewPatchRequest }) =>
+      analyticsApi.reviewPurchaseGateCandidate(candidateKey, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['analytics', 'purchaseGateCandidates'] })
+      void qc.invalidateQueries({ queryKey: ['analytics', 'purchaseGateCandidates'] })
     },
   })
 }

@@ -151,22 +151,31 @@ export interface SpendingAnomaliesQuery {
   end_date?: string
 }
 
-export type AnalyticsRiskLevel = 'low' | 'watch' | 'warning' | 'high' | 'critical'
+export type AnalyticsRiskLevel =
+  | 'normal'
+  | 'low'
+  | 'watch'
+  | 'warning'
+  | 'high'
+  | 'critical'
+  | 'needs_classification'
+  | 'unknown'
 
 export interface DiscretionaryVelocityResponse {
   period: string
   as_of_date: string
   month_progress_ratio: number
   discretionary_spend: number
+  baseline_monthly_spend: number
   baseline_spend_at_same_progress: number
   velocity_ratio: number | null
   risk_level: AnalyticsRiskLevel
   review_priority?: number | null
-  confidence: number
+  confidence: string
   reasons: string[]
   assumptions: string[]
   unclassified_spend: number
-  classification_coverage_ratio: number
+  classification_coverage_ratio: number | null
   income_basis?: 'observed' | 'estimated' | string | null
 }
 
@@ -215,6 +224,22 @@ export interface PurchaseGateCandidateItem {
   assumptions: string[]
 }
 
+export interface PurchaseGateReviewPatchRequest {
+  review_status: PurchaseGateCandidateStatus
+  memo?: string | null
+  cooldown_days?: number | null
+}
+
+export interface PurchaseGateReviewResponse {
+  candidate_key: string
+  candidate_type: string
+  transaction_id: number
+  review_status: PurchaseGateCandidateStatus
+  memo: string | null
+  reviewed_at: string | null
+  cooldown_until: string | null
+}
+
 export interface PurchaseGateCandidatesResponse {
   total: number
   page: number
@@ -226,10 +251,4 @@ export interface PurchaseGateCandidatesResponse {
 export interface PurchaseGateCandidatesQuery {
   status?: PurchaseGateCandidateStatus
   limit?: number
-}
-
-export interface PurchaseGateReviewPatchRequest {
-  review_status: PurchaseGateCandidateStatus
-  memo?: string | null
-  cooldown_days?: number | null
 }

@@ -16,6 +16,12 @@ export interface CanonicalMonthlyCashflowItem {
   unclassified_expense_total: number
   net_cashflow: number
   savings_rate: number | null
+  savings_rate_basis:
+    | 'observed_closed_month'
+    | 'observed_partial_month'
+    | 'insufficient_partial_month_income'
+    | 'no_income'
+  is_complete_month: boolean
 }
 
 export interface CanonicalTrueSpendableMonthlyItem {
@@ -37,6 +43,7 @@ export interface CanonicalTrueSpendableMonthlyItem {
   excluded_income_periods: string[]
   estimated_spendable_before_variable_spend: number | null
   estimated_remaining_after_variable_spend: number | null
+  is_complete_month: boolean
 }
 
 export interface CanonicalLoanRepaymentMonthlyItem {
@@ -92,9 +99,18 @@ export interface CanonicalUnclassifiedWorkQueueItem {
   merchant_expense_count: number
   priority_score: number
   priority_reason: string
+  issue_types: string[]
+  primary_issue_type: string | null
+  recurrence_signal: Record<string, boolean | number>
+}
+
+export interface CanonicalDataCoverage {
+  first_transaction_date: string | null
+  last_transaction_date: string | null
 }
 
 export interface CanonicalViewsDashboardResponse {
+  data_coverage: CanonicalDataCoverage
   monthly_cashflow: CanonicalMonthlyCashflowItem[]
   true_spendable_monthly: CanonicalTrueSpendableMonthlyItem[]
   loan_repayment_monthly: CanonicalLoanRepaymentMonthlyItem[]

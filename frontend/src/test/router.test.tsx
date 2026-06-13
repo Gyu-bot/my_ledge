@@ -1,80 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { isValidElement } from 'react'
+import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { routes } from '../router'
-import { NAVIGATION_ITEMS } from '../navigation'
 
-function findRoute(path: string) {
-  return routes.find((route) => route.path === path)
+function renderAt(path: string) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const router = createMemoryRouter(routes, { initialEntries: [path] })
+  render(
+    <QueryClientProvider client={qc}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
+  return router
 }
 
-describe('legacy route fallbacks', () => {
+describe('router — 새 IA + 레거시 redirect', () => {
   it.each([
-    ['/spending', '/analysis/spending'],
-    ['/assets', '/analysis/assets'],
-    ['/data', '/operations/workbench'],
-  ])('defines an explicit %s redirect', (path, destination) => {
-    const route = findRoute(path)
-
-    expect(route).toBeDefined()
-    expect(isValidElement(route?.element)).toBe(true)
-    expect((route?.element as { props?: { to?: string } }).props?.to).toBe(destination)
+    ['/spending', '지출'],
+    ['/net-worth', '자산·부채'],
+    ['/signals', '신호'],
+    ['/data/inbox', '데이터 · 인박스'],
+    ['/data/settings', '데이터 · 설정'],
+    ['/data/reference', '데이터 · 데이터 사전'],
+  ])('%s → 페이지 타이틀 "%s"', (path, title) => {
+    renderAt(path)
+    expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument()
   })
 
-  it('defines an explicit /income redirect to overview', () => {
-    const route = findRoute('/income')
-
-    expect(route).toBeDefined()
-    expect(isValidElement(route?.element)).toBe(true)
-    expect((route?.element as { props?: { to?: string } }).props?.to).toBe('/')
+  it.each([
+    ['/analysis/spending', '/spending'],
+    ['/analysis/assets', '/net-worth'],
+    ['/analysis/insights', '/signals'],
+    ['/operations/workbench', '/data/transactions'],
+    ['/operations/loan-mapping', '/data/loans'],
+    ['/operations/installments', '/data/installments'],
+    ['/operations/asset-settings', '/data/assets'],
+    ['/operations/auto-classification', '/data/rules'],
+    ['/operations/canonical-views', '/data/reference'],
+  ])('레거시 %s → %s redirect', (from, to) => {
+    const router = renderAt(from)
+    expect(router.state.location.pathname).toBe(to)
   })
 
-  it('defines an explicit /transfers redirect to overview', () => {
-    const route = findRoute('/transfers')
-
-    expect(route).toBeDefined()
-    expect(isValidElement(route?.element)).toBe(true)
-    expect((route?.element as { props?: { to?: string } }).props?.to).toBe('/')
-  })
-})
-
-describe('operations routes', () => {
-  it('registers the recurring classification operations route', () => {
-    const root = findRoute('/')
-    const children = root?.children as Array<{ path?: string }> | undefined
-
-    expect(children?.some((route) => route.path === 'operations/recurring-classification')).toBe(true)
+  it('레거시 반복 결제 분류는 거래 그룹 보기로 redirect', () => {
+    const router = renderAt('/operations/recurring-classification')
+    expect(router.state.location.pathname).toBe('/data/transactions')
+    expect(router.state.location.search).toBe('?view=groups')
   })
 
-  it('registers the auto classification operations route', () => {
-    const root = findRoute('/')
-    const children = root?.children as Array<{ path?: string }> | undefined
-
-    expect(children?.some((route) => route.path === 'operations/auto-classification')).toBe(true)
-  })
-
-  it('registers the canonical views operations route', () => {
-    const root = findRoute('/')
-    const children = root?.children as Array<{ path?: string }> | undefined
-
-    expect(children?.some((route) => route.path === 'operations/canonical-views')).toBe(true)
-  })
-
-  it('registers the asset settings operations route', () => {
-    const root = findRoute('/')
-    const children = root?.children as Array<{ path?: string }> | undefined
-
-    expect(children?.some((route) => route.path === 'operations/asset-settings')).toBe(true)
-  })
-})
-
-describe('navigation items', () => {
-  it('exposes an asset settings entry in the operations navigation', () => {
-    expect(NAVIGATION_ITEMS).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        path: '/operations/asset-settings',
-        label: '자산 설정',
-        section: 'operations',
-      }),
-    ]))
+  it('/data → /data/inbox', () => {
+    const router = renderAt('/data')
+    expect(router.state.location.pathname).toBe('/data/inbox')
   })
 })
