@@ -48,7 +48,7 @@
 
 1. `T012`/`T012A` and issue-backed agent contract tasks `T023`-`T029` are implemented in `codex/ready-plan-tasks`; GitHub Issues `#7`-`#14` are closed as completed.
 2. Frontend remake PR `#15` has landed on `main`; frontend-dependent settings and smoke tasks can now target the new `/data/*` and `/data/settings` surfaces instead of staying paused for the remake line.
-3. `T015` is the next backend/domain Ready task. `T016`, `T016A`, `T017`, and `T018` remain Planned because they depend on the observation/canonical base from `T015`; `T019` is Blocked until official Toss Securities API documentation is provided.
+3. `T015`-`T018` and `T016A` are Ready as an executable source-selection/reconciliation sequence; `Depends on` records implementation order, not a reason to keep them Planned. `T019` is Blocked until official Toss Securities API documentation is provided.
 
 ---
 
@@ -295,20 +295,25 @@
 - Status: Ready
 - Depends on: T010
 - Acceptance Criteria:
-  - [ ] `/data/settings` route와 shell navigation entry를 기준으로 settings surface를 확장한다.
-  - [ ] analytics settings panel이 현재 backend settings 값을 조회하고 저장한다.
-  - [ ] 기존 재무 목표 편집 UI와 같은 화면에서 분석 파라미터 섹션별 편집 UI를 제공한다.
+  - [x] `/data/settings` route와 shell navigation entry가 새 frontend IA에 존재한다.
+  - [x] `GET/PATCH /api/v1/settings/analytics` frontend API client와 React Query hook이 존재한다.
+  - [x] `financial_targets` 재무 목표 편집 UI가 현재 backend effective/default 값을 조회하고 저장한다.
+  - [x] 비상금 목표 개월, 저축률 목표, 부채 상환 전략을 편집할 수 있다.
+  - [ ] 기존 재무 목표 편집 UI와 같은 화면에서 분석 파라미터 섹션별 default/saved/effective 값을 표시한다.
+  - [ ] 분석 파라미터 섹션별 편집 UI를 제공한다.
   - [ ] purchase gate threshold/settings를 편집할 수 있다.
   - [ ] discretionary velocity threshold/settings를 편집할 수 있다.
   - [ ] recurring dry-run 기본값/settings를 편집할 수 있다.
-  - [ ] asset-liability settings와 financial targets를 편집할 수 있다.
-  - [ ] reset-to-default, export/import는 일반 사용자 UI가 아니라 별도 개발/리뷰 도구로 남긴다.
-  - [ ] frontend typecheck/lint/test가 통과한다.
-  - [ ] Codex 인앱 브라우저로 `/data/settings` 기본 흐름을 확인한다.
-  - [ ] frontend docs가 갱신된다.
+  - [ ] asset-liability settings 중 `asset_liability_health` 월상환 추정/유동성 설정을 편집할 수 있다.
+  - [x] reset-to-default, export/import는 일반 사용자 UI에 노출하지 않고 별도 개발/리뷰 도구로 남긴다.
+  - [x] `SettingsPage` vitest가 effective 값 초기화와 저축률 `% -> ratio` PATCH 변환을 검증한다.
+  - [ ] 분석 파라미터 편집까지 포함한 frontend typecheck/lint/test가 통과한다.
+  - [ ] Codex 인앱 브라우저로 `/data/settings` 전체 설정 편집 흐름을 확인한다.
+  - [x] frontend docs가 `/data/settings` route와 `settings/analytics` + `financial_targets` 설정 surface를 설명한다.
 - Notes:
+  - Status rationale: `/data/settings` route, navigation, financial targets edit/save는 구현됐고, 분석 파라미터 섹션별 full edit UI는 바로 이어서 작업 가능하므로 Ready다.
   - frontend/UI 작업이므로 브라우저 또는 동등한 visual check가 필요하다.
-  - Frontend remake PR `#15`에서 `/data/settings`와 재무 목표 편집은 들어왔으나, 분석 파라미터별 full edit UI는 아직 남아 있다.
+  - Frontend remake PR `#15`에서 `/data/settings`와 재무 목표 편집은 들어왔으나, 분석 파라미터별 default/saved/effective 표시와 편집 폼은 아직 남아 있다.
 
 #### Task T014. 운영 배포본 smoke capture
 - Priority: P1
@@ -319,11 +324,13 @@
   - [ ] `/spending` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/net-worth` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/signals` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/data/inbox` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/data/transactions` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/data/loans` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/data/assets` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/data/settings` 운영 배포본 screenshot과 console 상태가 기록된다.
   - [ ] `/data/import`, `/data/rules`, `/data/installments`, `/data/reference`의 기본 접근성이 확인된다.
+  - [ ] legacy redirect(`/analysis/spending`, `/analysis/assets`, `/analysis/insights`, `/operations/*`, `/income`)가 새 IA target으로 이동하는지 확인된다.
   - [ ] API proxy와 runtime config가 운영 환경에서 정상 동작함을 확인한다.
   - [ ] 발견된 문제는 별도 fix task 또는 issue로 분리된다.
 - Notes:
@@ -359,7 +366,7 @@
 
 #### Task T016. User-controlled source priority profiles
 - Priority: P2
-- Status: Planned
+- Status: Ready
 - Depends on: T015
 - Acceptance Criteria:
   - [ ] source priority profile 저장 모델이 추가된다.
@@ -379,7 +386,7 @@
   - [ ] agent는 source conflict를 임의로 해결하지 않고 저장된 priority와 conflict reason을 설명한다.
   - [ ] 관련 backend/API contract docs와 agent coverage 해석 규칙이 갱신된다.
 - Notes:
-  - Status rationale: `T015`의 observation/canonical identity foundation이 먼저 필요하므로 아직 Planned다.
+  - Status rationale: 구현 순서는 `T015` 이후지만 같은 source-selection backend batch로 바로 착수 가능하므로 Ready다.
   - 증권사/부동산/수동 valuation 같은 외부 source adapter와 연결될 기반이다.
   - 추천 기본값은 global default `banksalad_snapshot`, Toss 연동 시 investment override `toss_securities_api`, 예외 처리는 canonical asset key override 이다.
   - field-level override는 장기 확장 포인트로 남기되, Toss Securities 1차 구현은 계좌 holdings row 단위 replacement로 제한한다.
@@ -388,7 +395,7 @@
 #### Task T016A. Source priority settings frontend
 - Parent Task: T016
 - Priority: P2
-- Status: Planned
+- Status: Ready
 - Depends on: T016
 - Acceptance Criteria:
   - [ ] 새 frontend의 `/data/settings` 또는 동등한 설정 surface에 자산 source 선택 섹션이 추가된다.
@@ -403,12 +410,12 @@
   - [ ] Codex 인앱 브라우저 또는 동등한 visual QA로 기본 조회/저장 흐름을 확인한다.
   - [ ] frontend docs가 새 settings surface 기준으로 갱신된다.
 - Notes:
-  - Status rationale: frontend remake는 완료되어 Paused는 아니지만, 저장/조회할 backend source-priority API(`T016`)가 필요하므로 Planned다.
+  - Status rationale: frontend remake가 완료됐고 `/data/settings` surface가 있으므로 Ready다. 저장/조회 API는 `T016`과 같은 sequence에서 맞춘다.
   - Frontend remake is now merged, so this task is no longer blocked by the remake branch.
 
 #### Task T017. Deterministic field-level resolution and conflict queue
 - Priority: P2
-- Status: Planned
+- Status: Ready
 - Depends on: T015, T016
 - Acceptance Criteria:
   - [ ] 동일 자산 identity의 여러 source를 `canonical_asset_key + as_of_date` 또는 source별 `valuation_as_of`로 묶는다.
@@ -423,12 +430,12 @@
   - [ ] apply는 explicit confirmation 후 replacement chain 또는 lifecycle decision을 저장한다.
   - [ ] `POST /api/v1/data/reset`은 대량 초기화용으로 남고 reconciliation API와 분리된다.
 - Notes:
-  - Status rationale: source priority와 selected observation model(`T015`, `T016`)이 먼저 필요하므로 Planned다.
+  - Status rationale: 구현 순서는 `T015`/`T016` 이후지만 같은 reconciliation backend batch로 바로 착수 가능하므로 Ready다.
   - row 단위 merge보다 field 단위 resolution을 우선한다.
 
 #### Task T018. Provenance and agent coverage surface
 - Priority: P2
-- Status: Planned
+- Status: Ready
 - Depends on: T015, T016, T017
 - Acceptance Criteria:
   - [ ] source provenance 필드 또는 별도 table이 `source_system`, `source_run_id`, `source_file_fingerprint`, `source_row_hash`, `canonical_asset_key`, `source_confidence`, `observed_at`, `valuation_as_of`를 표현한다.
@@ -442,7 +449,7 @@
   - [ ] investment summary와 net-worth 관련 API는 selected source, source basis date, mixed-source 여부를 agent가 설명할 수 있게 metadata를 제공한다.
   - [ ] agent 문서가 source가 섞인 자산 값을 확정 총액처럼 말하지 않도록 안내한다.
 - Notes:
-  - Status rationale: selected canonical view와 source resolution(`T015`-`T017`)이 먼저 필요하므로 Planned다.
+  - Status rationale: 구현 순서는 `T015`-`T017` 이후지만 같은 coverage/contract hardening batch로 바로 착수 가능하므로 Ready다.
   - coverage surface는 외부 agent가 raw DB를 직접 재해석하지 않도록 하는 read contract다.
 
 #### Task T019. Toss Securities holdings valuation integration
@@ -501,13 +508,15 @@
 - Status: Planned
 - Depends on: T001 through T014
 - Acceptance Criteria:
-  - [ ] 수입 분석 페이지를 별도 task로 쪼갤지 결정한다.
+  - [ ] 수입 분석을 별도 top-level route로 둘지, 현재 새 IA처럼 홈(`/`) 또는 신호(`/signals`) 안의 section으로 유지할지 결정한다.
+  - [ ] 별도 수입 route를 만들 경우 현재 legacy `/income -> /` redirect와 충돌하지 않도록 새 route/redirect 정책을 먼저 정의한다.
   - [ ] 자동 백업 크론을 별도 infra task로 쪼갤지 결정한다.
   - [ ] 도메인 연결과 HTTPS를 별도 deployment task로 쪼갤지 결정한다.
   - [ ] budgets/goals/advice preferences 전체 기능을 `T010` 이후 별도 product task로 쪼갠다.
   - [ ] health score/personalized coaching은 My Ledge core 책임 경계와 충돌하지 않는 consumer/advisor layer 작업으로 분리한다.
 - Notes:
   - 이 task는 queue placeholder가 아니라 분해 대상 tracking task다. 착수 전 더 작은 executable task로 재작성한다.
+  - 현재 frontend route 기준으로 `/income`은 별도 페이지가 아니라 `/` redirect다.
 
 #### Task T023. 진행월 cashflow 대표 지표와 savings rate basis 명시
 - GitHub Issue: [#7](https://github.com/Gyu-bot/my_ledge/issues/7)
