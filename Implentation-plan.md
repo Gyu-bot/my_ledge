@@ -47,8 +47,8 @@
 ## Current Priority Queue
 
 1. `T012`/`T012A` and issue-backed agent contract tasks `T023`-`T029` are implemented in `codex/ready-plan-tasks`; GitHub Issues `#7`-`#14` are closed as completed.
-2. Frontend-editing and current-frontend verification tasks are paused while the separate frontend remake branch is in progress.
-3. `T015` is the next backend/domain Ready task. `T016` is split into backend/API source-priority policy work and paused frontend settings work (`T016A`).
+2. Frontend remake PR `#15` has landed on `main`; frontend-dependent settings and smoke tasks can now target the new `/data/*` and `/data/settings` surfaces instead of staying paused for the remake line.
+3. `T015` is the next backend/domain Ready task. `T016`, `T016A`, `T017`, and `T018` remain Planned because they depend on the observation/canonical base from `T015`; `T019` is Blocked until official Toss Securities API documentation is provided.
 
 ---
 
@@ -292,59 +292,70 @@
 
 #### Task T013. Settings frontend
 - Priority: P1
-- Status: Paused
+- Status: Ready
 - Depends on: T010
 - Acceptance Criteria:
-  - [ ] `/settings` route가 추가된다.
-  - [ ] shell navigation 또는 하단 entry에서 settings로 진입할 수 있다.
+  - [ ] `/data/settings` route와 shell navigation entry를 기준으로 settings surface를 확장한다.
   - [ ] analytics settings panel이 현재 backend settings 값을 조회하고 저장한다.
+  - [ ] 기존 재무 목표 편집 UI와 같은 화면에서 분석 파라미터 섹션별 편집 UI를 제공한다.
   - [ ] purchase gate threshold/settings를 편집할 수 있다.
   - [ ] discretionary velocity threshold/settings를 편집할 수 있다.
   - [ ] recurring dry-run 기본값/settings를 편집할 수 있다.
   - [ ] asset-liability settings와 financial targets를 편집할 수 있다.
   - [ ] reset-to-default, export/import는 일반 사용자 UI가 아니라 별도 개발/리뷰 도구로 남긴다.
   - [ ] frontend typecheck/lint/test가 통과한다.
-  - [ ] Codex 인앱 브라우저로 `/settings` 기본 흐름을 확인한다.
+  - [ ] Codex 인앱 브라우저로 `/data/settings` 기본 흐름을 확인한다.
   - [ ] frontend docs가 갱신된다.
 - Notes:
   - frontend/UI 작업이므로 브라우저 또는 동등한 visual check가 필요하다.
-  - 별도 frontend remake branch가 완료된 뒤 새 frontend 기준으로 재개한다.
+  - Frontend remake PR `#15`에서 `/data/settings`와 재무 목표 편집은 들어왔으나, 분석 파라미터별 full edit UI는 아직 남아 있다.
 
 #### Task T014. 운영 배포본 smoke capture
 - Priority: P1
-- Status: Paused
+- Status: Ready
 - Depends on: T000
 - Acceptance Criteria:
-  - [ ] overview 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] spending 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] assets 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] insights 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] operations workbench 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] loan mapping 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] asset settings 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] installments 화면의 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/spending` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/net-worth` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/signals` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/data/transactions` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/data/loans` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/data/assets` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/data/settings` 운영 배포본 screenshot과 console 상태가 기록된다.
+  - [ ] `/data/import`, `/data/rules`, `/data/installments`, `/data/reference`의 기본 접근성이 확인된다.
   - [ ] API proxy와 runtime config가 운영 환경에서 정상 동작함을 확인한다.
   - [ ] 발견된 문제는 별도 fix task 또는 issue로 분리된다.
 - Notes:
   - local DOM smoke는 이미 완료된 기록이 있으므로 이 task는 운영 배포본 확인에 집중한다.
-  - 현재 frontend 기준 운영 smoke는 remake branch 완료 후 의미가 커지므로 그때 재개한다.
+  - Frontend remake PR `#15`가 main에 머지되었으므로 새 IA 기준 운영 smoke가 가능하다.
 
-#### Task T015. Asset raw observation lifecycle와 canonical inclusion policy
+#### Task T015. Asset/investment raw observation lifecycle와 selected canonical views
 - Priority: P2
 - Status: Ready
 - Depends on: T001, T002, T005
 - Acceptance Criteria:
   - [ ] raw observation은 일반 운영에서 hard delete하지 않는다.
+  - [ ] 기존 BankSalad snapshot row와 외부 source row를 보존할 별도 observation table 또는 observation metadata layer가 도입된다.
   - [ ] asset/investment/loan observation에 lifecycle status 또는 별도 metadata table이 도입된다.
   - [ ] status는 최소 `active`, `hidden_by_user`, `matured_candidate`, `matured_confirmed`, `replaced`, `duplicate`, `conflict`, `stale`, `needs_review`를 표현한다.
   - [ ] `hidden_by_user`, `matured_confirmed`, `replaced`, `duplicate` observation은 raw audit에서는 보이지만 기본 canonical totals에서는 제외된다.
   - [ ] `stale`은 freshness 신호일 뿐 자동 제외 근거가 아니다.
   - [ ] 만기 지난 대출/자산은 자동 숨김이 아니라 review candidate로 제안된다.
+  - [ ] selected canonical view가 raw observation 중 canonical total/API에 반영될 row를 명시한다.
+  - [ ] BankSalad snapshot 기반 `asset_snapshots`, `loans`, `insurance_contracts`, `user_profile_snapshots`의 기존 동작은 유지하고, 투자 source 확장은 investment observation/canonical layer에서만 시작한다.
+  - [ ] Toss Securities source는 투자 증권계좌 holdings 전용 source로 모델링하고, 일반 자산/대출/보험/profile snapshot을 대체하지 않는다.
+  - [ ] BankSalad 투자 row 중 Toss Securities 계좌 항목은 우선 `broker` 정규화값으로 식별하되, 실제 workbook 값 확인 후 `broker + product_name` 또는 별도 account/source mapping으로 보강할 수 있다.
+  - [ ] investment canonical identity는 `canonical_investment_key = normalized_account_key + normalized_instrument_key` 구조로 정의한다.
+  - [ ] `normalized_account_key`는 Toss API 계좌 식별자 또는 BankSalad `broker` 정규화값을 사용하고, `normalized_instrument_key`는 Toss API 종목 식별자/ISIN/ticker를 우선하되 BankSalad-only row는 정규화된 `product_name`으로 fallback한다.
   - [ ] preview API가 canonical total 영향, latest asset screen 영향, raw audit 보존 여부를 보여준다.
   - [ ] apply API가 explicit confirmation 후 감사 가능한 이유와 actor/source를 남긴다.
   - [ ] 관련 contract docs와 agent coverage 해석 규칙이 갱신된다.
 - Notes:
+  - Status rationale: 바로 착수 가능한 backend/domain 설계 작업이다. Toss 공식 API 문서가 없어도 BankSalad observation 보존, investment canonical identity, selected view foundation은 진행할 수 있다.
   - 이 task부터는 더 큰 asset reconciliation 구조 변경이므로 advisor canonical P0/P1 완료 후 착수한다.
+  - Toss Securities holdings replacement는 기존 snapshot table을 덮어쓰지 않고 selected canonical investment view에서 표현한다.
+  - 샘플 workbook `tmp/2025-05-21~2026-05-21.xlsx`에서는 `broker='토스증권'` 6건과 `broker='카카오페이 증권'` 3건이 분리되며, `알파벳`/`테슬라`류 종목명이 증권사 간 중복될 수 있어 product name 단독 identity는 금지한다.
 
 #### Task T016. User-controlled source priority profiles
 - Priority: P2
@@ -356,48 +367,63 @@
   - [ ] asset class별 priority를 표현할 수 있다.
   - [ ] canonical asset key별 override를 표현할 수 있다.
   - [ ] field별 override를 표현할 수 있다.
+  - [ ] 1차 profile은 `investment` asset class에서 `banksalad_snapshot`과 `toss_securities_api` 중 선택할 수 있다.
+  - [ ] `toss_securities_api` 선택 시 Toss Securities 계좌에 속한 투자 항목은 BankSalad 투자 row와 field merge하지 않고 Toss API observation 값으로 완전 대체된다.
+  - [ ] Toss Securities 계좌가 아닌 투자 항목과 모든 비투자 snapshot surface는 BankSalad latest snapshot을 계속 사용한다.
+  - [ ] source 선택 단위는 기본값으로 `asset_class=investment` override를 제공하고, 필요 시 `canonical_asset_key` override로 특정 계좌/상품만 예외 처리할 수 있게 한다.
   - [ ] priority 변경은 historical observation을 수정하지 않고 future resolution rule로 기록된다.
   - [ ] `GET/PATCH /api/v1/assets/source-priority` 또는 동등한 API가 제공된다.
   - [ ] API 응답은 현재 적용 중인 effective priority와 override source를 설명한다.
+  - [ ] source priority override key는 product name 단독이 아니라 `canonical_investment_key` 또는 `normalized_account_key` 단위로 저장된다.
   - [ ] frontend 설정 화면 없이도 API/agent contract로 source conflict를 해석할 수 있다.
   - [ ] agent는 source conflict를 임의로 해결하지 않고 저장된 priority와 conflict reason을 설명한다.
   - [ ] 관련 backend/API contract docs와 agent coverage 해석 규칙이 갱신된다.
 - Notes:
+  - Status rationale: `T015`의 observation/canonical identity foundation이 먼저 필요하므로 아직 Planned다.
   - 증권사/부동산/수동 valuation 같은 외부 source adapter와 연결될 기반이다.
+  - 추천 기본값은 global default `banksalad_snapshot`, Toss 연동 시 investment override `toss_securities_api`, 예외 처리는 canonical asset key override 이다.
+  - field-level override는 장기 확장 포인트로 남기되, Toss Securities 1차 구현은 계좌 holdings row 단위 replacement로 제한한다.
   - 이 task는 backend/API/policy scope만 다룬다. frontend settings surface는 `T016A`에서 별도로 추적한다.
 
 #### Task T016A. Source priority settings frontend
 - Parent Task: T016
 - Priority: P2
-- Status: Paused
-- Depends on: T016, frontend remake completion
+- Status: Planned
+- Depends on: T016
 - Acceptance Criteria:
-  - [ ] `/settings/assets/source-priority` 또는 동등한 설정 surface가 새 frontend IA에 정의된다.
+  - [ ] 새 frontend의 `/data/settings` 또는 동등한 설정 surface에 자산 source 선택 섹션이 추가된다.
   - [ ] global default priority를 조회/저장할 수 있다.
   - [ ] asset class별 priority를 조회/저장할 수 있다.
   - [ ] canonical asset key별 override를 조회/저장할 수 있다.
   - [ ] field별 override를 조회/저장할 수 있다.
+  - [ ] Toss Securities 연동을 켜면 "토스 증권계좌 투자 항목만 Toss API 값으로 대체하고, 나머지 자산/대출/보험/profile은 BankSalad snapshot을 유지한다"는 범위가 화면에서 명확하다.
+  - [ ] 설정 화면은 BankSalad snapshot 기준일과 Toss API 조회/평가 기준일이 서로 다를 수 있음을 표시한다.
   - [ ] priority 변경이 historical observation을 수정하지 않는 future resolution rule임을 화면 copy와 interaction으로 명확히 한다.
   - [ ] frontend typecheck/lint/test가 통과한다.
   - [ ] Codex 인앱 브라우저 또는 동등한 visual QA로 기본 조회/저장 흐름을 확인한다.
   - [ ] frontend docs가 새 settings surface 기준으로 갱신된다.
 - Notes:
-  - 별도 frontend remake branch가 완료된 뒤 새 frontend 기준으로 재개한다.
+  - Status rationale: frontend remake는 완료되어 Paused는 아니지만, 저장/조회할 backend source-priority API(`T016`)가 필요하므로 Planned다.
+  - Frontend remake is now merged, so this task is no longer blocked by the remake branch.
 
 #### Task T017. Deterministic field-level resolution and conflict queue
 - Priority: P2
 - Status: Planned
 - Depends on: T015, T016
 - Acceptance Criteria:
-  - [ ] 동일 자산 identity의 여러 source를 `canonical_asset_key + as_of_date`로 묶는다.
+  - [ ] 동일 자산 identity의 여러 source를 `canonical_asset_key + as_of_date` 또는 source별 `valuation_as_of`로 묶는다.
+  - [ ] 투자 identity는 `canonical_investment_key`를 사용하며, 같은 `product_name`이라도 계좌/broker가 다르면 다른 holding으로 유지한다.
   - [ ] lifecycle에서 제외된 observation은 resolution 후보에서 제외된다.
   - [ ] field별 source priority가 적용된다.
   - [ ] tie-break 순서가 `user_confirmed`, source priority, fresher observed_at, source_confidence, ingested_at, stable row id 순으로 고정된다.
+  - [ ] Toss Securities가 선택된 투자 계좌 holdings는 field-level merge 없이 Toss observation row를 selected source로 고른다.
+  - [ ] BankSalad snapshot 기준일과 Toss API 조회일이 다른 mixed-date canonical total은 각 row/source별 basis metadata를 함께 노출한다.
   - [ ] tolerance를 넘는 같은 우선순위 source 충돌은 conflict queue에 남긴다.
   - [ ] reconciliation preview가 field별 선택 이유와 conflict 정보를 보여준다.
   - [ ] apply는 explicit confirmation 후 replacement chain 또는 lifecycle decision을 저장한다.
   - [ ] `POST /api/v1/data/reset`은 대량 초기화용으로 남고 reconciliation API와 분리된다.
 - Notes:
+  - Status rationale: source priority와 selected observation model(`T015`, `T016`)이 먼저 필요하므로 Planned다.
   - row 단위 merge보다 field 단위 resolution을 우선한다.
 
 #### Task T018. Provenance and agent coverage surface
@@ -406,28 +432,40 @@
 - Depends on: T015, T016, T017
 - Acceptance Criteria:
   - [ ] source provenance 필드 또는 별도 table이 `source_system`, `source_run_id`, `source_file_fingerprint`, `source_row_hash`, `canonical_asset_key`, `source_confidence`, `observed_at`, `valuation_as_of`를 표현한다.
+  - [ ] `source_system`은 최소 `banksalad_snapshot`과 `toss_securities_api`를 구분한다.
+  - [ ] BankSalad source는 `snapshot_date`, Toss source는 API 조회 시각(`observed_at`)과 평가 기준일(`valuation_as_of` 또는 API 제공 동등값)을 분리해서 저장한다.
   - [ ] 사용자 확인/정책 적용 필드가 `is_user_confirmed`, `priority_policy_id`, `decision_reason`, `reviewed_by`, `reviewed_at`를 표현한다.
   - [ ] supersession/selection 필드가 `superseded_by_observation_id`, `selected_source_system`, `selected_observation_id`를 표현한다.
   - [ ] freshness/conflict 필드가 `freshness_sla_days`, `stale_days`, `conflict_status`를 표현한다.
   - [ ] `GET /api/v1/analytics/asset-source-coverage` 또는 `vw_asset_source_coverage`가 제공된다.
   - [ ] canonical asset coverage가 raw/selected/excluded/confirmed/derived/hidden/conflicted/stale 비율을 설명할 수 있다.
+  - [ ] investment summary와 net-worth 관련 API는 selected source, source basis date, mixed-source 여부를 agent가 설명할 수 있게 metadata를 제공한다.
   - [ ] agent 문서가 source가 섞인 자산 값을 확정 총액처럼 말하지 않도록 안내한다.
 - Notes:
+  - Status rationale: selected canonical view와 source resolution(`T015`-`T017`)이 먼저 필요하므로 Planned다.
   - coverage surface는 외부 agent가 raw DB를 직접 재해석하지 않도록 하는 read contract다.
 
-#### Task T019. Investment analytics after securities source integration
+#### Task T019. Toss Securities holdings valuation integration
 - Priority: P2
-- Status: Paused
-- Depends on: T016, external securities source decision
+- Status: Blocked
+- Depends on: T015, T016, T017, T018, official Toss Securities API documentation
 - Acceptance Criteria:
-  - [ ] 증권사 API/CLI 또는 동등한 holdings/cashflow source가 결정된다.
-  - [ ] `GET /api/v1/analytics/investment-performance` contract가 정의된다.
-  - [ ] `vw_investment_allocation_snapshot` 또는 동등한 allocation view가 정의된다.
+  - [ ] 사용자가 제공한 Toss Securities 공식 문서 기준으로 인증, 조회 가능 holdings 필드, rate limit, 저장 가능 범위가 확인된다.
+  - [ ] Toss Securities adapter는 증권계좌 투자 holdings만 조회하고 일반 자산/대출/보험/profile은 조회하거나 대체하지 않는다.
+  - [ ] Toss API 조회 결과는 별도 investment observation table에 저장하며, 기존 BankSalad `investments` snapshot row를 직접 수정하지 않는다.
+  - [ ] 저장 필드는 최소 broker/source account identity, product identifier/name, quantity 또는 units, cost basis if available, market value, currency, observed_at, valuation_as_of, source_run_id를 포함한다.
+  - [ ] BankSalad snapshot의 Toss Securities 투자 row를 식별할 수 있는 mapping/normalization이 제공된다.
+  - [ ] Toss API 종목 식별자와 BankSalad `product_name`을 연결하는 mapping은 자동 정규화 preview 후 저장하며, 불확실한 이름 매칭은 canonical replacement에 바로 사용하지 않는다.
+  - [ ] source priority가 `toss_securities_api`일 때 selected canonical investment view가 Toss Securities 계좌 내 항목을 Toss API observation 값으로 완전 대체한다.
+  - [ ] source priority가 `banksalad_snapshot`이거나 Toss observation이 없으면 기존 BankSalad 투자 snapshot 값으로 fallback한다.
+  - [ ] `GET /api/v1/investments/summary` 또는 새 canonical investment summary API가 selected source 기준 items/totals와 source metadata를 반환한다.
   - [ ] broker/product type/product 기준 allocation ratio와 previous-snapshot delta가 제공된다.
-  - [ ] 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution 계산 방식이 문서화된다.
+  - [ ] 1차 범위는 보유 평가액과 투자 구성 비중만이며, 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution은 구현하지 않는다.
   - [ ] BankSalad snapshot만으로 투자 성과/수익률을 해석하지 않는다.
 - Notes:
-  - 현재는 `T011`의 snapshot composition 보조 필드까지만 허용한다.
+  - Status rationale: 공식 Toss Securities API 문서가 제공되어야 인증, 조회 필드, 저장 가능 범위를 확정할 수 있으므로 Blocked다.
+  - 이 task는 공식 Toss Securities API 문서가 제공될 때까지 Blocked다.
+  - 투자 성과 분석은 holdings valuation source가 안정화된 뒤 별도 task로 승격한다.
 
 #### Task T020. Transfer tracking
 - Priority: P2
@@ -445,17 +483,18 @@
   - 사용자 가치가 낮아 뒤쪽 P2로 미룬 기존 결정을 유지한다.
 
 #### Task T021. Frontend remake
-- Priority: Paused
-- Status: Paused
-- Depends on: T013
+- Priority: P1
+- Status: Done
+- Depends on: None
 - Acceptance Criteria:
-  - [ ] 현재 main의 live 기능, route, API contract를 기준으로 remake 범위를 다시 정의한다.
-  - [ ] legacy component cleanup이나 단기 theme polish를 독립 목표로 삼지 않는다.
-  - [ ] 새 frontend IA/wireframe이 current route별 기능을 누락하지 않는다.
-  - [ ] frontend docs가 remake 기준으로 갱신된다.
-  - [ ] 구현 시 브라우저 visual QA를 포함한다.
+  - [x] 현재 main의 live 기능, route, API contract를 기준으로 remake 범위를 다시 정의한다.
+  - [x] legacy component cleanup이나 단기 theme polish를 독립 목표로 삼지 않는다.
+  - [x] 새 frontend IA/wireframe이 current route별 기능을 누락하지 않는다.
+  - [x] frontend docs가 remake 기준으로 갱신된다.
+  - [x] 구현 시 브라우저 visual QA를 포함한다.
 - Notes:
-  - 지금은 단기 미관 개선보다 전체 재구현 가능성만 계획으로 유지한다.
+  - Completed by frontend remake PR `#15` / commit `0b71238`.
+  - 새 IA는 `/`, `/spending`, `/net-worth`, `/signals`, `/data/*` route를 기준으로 한다.
 
 #### Task T022. Long-term product expansion queue
 - Priority: P2
