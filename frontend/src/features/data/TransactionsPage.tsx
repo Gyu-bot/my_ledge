@@ -73,6 +73,22 @@ interface EditDraft {
   memo: string
 }
 
+interface BulkDraft {
+  merchant: string
+  category_major_user: string
+  cost_kind: string
+  spend_necessity: string
+  recurring_payment_kind: string
+}
+
+const DEFAULT_BULK_DRAFT: BulkDraft = {
+  merchant: '',
+  category_major_user: '',
+  cost_kind: '',
+  spend_necessity: '',
+  recurring_payment_kind: '',
+}
+
 function draftFrom(tx: TransactionResponse): EditDraft {
   return {
     merchant: tx.merchant,
@@ -94,7 +110,7 @@ function RowsView() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [detailId, setDetailId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
-  const [bulkDraft, setBulkDraft] = useState<{ cost_kind: string; spend_necessity: string; category_major_user: string }>({ cost_kind: '', spend_necessity: '', category_major_user: '' })
+  const [bulkDraft, setBulkDraft] = useState<BulkDraft>(DEFAULT_BULK_DRAFT)
 
   const params = {
     page, per_page: PAGE_SIZE,
@@ -175,14 +191,16 @@ function RowsView() {
     const ids = [...selected]
     if (ids.length === 0) return
     const data: Parameters<typeof bulkUpdate.mutateAsync>[0] = { ids }
+    if (bulkDraft.merchant.trim()) data.merchant = bulkDraft.merchant.trim()
     if (bulkDraft.cost_kind) data.cost_kind = bulkDraft.cost_kind as 'fixed' | 'variable'
     if (bulkDraft.spend_necessity) data.spend_necessity = bulkDraft.spend_necessity as SpendNecessity
     if (bulkDraft.category_major_user) data.category_major_user = bulkDraft.category_major_user
+    if (bulkDraft.recurring_payment_kind) data.recurring_payment_kind = bulkDraft.recurring_payment_kind as RecurringPaymentKind
     try {
       const result = await bulkUpdate.mutateAsync(data)
       toast.success(`${result.updated}건 일괄 수정 완료`)
       setSelected(new Set())
-      setBulkDraft({ cost_kind: '', spend_necessity: '', category_major_user: '' })
+      setBulkDraft(DEFAULT_BULK_DRAFT)
     } catch (error) {
       toast.error('일괄 수정 실패', { description: String(error) })
     }
@@ -315,11 +333,19 @@ function RowsView() {
 
       <BulkBar
         count={selected.size}
-        onClear={() => { setSelected(new Set()); setBulkDraft({ cost_kind: '', spend_necessity: '', category_major_user: '' }) }}
+        onClear={() => { setSelected(new Set()); setBulkDraft(DEFAULT_BULK_DRAFT) }}
       >
+        <TextInput
+          className="w-36 text-caption"
+          aria-label="일괄 거래처"
+          placeholder="거래처 유지"
+          value={bulkDraft.merchant}
+          onChange={(e) => setBulkDraft((d) => ({ ...d, merchant: e.target.value }))}
+        />
         <Select className="text-caption" value={bulkDraft.category_major_user} onChange={(e) => setBulkDraft((d) => ({ ...d, category_major_user: e.target.value }))} aria-label="일괄 대분류"><option value="">대분류 유지</option>{filterOptions.data?.category_options.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
         <Select className="text-caption" value={bulkDraft.cost_kind} onChange={(e) => setBulkDraft((d) => ({ ...d, cost_kind: e.target.value }))} aria-label="일괄 고정/변동"><option value="">고정/변동 유지</option><option value="fixed">고정비</option><option value="variable">변동비</option></Select>
         <Select className="text-caption" value={bulkDraft.spend_necessity} onChange={(e) => setBulkDraft((d) => ({ ...d, spend_necessity: e.target.value }))} aria-label="일괄 필수/재량"><option value="">필수/재량 유지</option><option value="essential">필수</option><option value="discretionary">재량</option></Select>
+        <Select className="text-caption" value={bulkDraft.recurring_payment_kind} onChange={(e) => setBulkDraft((d) => ({ ...d, recurring_payment_kind: e.target.value }))} aria-label="일괄 반복여부"><option value="">반복 유지</option><option value="installment">할부</option><option value="monthly_recurring">매월 반복</option><option value="not_recurring">반복 아님</option></Select>
         <Button variant="primary" disabled={!hasWrite || bulkUpdate.isPending} onClick={() => void applyBulk()}>일괄 적용</Button>
         <Button variant="danger" disabled={!hasWrite} onClick={() => void bulkDeleteFlow()}>삭제</Button>
         <Button variant="secondary" disabled={!hasWrite} onClick={() => void bulkRestoreFlow()}>복원</Button>
