@@ -227,6 +227,7 @@ async def test_schema_endpoint_returns_tables(
         "lender",
         "product_name",
         "loan_kind",
+        "is_hidden",
         "snapshot_date",
         "principal",
         "balance",

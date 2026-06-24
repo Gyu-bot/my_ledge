@@ -186,6 +186,72 @@ async def test_update_loan_account_metadata_saves_display_name_and_kind(
     assert accounts.items[0].loan_kind == "equal_principal_interest"
 
 
+async def test_list_loan_accounts_excludes_user_hidden_accounts_by_default(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            LoanAccount(
+                lender="종료은행",
+                product_name="완납대출",
+                is_hidden=True,
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="종료은행",
+                product_name="완납대출",
+                balance="0.00",
+                interest_rate="4.50",
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="국민은행",
+                product_name="활성대출",
+                balance="10000000.00",
+                interest_rate="3.45",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    visible = await list_loan_accounts(db_session)
+    hidden_included = await list_loan_accounts(db_session, include_hidden=True)
+
+    assert [item.product_name for item in visible.items] == ["활성대출"]
+    hidden = next(
+        item for item in hidden_included.items if item.product_name == "완납대출"
+    )
+    assert hidden.is_hidden is True
+    assert hidden.lifecycle_status == "user_hidden"
+    assert hidden.included_in_active_summary is False
+    assert hidden.excluded_from_summary_reason == "user_hidden"
+
+
+async def test_update_loan_account_hidden_state_preserves_existing_metadata(
+    db_session: AsyncSession,
+) -> None:
+    account = LoanAccount(
+        lender="종료은행",
+        product_name="완납대출",
+        display_name_user="예전 신용대출",
+        loan_kind="bullet",
+    )
+    db_session.add(account)
+    await db_session.commit()
+
+    updated = await update_loan_account_metadata(
+        db_session,
+        LoanAccountMetadataUpdateRequest(
+            loan_account_id=account.id,
+            is_hidden=True,
+        ),
+    )
+
+    assert updated.is_hidden is True
+    assert updated.display_name_user == "예전 신용대출"
+    assert updated.loan_kind == "bullet"
+
+
 async def test_list_loan_transaction_mappings_search_matches_transaction_memo(
     db_session: AsyncSession,
 ) -> None:

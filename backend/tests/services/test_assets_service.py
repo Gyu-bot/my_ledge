@@ -366,6 +366,41 @@ async def test_get_loan_summary_derives_repayment_method_from_loan_account_kind(
     assert response.items[0].repayment_method_source == "derived_from_loan_account"
 
 
+async def test_get_loan_summary_excludes_user_hidden_accounts(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            LoanAccount(
+                lender="종료은행",
+                product_name="완납대출",
+                is_hidden=True,
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="종료은행",
+                product_name="완납대출",
+                balance=Decimal("0.00"),
+                principal=Decimal("0.00"),
+            ),
+            Loan(
+                snapshot_date=date(2026, 5, 31),
+                lender="국민은행",
+                product_name="활성대출",
+                balance=Decimal("90000000.00"),
+                principal=Decimal("100000000.00"),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await assets_service.get_loan_summary(db_session, None)
+
+    assert [item.product_name for item in response.items] == ["활성대출"]
+    assert response.excluded_historical_count == 1
+    assert response.totals.balance == Decimal("90000000.00")
+
+
 async def test_get_loan_summary_keeps_manual_repayment_method_over_account_kind(
     db_session: AsyncSession,
 ) -> None:

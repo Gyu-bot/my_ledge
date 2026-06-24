@@ -3,7 +3,7 @@ import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
 import { BulkBar } from '../../ds/BulkBar'
-import { Field, Select, TextInput } from '../../ds/Field'
+import { Field, Select, TextInput, Toggle } from '../../ds/Field'
 import { Pagination } from '../../ds/Pagination'
 import { SegmentedControl } from '../../ds/SegmentedControl'
 import { ListSkeleton } from '../../ds/Skeleton'
@@ -53,7 +53,8 @@ function accountIdFromValue(value: string) {
 
 function AccountsTab() {
   const hasWrite = useWriteAccess()
-  const accounts = useLoanAccounts()
+  const [includeHidden, setIncludeHidden] = useState(false)
+  const accounts = useLoanAccounts({ include_hidden: includeHidden })
   const loans = useLoanSummary()
   const updateMeta = useUpdateLoanAccountMetadata()
   const patchRepayment = usePatchLoanRepaymentMetadata()
@@ -104,8 +105,28 @@ function AccountsTab() {
     }
   }
 
+  async function setHidden(account: LoanAccountCandidate, isHidden: boolean) {
+    try {
+      await updateMeta.mutateAsync({
+        loan_account_id: account.loan_account_id,
+        lender: account.loan_account_id === null ? account.lender : null,
+        product_name: account.loan_account_id === null ? account.product_name : null,
+        loan_kind: account.loan_kind,
+        is_hidden: isHidden,
+      })
+      toast.success(isHidden ? '대출 계좌를 숨겼습니다' : '대출 계좌를 다시 표시합니다')
+    } catch (error) {
+      toast.error('대출 계좌 상태 변경 실패', { description: String(error) })
+    }
+  }
+
   return (
-    <Card title="대출 계좌 관리" meta="표시명·대출 성격·상환 메타를 함께 관리합니다" bodyClassName="p-0">
+    <Card
+      title="대출 계좌 관리"
+      meta="표시명·대출 성격·상환 메타를 함께 관리합니다"
+      action={<Toggle label="숨김 포함" checked={includeHidden} onChange={setIncludeHidden} />}
+      bodyClassName="p-0"
+    >
       {accounts.isLoading ? <div className="p-4"><ListSkeleton rows={3} /></div> :
        accounts.data && accounts.data.items.length > 0 ? (
         <div className="divide-y divide-border-subtle">
@@ -124,7 +145,10 @@ function AccountsTab() {
               <div key={key} className="px-4 py-3.5">
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="min-w-44 flex-1">
-                    <div className="text-label font-semibold text-text-primary">{account.lender} {account.product_name}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-label font-semibold text-text-primary">{account.lender} {account.product_name}</div>
+                      {account.is_hidden && <Badge variant="neutral">숨김</Badge>}
+                    </div>
                     <div className="tnum text-caption text-text-muted">{meta}</div>
                   </div>
                   <Field label="대출 계좌명"><TextInput className="w-44" disabled={!hasWrite} placeholder={account.display_name} value={draft.display_name_user} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, display_name_user: e.target.value } }))} /></Field>
@@ -138,6 +162,9 @@ function AccountsTab() {
                   <Field label="수동 월상환액"><TextInput type="number" min={0} className="w-32" disabled={!hasWrite} value={draft.monthly_payment} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, monthly_payment: e.target.value } }))} /></Field>
                   <Field label="상환 방식"><Select disabled={!hasWrite} value={draft.repayment_method} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, repayment_method: e.target.value as LoanRepaymentMethod } }))}>{(Object.entries(REPAYMENT_METHOD_LABEL) as [LoanRepaymentMethod, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
                   <Button variant="primary" disabled={!hasWrite || updateMeta.isPending || patchRepayment.isPending} onClick={() => void save(account)}>저장</Button>
+                  <Button variant={account.is_hidden ? 'secondary' : 'ghost'} disabled={!hasWrite || updateMeta.isPending} onClick={() => void setHidden(account, !account.is_hidden)}>
+                    {account.is_hidden ? '다시 표시' : '숨김'}
+                  </Button>
                 </div>
               </div>
             )

@@ -147,7 +147,7 @@
 | `PUT` | `/api/v1/transactions/{id}/loan-link` | live | API key required, upsert one transaction-to-loan mapping |
 | `DELETE` | `/api/v1/transactions/{id}/loan-link` | live | API key required, remove mapping |
 | `PUT` | `/api/v1/transactions/loan-links/bulk` | live | API key required, map selected transactions to one loan account |
-| `PATCH` | `/api/v1/loan-accounts` | live | API key required, update loan account display name and loan kind |
+| `PATCH` | `/api/v1/loan-accounts` | live | API key required, update loan account display name, loan kind, and user hidden state |
 | `POST` | `/api/v1/installment-plans` | live | API key required, create an installment ledger entry |
 | `PATCH` | `/api/v1/installment-plans/{id}` | live | API key required, update installment ledger metadata |
 | `PUT` | `/api/v1/transactions/{id}/installment-link` | live | API key required, upsert one transaction-to-installment mapping |
@@ -164,8 +164,8 @@
 | `GET` | `/api/v1/assets/snapshot-compare` | live | `comparison_mode` optional, default `latest_available_vs_previous_available` |
 | `GET` | `/api/v1/investments/summary` | live | optional `snapshot_date`; omitted면 latest; items include `pct_of_investment_total` |
 | `GET` | `/api/v1/insurance/summary` | live | optional `snapshot_date`; omitted면 latest; latest insurance contracts + recent closed-month insurance premium estimate + empty-state metadata |
-| `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest; active-loans-only scope metadata |
-| `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots, with active/historical lifecycle metadata |
+| `GET` | `/api/v1/loans/summary` | live | optional `snapshot_date`; omitted면 latest; active-loans-only scope metadata; user-hidden accounts are excluded |
+| `GET` | `/api/v1/loan-accounts` | live | stable loan account candidates from mapped accounts + loan snapshots, with active/historical/user-hidden lifecycle metadata; `include_hidden` optional |
 | `GET` | `/api/v1/analytics/net-worth-breakdown` | live | optional `snapshot_date`; latest if omitted |
 | `GET` | `/api/v1/analytics/liquidity-health` | live | optional `snapshot_date`, `monthly_required_spend`, `monthly_income`; omitted spend/income derive from closed-month data and expose source metadata |
 | `PATCH` | `/api/v1/assets/snapshots/{asset_snapshot_id}/liquidity` | live | API key required, update `liquidity_tier` and `is_cash_equivalent` |

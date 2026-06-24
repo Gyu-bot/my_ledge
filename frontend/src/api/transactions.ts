@@ -11,6 +11,7 @@ import type {
   TransactionBulkMutationResponse,
   LoanAccountCandidate,
   LoanAccountMetadataUpdateRequest,
+  LoanAccountsParams,
   LoanAccountsResponse,
   LoanTransactionLinkBulkRequest,
   LoanTransactionLinkBulkResponse,
@@ -153,8 +154,12 @@ export const transactionApi = {
       body: JSON.stringify(data),
     }),
 
-  loanAccounts: () =>
-    apiFetch<LoanAccountsResponse>('/loan-accounts'),
+  loanAccounts: (params: LoanAccountsParams = {}) => {
+    const query = new URLSearchParams()
+    if (params.include_hidden) query.set('include_hidden', 'true')
+    const suffix = query.toString()
+    return apiFetch<LoanAccountsResponse>(`/loan-accounts${suffix ? `?${suffix}` : ''}`)
+  },
 
   updateLoanAccountMetadata: (data: LoanAccountMetadataUpdateRequest) =>
     apiFetch<LoanAccountCandidate>('/loan-accounts', {

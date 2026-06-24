@@ -142,6 +142,7 @@ export interface LoanAccountCandidate {
   as_of_date: string | null
   latest_snapshot_date: string | null
   is_active: boolean
+  is_hidden: boolean
   is_matured: boolean
   is_stale: boolean
   lifecycle_status: string
@@ -175,6 +176,11 @@ export interface LoanAccountMetadataUpdateRequest {
   product_name?: string | null
   display_name_user?: string | null
   loan_kind: LoanKind
+  is_hidden?: boolean | null
+}
+
+export interface LoanAccountsParams {
+  include_hidden?: boolean
 }
 
 export interface LoanTransactionLinkBulkResponse {

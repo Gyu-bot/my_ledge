@@ -559,7 +559,7 @@ async def get_loan_summary(
         )
 
     result = await db_session.execute(
-        select(Loan, LoanAccount.loan_kind)
+        select(Loan, LoanAccount.loan_kind, LoanAccount.is_hidden)
         .outerjoin(
             LoanAccount,
             and_(
@@ -570,15 +570,19 @@ async def get_loan_summary(
         .where(Loan.snapshot_date == resolved_snapshot_date)
         .order_by(Loan.lender, Loan.product_name)
     )
+    rows = result.all()
     items = [
         _loan_item_response_with_account_kind(loan, loan_kind)
-        for loan, loan_kind in result.all()
+        for loan, loan_kind, is_hidden in rows
+        if not is_hidden
     ]
     return LoanSummaryResponse(
         snapshot_date=resolved_snapshot_date,
         as_of_date=resolved_snapshot_date,
         summary_scope="active_loans_only",
-        excluded_historical_count=0,
+        excluded_historical_count=sum(
+            1 for _loan, _loan_kind, is_hidden in rows if is_hidden
+        ),
         items=items,
         totals=LoanTotalsResponse(
             principal=sum((item.principal or Decimal("0")) for item in items),
@@ -705,7 +709,9 @@ async def _derive_liquidity_health_defaults(
         .where(Transaction.type == "지출")
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
-        .where(Transaction.date >= date(closed_month_end.year, closed_month_end.month, 1))
+        .where(
+            Transaction.date >= date(closed_month_end.year, closed_month_end.month, 1)
+        )
         .where(Transaction.date <= closed_month_end)
         .where(Transaction.spend_necessity == "essential")
     )

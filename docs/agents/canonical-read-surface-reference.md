@@ -36,7 +36,8 @@
 | 음수 자산 row | canonical/API 계산에서는 `side='asset' AND amount < 0` row를 `asset_total`과 현금성 합계에서 제외하고 `negative_asset_excluded_total`로 노출한다. raw row를 부채로 이동하지는 않으므로, 마이너스 통장처럼 실질 부채로 보이는 row는 사용자 확인 대상으로 설명한다. |
 | `liquidity_tier` | 사용자가 저장한 값이 있으면 우선한다. 없으면 health service가 category/name heuristic을 사용하고 assumptions에 남긴다. |
 | `is_cash_equivalent` | 명시값이 있으면 `liquidity_tier`보다 우선해 현금성 포함 여부를 결정한다. 값이 없으면 `liquidity_tier='immediate'` 또는 보수적 category/name heuristic을 사용한다. |
-| 만기/소멸/중복 자산 | 현재 live 삭제/숨김/병합 API가 없으므로 latest snapshot/API에 남을 수 있다. 에이전트는 이를 live 값으로 단정하지 말고, snapshot 날짜와 raw source 한계를 함께 말한다. |
+| 만기/소멸/중복 자산 | 자산 snapshot은 아직 삭제/숨김/병합 API가 없으므로 latest snapshot/API에 남을 수 있다. 에이전트는 이를 live 값으로 단정하지 말고, snapshot 날짜와 raw source 한계를 함께 말한다. |
+| 사용자 숨김 대출 계좌 | `loan_accounts.is_hidden=true`인 stable loan account는 기본 `/loan-accounts`와 `/loans/summary` active summary에서 제외된다. 감사/복구 목적이면 `/loan-accounts?include_hidden=true`를 사용하고 `lifecycle_status='user_hidden'`를 확인한다. |
 | 원천 우선순위 | 현재는 사용자 보강값(`liquidity_tier`, `is_cash_equivalent`, 대출 `monthly_payment`/`repayment_method`)이 raw import metadata보다 우선한다. multi-source 우선순위와 source confidence는 planned work다. |
 
 ## My Ledge / Agent 판단 책임 경계
@@ -64,7 +65,7 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 | 월별 현금흐름/저축률 | `vw_monthly_cashflow` 또는 `GET /api/v1/analytics/monthly-cashflow` | `GET /api/v1/canonical-views/dashboard` |
 | 고정비/변동비 구조 | `vw_fixed_cost_monthly_summary` 또는 fixed-cost analytics endpoints | `vw_unclassified_work_queue` |
 | 대출 상환 부담 | `vw_loan_repayment_monthly` | `GET /api/v1/loan-transaction-links` |
-| 대출 구조/금리/만기 | `GET /api/v1/loans/summary` 또는 `vw_loan_account_canonical` | `GET /api/v1/schema` |
+| 대출 구조/금리/만기 | `GET /api/v1/loans/summary` 또는 `vw_loan_account_canonical` | 숨김 계좌 복구/감사는 `GET /api/v1/loan-accounts?include_hidden=true`, schema 확인은 `GET /api/v1/schema` |
 | 보험 계약/추정 보험료 | `GET /api/v1/insurance/summary` | raw `insurance_contracts`; 보험 적정성 판단은 에이전트 해석이다. |
 | 할부 잔여 현금흐름 | `GET /api/v1/installments/forecast` | `/operations/installments`. canonical cashflow view는 관측 거래만 유지하고, 할부 예측은 별도 projection surface로 읽는다. |
 | 수입 구성 | `vw_income_monthly_by_category` | `vw_monthly_cashflow`, `GET /api/v1/canonical-views/dashboard` |

@@ -191,7 +191,8 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         description=(
             "Canonical latest loan-account structure read model. Uses stable "
             "lender/product identity, includes unmapped loan snapshots, and exposes "
-            "a simple monthly interest estimate for agent-side prioritization."
+            "user-hidden state plus a simple monthly interest estimate for "
+            "agent-side prioritization."
         ),
         recommended_for_ai=True,
         columns=(
@@ -200,6 +201,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("lender", String(length=50), nullable=False),
             SchemaColumnDefinition("product_name", String(length=200), nullable=False),
             SchemaColumnDefinition("loan_kind", String(length=40), nullable=True),
+            SchemaColumnDefinition("is_hidden", Boolean(), nullable=False),
             SchemaColumnDefinition("snapshot_date", Date(), nullable=False),
             SchemaColumnDefinition("principal", Numeric(15, 2), nullable=True),
             SchemaColumnDefinition("balance", Numeric(15, 2), nullable=True),

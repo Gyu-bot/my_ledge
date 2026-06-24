@@ -1,4 +1,4 @@
-from sqlalchemy import String, UniqueConstraint
+from sqlalchemy import Boolean, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -19,3 +19,9 @@ class LoanAccount(TimestampMixin, Base):
     product_name: Mapped[str] = mapped_column(String(200), nullable=False)
     display_name_user: Mapped[str | None] = mapped_column(String(200), nullable=True)
     loan_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )

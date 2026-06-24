@@ -29,6 +29,7 @@ class LoanAccountCandidateResponse(BaseModel):
     as_of_date: date | None = None
     latest_snapshot_date: date | None
     is_active: bool = False
+    is_hidden: bool = False
     is_matured: bool = False
     is_stale: bool = False
     lifecycle_status: str = "no_snapshot"
@@ -52,7 +53,8 @@ class LoanAccountMetadataUpdateRequest(BaseModel):
     lender: str | None = None
     product_name: str | None = None
     display_name_user: str | None = Field(default=None, max_length=200)
-    loan_kind: LoanKind = "unknown"
+    loan_kind: LoanKind | None = None
+    is_hidden: bool | None = None
 
     @model_validator(mode="after")
     def validate_account_target(self) -> "LoanAccountMetadataUpdateRequest":
