@@ -28,7 +28,11 @@ from app.schemas.loan_mapping import (
 from app.services.settings_service import get_analytics_settings
 
 
-async def list_loan_accounts(db_session: AsyncSession) -> LoanAccountsResponse:
+async def list_loan_accounts(
+    db_session: AsyncSession,
+    *,
+    include_hidden: bool = False,
+) -> LoanAccountsResponse:
     accounts = await _load_persisted_accounts(db_session)
     latest_snapshots = await _load_latest_loan_snapshots(db_session)
     as_of_date = await db_session.scalar(select(func.max(Loan.snapshot_date)))
@@ -45,6 +49,14 @@ async def list_loan_accounts(db_session: AsyncSession) -> LoanAccountsResponse:
         set(account_by_key) | set(snapshot_by_key),
         key=lambda key: (key[0], key[1]),
     )
+    if not include_hidden:
+        all_keys = [
+            key
+            for key in all_keys
+            if not (
+                account_by_key.get(key) is not None and account_by_key[key].is_hidden
+            )
+        ]
 
     return LoanAccountsResponse(
         items=[
@@ -65,8 +77,14 @@ async def update_loan_account_metadata(
     payload: LoanAccountMetadataUpdateRequest,
 ) -> LoanAccountCandidateResponse:
     account = await _resolve_metadata_account(db_session, payload)
-    account.display_name_user = _normalize_optional_text(payload.display_name_user)
-    account.loan_kind = None if payload.loan_kind == "unknown" else payload.loan_kind
+    if "display_name_user" in payload.model_fields_set:
+        account.display_name_user = _normalize_optional_text(payload.display_name_user)
+    if payload.loan_kind is not None:
+        account.loan_kind = (
+            None if payload.loan_kind == "unknown" else payload.loan_kind
+        )
+    if payload.is_hidden is not None:
+        account.is_hidden = payload.is_hidden
     await db_session.commit()
     await db_session.refresh(account)
     snapshot = await _load_latest_loan_snapshot_for_key(
@@ -112,10 +130,14 @@ async def list_loan_transaction_mappings(
         loan_account_id=loan_account_id,
         repayment_type=repayment_type,
     )
-    total = await db_session.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    total = (
+        await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
+        or 0
+    )
     result = await db_session.execute(
-        base_query
-        .order_by(Transaction.date.desc(), Transaction.time.desc(), Transaction.id.desc())
+        base_query.order_by(
+            Transaction.date.desc(), Transaction.time.desc(), Transaction.id.desc()
+        )
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -123,10 +145,7 @@ async def list_loan_transaction_mappings(
         total=total,
         page=page,
         per_page=per_page,
-        items=[
-            _serialize_mapping_row(row)
-            for row in result.mappings().all()
-        ],
+        items=[_serialize_mapping_row(row) for row in result.mappings().all()],
     )
 
 
@@ -296,10 +315,10 @@ async def apply_loan_repayment_estimates_for_latest_snapshots(
         repayment_method = _infer_repayment_method(observations["monthly_types"])
         if repayment_method is not None:
             latest_loan.repayment_method = repayment_method
-            latest_loan.repayment_method_source = (
-                "estimated_from_linked_transactions"
-            )
-        elif latest_loan.repayment_method_source == "estimated_from_linked_transactions":
+            latest_loan.repayment_method_source = "estimated_from_linked_transactions"
+        elif (
+            latest_loan.repayment_method_source == "estimated_from_linked_transactions"
+        ):
             latest_loan.repayment_method = None
             latest_loan.repayment_method_source = None
         elif latest_loan.repayment_method is None:
@@ -448,8 +467,7 @@ def _build_loan_transaction_mapping_query(
     for pattern in candidate_patterns:
         like_pattern = f"%{pattern}%"
         candidate_conditions.extend(
-            column.ilike(like_pattern)
-            for column in text_columns
+            column.ilike(like_pattern) for column in text_columns
         )
 
     query = (
@@ -785,9 +803,7 @@ async def _load_linked_repayment_observations(
         .order_by(Transaction.date.asc(), Transaction.id.asc())
     )
 
-    monthly_amounts: dict[tuple[int, int], Decimal] = defaultdict(
-        lambda: Decimal("0")
-    )
+    monthly_amounts: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
     monthly_types: dict[tuple[int, int], set[str]] = defaultdict(set)
     for transaction_date, amount, repayment_type in result.all():
         month_key = (transaction_date.year, transaction_date.month)
@@ -817,10 +833,13 @@ def _month_window_start(reference_date: date, lookback_months: int) -> date:
 
 
 def _complete_month_window_end(reference_date: date) -> date:
-    if reference_date.day == calendar.monthrange(
-        reference_date.year,
-        reference_date.month,
-    )[1]:
+    if (
+        reference_date.day
+        == calendar.monthrange(
+            reference_date.year,
+            reference_date.month,
+        )[1]
+    ):
         return reference_date
     previous_month_index = reference_date.year * 12 + reference_date.month - 2
     year = previous_month_index // 12
@@ -845,7 +864,9 @@ def _estimate_monthly_payment(
 
 
 def _infer_repayment_method(monthly_type_sets: list[set[str]]) -> str | None:
-    if monthly_type_sets and all(type_set == {"mixed"} for type_set in monthly_type_sets):
+    if monthly_type_sets and all(
+        type_set == {"mixed"} for type_set in monthly_type_sets
+    ):
         return "principal_interest"
     return None
 
@@ -886,6 +907,7 @@ def _build_account_candidate(
     observed_principal = (
         latest_principal if isinstance(latest_principal, Decimal) else None
     )
+    is_hidden = bool(account is not None and account.is_hidden)
     is_stale = (
         as_of_date is not None
         and resolved_latest_snapshot_date is not None
@@ -899,7 +921,9 @@ def _build_account_candidate(
     has_observed_debt = (observed_balance or Decimal("0")) > 0 or (
         observed_principal or Decimal("0")
     ) > 0
-    if is_matured and is_stale and has_observed_debt:
+    if is_hidden:
+        lifecycle_status = "user_hidden"
+    elif is_matured and is_stale and has_observed_debt:
         lifecycle_status = "past_maturity_with_last_observed_balance"
     elif is_matured and is_stale:
         lifecycle_status = "matured_and_missing_from_latest_snapshot"
@@ -912,11 +936,15 @@ def _build_account_candidate(
     else:
         lifecycle_status = "metadata_only_no_snapshot"
     is_active = lifecycle_status == "active"
-    excluded_reason = None if is_active else (
-        "matured_missing_from_latest_snapshot"
-        if is_matured and is_stale
-        else "not_in_latest_snapshot"
-    )
+    excluded_reason = None
+    if is_hidden:
+        excluded_reason = "user_hidden"
+    elif not is_active:
+        excluded_reason = (
+            "matured_missing_from_latest_snapshot"
+            if is_matured and is_stale
+            else "not_in_latest_snapshot"
+        )
 
     return LoanAccountCandidateResponse(
         loan_account_id=account.id if account is not None else None,
@@ -928,7 +956,9 @@ def _build_account_candidate(
             product_name,
             account.display_name_user if account is not None else None,
         ),
-        loan_kind=account.loan_kind if account is not None and account.loan_kind else "unknown",
+        loan_kind=account.loan_kind
+        if account is not None and account.loan_kind
+        else "unknown",
         loan_start_date=loan_start_date if isinstance(loan_start_date, date) else None,
         loan_maturity_date=loan_maturity_date
         if isinstance(loan_maturity_date, date)
@@ -936,6 +966,7 @@ def _build_account_candidate(
         as_of_date=as_of_date,
         latest_snapshot_date=resolved_latest_snapshot_date,
         is_active=is_active,
+        is_hidden=is_hidden,
         is_matured=is_matured,
         is_stale=is_stale,
         lifecycle_status=lifecycle_status,

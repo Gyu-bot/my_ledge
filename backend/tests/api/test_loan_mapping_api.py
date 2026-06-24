@@ -71,6 +71,7 @@ async def test_loan_accounts_endpoint_returns_snapshot_candidates(
             "as_of_date": "2026-05-31",
             "latest_snapshot_date": "2026-05-31",
             "is_active": True,
+            "is_hidden": False,
             "is_matured": False,
             "is_stale": False,
             "lifecycle_status": "active",
@@ -125,7 +126,10 @@ async def test_loan_accounts_mark_matured_missing_snapshot_as_historical(
     assert matured["is_active"] is False
     assert matured["lifecycle_status"] == "past_maturity_with_last_observed_balance"
     assert matured["included_in_active_summary"] is False
-    assert matured["excluded_from_summary_reason"] == "matured_missing_from_latest_snapshot"
+    assert (
+        matured["excluded_from_summary_reason"]
+        == "matured_missing_from_latest_snapshot"
+    )
     assert matured["last_observed_balance"] == "1000000.00"
 
 
@@ -178,6 +182,60 @@ async def test_loan_account_metadata_endpoint_updates_display_name_and_kind(
     assert fetched.status_code == 200
     assert fetched.json()["items"][0]["display_name"] == "우리집 주담대"
     assert fetched.json()["items"][0]["loan_kind"] == "equal_principal_interest"
+
+
+async def test_loan_account_metadata_endpoint_hides_and_restores_account(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        Loan(
+            snapshot_date=date(2026, 5, 31),
+            lender="종료은행",
+            product_name="완납대출",
+            balance="0.00",
+        )
+    )
+    await db_session.commit()
+
+    hidden = await async_client.patch(
+        "/api/v1/loan-accounts",
+        headers=api_headers,
+        json={
+            "lender": "종료은행",
+            "product_name": "완납대출",
+            "loan_kind": "unknown",
+            "is_hidden": True,
+        },
+    )
+
+    assert hidden.status_code == 200
+    assert hidden.json()["is_hidden"] is True
+    assert hidden.json()["lifecycle_status"] == "user_hidden"
+
+    visible = await async_client.get("/api/v1/loan-accounts")
+    assert visible.status_code == 200
+    assert visible.json()["items"] == []
+
+    hidden_included = await async_client.get(
+        "/api/v1/loan-accounts",
+        params={"include_hidden": "true"},
+    )
+    assert hidden_included.status_code == 200
+    assert hidden_included.json()["items"][0]["is_hidden"] is True
+
+    restored = await async_client.patch(
+        "/api/v1/loan-accounts",
+        headers=api_headers,
+        json={
+            "loan_account_id": hidden.json()["loan_account_id"],
+            "loan_kind": "unknown",
+            "is_hidden": False,
+        },
+    )
+    assert restored.status_code == 200
+    assert restored.json()["is_hidden"] is False
 
 
 async def test_transaction_loan_link_endpoints_require_auth_and_support_crud(
@@ -307,15 +365,17 @@ async def test_loan_transaction_links_endpoint_lists_expense_candidates_with_lin
     unrelated_donation.description = "후원금"
     unrelated_donation.merchant = "후원금"
     account = LoanAccount(lender="국민은행", product_name="주택담보대출")
-    db_session.add_all([
-        linked,
-        unlinked,
-        income,
-        unrelated_food,
-        finance_without_keyword,
-        unrelated_donation,
-        account,
-    ])
+    db_session.add_all(
+        [
+            linked,
+            unlinked,
+            income,
+            unrelated_food,
+            finance_without_keyword,
+            unrelated_donation,
+            account,
+        ]
+    )
     await db_session.commit()
 
     link_response = await async_client.put(
@@ -350,7 +410,9 @@ async def test_loan_transaction_links_endpoint_lists_expense_candidates_with_lin
     assert linked_only.json()["total"] == 1
     assert linked_only.json()["items"][0]["transaction_id"] == linked.id
 
-    unlinked_only = await async_client.get("/api/v1/loan-transaction-links?linked=unlinked")
+    unlinked_only = await async_client.get(
+        "/api/v1/loan-transaction-links?linked=unlinked"
+    )
     assert unlinked_only.status_code == 200
     assert unlinked_only.json()["total"] == 2
     assert [item["transaction_id"] for item in unlinked_only.json()["items"]] == [

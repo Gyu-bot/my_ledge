@@ -33,9 +33,10 @@ router = APIRouter()
 
 @router.get("/loan-accounts", response_model=LoanAccountsResponse)
 async def get_loan_accounts(
+    include_hidden: bool = Query(default=False),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> LoanAccountsResponse:
-    return await list_loan_accounts(db_session)
+    return await list_loan_accounts(db_session, include_hidden=include_hidden)
 
 
 @router.patch(

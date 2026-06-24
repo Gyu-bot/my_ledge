@@ -469,6 +469,8 @@
 
 - Purpose: return stable loan account candidates for frontend mapping controls
 - Auth: none
+- Query params:
+  - `include_hidden: bool` default `false`
 - Response model: `LoanAccountsResponse`
 - Response shape:
   - `items[]`
@@ -483,6 +485,7 @@
     - `as_of_date`
     - `latest_snapshot_date`
     - `is_active`
+    - `is_hidden`
     - `is_matured`
     - `is_stale`
     - `lifecycle_status`
@@ -501,6 +504,8 @@
   - does not directly expose or depend on `loans.id`
   - `display_name` prefers user-managed `display_name_user`
   - `loan_kind` is one of `unknown`, `overdraft`, `equal_principal_interest`, `equal_principal`, `bullet`, `other`
+  - user-hidden accounts are excluded by default and can be included with `include_hidden=true`
+  - hidden accounts return `lifecycle_status='user_hidden'`, `is_hidden=true`, `included_in_active_summary=false`, and `excluded_from_summary_reason='user_hidden'`
   - `loan_start_date` and `loan_maturity_date` come from the latest `loans` snapshot for the same `lender + product_name`
   - `/loan-accounts` is an inventory surface: rows missing from the latest global loan snapshot can remain visible with stale/matured lifecycle metadata instead of being treated as active balances
 
@@ -513,11 +518,14 @@
   - either `loan_account_id`
   - or `lender` plus `product_name`
   - `display_name_user`
-  - `loan_kind: "unknown" | "overdraft" | "equal_principal_interest" | "equal_principal" | "bullet" | "other"`
+  - optional `loan_kind: "unknown" | "overdraft" | "equal_principal_interest" | "equal_principal" | "bullet" | "other"`
+  - `is_hidden`
 - Response model: `LoanAccountCandidateResponse`
 - Behavior:
   - stores user-managed display name on the stable `loan_accounts` identity
+  - omitted metadata fields leave existing values unchanged
   - stores `loan_kind` as nullable when the request value is `unknown`
+  - stores `is_hidden` when supplied; omitted leaves the existing hidden state unchanged
   - creates a stable account for a `lender + product_name` pair if only snapshot data exists
   - returns the latest loan snapshot metadata when available
 
@@ -953,6 +961,7 @@
     - `balance`
 - Behavior:
   - latest or requested loan snapshots are enriched with matching `loan_accounts.loan_kind` by stable `lender + product_name`
+  - rows whose stable loan account has `is_hidden=true` are excluded from `items` and totals
   - when `repayment_method` is missing or non-manual `unknown`, compatible `loan_kind` values are exposed as read-only repayment-method fallbacks with `repayment_method_source='derived_from_loan_account'`
   - the enrichment is response-only and does not update the `loans` snapshot row
 
@@ -1373,7 +1382,7 @@ Interpretation rule: this view provides calculation evidence. `asset_total` excl
 
 ### `vw_loan_account_canonical`
 
-Latest loan-account structure surface. It uses stable lender/product identity, includes unmapped loan snapshots, and exposes `loan_account_id`, `display_name`, `lender`, `product_name`, `loan_kind`, `snapshot_date`, `principal`, `balance`, `interest_rate`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `start_date`, `maturity_date`, and `estimated_monthly_interest`. The interest estimate is `round(balance * interest_rate / 100 / 12)` and is a simple evidence field, not an amortization schedule.
+Latest loan-account structure surface. It uses stable lender/product identity, includes unmapped loan snapshots, and exposes `loan_account_id`, `display_name`, `lender`, `product_name`, `loan_kind`, `is_hidden`, `snapshot_date`, `principal`, `balance`, `interest_rate`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `start_date`, `maturity_date`, and `estimated_monthly_interest`. The interest estimate is `round(balance * interest_rate / 100 / 12)` and is a simple evidence field, not an amortization schedule. `is_hidden=true` means the user excluded that stable account from default loan-account and loan-summary surfaces.
 
 ### `vw_income_monthly_by_category`
 

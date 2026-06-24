@@ -5,6 +5,7 @@ import type {
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
   TransactionBulkMutationRequest,
+  LoanAccountsParams,
   LoanAccountMetadataUpdateRequest,
   LoanTransactionLinkBulkRequest,
   LoanTransactionMappingParams,
@@ -28,7 +29,7 @@ import type {
 export const txKeys = {
   list: (params: TransactionListParams) => ['transactions', 'list', params] as const,
   filterOptions: () => ['transactions', 'filterOptions'] as const,
-  loanAccounts: () => ['transactions', 'loanAccounts'] as const,
+  loanAccounts: (params: LoanAccountsParams = {}) => ['transactions', 'loanAccounts', params] as const,
   loanTransactionMappings: (params: LoanTransactionMappingParams) =>
     ['transactions', 'loanTransactionMappings', params] as const,
   installmentPlans: () => ['transactions', 'installmentPlans'] as const,
@@ -65,10 +66,10 @@ export function useTransactionFilterOptions() {
   })
 }
 
-export function useLoanAccounts() {
+export function useLoanAccounts(params: LoanAccountsParams = {}) {
   return useQuery({
-    queryKey: txKeys.loanAccounts(),
-    queryFn: transactionApi.loanAccounts,
+    queryKey: txKeys.loanAccounts(params),
+    queryFn: () => transactionApi.loanAccounts(params),
   })
 }
 
@@ -283,8 +284,9 @@ export function useUpdateLoanAccountMetadata() {
     mutationFn: (data: LoanAccountMetadataUpdateRequest) =>
       transactionApi.updateLoanAccountMetadata(data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: txKeys.loanAccounts() })
+      void qc.invalidateQueries({ queryKey: ['transactions', 'loanAccounts'] })
       void qc.invalidateQueries({ queryKey: ['transactions'] })
+      void qc.invalidateQueries({ queryKey: ['assets'] })
     },
   })
 }
