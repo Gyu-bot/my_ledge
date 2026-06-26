@@ -25,7 +25,8 @@
 
 - 제품 요구사항: [PRD.md](../../PRD.md)
 - 협업/운영 규칙: [AGENTS.md](../../AGENTS.md)
-- 현재 구현/검증 상태: [docs/STATUS.md](../STATUS.md)
+- 사용자용 구현 현황/roadmap: [Implentation-plan.md](../../Implentation-plan.md)
+- OMO 실행계획: [.omo/plans/](../../.omo/plans/)
 - live backend/API contract: [docs/backend-api-ssot.md](../backend-api-ssot.md)
 
 이 디렉터리에는 새 세부 문서를 추가하지 않는다.

@@ -131,7 +131,7 @@ readonly DB role 요구사항:
 | 대출 구조/금리/만기 | `GET /api/v1/loans/summary` | `vw_loan_account_canonical` | 금리와 잔액은 snapshot 값이고, 상환 우선순위는 에이전트 해석이다. |
 | 보험 계약/보험료 추정 | `GET /api/v1/insurance/summary` | raw `insurance_contracts`, 거래 API의 보험 카테고리 지출 | 보험료 적정성 판단은 에이전트 해석이며, API는 계약과 최근 마감월 보험 지출 근거만 제공한다. |
 | 자산/부채 상태 | `GET /api/v1/analytics/net-worth-breakdown` | `GET /api/v1/assets/snapshots`, `vw_asset_snapshot_canonical` | `negative_asset_excluded_total`이 있으면 음수 asset row 제외를 같이 설명한다. |
-| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [Implentation-plan.md](../../Implentation-plan.md), `GET /api/v1/schema` | 전역 실행계획의 endpoint 후보를 live로 가정하지 않는다. |
+| 구현 여부 확인 | [backend-api-ssot.md](../backend-api-ssot.md) | [Implentation-plan.md](../../Implentation-plan.md), [.omo/plans/](../../.omo/plans/), `GET /api/v1/schema` | 사용자용 roadmap이나 OMO 실행계획의 endpoint 후보를 live로 가정하지 않는다. |
 
 ## 판단 책임 경계
 

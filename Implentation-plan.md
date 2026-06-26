@@ -1,72 +1,85 @@
-# My Ledge Global Execution Plan
+# My Ledge User Roadmap
 
-작성일: 2026-06-10
-상태: Active global execution plan
-이 문서는 앞으로 프로젝트의 전역 실행계획과 backlog tracking 기준 문서다.
+Generated: 2026-06-26
+Mode: user-facing project status and roadmap
+Status: Active
 
 > 파일명은 사용자 요청의 철자 그대로 `Implentation-plan.md`를 사용한다.
 
-## How To Use
+## Objective
 
-- 새 작업은 이 문서의 Task ID 기준으로 시작한다.
-- feature/fix PR에서는 `docs/STATUS.md`를 직접 갱신하지 말고 PR 본문 `Status impact`에 mainline 반영 내용을 남긴다.
-- 이 문서 자체를 갱신하는 작업은 docs/planning 작업으로 취급한다.
-- 실제 live contract 판단은 코드와 `docs/backend-api-ssot.md`를 우선한다.
-- API, schema, canonical view, frontend route가 바뀌면 관련 contract/source-of-truth 문서를 같은 PR에서 최소 범위로 갱신한다.
-- 실데이터 acceptance가 있는 task는 `tmp/2025-05-21~2026-05-21.xlsx` 기준 수치를 재현해야 한다.
+This file is for the user to see what has been implemented, what remains, and which product direction each remaining item supports.
+
+## Operating Mode
+
+- This file is a human-readable roadmap/status surface, not an agent-executable OMO work plan.
+- Agent-executable plans live under `.omo/plans/<slug>.md`.
+- Use this file to understand current completed work, remaining work, priorities, blockers, and product intent.
+- Start implementation only from an approved `.omo/plans/<slug>.md`, or create one with `omo:ulw-plan` if no suitable execution plan exists.
+- Code and live contracts beat this roadmap. If implementation reality differs, update this file as a user-facing roadmap/status sync.
+- API, schema, canonical view, route, or component contract changes must update the relevant contract/source-of-truth docs in the same PR when practical.
+- Real-data acceptance should use `tmp/2025-05-21~2026-05-21.xlsx` when the task depends on workbook behavior.
+- `docs/STATUS.md` is deprecated and no longer maintained as a handoff surface.
 
 ## Status Values
 
-- `Ready`: 바로 착수 가능
-- `Planned`: 아직 착수 전이며 선행 task가 있거나 범위 조정이 필요함
-- `In Progress`: 현재 작업 중
-- `Done`: acceptance criteria 충족 완료
-- `Blocked`: 외부 결정/권한/데이터가 필요함
-- `Paused`: 명시적으로 보류됨
+- `Ready`: startable now.
+- `Planned`: valid backlog, but dependency or scope sequencing remains.
+- `In Progress`: actively being worked.
+- `Done`: acceptance criteria satisfied and verified.
+- `Blocked`: external decision, data, credential, or documentation required.
+- `Paused`: intentionally held for a later product/architecture moment.
 
 ## Priority Guide
 
-- `P0`: 계산 정합성, 데이터 신뢰도, agent read contract에 즉시 영향
-- `P1`: 현재 workflow 개선 또는 advisor 품질에 큰 영향
-- `P1.5`: 가치가 있으나 P0/P1 이후 독립 PR로 다룰 항목
-- `P2`: 큰 구조 변경, 장기 제품 방향, 별도 승인 후 진행할 항목
-- `Paused`: 의도적으로 뒤로 미룬 항목
+- `P0`: calculation correctness, data trust, source lifecycle, or agent read contract risk.
+- `P1`: important workflow, review, automation, or advisor-quality improvement.
+- `P1.5`: valuable hardening after the core P0/P1 path.
+- `P2`: larger product expansion or structural change.
 
-## Source Documents
+## Sources
 
-- Current active plan: `Implentation-plan.md`
+- Repo operating contract: `AGENTS.md` and nearest child `AGENTS.md`
+- User-facing roadmap/status: `Implentation-plan.md`
+- OMO execution plan index: `.omo/plans/index.md`
+- OMO executable plans: `.omo/plans/<slug>.md`
+- Live API contract: `docs/backend-api-ssot.md`
+- Detailed API/metric reference: `docs/backend-api-and-metrics-reference.md`
+- Agent canonical value dictionary: `docs/agents/canonical-read-surface-reference.md`
+- Frontend contract: `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md`
 - Archived backlog source: `docs/archive/planning/2026-06-10-planned-work.md`
 - Archived advisor execution source: `docs/archive/planning/2026-06-10-advisor-canonical-gap-priority.md`
 - Advisor gap analysis evidence: `docs/advisor-canonical-gap-analysis.md`
-- Current live API contract: `docs/backend-api-ssot.md`
-- Detailed API/metric reference: `docs/backend-api-and-metrics-reference.md`
-- Agent canonical value dictionary: `docs/agents/canonical-read-surface-reference.md`
+- Kept feature roadmap source: user-provided `my_ledge_kept_features.md` folded into this plan on 2026-06-25
 
 ---
 
-## Current Priority Queue
+## Current User-Facing Queue
 
 1. `T012`/`T012A` and issue-backed agent contract tasks `T023`-`T029` are implemented in `codex/ready-plan-tasks`; GitHub Issues `#7`-`#14` are closed as completed.
 2. Frontend remake PR `#15` has landed on `main`; frontend-dependent settings and smoke tasks can now target the new `/data/*` and `/data/settings` surfaces instead of staying paused for the remake line.
-3. `T015`-`T018` and `T016A` are Ready as an executable source-selection/reconciliation sequence; `Depends on` records implementation order, not a reason to keep them Planned. `T019` is Blocked until official Toss Securities API documentation is provided.
+3. `T030`-`T032` are the next P0 transaction-trust sequence: source lifecycle, upload preview/reconciliation, then shared settlement groups.
+4. `T015`-`T018` and `T016A` remain Ready as an executable source-selection/reconciliation sequence, with the kept-feature roadmap details folded into those existing tasks instead of duplicated as new asset-source task IDs. `T019` is Blocked until official Toss Securities API documentation is provided.
+5. `T033`-`T039` and `T041` are retained as post-trust automation, forecasting, decision-support, and limited tagging backlog; each should be started as a focused PR after its dependencies are satisfied.
 
 ---
 
-## Tasks
+## Roadmap Items
 
-#### Task T000. 전역 실행계획 문서 전환
+#### Task T000. 사용자용 roadmap/status 문서 전환
 - Priority: P0
 - Status: Done
 - Depends on: None
 - Acceptance Criteria:
-  - [x] `docs/planned-work.md`의 미구현 backlog가 새 전역 계획에 반영되어 있다.
-  - [x] `docs/superpowers/plans/2026-06-10-advisor-canonical-gap-priority.md`의 advisor canonical 우선순위가 새 전역 계획에 반영되어 있다.
+  - [x] `docs/planned-work.md`의 미구현 backlog가 사용자용 roadmap/status에 반영되어 있다.
+  - [x] `docs/superpowers/plans/2026-06-10-advisor-canonical-gap-priority.md`의 advisor canonical 우선순위가 사용자용 roadmap/status에 반영되어 있다.
   - [x] 각 작업 단위가 `Priority`, `Status`, `Depends on`, `Acceptance Criteria`, `Notes` 형식으로 tracking 가능하다.
   - [x] 기존 계획 문서가 `docs/archive/planning/` 아래로 이동되어 historical reference가 된다.
-  - [x] 프로젝트 시작점 문서가 `Implentation-plan.md`를 전역 실행계획으로 안내한다.
+  - [x] 프로젝트 시작점 문서가 `Implentation-plan.md`를 사용자용 roadmap/status 문서로 안내한다.
 - Notes:
-  - `docs/STATUS.md`는 계속 mainline handoff/status snapshot 역할을 맡는다.
-  - archived 문서는 참고용이며 current backlog 판단은 이 문서를 우선한다.
+  - `docs/STATUS.md`는 2026-06-26부터 deprecated pointer로 전환되었고, mainline handoff/status snapshot 역할을 더 이상 맡지 않는다.
+  - archived 문서는 참고용이며 사용자용 current roadmap 판단은 이 문서를 우선한다.
+  - 에이전트 실행 지시서는 `.omo/plans/<slug>.md`에 둔다.
 
 #### Task T001. 음수 자산 중복 차감 제거와 canonical 순자산 정합성 보정
 - Priority: P0
@@ -355,6 +368,9 @@
   - [ ] BankSalad 투자 row 중 Toss Securities 계좌 항목은 우선 `broker` 정규화값으로 식별하되, 실제 workbook 값 확인 후 `broker + product_name` 또는 별도 account/source mapping으로 보강할 수 있다.
   - [ ] investment canonical identity는 `canonical_investment_key = normalized_account_key + normalized_instrument_key` 구조로 정의한다.
   - [ ] `normalized_account_key`는 Toss API 계좌 식별자 또는 BankSalad `broker` 정규화값을 사용하고, `normalized_instrument_key`는 Toss API 종목 식별자/ISIN/ticker를 우선하되 BankSalad-only row는 정규화된 `product_name`으로 fallback한다.
+  - [ ] source별 sync run을 구분하고, run 상태는 최소 `pending`, `success_complete`, `success_partial`, `failed`, `rejected`를 표현한다.
+  - [ ] complete sync만 canonical source 후보가 되며, partial/failed sync는 raw audit과 운영 상태에는 남기되 전체 계좌 대체에는 사용하지 않는다.
+  - [ ] Toss Securities holdings는 종목별 조각이 아니라 계좌 전체 complete sync run을 선택 단위로 다루며, 수량/가격/평가액/통화/환율은 같은 source run에서 함께 선택된다.
   - [ ] preview API가 canonical total 영향, latest asset screen 영향, raw audit 보존 여부를 보여준다.
   - [ ] apply API가 explicit confirmation 후 감사 가능한 이유와 actor/source를 남긴다.
   - [ ] 관련 contract docs와 agent coverage 해석 규칙이 갱신된다.
@@ -382,6 +398,7 @@
   - [ ] `GET/PATCH /api/v1/assets/source-priority` 또는 동등한 API가 제공된다.
   - [ ] API 응답은 현재 적용 중인 effective priority와 override source를 설명한다.
   - [ ] source priority override key는 product name 단독이 아니라 `canonical_investment_key` 또는 `normalized_account_key` 단위로 저장된다.
+  - [ ] account-level source override는 해당 계좌에만 적용되고, 적용 전 순자산 영향 preview를 제공한다.
   - [ ] frontend 설정 화면 없이도 API/agent contract로 source conflict를 해석할 수 있다.
   - [ ] agent는 source conflict를 임의로 해결하지 않고 저장된 priority와 conflict reason을 설명한다.
   - [ ] 관련 backend/API contract docs와 agent coverage 해석 규칙이 갱신된다.
@@ -405,6 +422,7 @@
   - [ ] field별 override를 조회/저장할 수 있다.
   - [ ] Toss Securities 연동을 켜면 "토스 증권계좌 투자 항목만 Toss API 값으로 대체하고, 나머지 자산/대출/보험/profile은 BankSalad snapshot을 유지한다"는 범위가 화면에서 명확하다.
   - [ ] 설정 화면은 BankSalad snapshot 기준일과 Toss API 조회/평가 기준일이 서로 다를 수 있음을 표시한다.
+  - [ ] configured source, effective source, selected run, 마지막 성공 동기화, 마지막 동기화 시도, 평가 기준시각, stale 여부, fallback 이유를 표시한다.
   - [ ] priority 변경이 historical observation을 수정하지 않는 future resolution rule임을 화면 copy와 interaction으로 명확히 한다.
   - [ ] frontend typecheck/lint/test가 통과한다.
   - [ ] Codex 인앱 브라우저 또는 동등한 visual QA로 기본 조회/저장 흐름을 확인한다.
@@ -424,8 +442,13 @@
   - [ ] field별 source priority가 적용된다.
   - [ ] tie-break 순서가 `user_confirmed`, source priority, fresher observed_at, source_confidence, ingested_at, stable row id 순으로 고정된다.
   - [ ] Toss Securities가 선택된 투자 계좌 holdings는 field-level merge 없이 Toss observation row를 selected source로 고른다.
+  - [ ] Toss 계좌는 account snapshot 단위로 선택하며, BankSalad와 Toss API 값을 이중 합산하지 않는다.
+  - [ ] 최신 Toss sync가 실패하면 마지막 successful complete run을 유지하고 stale/refresh failure를 표시한다.
+  - [ ] Toss successful complete run이 한 번도 없을 때만 BankSalad fallback을 허용한다.
   - [ ] BankSalad snapshot 기준일과 Toss API 조회일이 다른 mixed-date canonical total은 각 row/source별 basis metadata를 함께 노출한다.
   - [ ] tolerance를 넘는 같은 우선순위 source 충돌은 conflict queue에 남긴다.
+  - [ ] conflict queue가 최소 `missing_in_toss`, `missing_in_banksalad`, `value_difference`, `quantity_difference`, `currency_mismatch`, `account_mapping_ambiguous`, `instrument_mapping_ambiguous`, `stale_comparison`, `possible_duplicate`를 표현한다.
+  - [ ] 차이가 있다는 이유만으로 raw 데이터를 자동 수정하지 않고, BankSalad 재업로드도 저장된 Toss source 설정을 덮어쓰지 않는다.
   - [ ] reconciliation preview가 field별 선택 이유와 conflict 정보를 보여준다.
   - [ ] apply는 explicit confirmation 후 replacement chain 또는 lifecycle decision을 저장한다.
   - [ ] `POST /api/v1/data/reset`은 대량 초기화용으로 남고 reconciliation API와 분리된다.
@@ -446,6 +469,7 @@
   - [ ] freshness/conflict 필드가 `freshness_sla_days`, `stale_days`, `conflict_status`를 표현한다.
   - [ ] `GET /api/v1/analytics/asset-source-coverage` 또는 `vw_asset_source_coverage`가 제공된다.
   - [ ] canonical asset coverage가 raw/selected/excluded/confirmed/derived/hidden/conflicted/stale 비율을 설명할 수 있다.
+  - [ ] coverage 지표가 raw observation 수, selected observation 수, Toss selected 비율, BankSalad selected 비율, unmapped holding 수, conflict 수, stale account 수, incomplete sync 수를 포함한다.
   - [ ] investment summary와 net-worth 관련 API는 selected source, source basis date, mixed-source 여부를 agent가 설명할 수 있게 metadata를 제공한다.
   - [ ] agent 문서가 source가 섞인 자산 값을 확정 총액처럼 말하지 않도록 안내한다.
 - Notes:
@@ -467,6 +491,12 @@
   - [ ] source priority가 `banksalad_snapshot`이거나 Toss observation이 없으면 기존 BankSalad 투자 snapshot 값으로 fallback한다.
   - [ ] `GET /api/v1/investments/summary` 또는 새 canonical investment summary API가 selected source 기준 items/totals와 source metadata를 반환한다.
   - [ ] broker/product type/product 기준 allocation ratio와 previous-snapshot delta가 제공된다.
+  - [ ] 인증정보와 API 오류 detail은 로그에 민감정보를 남기지 않는다.
+  - [ ] 일부 조회 실패는 `success_partial`로 기록하고 canonical source 후보에서 제외한다.
+  - [ ] 수동 새로고침, pagination, rate limit, 원화/외화 평가액, 환율 기준 저장을 처리한다.
+  - [ ] 기존 확정 순자산(`동일 BankSalad snapshot_date의 총자산 - 총부채`)과 현재 추정 순자산(`최신 BankSalad 비토스 자산 + selected Toss 투자자산 - 최신 BankSalad 부채`)을 구분한다.
+  - [ ] API 연동 이후 일별 대표 투자 observation을 보존하되, API 연동 이전 history를 임의로 복원하지 않는다.
+  - [ ] 실패한 sync가 직전 정상 observation을 덮지 않으며, 장기 stale 상태도 자동 source 전환이 아니라 경고와 수동 전환 선택지로 표현한다.
   - [ ] 1차 범위는 보유 평가액과 투자 구성 비중만이며, 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution은 구현하지 않는다.
   - [ ] BankSalad snapshot만으로 투자 성과/수익률을 해석하지 않는다.
 - Notes:
@@ -656,6 +686,205 @@
 - Notes:
   - 이 task는 비어 있는 값을 임의로 채우는 작업이 아니다. API consumer가 empty response의 원인을 구분하게 만드는 task다.
   - parser-level diagnostics가 커지면 첫 PR은 response-level missing metadata로 제한하고 diagnostics는 별도 task로 분리해도 된다.
+
+#### Task T030. Transaction source lifecycle
+- Priority: P0
+- Status: Ready
+- Depends on: T000
+- Acceptance Criteria:
+  - [ ] BankSalad upload row와 사용자 수정 거래를 분리하는 transaction source lifecycle model이 도입된다.
+  - [ ] lifecycle status는 최소 `active`, `missing_from_latest_export`, `source_changed`, `superseded`, `duplicate_candidate`, `ambiguous`를 표현한다.
+  - [ ] transaction source tracking이 `source_row_hash`, `first_seen_import_id`, `last_seen_import_id`, `source_first_seen_at`, `source_last_seen_at`, `superseded_by_transaction_id` 또는 동등한 필드를 제공한다.
+  - [ ] 최신 파일에서 사라진 거래를 즉시 hard delete하지 않고 `missing_from_latest_export` 또는 동등한 상태로 보존한다.
+  - [ ] 기존 거래 수정 시 delete 후 insert보다 source field update 또는 supersession을 우선한다.
+  - [ ] BankSalad가 갱신할 수 있는 원본 필드와 업로드가 덮어쓰면 안 되는 사용자 필드가 코드와 contract docs에서 분리된다.
+  - [ ] 사용자 카테고리, 정규화 거래처, 대출 연결, 할부 연결, spending review 상태, memo가 재업로드로 손실되지 않는다.
+  - [ ] 거래별 source 이력 또는 import lineage를 조회할 수 있다.
+  - [ ] backend regression test가 missing row, changed source field, superseded transaction, preserved user override fixture를 포함한다.
+  - [ ] 관련 API/agent contract docs가 lifecycle status 해석 규칙을 설명한다.
+- Notes:
+  - Kept feature roadmap Track A의 첫 P0이다.
+  - `transactions` soft delete와 upload incremental insert 동작을 유지하되, 반복 업로드에서 사용자 작업이 사라지지 않게 하는 기반이다.
+
+#### Task T031. Upload preview and reconciliation v2
+- Priority: P0
+- Status: Planned
+- Depends on: T030
+- Acceptance Criteria:
+  - [ ] upload apply 전에 DB를 변경하지 않는 reconciliation preview API가 제공된다.
+  - [ ] preview flow는 `파일 업로드 -> 파싱 -> reconciliation preview -> 안전 변경 자동 선택 -> 사용자 확인 -> apply`로 분리된다.
+  - [ ] preview change type은 최소 `new`, `unchanged`, `source_fields_changed`, `time_shifted`, `possible_replacement`, `missing_from_latest_export`, `possible_duplicate`, `ambiguous`를 표현한다.
+  - [ ] 안전하게 자동 적용할 변경과 사용자 검토가 필요한 변경이 response에서 분리된다.
+  - [ ] preview item이 기존 값, 신규 값, 판단 근거, 사용자 수정 보존 여부, canonical/cashflow 영향 범위를 보여준다.
+  - [ ] apply API는 explicit confirmation 후 선택된 change set만 반영한다.
+  - [ ] apply 결과와 판단 근거가 upload log 또는 별도 reconciliation log에 기록된다.
+  - [ ] 기존 `POST /api/v1/upload` 호환 경로의 동작과 새 preview/apply flow의 관계가 문서화된다.
+  - [ ] backend API/service test가 preview no-write, safe apply, ambiguous no-auto-apply, upload log 기록을 검증한다.
+  - [ ] frontend surface가 포함되는 경우 `/data/import`에서 preview/apply flow를 브라우저로 확인한다.
+- Notes:
+  - `T030` lifecycle 없이는 replacement/missing/source-changed 판단이 불안정하므로 `T030` 이후에 착수한다.
+  - 첫 PR은 backend preview/apply contract만 만들고 frontend는 후속으로 쪼갤 수 있다.
+
+#### Task T032. Settlement group canonical netting
+- Priority: P0
+- Status: Planned
+- Depends on: T030, T031
+- Acceptance Criteria:
+  - [ ] 원결제, 완전 취소, 부분환불, 복수 부분환불을 하나의 settlement group으로 묶는 model 또는 canonical layer가 도입된다.
+  - [ ] settlement status는 최소 `auto_confirmed`, `review_required`, `user_confirmed`, `rejected`를 표현한다.
+  - [ ] 자동 매칭은 동일/정규화 거래처, 동일 결제수단, 동일 통화, 반대 부호, 절대금액 일치 또는 원결제 이하, 근접 날짜, 원본 설명 유사도, 기존 연결 여부를 사용한다.
+  - [ ] 후보 원결제가 여러 개인 경우 자동 확정하지 않고 review queue로 보낸다.
+  - [ ] 사용자가 settlement 연결을 수정하거나 해제할 수 있다.
+  - [ ] 완전 취소는 실제 지출 합계에서 제외되고, 부분환불은 순액만 반영된다.
+  - [ ] settlement 순액은 월간 지출, 카테고리 지출, 거래처 지출, 이상 지출, 반복결제 탐지, 구매 후 검토, 예산 사용액, 현금흐름 예측에서 공통으로 사용할 수 있다.
+  - [ ] 기존 `T012` spending review refund netting과 중복 계산하지 않고 shared settlement service/view로 수렴한다.
+  - [ ] backend regression test가 완전 취소, 부분환불, 복수 부분환불, 다중 원결제 후보, user rejected fixture를 포함한다.
+  - [ ] API/agent docs가 raw signed transaction과 settlement-netted analysis surface의 차이를 설명한다.
+- Notes:
+  - `T012`에서 구매 후보용 refund netting은 이미 구현됐지만, 이 task는 분석 전반에 재사용되는 공통 경제적 거래 layer로 승격하는 작업이다.
+
+#### Task T033. Merchant normalization candidate engine
+- Priority: P1
+- Status: Planned
+- Depends on: T030, T032
+- Acceptance Criteria:
+  - [ ] 표기만 다른 동일 거래처를 결정론적 규칙으로 추천하는 candidate engine이 추가된다.
+  - [ ] 후보 생성은 대소문자 통일, 공백 제거, 특수문자 정규화, 법인 표기 정리, 괄호/하이픈 정리, PG사 접두어 처리, 기존 alias dictionary, 문자열 유사도, 결제 패턴 비교를 사용한다.
+  - [ ] 모든 추천은 confidence, reason, matched evidence, expected affected transaction count를 제공한다.
+  - [ ] very high confidence는 자동 적용 가능 후보로 표시할 수 있지만, 실제 rule 저장/적용은 사용자 승인 또는 명시 설정을 따른다.
+  - [ ] medium confidence는 `/data/inbox` 또는 `/data/rules` 추천으로 남기고 low confidence는 추천하지 않는다.
+  - [ ] 사용자 거절 후보는 같은 근거로 반복 추천하지 않는다.
+  - [ ] 승인 시 기존 merchant alias rule로 저장한다.
+  - [ ] 거래별 수동 정규화 값은 자동 alias rule보다 우선한다.
+  - [ ] backend test가 PG사 접두어, 법인 표기, 비슷하지만 다른 거래처, 거절 후보 재추천 방지를 검증한다.
+  - [ ] frontend를 포함하는 경우 candidate review/approve/reject flow를 browser 또는 component test로 검증한다.
+- Notes:
+  - 기존 merchant alias rule/apply 기능은 live다. 이 task는 rule을 사람이 직접 입력하기 전 후보를 만들어주는 고도화다.
+  - LLM/ML 도입 없이 deterministic rule로 시작한다.
+
+#### Task T034. Approval-based classification suggestions
+- Priority: P1
+- Status: Planned
+- Depends on: T030, T033
+- Acceptance Criteria:
+  - [ ] 사용자의 과거 승인 결과를 기반으로 카테고리, 고정비/변동비, 필수/재량 추천을 생성한다.
+  - [ ] 추천 우선순위는 `거래별 수동 override > 거래처 + 원본 설명 규칙 > 거래처 규칙 > 원본 소분류 규칙 > 원본 대분류 규칙 > 과거 동일 패턴의 다수 승인 결과 > 미분류`로 고정된다.
+  - [ ] 거래처만으로 모호한 경우 원본 설명, 원본 소분류, 금액, 결제수단을 함께 사용한다.
+  - [ ] 추천은 confidence, reason, source rule, matched historical approvals, affected count를 제공한다.
+  - [ ] 단건 승인, 동일 패턴 전체 승인, 규칙 저장, 추천 거절, 기존 데이터 일괄 적용 preview를 지원한다.
+  - [ ] 자동 적용 전 예상 변경 건수와 보존될 수동 override를 보여준다.
+  - [ ] 거절한 추천은 동일 근거로 반복 노출하지 않는다.
+  - [ ] 수동 수정은 자동 규칙보다 항상 우선한다.
+  - [ ] backend test가 precedence, ambiguous merchant, rejection memory, preview count, manual override preservation을 검증한다.
+  - [ ] 관련 `/data/inbox` 또는 `/data/rules` UI가 포함되면 visual/browser smoke를 수행한다.
+- Notes:
+  - 기존 category/recurring classification rule과 dry-run 기능을 대체하지 않고, 승인 기반 추천 queue를 얹는 작업이다.
+
+#### Task T035. Recurring series segmentation
+- Priority: P1
+- Status: Planned
+- Depends on: T032, T033
+- Acceptance Criteria:
+  - [ ] 한 거래처 안에 여러 월간 결제가 존재할 때 별도 recurring series로 분리한다.
+  - [ ] series key 후보는 정규화 거래처, 결제수단, 금액 클러스터, 결제일 패턴, 원본 설명 유사도를 함께 사용한다.
+  - [ ] 정액 구독은 동일 금액 또는 `+-1%` 범위, 보험/통신은 안정 범위 내 변동, 공과금은 금액보다 결제일 반복 우선, 해외 결제는 외화 금액 또는 환율 변동을 고려한다.
+  - [ ] 환불/취소/settlement reversal 거래는 반복 횟수와 금액 안정성 계산에서 제외된다.
+  - [ ] series candidate마다 confidence, separation reason, matched transaction ids, excluded settlement ids를 제공한다.
+  - [ ] 불확실한 series는 사용자 승인 대상으로 남긴다.
+  - [ ] 기존 `recurring_payment_kind` 거래 단위 분류와 충돌하지 않고, series는 반복 계약 후보의 상위 grouping으로 취급한다.
+  - [ ] backend test가 같은 merchant의 두 구독, 통신비 변동, 공과금, 해외 결제, 환불 제외 fixture를 포함한다.
+  - [ ] agent docs가 merchant-level recurring과 series-level recurring의 차이를 설명한다.
+- Notes:
+  - 현재 recurring 후보 보수화와 dry-run은 live지만 merchant 단위에 가깝다. 이 task는 계약/series 단위로 분리하는 기반이다.
+
+#### Task T036. Recurring contract ledger
+- Priority: P1
+- Status: Planned
+- Depends on: T035
+- Acceptance Criteria:
+  - [ ] recurring series candidate를 지속 관리되는 recurring contract ledger로 승격할 수 있다.
+  - [ ] contract row는 `display_name`, `merchant`, `expected_amount`, `amount_tolerance`, `expected_day`, `expected_interval`, `payment_method`, `status`, `first_observed_at`, `last_observed_at`, `next_expected_at`, `annualized_cost` 또는 동등한 필드를 가진다.
+  - [ ] status는 최소 `candidate`, `active`, `paused`, `cancelled`, `ended_candidate`, `missing_payment`, `price_changed`를 표현한다.
+  - [ ] 다음 결제일, 예상 금액 범위, 연간 환산 비용, 신규 반복결제, 가격 인상, 결제 누락, 종료 추정, 해지 후 재발생을 계산하거나 후보로 제안한다.
+  - [ ] 실제 거래가 들어오면 예상 결제와 자동 연결하되 ambiguous match는 review 상태로 남긴다.
+  - [ ] 반복계약과 할부 계획은 별도 개념으로 유지한다.
+  - [ ] 사용자가 활성/종료/반복 아님 상태를 관리할 수 있다.
+  - [ ] 90일 현금흐름 예측에서 confirmed/high-confidence expected outflow로 사용할 수 있는 API 또는 canonical view가 제공된다.
+  - [ ] backend test가 active contract, price change, missing payment, cancelled contract, installment-not-recurring separation을 검증한다.
+  - [ ] docs가 recurring contract ledger와 기존 recurring classification rule의 역할 차이를 설명한다.
+- Notes:
+  - `T037` cashflow calendar의 핵심 입력이므로 forecasting 전에 먼저 끝내는 것이 좋다.
+
+#### Task T037. 90-day cashflow calendar
+- Priority: P1
+- Status: Planned
+- Depends on: T006, T010, T024, T032, T036
+- Acceptance Criteria:
+  - [ ] 향후 90일 일별 예상 잔액을 계산하는 API 또는 canonical surface가 제공된다.
+  - [ ] 입력은 최신 현금성 자산, 최근 급여 패턴과 급여일 설정, 대출 월상환액과 상환일, 할부 forecast, recurring contract 예상 결제, 카드 결제일, 비정기 지출 적립금, 사용자가 등록한 예정 현금 유출입을 포함할 수 있다.
+  - [ ] 출력은 향후 30/60/90일 최저 잔액, 잔액 부족 예상일, 급여일까지 안전 사용 가능 금액, 확정 예정 지출, 추정 예정 지출을 포함한다.
+  - [ ] 각 예상 거래는 `confirmed`, `high_confidence`, `estimated`, `manual_plan`, `unknown` 또는 동등한 confidence를 가진다.
+  - [ ] 오래된 데이터에는 stale 경고를 표시한다.
+  - [ ] 투자 평가액은 기본 가용 현금에 포함하지 않는다.
+  - [ ] forecast는 관측 cashflow를 수정하지 않고 projection layer로만 제공된다.
+  - [ ] backend test가 급여 전 잔액 부족, 반복계약, 대출상환, 할부 forecast, stale input, 투자자산 제외 fixture를 포함한다.
+  - [ ] frontend surface가 포함되면 `/signals` 또는 `/data/settings` 연결 화면을 browser smoke로 확인한다.
+  - [ ] docs가 forecast confidence와 observed/canonical cashflow의 차이를 설명한다.
+- Notes:
+  - 월간 총액 분석이 아니라 날짜별 유동성 위험을 보기 위한 surface다.
+  - `T036` 없이도 최소 forecast는 가능하지만, 제품 의미가 약하므로 recurring contract ledger 이후로 둔다.
+
+#### Task T038. Sinking funds and adaptive budget
+- Priority: P1
+- Status: Planned
+- Depends on: T010, T037
+- Acceptance Criteria:
+  - [ ] 여행, 경조사, 자동차 유지비 같은 비정기 지출을 위한 sinking fund goal model 또는 settings section이 정의된다.
+  - [ ] 월 필요 적립액은 `(목표 금액 - 현재 준비액) / 남은 개월`을 기본으로 계산한다.
+  - [ ] 추천 근거는 최근 12개월 합계, 월별 중앙값, 상위 75/90 percentile, 계절성, 일회성 제외 여부, 반복된 연간 지출을 포함할 수 있다.
+  - [ ] adaptive budget은 필수 월지출, 재량 월지출 한도, 비정기 지출 적립, 대출 추가상환, 장기 목표 적립을 분리해 표현한다.
+  - [ ] forecast에 예정 적립액을 반영할 수 있다.
+  - [ ] 적립금으로 준비한 거래를 단순 이상 지출로만 처리하지 않도록 anomaly/spending review basis가 구분된다.
+  - [ ] 시스템 추천은 사용자 승인 후에만 goal/plan으로 저장된다.
+  - [ ] backend test가 annual expense, seasonal expense, approved sinking fund, rejected suggestion, forecast inclusion을 검증한다.
+  - [ ] agent docs가 My Ledge는 계산/추천 근거를 제공하고 최종 예산 판단은 사용자 또는 advisor layer가 수행한다고 설명한다.
+- Notes:
+  - 기존 `T010` financial targets는 미니멀 목표 설정이다. 이 task는 더 넓은 budgeting/product feature다.
+
+#### Task T039. Loan repayment scenario simulator
+- Priority: P1
+- Status: Planned
+- Depends on: T005, T010, T024
+- Acceptance Criteria:
+  - [ ] 대출 잔액, 금리, 월상환액, 상환 방식 metadata를 기반으로 추가상환 시나리오를 비교하는 API가 제공된다.
+  - [ ] 기본 시나리오는 현재 상환 유지, 월 10만원/30만원/50만원 추가, 최고금리 우선, 최저잔액 우선, 사용자 지정 순서, 금리 상승, 일부 일시상환, 리파이낸싱 가정을 포함할 수 있다.
+  - [ ] 출력은 예상 완납일, 총 예상 이자, 기준안 대비 절감 이자, 상환기간 단축, 월별 현금 부담, 비상금 목표 영향을 포함한다.
+  - [ ] 계산에 사용한 가정과 누락 데이터를 response basis에 명시한다.
+  - [ ] 중도상환수수료, 실제 상환 스케줄, 변동금리 조건이 없으면 미반영 사실을 표시한다.
+  - [ ] My Ledge는 비교 계산과 근거만 제공하고 최종 판단은 사용자 또는 외부 advisor가 수행한다.
+  - [ ] backend test가 fixed-rate amortization approximation, missing fee warning, emergency fund impact, manual scenario order, rate increase assumption을 검증한다.
+  - [ ] docs가 실제 금융 조언이 아니라 scenario calculator임을 명시한다.
+- Notes:
+  - `T025` active/historical scope metadata는 Done이므로, scenario input은 active loan summary와 canonical loan inventory의 scope 차이를 존중해야 한다.
+
+#### Task T041. Limited multi-dimensional transaction tags
+- Priority: P2
+- Status: Planned
+- Depends on: T030, T034
+- Acceptance Criteria:
+  - [ ] 기존 카테고리와 별개로 거래 맥락을 표현하는 tag model이 도입된다.
+  - [ ] 1차 tag type은 최소 `context`, `person`, `project`, `reimbursable`, `shared` 또는 동등한 제한된 set으로 시작한다.
+  - [ ] 사용자가 단건 거래 또는 선택 거래에 태그를 일괄 적용할 수 있다.
+  - [ ] 동일 거래처/기간 기반 추천과 승인 기반 규칙 재사용은 가능하되, 자동 태깅보다 사용자 승인 flow를 우선한다.
+  - [ ] 금액 분할은 범위에 포함하지 않는다.
+  - [ ] 태그는 category, spend necessity, recurring kind, loan/installment link를 대체하지 않는다.
+  - [ ] export/API/agent surface에서 tag filtering 또는 tag aggregation을 제공한다.
+  - [ ] backend test가 tag CRUD, bulk apply, filtered transaction list, rejected suggestion memory, category independence를 검증한다.
+  - [ ] frontend가 포함되면 거래 테이블 bulk edit과 tag filter UX를 browser smoke로 확인한다.
+  - [ ] 실제 사용 수요가 확인되기 전에는 tag taxonomy 자동 확장이나 split accounting을 추가하지 않는다.
+- Notes:
+  - Kept feature roadmap에서 `제한적 유지`로 분류된 항목이다.
+  - 공동비용/환급/여행 같은 맥락 표시는 유용하지만, accounting split까지 들어가면 별도 큰 기능이 되므로 명시적으로 제외한다.
 
 ---
 

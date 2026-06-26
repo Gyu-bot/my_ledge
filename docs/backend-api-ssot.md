@@ -318,7 +318,7 @@
 - `GET /api/v1/assets/snapshot-compare`
 
 위 세 endpoint는 현재 `start_date` / `end_date` filter를 받지 않는다.
-현재 live contract에는 asset/investment/loan raw snapshot row를 삭제, 숨김, 만기 처리, 병합하는 endpoint가 없다. `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`는 최신 자산 row의 유동성 metadata만 수정한다. raw-data lifecycle과 multi-source provenance 관리는 [planned-work.md](planned-work.md)의 P2 계획으로 둔다.
+현재 live contract에는 asset/investment/loan raw snapshot row를 삭제, 숨김, 만기 처리, 병합하는 endpoint가 없다. `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`는 최신 자산 row의 유동성 metadata만 수정한다. raw-data lifecycle과 multi-source provenance는 사용자용 roadmap에서는 [Implentation-plan.md](../Implentation-plan.md), 실행계획에서는 [`.omo/plans/`](../.omo/plans/) 아래에서 관리한다.
 
 ### Snapshot Compare Contract
 
@@ -367,9 +367,12 @@
 - `PRD.md`
   - 제품 요구사항 문서
   - 구현 반영은 하되, low-level contract는 이 문서가 더 직접적이다
-- `docs/planned-work.md`
-  - 현재 미구현이지만 계획으로 유지하는 backlog 문서
-  - live contract가 아니라 실행 우선순위와 보류/장기 항목 정리 기준이다
+- `../Implentation-plan.md`
+  - 사용자가 보는 구현 현황과 남은 roadmap
+  - live contract가 아니라 제품 방향과 남은 항목 정리 기준이다
+- `../.omo/plans/`
+  - 에이전트가 실행할 decision-complete 계획
+  - todo, acceptance criteria, QA, evidence, commit strategy를 담는다
 - `docs/archive/planning/finance-advisor-analytics-expansion.md`
   - historical planning 문서
   - 현재 live backend/API SSOT나 active backlog로 사용하지 않는다

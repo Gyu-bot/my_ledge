@@ -1,566 +1,147 @@
-# AGENTS.md
+# PROJECT KNOWLEDGE BASE
 
-개인 재무 대시보드. BankSalad 엑셀 내보내기를 데이터 소스로 사용하여 지출 분석과 자산 변동 tracking을 수행한다.
-상세 요구사항은 `PRD.md`를 참조한다.
+Generated: 2026-06-26
+Mode: OMO-first repo governance
+Workspace: `/Users/gyurin/dev/my_ledge`
 
----
+## Overview
 
-## Project Layout
+My Ledge is a personal finance dashboard backed by BankSalad Excel exports. It tracks transactions, net worth, assets, loans, installments, recurring payments, and agent-facing canonical read surfaces.
 
-```
-my_ledge/
-├── AGENTS.md                # 이 파일
-├── Implentation-plan.md     # 전역 실행계획 / backlog tracking
-├── PRD.md                   # 상세 요구사항 문서
-├── docker-compose.yml
-├── .env                     # 환경변수 (DB_PASSWORD, EXCEL_PASSWORD 등)
-├── docs/
-│   └── STATUS.md            # main 기준 작업 현황 (모든 작업자가 읽고, mainline 정리 시 갱신)
-├── backend/
-│   ├── pyproject.toml       # uv 기반 의존성
-│   ├── alembic/             # DB 마이그레이션
-│   ├── app/
-│   │   ├── main.py          # FastAPI 진입점
-│   │   ├── api/v1/          # 라우터
-│   │   ├── models/          # SQLAlchemy 모델
-│   │   ├── schemas/         # Pydantic v2 스키마
-│   │   ├── services/        # 비즈니스 로직
-│   │   └── parsers/         # 엑셀 파싱 로직
-│   └── tests/
-└── frontend/
-    ├── package.json
-    ├── vite.config.ts
-    └── src/
-        ├── features/        # 라우트별 feature page
-        ├── ds/              # Ledger DS primitive와 chart primitive
-        ├── shell/           # App shell, navigation, page header
-        ├── hooks/           # 커스텀 훅 (React Query 등)
-        ├── api/             # API 호출 함수
-        └── types/           # TypeScript 타입
-```
+Core stack:
 
----
+- Backend: FastAPI, Pydantic v2, SQLAlchemy async, Alembic, PostgreSQL, `uv`
+- Frontend: Vite, React, TypeScript strict, Tailwind, TanStack Query, Vitest
+- Data source: encrypted BankSalad workbook, decrypted with `msoffcrypto-tool`, parsed with `openpyxl(data_only=True)`
 
-## Documentation Map
+## Operating Contract
 
-새 세션이나 다른 에이전트가 이어받을 때는 아래 순서로 문서를 본다.
+- Respond in Korean when the user writes in Korean.
+- Keep edits scoped to the request. Do not add unrelated cleanup.
+- Use subagents proactively for independent research, implementation slices, and review passes when their file ownership can stay separate.
+- Before changing Docker, local services, network, host ports, or browser targets, inspect current state first.
+- Preserve active `honcho-*` services. Avoid host conflicts with `127.0.0.1:8000`, `127.0.0.1:6379`, and `127.0.0.1:5432`.
+- For UI/frontend changes, verify in the Codex in-app browser or equivalent visual check when feasible.
+- Normalize local browser URLs to explicit `http://...`.
+- Do not overwrite, reset, or discard existing user/agent changes.
 
-| 문서 | 역할 | 비고 |
+## Source Of Truth
+
+| Need | Source | Rule |
 |---|---|---|
-| `docs/STATUS.md` | main 기준 현재 작업 상태, 최근 완료, 진행 중, 다음 작업, 핵심 결정 로그 | 작업 시작 전 읽는다. feature/PR 브랜치에서는 기본적으로 수정하지 않고, main에 머지된 후 mainline snapshot으로 갱신한다. backlog 전체 목록으로 쓰지 않는다. |
-| `Implentation-plan.md` | 전역 실행계획 / backlog tracking | 모든 현재 작업은 Task ID, Priority, Status, Depends on, Acceptance Criteria 기준으로 이 문서에서 추적한다. feature/PR 브랜치에서는 기본적으로 수정하지 않고, 계획 정리 작업이나 mainline sync 때 갱신한다. |
-| `PRD.md` | 제품 요구사항과 장기 범위 | live 구현 여부 판단은 코드와 backend/API SSOT를 우선한다. |
-| `docs/backend-api-ssot.md` | 현재 backend/API live contract 요약 | endpoint/field 충돌 시 backend 코드 다음 우선순위다. |
-| `docs/backend-api-and-metrics-reference.md` | endpoint, metric, canonical view 계산 방식 상세 설명 | 구현자와 리뷰어용 상세 reference다. |
-| `docs/agents/README.md` | Hermes, Codex, Claude, OpenClaw 등 외부 에이전트 시작점 | read/write 권한, canonical view 우선 규칙, 추천 흐름을 담는다. |
-| `docs/agents/canonical-read-surface-reference.md` | 에이전트용 API/canonical view 값 사전 | 각 값의 의미, 계산식, null/비율/금액 해석 규칙을 담는다. |
-| `docs/agent-integration/**` | 범용 에이전트 운영/skill 패키징 문서 | API/DB 연결, readonly DB, skill handoff, acceptance checklist를 담는다. |
-| `docs/openclaw/README.md` | 기존 OpenClaw 링크 호환용 legacy 안내 | 새 문서는 `docs/agents/`와 `docs/agent-integration/`를 우선한다. |
-| `docs/frontend-design-tokens.md` | 현재 frontend 시각 토큰 source of truth | 실제 CSS/token 값 기준이다. |
-| `docs/frontend/components-and-design-token-inventory.md` | 현재 UI component surface와 token 연결표 | 새 컴포넌트 추가 시 같이 갱신한다. |
-| `docs/frontend/page-wireframes.md` | live route별 section 구성과 wireframe | 현재 화면 구조 기준이다. |
-| `docs/frontend-reimplementation-wireframe-functional-requirements.md` | frontend 재구현/정렬 요구사항 | current frontend 기준과 함께 참고한다. |
-| `docs/archive/**`, `docs/daily/**`, `docs/superpowers/plans/**`, `docs/superpowers/specs/**` | historical reference | 미체크 task가 남아 있어도 current backlog로 보지 않는다. 필요한 내용은 `Implentation-plan.md`로 승격한 뒤 사용한다. |
+| Repo operating rules | `AGENTS.md` hierarchy | Start here, then nearest child `AGENTS.md` |
+| User-facing roadmap/status | `Implentation-plan.md` | Human-readable project status and remaining work; filename spelling is intentional |
+| OMO execution plans | `.omo/plans/` | Agent-executable plans with todos, references, acceptance criteria, QA, and commit strategy |
+| Live backend/API contract | `docs/backend-api-ssot.md` | Code wins if docs drift |
+| Detailed metric/API formulas | `docs/backend-api-and-metrics-reference.md` | Use for implementation/review details |
+| Agent read values | `docs/agents/canonical-read-surface-reference.md` | Agent-facing value semantics |
+| Frontend UI contract | `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md` | Current frontend truth |
+| Historical context | `docs/archive/**`, `docs/daily/**`, `docs/superpowers/**`, `docs/frontend-remake/**` | Reference only; promote into `Implentation-plan.md` for user visibility or `.omo/plans/` for execution before treating as active |
 
-`docs/STATUS.md`와 `Implentation-plan.md`는 역할이 다르므로 분리한다. `STATUS.md`는 mainline handoff log이고, `Implentation-plan.md`는 전역 실행계획과 current backlog tracking 문서다.
+`docs/STATUS.md` is deprecated. Do not maintain it as a handoff surface.
 
-`docs/STATUS.md`는 필수 mainline handoff 파일이므로 길이를 관리한다. 상단에는 main에 실제 반영된 현재 상태, 최근 완료, 진행 중, 다음 작업, 핵심 결정만 유지하고, 오래된 완료 로그가 파일을 비대하게 만들면 `docs/archive/status/` 아래 날짜별 snapshot으로 옮긴 뒤 요약 링크만 남긴다.
+## OMO Workflow
 
-### Shared Docs Update Policy
+1. Read this file and the nearest child `AGENTS.md`.
+2. Check `git status --short --branch` and protect existing changes.
+3. Read `Implentation-plan.md` for user-facing project context: what is done, what remains, and why it matters.
+4. For execution, use `.omo/plans/index.md` to choose the relevant `.omo/plans/<slug>.md`; if no suitable plan exists, create one with `omo:ulw-plan` and wait for user approval before execution.
+5. For code changes, inspect the live code path before editing. Do not rely on plan text alone.
+6. For project work, prefer a focused branch or worktree from latest `origin/main` unless the user explicitly asks for local/mainline edits.
+7. Capture completed work in the executing `.omo/plans/<slug>.md` evidence/checklist first; update `Implentation-plan.md` only when the user-facing roadmap/status should change.
+8. Feature/fix PR bodies should carry `Summary`, `Verification`, `Plan impact`, and `Contract docs` when relevant.
+9. Do not merge PRs or push to `main` without explicit user approval.
 
-병렬 PR 충돌을 줄이기 위해 문서를 두 종류로 나눠 다룬다.
+## Git And Worktrees
 
-**Mainline coordination docs**는 main의 현재 상태와 다음 계획을 요약하는 공유 조정 문서다.
+- Before git work, inspect branch, working tree, remote tracking, and latest `origin/main`.
+- Base new feature/fix worktrees on latest `origin/main`.
+- One session = one worktree = one branch = one PR when practical.
+- Split unrelated changes into focused branches. Keep backend/frontend/docs together only when they serve the same user-visible outcome.
+- Mainline coordination now flows through `.omo/plans/` for execution and `Implentation-plan.md` for user-facing status, not `docs/STATUS.md`.
+- Clean up worktrees/branches only after their PRs are merged and no active session needs them.
 
-- 해당 문서: `docs/STATUS.md`, `Implentation-plan.md`
-- feature/fix PR에서는 기본적으로 수정하지 않는다.
-- PR 본문에 `Status impact`와 필요 시 `Plan impact`를 남긴다.
-- PR이 main에 머지된 뒤, 또는 여러 병렬 PR을 순차 머지한 뒤, main에서 한 번에 갱신한다.
-- 예외: 사용자가 명시적으로 요청한 문서/계획 정리 PR이거나, 브랜치 목적 자체가 backlog/status 정리라면 해당 브랜치에서 수정할 수 있다.
+Generated/foreign paths to ignore for governance generation: `.git`, `.claude/worktrees`, `.codex`, `.venv`, `.uv-cache`, `node_modules`, `dist`, `build`, `__pycache__`, `.pytest_cache`, `.ruff_cache`.
 
-**Contract/source-of-truth docs**는 코드 변경과 함께 리뷰되어야 하는 동작 계약 문서다.
+## Entry Points
 
-- 해당 문서 예: `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`, `docs/agent-integration/**`, `docs/frontend/page-wireframes.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend-design-tokens.md`
-- feature/fix PR에서 실제 변경된 endpoint, field, canonical surface, route, component surface에 한해 최소 범위로 같이 갱신한다.
-- 같은 문서의 같은 섹션을 여러 병렬 PR이 건드릴 가능성이 크면 먼저 PR 본문에 문서 영향만 남기고, main merge 후 별도 docs 정리 커밋/PR로 합친다.
-- 광범위한 문서 재구성, 오래된 내용 정리, backlog 재분류는 기능 PR에 섞지 않고 별도 docs 작업으로 분리한다.
+| Surface | Path | Notes |
+|---|---|---|
+| Backend app | `backend/app/main.py` | `create_app()`, CORS, API router |
+| Backend router | `backend/app/api/v1/router.py` | `/api/v1` fan-out |
+| Backend services | `backend/app/services/` | Core business logic; endpoints should stay thin |
+| Backend parsers | `backend/app/parsers/` | BankSalad workbook parsing |
+| Frontend app | `frontend/src/App.tsx` | Query client + router provider |
+| Frontend router | `frontend/src/router.tsx` | Current IA and legacy redirects |
+| Frontend shell | `frontend/src/shell/` | Navigation, layout, theme, write-access badge |
+| Frontend DS | `frontend/src/ds/` | Ledger design primitives and charts |
 
-### Parallel Work Workflow
-
-사용자가 병렬 작업 충돌을 최소화하려면 아래 운영을 기본으로 한다.
-
-1. 기능/버그 수정은 `feature/*` 또는 `fix/*` 브랜치의 PR로 올린다. 한 PR은 한 의도와 한 책임 범위를 갖게 한다.
-2. 병렬 PR은 가능하면 파일 소유권이 겹치지 않게 나눈다. 예: backend API, frontend page, infra, docs cleanup을 분리한다.
-3. 같은 페이지, 같은 endpoint, 같은 contract 문서 섹션을 여러 PR이 동시에 바꿀 가능성이 있으면 먼저 한 PR을 merge하고 다른 PR을 최신 `main`에 맞춘다.
-4. feature/fix PR은 `docs/STATUS.md`와 `Implentation-plan.md`를 직접 수정하지 않는다. 대신 PR 본문에 mainline docs sync용 영향을 남긴다.
-5. API/스키마/화면 동작처럼 코드와 함께 리뷰되어야 하는 contract 문서는 기능 PR에 포함하되, 바뀐 섹션만 최소 수정한다.
-6. 여러 PR을 머지한 뒤에는 `main`에서 짧은 mainline docs sync 세션을 돌려 `docs/STATUS.md`와 `Implentation-plan.md`를 현재 main 기준으로 정리한다.
-7. 단일 PR만 머지했고 영향이 작으면 merge 담당자가 같은 흐름에서 mainline docs sync를 바로 처리해도 된다.
-
-### Git Worktree Policy
-
-병렬 Codex 세션이나 병렬 feature/fix 작업은 기본적으로 `git worktree`를 사용한다.
-
-- 한 세션 = 한 worktree = 한 branch = 한 PR을 기본 단위로 둔다.
-- 새 작업 worktree는 최신 `origin/main`에서 생성한다.
-- 같은 checkout에서 여러 feature/fix 브랜치를 번갈아 작업하지 않는다.
-- mainline docs sync는 기본 repo의 `main` 또는 별도 docs sync worktree에서만 수행한다.
-- 각 worktree는 dev server 포트, 임시 파일, 테스트 산출물이 섞이지 않도록 독립적으로 관리한다.
-- Docker, DB, host port는 worktree와 무관하게 공유 자원이므로 변경 전 현재 상태를 확인한다.
-
-권장 예시:
+## Commands
 
 ```bash
-git fetch origin
-git worktree add ../my_ledge-worktrees/workbench-memo-search -b feature/workbench-memo-search origin/main
-git worktree add ../my_ledge-worktrees/loan-summary-kind -b feature/loan-summary-kind origin/main
-```
-
-`main` 브랜치는 동시에 여러 worktree에서 checkout할 수 없으므로, mainline docs sync는 기존 main checkout을 쓰거나 `docs/mainline-sync-*` 같은 짧은 정리 브랜치/worktree에서 수행한 뒤 main에 반영한다.
-
-Codex에 feature/fix 작업을 맡길 때는 다음 문구를 권장한다.
-
-```text
-이 작업은 feature PR 모드로 해줘.
-최신 origin/main에서 별도 git worktree를 만들어 작업해줘.
-STATUS.md와 Implentation-plan.md는 직접 수정하지 말고,
-필요한 내용은 PR 본문 Status impact / Plan impact에 남겨줘.
-contract 문서는 변경된 섹션만 최소 수정해줘.
-```
-
-Codex에 병렬 작업 중 한 범위만 맡길 때는 다음처럼 파일/책임 경계를 명시한다.
-
-```text
-이 브랜치는 frontend만 맡고, backend/API contract는 건드리지 마.
-별도 git worktree에서 이 범위만 작업해줘.
-STATUS.md/Implentation-plan.md는 수정하지 마.
-PR 본문에 mainline docs sync에 필요한 영향만 남겨줘.
-```
-
-여러 PR을 머지한 뒤 mainline docs sync 세션을 돌릴 때는 `main`에서 다음 문구를 권장한다.
-
-```text
-main 브랜치에서만 문서 정리해줘.
-최근 머지된 PR들의 Status impact / Plan impact를 반영해서
-STATUS.md와 Implentation-plan.md를 현재 main 기준으로 갱신해줘.
-contract 문서는 이미 merge된 코드와 불일치하는 부분만 최소 수정해줘.
-```
-
-### PR Body Template
-
-feature/fix PR 본문은 mainline docs sync 세션이 그대로 읽을 수 있도록 아래 구조를 기본으로 한다.
-
-```markdown
-## Summary
-- 사용자가 볼 수 있는 변화 또는 핵심 코드 변화
-- 변경된 주요 화면/API/서비스
-
-## Verification
-- 실행한 테스트, lint, typecheck, browser smoke
-- 실행하지 못한 검증이 있으면 그 이유
-
-## Status impact
-- main merge 후 `docs/STATUS.md`에 반영할 1-3줄 요약
-- In Progress / Known Issues / Key Decisions에 옮길 내용이 있으면 명시
-- 없으면: 없음
-
-## Plan impact
-- 완료되어 `Implentation-plan.md`에서 제거하거나 완료 표시할 항목
-- 새로 발견한 backlog 또는 우선순위 변경
-- 없으면: 없음
-
-## Contract docs
-- 이 PR에서 함께 수정한 contract/source-of-truth 문서
-- 의도적으로 PR 본문에만 남기고 mainline docs sync로 미룬 문서 영향
-```
-
-`Status impact`와 `Plan impact`는 비어 있더라도 `없음`이라고 적어 mainline docs sync 담당자가 누락과 무영향을 구분할 수 있게 한다.
-
----
-
-## Core Commands
-
-```bash
-# 개발 환경 실행
-docker compose up -d
-
-# 백엔드 단독 실행 (개발)
-cd backend
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 프론트엔드 단독 실행 (개발)
-cd frontend
-npm run dev
-
-# DB 마이그레이션
-cd backend
-uv run alembic upgrade head          # 적용
-uv run alembic revision --autogenerate -m "description"  # 새 마이그레이션 생성
-
-# 테스트
+# backend
 cd backend && uv run pytest
+cd backend && uv run ruff check .
+cd backend && uv run ruff format --check .
+cd backend && uv run alembic upgrade head
+
+# frontend
 cd frontend && npm test
-
-# 린트/포맷
-cd backend && uv run ruff check . && uv run ruff format .
 cd frontend && npm run lint
+cd frontend && npm run typecheck
+cd frontend && npm run build
+
+# full stack, only after checking honcho/ports
+docker compose up -d --build
+docker compose ps
 ```
 
----
-
-## Tech Stack & Constraints
-
-### Backend (Python)
-
-- **Runtime:** Python 3.12+
-- **Framework:** FastAPI + uvicorn
-- **패키지 관리:** `uv` 사용. **pip 사용 금지.** `pyproject.toml`에 의존성 선언.
-- **ORM:** SQLAlchemy 2.0 (async), Alembic 마이그레이션
-- **Validation:** Pydantic v2 — 모든 request/response에 적용
-- **DB:** PostgreSQL 16+
-- **엑셀 파싱:** `openpyxl` (반드시 `data_only=True`), 암호화 파일은 `msoffcrypto-tool`로 복호화 후 파싱
-- **인코딩:** 한글 데이터 처리 시 UTF-8-SIG
-- **API 버전:** `/api/v1/` prefix
-- **테스트:** pytest + httpx (AsyncClient)
-
-### Frontend (React)
-
-- **빌드:** Vite + TypeScript
-- **UI:** Tailwind CSS 기반. 공통 primitive는 `shadcn/ui` 스타일로 정리 가능하되, 별도 CSS 프레임워크 도입 금지
-- **차트:** `shadcn/ui` chart 패턴을 우선 검토하고, 커버되지 않는 시각화만 Recharts 사용
-- **상태관리:** TanStack Query (React Query) — 서버 상태 중심, Redux/Zustand 불필요
-- **라우팅:** React Router v6+
-- **컴포넌트:** 함수형 컴포넌트 + Hooks only, class 컴포넌트 사용 금지
-
-### Docker
-
-- 멀티스테이지 빌드 (frontend: node → nginx, backend: python:3.12-slim)
-- `docker compose up -d` 로 원커맨드 실행
-- 각 서비스에 healthcheck 포함
-
----
-
-## Coding Rules
-
-### NEVER
-
-- pip, pip install, requirements.txt 사용 → `uv`와 `pyproject.toml` 사용
-- 카테고리 목록 하드코딩 → DB에서 동적 조회
-- Chart.js, D3, Nivo 등 임의 차트 라이브러리 추가 사용
-- `openpyxl` 사용 시 `data_only=True` 누락
-- 프론트엔드에서 `any` 타입 사용 (TypeScript strict)
-- DB 스키마 직접 수정 → Alembic 마이그레이션으로만 변경
-- `\n`으로 줄바꿈 (Python docstring 제외) → 명시적 구조 사용
-
-### ALWAYS
-
-- 새 엔드포인트 추가 시 Pydantic v2 request/response 스키마 정의
-- DB 모델 변경 시 Alembic 마이그레이션 생성
-- API 응답에 적절한 HTTP 상태 코드 사용 (200, 201, 400, 404, 422, 500)
-- 한글 문자열 처리 시 인코딩 확인 (UTF-8-SIG)
-- 새 컴포넌트 생성 시 TypeScript 타입 정의
-- 비동기 DB 작업에 async/await 사용
-
----
-
-## Database Schema Overview
-
-5개 핵심 테이블. 상세 스키마는 PRD 섹션 3.1 참조.
-
-| 테이블 | 용도 | 주요 특성 |
-|---|---|---|
-| `transactions` | 가계부 거래 내역 | 소프트 삭제(`is_deleted`), 사용자 카테고리 수정(`category_*_user`), 병합(`merged_into_id`), 출처(`source`: import/manual) |
-| `asset_snapshots` | 재무현황 스냅샷 | `snapshot_date` 기준 시계열 누적, UPSERT |
-| `investments` | 투자현황 스냅샷 | `snapshot_date` 기준 시계열 누적, UPSERT |
-| `loans` | 대출현황 스냅샷 | `snapshot_date` 기준 시계열 누적, UPSERT |
-| `upload_logs` | 업로드 이력 | 파싱 결과 기록 (전체/신규/스킵 건수) |
-
-### 거래 데이터 쿼리 규칙
-
-분석 쿼리에서 **반드시** 적용해야 할 필터:
-
-```sql
--- 삭제/병합된 건 제외
-WHERE is_deleted = FALSE
-  AND merged_into_id IS NULL
-
--- 카테고리는 사용자 수정값 우선
-SELECT COALESCE(category_major_user, category_major) AS category_major,
-       COALESCE(category_minor_user, category_minor) AS category_minor
-```
-
-### 거래 타입 처리
-
-| 타입 | 분석 포함 | 비고 |
-|---|---|---|
-| `지출` (amount < 0) | ✅ 지출 분석 | — |
-| `지출` (amount > 0) | ✅ 지출 분석 | 결제 취소/환불, 상계 처리 |
-| `수입` | ✅ 수입 분석 | — |
-| `이체` | ❌ 수입/지출 제외 | 별도 '자산이동' tracking |
-
----
-
-## Data Upload Pipeline
-
-엑셀 업로드 → 적재 흐름. `POST /api/v1/upload`
-
-```
-1. 파일 수신 (multipart/form-data)
-2. msoffcrypto-tool로 복호화 (EXCEL_PASSWORD 환경변수)
-3. openpyxl로 파싱 (data_only=True)
-4. 가계부 내역:
-   a. DB에서 MAX(date, time) 조회 → 마지막 거래 시점
-   b. 새 파일에서 마지막 시점 이후 건만 필터
-   c. 경계 시점 건은 기존 DB와 비교하여 미존재 건만 추가
-   d. INSERT
-5. 뱅샐현황 (3.재무/5.투자/6.대출):
-   a. 테이블 마커 텍스트로 시작 위치 동적 검색 (위치 유동적)
-   b. snapshot_date 기준 UPSERT
-6. upload_logs에 결과 기록
-```
-
-**뱅샐현황 파싱 주의:** 테이블 위치가 유동적이므로, 행을 순회하며 `'3.재무현황'`, `'5.투자현황'`, `'6.대출현황'` 마커 텍스트를 검색하여 시작점을 찾는다. 절대 행 번호를 하드코딩하지 않는다.
-
----
-
-## API Endpoints Summary
-
-### 업로드
-
-| Method | Path | 설명 |
-|---|---|---|
-| POST | `/api/v1/upload` | 엑셀 파일 업로드 + 파싱 + 적재 |
-
-### 거래 조회
-
-| Method | Path | 설명 |
-|---|---|---|
-| GET | `/api/v1/transactions` | 거래 목록 (필터, 페이지네이션) |
-| GET | `/api/v1/transactions/summary` | 기간별 수입/지출 요약 |
-| GET | `/api/v1/transactions/by-category` | 카테고리별 집계 |
-| GET | `/api/v1/transactions/payment-methods` | 결제수단별 집계 |
-
-### 거래 편집
-
-| Method | Path | 설명 |
-|---|---|---|
-| POST | `/api/v1/transactions` | 수동 거래 추가 (source='manual') |
-| PATCH | `/api/v1/transactions/{id}` | 카테고리/메모 수정 |
-| DELETE | `/api/v1/transactions/{id}` | 소프트 삭제 |
-| POST | `/api/v1/transactions/{id}/restore` | 삭제 복원 |
-| POST | `/api/v1/transactions/merge` | 거래 병합 |
-| PATCH | `/api/v1/transactions/bulk-update` | 일괄 카테고리 수정 |
-
-### 자산
-
-| Method | Path | 설명 |
-|---|---|---|
-| GET | `/api/v1/assets/snapshots` | 자산/부채 스냅샷 목록 |
-| GET | `/api/v1/assets/net-worth-history` | 순자산 시계열 |
-| GET | `/api/v1/investments/summary` | 투자 포트폴리오 |
-| GET | `/api/v1/loans/summary` | 대출 현황 |
-
-### 시스템
-
-| Method | Path | 설명 |
-|---|---|---|
-| GET | `/api/v1/schema` | DB 스키마 문서 (에이전트용) |
-
----
-
-## Frontend Pages
-
-| 경로 | 페이지 | 핵심 컴포넌트 |
-|---|---|---|
-| `/` | 홈 | KPI, 월간 현금흐름, 주의 신호, 작업 queue, 최근 거래 |
-| `/spending` | 지출 | 기간 컨트롤, 카테고리 추이, breakdown, 고정비 요약, 거래처 treemap, 일별 달력, 거래 테이블 |
-| `/net-worth` | 자산·부채 | 순자산 추이, 자산 구성, 유동성, 투자/대출/보험/할부 요약 |
-| `/signals` | 신호 | 저축률, 수입 변동성, 이상 지출, 재량 지출 속도, 구매 게이트, 반복 결제 |
-| `/data/inbox` | 데이터 인박스 | 미분류/반복 승인/대출 연결/구매 게이트 작업 queue |
-| `/data/transactions` | 거래 | 필터 바, 행/그룹 보기, 거래 편집, bulk update/delete/restore |
-| `/data/loans` | 대출 | 대출 계좌 metadata, 상환 후보, 연결 계좌, 상환 성격, 다건 연결 |
-| `/data/installments` | 할부 | 할부 계획, 거래 후보, 회차 연결, 월별 forecast |
-| `/data/assets` | 자산 메타 | 자산 유동성/현금성 metadata, 대출 월상환/상환방식 metadata |
-| `/data/rules` | 규칙 | 자동분류, 반복 카테고리, 거래처 alias, 대출 거래처 rule |
-| `/data/settings` | 설정 | 재무 목표, 분석 파라미터 default/saved/effective |
-| `/data/import` | 가져오기 | 업로드, 업로드 이력, Danger Zone |
-| `/data/reference` | 데이터 사전 | schema, canonical view, backend read surface |
-
-호환용 redirect만 유지:
-
-- `/analysis/spending` → `/spending`
-- `/analysis/assets` → `/net-worth`
-- `/analysis/insights` → `/signals`
-- `/operations/workbench` → `/data/transactions`
-- `/operations/loan-mapping` → `/data/loans`
-- `/operations/installments` → `/data/installments`
-- `/operations/asset-settings` → `/data/assets`
-- `/operations/auto-classification` → `/data/rules`
-- `/operations/canonical-views` → `/data/reference`
-- `/operations/recurring-classification` → `/data/transactions?view=groups`
-- `/assets` → `/net-worth`
-- `/income` → `/`
-- `/transfers` → `/`
-- `/data` → `/data/inbox`
-
----
-
-## Environment Variables
-
-```env
-# Database
-DB_PASSWORD=           # PostgreSQL 비밀번호
-DB_READONLY_PASSWORD=  # readonly 유저 비밀번호 (외부 에이전트용)
-DATABASE_URL=          # postgresql+asyncpg://my_ledge:${DB_PASSWORD}@db:5432/my_ledge
-
-# Excel
-EXCEL_PASSWORD=        # BankSalad 엑셀 암호
-
-# App
-SECRET_KEY=
-API_KEY=               # 내부 API 인증용 (X-API-Key)
-CORS_ORIGINS=          # 프론트엔드 도메인
-```
-
----
-
-## Gotchas & Domain Knowledge
-
-- **BankSalad 엑셀은 암호화됨** — `openpyxl`이 직접 못 열어서 `msoffcrypto-tool`로 먼저 복호화해야 한다.
-- **가계부 파일은 누적 데이터** — 새 파일에 이전 데이터가 포함되어 있다. 시간 커서 기반으로 기존 데이터 이후 건만 INSERT.
-- **뱅샐현황 테이블 위치가 유동적** — 행 번호 하드코딩 금지. `'3.재무현황'` 등 마커 텍스트로 검색.
-- **소분류 85%가 "미분류"** — 이번 버전에서는 수동 편집만 제공. 자동 분류는 다음 버전.
-- **이체 = 자산이동** — 수입/지출 분석에서 제외, 별도 tracking.
-- **지출인데 양수인 건** — 결제 취소/환불. 해당 월 지출에서 상계.
-- **마이너스 통장 자산 표기** — 자유입출금 자산에 음수로 잡힐 수 있다. 실질적으로는 부채로 해석해야 한다.
-- **해외주식 평가액** — 소수점 값이 포함될 수 있다. `NUMERIC(15,2)` 사용.
-- **외부 에이전트 연동** — 쓰기는 API 전용, 읽기는 PostgreSQL readonly 유저로 직접 SQL 실행 가능 (statement_timeout=30s).
-- `snapshot_date`는 API 입력값 우선, 없으면 서버 업로드 날짜를 사용한다.
-- 업로드는 부분 성공(`partial`)을 허용한다. 한쪽 적재가 성공하면 성공분은 유지하고 실패 원인을 `upload_logs`에 남긴다.
-- 카테고리/결제수단 드롭다운은 `transactions`의 distinct 값으로 조회한다.
-- 조회 API는 `is_edited`, `include_deleted`, `include_merged`, `search` 필터를 지원해야 한다.
-- `POST /api/v1/upload`, `GET /api/v1/schema`, 쓰기성 거래 편집 API는 `X-API-Key` 인증을 사용한다.
-- 원본 업로드 파일은 `/data/uploads/`에 최근 5개만 보관한다.
-- 거래 병합 기능은 엔드포인트 정의만 유지하고 MVP 구현 범위에서는 제외한다.
-
----
-
-## Collaboration Protocol
-
-이 프로젝트는 **사람과 복수의 AI 에이전트(Codex, Hermes, Claude, OpenClaw 등)가 협업**한다.
-누가 작업하든 컨텍스트가 끊기지 않도록 아래 프로토콜을 **반드시** 따른다.
-
-### Subagent Policy
-
-- Codex는 이 저장소에서 **사용자 추가 확인 없이** 서브에이전트를 스폰할 수 있다.
-- 사용자가 세션 중 이 권한을 명시적으로 재확인한 경우, 이후 turn에서도 별도 허가를 다시 묻지 않고 필요 시 바로 서브에이전트를 사용할 수 있다.
-- 기본 기대:
-  - 단일 파일의 아주 작은 수정이 아니라면, 작업 시작 시 병렬화 가능한 조사/구현/검증 단위를 먼저 찾는다.
-  - backend, frontend, docs, 테스트/리뷰처럼 책임 경계가 나뉘는 작업은 서브에이전트 위임을 적극적으로 우선 검토한다.
-  - 서브에이전트를 쓰지 않는 경우는 크리티컬 패스가 하나뿐이거나, 같은 파일 충돌 가능성이 커서 위임 이득보다 조율 비용이 큰 경우로 제한한다.
-- 허용 조건:
-  - 서로 독립적인 하위 작업이 2개 이상 있고 병렬 처리 이점이 분명할 때
-  - 메인 작업의 즉시 다음 단계가 막히지 않는 조사/구현/검증 작업일 때
-  - 각 서브에이전트의 책임 범위와 수정 파일 집합을 분리할 수 있을 때
-- 금지 조건:
-  - 즉시 결과가 필요한 크리티컬 패스 작업
-  - 같은 파일이나 강하게 결합된 모듈을 동시에 수정할 가능성이 큰 작업
-  - 단순 탐색만을 위한 과도한 위임
-- 서브에이전트를 사용한 경우 Codex는 commentary에 위임 범위와 책임을 짧게 공유한다.
-
-### docs/STATUS.md — 프로젝트 상태 파일
-
-`docs/STATUS.md`는 **작업 시작 전 반드시 읽는** mainline 프로젝트 상태 파일이다. 병렬 PR 충돌을 줄이기 위해 feature/PR 브랜치에서는 기본적으로 수정하지 않는다. 작업 완료 상세 handoff는 PR 본문과 커밋 메시지에 남기고, `docs/STATUS.md`는 해당 변경이 main에 머지된 뒤 main 기준 snapshot으로 갱신한다.
-
-```markdown
-# docs/STATUS.md
-
-## Current State
-- **Phase:** Phase 1 — 기반 구축
-- **Last Worker:** codex (2026-03-24T14:30+09:00)
-- **Branch:** feat/upload-pipeline
-
-## Completed
-- [x] DB 스키마 설계 (alembic init + 첫 마이그레이션)
-- [x] transactions 모델 구현
-
-## In Progress
-- [ ] 엑셀 파싱 파이프라인 (backend/app/parsers/)
-  - msoffcrypto 복호화 완료
-  - 가계부 내역 파싱 완료
-  - **뱅샐현황 파싱 진행 중** ← 현재 작업 지점
-
-## Blocked
-- 없음
-
-## Next Up
-- 시간 커서 기반 증분 적재 로직
-- 업로드 API 엔드포인트
-
-## Key Decisions
-- 2026-03-24: 뱅샐현황 파싱은 정규식 대신 마커 텍스트 순회 방식 채택 (정규식은 셀 병합 때문에 불안정)
-- 2026-03-24: transactions 테이블 amount는 INTEGER 유지 (원 단위, 소수점 불필요)
-
-## Known Issues
-- openpyxl read_only 모드에서 max_row가 None 반환 — iter_rows로 순회 필요
-```
-
-### 작업 규칙
-
-**작업 시작 시:**
-1. `docs/STATUS.md`를 읽고 현재 상태 파악
-2. `git log --oneline -10`으로 최근 커밋 확인
-3. In Progress 항목 중 자신이 이어받을 작업 확인
-
-**작업 중:**
-- 커밋 메시지 형식: `[영역] 작업 내용 (작업자)`
-  - 예: `[backend] 가계부 파싱 로직 구현 (codex)`
-  - 예: `[frontend] 지출 분석 페이지 레이아웃 (민규)`
-  - 예: `[infra] docker-compose 초기 설정 (agent)`
-- 영역 태그: `[backend]`, `[frontend]`, `[infra]`, `[docs]`, `[db]`
-- **설계 결정이 발생하면** feature/PR 브랜치에서는 PR 본문 `Handoff`/`Status impact` 또는 관련 contract 문서에 기록하고, mainline 정리 때 필요한 핵심만 `docs/STATUS.md` Key Decisions에 옮긴다.
-- 개발/검증을 위해 띄운 서버, watcher, 브라우저 자동화, 포트 포워딩, 백그라운드 프로세스는 **사용이 끝나는 즉시 종료**한다
-- 현재 작업에 쓰지 않는 프로세스를 계속 살려두지 않는다. 메모리/포트 점유를 줄이기 위해 항상 정리하면서 진행한다
-
-**작업 완료 시 (feature/PR 브랜치):**
-1. `docs/STATUS.md`를 기본적으로 수정하지 않는다. 충돌 가능성이 높은 `Last Worker`, `Branch`, `Recent Completed`, `In Progress`, `Key Decisions` 항목을 PR마다 갱신하지 않는다.
-2. PR 본문에 `Status impact` 또는 `Handoff` 섹션을 남긴다:
-   - main에 머지되면 `docs/STATUS.md`에 반영할 1-3줄 요약
-   - 완료/미완료/후속 작업
-   - 새로 발견한 이슈나 운영 주의사항
-3. `Implentation-plan.md` 변경이 필요해 보이면 PR 본문에 `Plan impact`를 남기고, mainline backlog 정리 때 반영한다.
-4. 장기 작업이라 브랜치 내부 handoff 문서가 꼭 필요하면 `docs/status-notes/<branch-name>.md`처럼 브랜치별 파일을 사용한다. main 머지 후 필요한 내용만 `docs/STATUS.md`에 흡수하고, 임시 note는 archive하거나 제거한다.
-
-**main 갱신 시 (머지 직후 또는 main 직접 변경):**
-1. `docs/STATUS.md`를 main에 실제 반영된 상태 기준으로 갱신한다:
-   - Last Worker, 시간 업데이트
-   - 완료 항목을 Recent Completed에 짧게 반영
-   - In Progress 현재 지점 업데이트
-   - 새로 발견한 이슈는 Known Issues에 추가
-   - 다음 작업자가 해야 할 일은 Next Up에 추가
-2. `Implentation-plan.md`를 main에 실제 남은 backlog 기준으로 갱신한다:
-   - 완료된 항목 제거 또는 완료 표시
-   - 새로 발견된 미구현 작업 추가
-   - 우선순위/Paused/Stale 분류 조정
-3. 여러 병렬 PR을 순차 머지할 때는 각 PR에서 `docs/STATUS.md` / `Implentation-plan.md`를 따로 갱신하지 말고, 마지막에 main 기준으로 한 번 정리한다.
-4. `docs/STATUS.md` / `Implentation-plan.md` 변경은 mainline 상태 정리 커밋 또는 머지 커밋에 포함한다.
-
-**핸드오프 시 (다른 작업자에게 넘길 때):**
-- feature/PR 브랜치 handoff는 PR 본문에 **현재 작업 지점을 구체적으로** 표시한다 (파일명, 함수명, 어디까지 했는지)
-- main에서 작업을 멈추거나 main에 머지한 뒤에는 `docs/STATUS.md` In Progress에 현재 지점을 구체적으로 표시한다
-- Blocked가 있으면 원인과 해결 방향 기록
-- "main에 반영된 context가 code에만 있고 docs/STATUS.md에 없으면 핸드오프 실패"라고 간주한다. PR 브랜치의 임시 context는 PR 본문으로 충분하다.
-
-### git 브랜치 전략
-
-```
-main                    ← 안정 버전, 직접 커밋 금지
-├── feat/upload-pipeline   ← Phase 1 기능
-├── feat/dashboard-core    ← Phase 2 기능
-├── feat/agent-integration ← Phase 3 기능
-└── fix/xxx                ← 버그 수정
-```
-
-- 기능 단위로 브랜치 생성, 완료 후 main에 머지
-- feature/PR 브랜치는 `docs/STATUS.md`와 `Implentation-plan.md`를 기본적으로 수정하지 않는다.
-- 머지 후 main 기준으로 `docs/STATUS.md`와 `Implentation-plan.md`를 업데이트한다. 병렬 PR 여러 개를 머지할 때는 충돌 방지를 위해 main에서 한 번에 정리한다.
+Backend tests often need a writable local `UV_CACHE_DIR` and test `DATABASE_URL`. Realistic workbook validation should use `tmp/2025-05-21~2026-05-21.xlsx` when present.
+
+## Backend Rules
+
+- Use `uv`; never use `pip`, `pip install`, or `requirements.txt`.
+- Schema changes require Alembic migrations. Do not mutate DB schema directly.
+- New endpoints require Pydantic v2 request/response schemas.
+- Use async DB access with `async/await`.
+- Excel parsing must use `openpyxl(..., data_only=True)`.
+- Encrypted workbooks must be decrypted before parsing.
+- Upload tables are marker-driven; never hardcode BankSalad section row numbers.
+- `POST /api/v1/upload`, `GET /api/v1/schema`, and write APIs require `X-API-Key`.
+- External agents may read through REST or readonly PostgreSQL. Direct DB writes are forbidden.
+
+## Finance Rules
+
+- Analysis queries exclude deleted and merged transactions: `is_deleted = FALSE` and `merged_into_id IS NULL`.
+- Effective category uses user override first: `COALESCE(category_*_user, category_*)`.
+- `merchant` is normalized analysis merchant; `description` is raw import text; `memo` is user note.
+- `이체` is excluded from income/expense analysis and handled as asset movement.
+- Positive `지출` rows are refunds/cancellations and must net against expense where applicable.
+- Raw loan, asset, investment, insurance, and upload evidence should be preserved unless the user explicitly requests destructive cleanup.
+
+## Frontend Rules
+
+- TypeScript strict stays on. Do not use `any`, `@ts-ignore`, or class components.
+- Use Tailwind and existing Ledger DS primitives. Do not add another CSS framework.
+- Prefer shadcn-style chart patterns; use Recharts only where existing patterns require it. Do not add Chart.js, D3, or Nivo.
+- Use route/page conventions from `frontend/src/router.tsx` and `frontend/src/features/**`.
+- Write UI tests with Vitest, Testing Library, `vi.mock`, and the existing render/query patterns.
+- Visual meaning cannot rely on color alone; include sign, icon, or label.
+- Estimate color tokens are estimate-only.
+
+## API And Agent Contract
+
+- Live code and `docs/backend-api-ssot.md` beat PRD or archived plans.
+- Agent-facing canonical values must explain basis, scope, source, missing reason, and confidence where available.
+- My Ledge provides reproducible calculations, candidates, assumptions, settings, and review state. Final financial advice belongs to the consuming agent/user context.
+- Do not present `health`, `risk_level`, `confidence`, `priority_score`, or `true_spendable` as final advice without stating the assumptions.
+
+## Child Knowledge Files
+
+Nearest child `AGENTS.md` overrides only within its subtree and must not contradict this root file.
+
+- `backend/app/AGENTS.md`
+- `backend/tests/AGENTS.md`
+- `frontend/src/AGENTS.md`
+- `frontend/src/test/AGENTS.md`
+- `docs/AGENTS.md`

@@ -1,7 +1,7 @@
 # Advisor Canonical Gap Analysis And Implementation Plan
 
 작성일: 2026-06-10
-상태: 제안 (구현 전). 구현 착수 시 항목별로 `docs/planned-work.md` backlog로 승격하고, 완료 후 이 문서의 해당 항목에 live 상태를 표기한다.
+상태: historical evidence. 사용자에게 보일 roadmap 항목은 `Implentation-plan.md`로, 에이전트 실행 계획은 `.omo/plans/<slug>.md`로 승격하고, live 여부는 코드와 contract 문서에서 확인한다.
 
 이 문서는 실제 사용자 데이터 export(`tmp/2025-05-21~2026-05-21.xlsx`, BankSalad 뱅샐현황 + 가계부 내역 1년치)를 canonical read surface에 흘려본 평가 결과다.
 "AI 에이전트가 이 사용자에게 개인 재무상담을 한다"는 관점에서, **에이전트가 값을 잘못 해석하게 만드는 지점**과 **상담에 필요한데 surface에 없는 판단 재료**를 정리하고, 각 항목의 상세 구현 계획을 남긴다.
@@ -40,7 +40,7 @@
 
 ## 해석 원칙 (변경하지 않는 것)
 
-`docs/planned-work.md`의 책임 경계를 그대로 유지한다.
+`Implentation-plan.md`와 agent contract 문서의 책임 경계를 그대로 유지한다.
 
 - My Ledge는 계산, 후보 탐지, confidence, assumptions까지만 제공한다. 아래 항목들은 모두 "판단 재료 추가/교정"이며, "조언 생성"이 아니다.
 - 예: 항목 4(신용점수)는 "리파이낸싱 하라"는 판정이 아니라, 에이전트가 금리 대화를 할 때 쓸 수 있는 데이터 필드 추가다.

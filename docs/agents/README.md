@@ -9,12 +9,13 @@ Hermes, Codex, Claude, OpenClaw 등 외부 에이전트가 `my_ledge`를 읽기/
 2. API/canonical value dictionary: [docs/agents/canonical-read-surface-reference.md](canonical-read-surface-reference.md)
 3. 상세 endpoint/metric reference: [docs/backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md)
 4. 범용 에이전트 연동 문서: [docs/agent-integration/README.md](../agent-integration/README.md)
-5. 전역 실행계획 / 미구현 backlog: [Implentation-plan.md](../../Implentation-plan.md)
-6. 협업 규칙과 상태: [AGENTS.md](../../AGENTS.md), [docs/STATUS.md](../STATUS.md)
+5. 사용자용 구현 현황 / roadmap: [Implentation-plan.md](../../Implentation-plan.md)
+6. OMO 실행계획: [.omo/plans/](../../.omo/plans/)
+7. repo 운영 규칙: [AGENTS.md](../../AGENTS.md)
 
 `PRD.md`와 과거 plan/spec 문서는 제품 의도와 배경을 볼 때만 사용한다.
 live endpoint나 필드 계약이 충돌하면 backend 코드와 [docs/backend-api-ssot.md](../backend-api-ssot.md)를 우선한다.
-아직 구현되지 않은 계획은 [Implentation-plan.md](../../Implentation-plan.md)에 승격된 항목만 current backlog로 본다.
+아직 구현되지 않은 사용자-facing roadmap은 [Implentation-plan.md](../../Implentation-plan.md)에서 확인한다. 에이전트가 실행할 상세 계획은 [.omo/plans/](../../.omo/plans/) 아래에 있어야 한다. [docs/STATUS.md](../STATUS.md)는 deprecated pointer이며 handoff 문서로 유지하지 않는다.
 
 ## 연결 정보
 
