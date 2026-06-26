@@ -1,9 +1,9 @@
 ---
 slug: my-ledge-omo-plan-review
-status: drafting
+status: completed
 intent: clear
-pending-action: write .omo/plans/my-ledge-omo-plan-review.md
-approach: Review current OMO governance plus roadmap/code/docs evidence, then write a decision-complete OMO execution plan that keeps `Implentation-plan.md` user-facing and schedules implementation waves in `.omo/plans/`.
+pending-action: none
+approach: Superseded by concrete `.omo/plans/<slug>.md` files registered in `.omo/plans/index.md`.
 ---
 
 # Draft: my-ledge-omo-plan-review
@@ -76,6 +76,6 @@ approach: Review current OMO governance plus roadmap/code/docs evidence, then wr
 - No blocking owner-decision remains for the approval brief. Approval needed only to write the detailed `.omo/plans/my-ledge-omo-plan-review.md` plan with the recommended status corrections and wave order.
 
 ## Approval gate
-status: awaiting-approval
+status: completed
 <!-- When exploration is exhausted and unknowns are answered, set status: awaiting-approval. -->
 <!-- That durable record is the loop guard: on a later turn read it and resume at the gate instead of re-running exploration. -->
