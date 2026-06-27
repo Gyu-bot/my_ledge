@@ -1,0 +1,146 @@
+^D
+> my_ledge-frontend@0.1.0 test
+> node -e "const { spawnSync } = require('node:child_process'); const args = process.argv.slice(1).filter((arg) => arg !== '--runInBand'); const command = process.platform === 'win32' ? 'npx.cmd' : 'npx'; const result = spawnSync(command, ['vitest', 'run', ...args], { stdio: 'inherit' }); process.exit(result.status ?? 1);" -- --run src/test/features/InboxPage.test.tsx src/test/features/InstallmentsPage.test.tsx src/test/features/SpendingPage.test.tsx src/test/api/contracts.test.ts
+
+
+ RUN  v2.1.9 /Users/gyurin/dev/my_ledge/frontend
+
+[?25l · src/test/api/contracts.test.ts (8)
+[?25l[2K[1A[2K[G ❯ src/test/api/contracts.test.ts (8)
+   ❯ frontend query contract adapters (8)
+     ✓ maps month-based analytics queries to backend start_date/end_date
+     ✓ replaces missing daily-spend endpoint with transactions list query
+     ✓ builds subcategory drill-down data from transactions filtered to the sele
+cted major category
+     ✓ maps asset and loan metadata patches to the health contract endpoints
+     ✓ maps loan candidate review and installment suggestion adapters to backend
+ contracts
+     ⠙ fetches installment suggestions through the typed query hook
+     · invalidates loan mapping and inbox queries after loan candidate review su
+cceeds
+     · invalidates installment suggestions when installment plans or links chang
+e
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ❯ src/test/api/contracts.test.ts (8)
+   ❯ frontend query contract adapters (8)
+     ✓ maps month-based analytics queries to backend start_date/end_date
+     ✓ replaces missing daily-spend endpoint with transactions list query
+     ✓ builds subcategory drill-down data from transactions filtered to the sele
+cted major category
+     ✓ maps asset and loan metadata patches to the health contract endpoints
+     ✓ maps loan candidate review and installment suggestion adapters to backend
+ contracts
+     ⠹ fetches installment suggestions through the typed query hook
+     · invalidates loan mapping and inbox queries after loan candidate review su
+cceeds
+     · invalidates installment suggestions when installment plans or links chang
+e
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ❯ src/test/api/contracts.test.ts (8)
+   ❯ frontend query contract adapters (8)
+     ✓ maps month-based analytics queries to backend start_date/end_date
+     ✓ replaces missing daily-spend endpoint with transactions list query
+     ✓ builds subcategory drill-down data from transactions filtered to the sele
+cted major category
+     ✓ maps asset and loan metadata patches to the health contract endpoints
+     ✓ maps loan candidate review and installment suggestion adapters to backend
+ contracts
+     ⠸ fetches installment suggestions through the typed query hook
+     · invalidates loan mapping and inbox queries after loan candidate review su
+cceeds
+     · invalidates installment suggestions when installment plans or links chang
+e
+ · src/test/features/SpendingPage.test.tsx (5)
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ · src/test/features/InstallmentsPage.test.tsx (4)
+ · src/test/features/InboxPage.test.tsx (5)
+ · src/test/features/SpendingPage.test.tsx (5)
+[?25l[?25l[?25l[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ❯ src/test/features/InstallmentsPage.test.tsx (4)
+   ❯ InstallmentsPage (4)
+     ⠙ renders installment suggestions with the proposed number and does not aut
+o-link
+     · marks conflict suggestions clearly and disables linking for unusable rows
+     · links a suggestion with the suggested number and refetches suggestions, l
+ist, and forecast
+     · keeps duplicate transaction suggestions isolated by installment plan when
+ editing and linking
+ · src/test/features/InboxPage.test.tsx (5)
+ · src/test/features/SpendingPage.test.tsx (5)
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ❯ src/test/features/InstallmentsPage.test.tsx (4)
+   ❯ InstallmentsPage (4)
+     ⠹ renders installment suggestions with the proposed number and does not aut
+o-link
+     · marks conflict suggestions clearly and disables linking for unusable rows
+     · links a suggestion with the suggested number and refetches suggestions, l
+ist, and forecast
+     · keeps duplicate transaction suggestions isolated by installment plan when
+ editing and linking
+ ❯ src/test/features/InboxPage.test.tsx (5)
+   ❯ InboxPage (5)
+     ✓ 3종 카드(승인 대기·미분류·대출 연결)와 커버리지 게이지를 렌더한다
+     ✓ 탭 카운트를 표시한다 (전체 3 = 미분류1 + 승인1 + 대출1)
+     ⠙ 미분류 카드에서 분류 저장 시 해당 거래를 업데이트한다
+     · 대출 후보 카드에 대출 후보 아님 액션을 노출하고 클릭 시 not_candidate 리
+뷰를 보낸다
+     · 대출 후보 아님 처리 성공 후 재조회 결과를 반영해 대출 후보 행과 카운트를
+숨긴다
+ · src/test/features/SpendingPage.test.tsx (5)
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ❯ src/test/features/InstallmentsPage.test.tsx (4)
+   ❯ InstallmentsPage (4)
+     ✓ renders installment suggestions with the proposed number and does not aut
+o-link
+     ⠙ marks conflict suggestions clearly and disables linking for unusable rows
+     · links a suggestion with the suggested number and refetches suggestions, l
+ist, and forecast
+     · keeps duplicate transaction suggestions isolated by installment plan when
+ editing and linking
+ ✓ src/test/features/InboxPage.test.tsx (5)
+ ✓ src/test/features/SpendingPage.test.tsx (5)
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ❯ src/test/features/InstallmentsPage.test.tsx (4)
+   ❯ InstallmentsPage (4)
+     ✓ renders installment suggestions with the proposed number and does not aut
+o-link
+     ✓ marks conflict suggestions clearly and disables linking for unusable rows
+     ⠙ links a suggestion with the suggested number and refetches suggestions, l
+ist, and forecast
+     · keeps duplicate transaction suggestions isolated by installment plan when
+ editing and linking
+ ✓ src/test/features/InboxPage.test.tsx (5)
+ ✓ src/test/features/SpendingPage.test.tsx (5)
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ❯ src/test/features/InstallmentsPage.test.tsx (4)
+   ❯ InstallmentsPage (4)
+     ✓ renders installment suggestions with the proposed number and does not aut
+o-link
+     ✓ marks conflict suggestions clearly and disables linking for unusable rows
+     ⠹ links a suggestion with the suggested number and refetches suggestions, l
+ist, and forecast
+     · keeps duplicate transaction suggestions isolated by installment plan when
+ editing and linking
+ ✓ src/test/features/InboxPage.test.tsx (5)
+ ✓ src/test/features/SpendingPage.test.tsx (5)
+[?25l[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ❯ src/test/features/InstallmentsPage.test.tsx (4)
+   ❯ InstallmentsPage (4)
+     ✓ renders installment suggestions with the proposed number and does not aut
+o-link
+     ✓ marks conflict suggestions clearly and disables linking for unusable rows
+     ✓ links a suggestion with the suggested number and refetches suggestions, l
+ist, and forecast
+     ⠙ keeps duplicate transaction suggestions isolated by installment plan when
+ editing and linking
+ ✓ src/test/features/InboxPage.test.tsx (5)
+ ✓ src/test/features/SpendingPage.test.tsx (5)
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G ✓ src/test/api/contracts.test.ts (8)
+ ✓ src/test/features/InboxPage.test.tsx (5)
+ ✓ src/test/features/InstallmentsPage.test.tsx (4)
+ ✓ src/test/features/SpendingPage.test.tsx (5)
+
+ Test Files  4 passed (4)
+      Tests  22 passed (22)
+   Start at  23:35:50
+   Duration  999ms (transform 267ms, setup 218ms, collect 773ms, tests 458ms, environment 1.21s, prepare 133ms)
+
+[?25h[?25h

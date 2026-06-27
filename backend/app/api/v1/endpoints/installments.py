@@ -17,7 +17,11 @@ from app.schemas.installment import (
     InstallmentTransactionLinkItem,
     InstallmentTransactionLinkUpsertRequest,
     InstallmentTransactionMappingListResponse,
+    InstallmentTransactionSuggestionListResponse,
     TransactionInstallmentLinkResponse,
+)
+from app.services.installment_suggestion_service import (
+    list_installment_transaction_suggestions,
 )
 from app.services.installment_service import (
     bulk_upsert_transaction_installment_links,
@@ -87,6 +91,24 @@ async def get_installment_transaction_links(
         end_date=end_date,
         search=search,
         linked=linked,
+        installment_plan_id=installment_plan_id,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.get(
+    "/installment-transaction-suggestions",
+    response_model=InstallmentTransactionSuggestionListResponse,
+)
+async def get_installment_transaction_suggestions(
+    installment_plan_id: int | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=40, ge=1, le=200),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> InstallmentTransactionSuggestionListResponse:
+    return await list_installment_transaction_suggestions(
+        db_session,
         installment_plan_id=installment_plan_id,
         page=page,
         per_page=per_page,

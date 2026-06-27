@@ -61,6 +61,7 @@
 3. P0 거래 신뢰도 기반 작업 `T030`-`T032`는 완료되었다: source lifecycle, upload preview/reconciliation, shared settlement groups 순서로 구현했다.
 4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 공식 Toss Securities API 문서가 있어야 진행할 수 있다.
 5. `T033`-`T039`와 `T041`은 거래 신뢰도 작업 이후의 automation, forecasting, decision-support, 제한적 tagging 백로그로 유지한다. 각 항목은 선행 조건이 충족된 뒤 집중된 PR로 시작한다.
+6. 대출 후보 `review_status` 및 할부 제안 API는 문서 계약이 SSOT/레퍼런스에 반영되었고, `Implentation-plan.md` 사용자-visible task graph에는 기존 MoM 회귀 커버리지 유지 상태만 보강 노트로 반영되었다.
 
 ---
 

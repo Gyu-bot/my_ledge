@@ -13,6 +13,8 @@ import type {
   LoanAccountMetadataUpdateRequest,
   LoanAccountsParams,
   LoanAccountsResponse,
+  LoanCandidateReviewPatchRequest,
+  LoanCandidateReviewResponse,
   LoanTransactionLinkBulkRequest,
   LoanTransactionLinkBulkResponse,
   LoanTransactionMappingListResponse,
@@ -26,6 +28,8 @@ import type {
   InstallmentTransactionLinkBulkResponse,
   InstallmentTransactionMappingListResponse,
   InstallmentTransactionMappingParams,
+  InstallmentTransactionSuggestionListResponse,
+  InstallmentTransactionSuggestionParams,
   InstallmentForecastResponse,
   InstallmentForecastParams,
   InstallmentPlanResponse,
@@ -178,6 +182,13 @@ export const transactionApi = {
   loanTransactionMappings: (params: LoanTransactionMappingParams = {}) =>
     apiFetch<LoanTransactionMappingListResponse>(`/loan-transaction-links${buildQuery(params)}`),
 
+  reviewLoanTransactionCandidate: (transactionId: number, data: LoanCandidateReviewPatchRequest) =>
+    apiFetch<LoanCandidateReviewResponse>(`/loan-transaction-links/${transactionId}/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
   installmentPlans: () =>
     apiFetch<InstallmentPlansResponse>('/installment-plans'),
 
@@ -197,6 +208,9 @@ export const transactionApi = {
 
   installmentTransactionMappings: (params: InstallmentTransactionMappingParams = {}) =>
     apiFetch<InstallmentTransactionMappingListResponse>(`/installment-transaction-links${buildQuery(params)}`),
+
+  installmentTransactionSuggestions: (params: InstallmentTransactionSuggestionParams = {}) =>
+    apiFetch<InstallmentTransactionSuggestionListResponse>(`/installment-transaction-suggestions${buildQuery(params)}`),
 
   linkTransactionToInstallment: (id: number, data: InstallmentTransactionLinkRequest) =>
     apiFetch<InstallmentTransactionLinkItem>(`/transactions/${id}/installment-link`, {

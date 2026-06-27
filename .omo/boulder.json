@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "active_work_id": "settlement-group-canonical-netting",
+  "active_work_id": null,
   "works": {
     "transaction-source-upload-reconciliation": {
       "work_id": "transaction-source-upload-reconciliation",
@@ -18,6 +18,16 @@
       "plan_name": "settlement-group-canonical-netting",
       "session_ids": [
         "codex:019f074e-f917-7af0-8a48-d628ad4eed52"
+      ],
+      "status": "completed",
+      "worktree_path": null
+    },
+    "loan-installment-candidate-review-workflows": {
+      "work_id": "loan-installment-candidate-review-workflows",
+      "active_plan": ".omo/plans/loan-installment-candidate-review-workflows.md",
+      "plan_name": "loan-installment-candidate-review-workflows",
+      "session_ids": [
+        "codex:019f08b8-d69f-7340-a63d-92989ba478b6"
       ],
       "status": "completed",
       "worktree_path": null

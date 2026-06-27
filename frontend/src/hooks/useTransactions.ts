@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transactionApi } from '../api/transactions'
 import type {
@@ -6,6 +7,7 @@ import type {
   TransactionBulkUpdateRequest,
   TransactionBulkMutationRequest,
   LoanAccountsParams,
+  LoanCandidateReviewPatchRequest,
   LoanAccountMetadataUpdateRequest,
   LoanTransactionLinkBulkRequest,
   LoanTransactionMappingParams,
@@ -14,6 +16,7 @@ import type {
   InstallmentTransactionLinkRequest,
   InstallmentTransactionLinkBulkRequest,
   InstallmentTransactionMappingParams,
+  InstallmentTransactionSuggestionParams,
   InstallmentForecastParams,
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
@@ -35,6 +38,8 @@ export const txKeys = {
   installmentPlans: () => ['transactions', 'installmentPlans'] as const,
   installmentTransactionMappings: (params: InstallmentTransactionMappingParams) =>
     ['transactions', 'installmentTransactionMappings', params] as const,
+  installmentTransactionSuggestions: (params: InstallmentTransactionSuggestionParams) =>
+    ['transactions', 'installmentTransactionSuggestions', params] as const,
   installmentForecast: (params: InstallmentForecastParams) =>
     ['transactions', 'installmentForecast', params] as const,
   autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
@@ -49,6 +54,15 @@ export const txKeys = {
   dailySpend: (params: { month?: string; include_income?: boolean }) => ['transactions', 'dailySpend', params] as const,
   merchantTreemap: (params: { start_month?: string; end_month?: string; include_income?: boolean } | null) =>
     ['transactions', 'merchantTreemap', params] as const,
+}
+
+function invalidateLoanCandidateInboxQueries(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ['transactions', 'loanTransactionMappings'] })
+  void queryClient.invalidateQueries({ queryKey: ['canonical-views'] })
+}
+
+function invalidateInstallmentSuggestionQueries(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionSuggestions'] })
 }
 
 export function useTransactionList(params: TransactionListParams = {}) {
@@ -91,6 +105,13 @@ export function useInstallmentTransactionMappings(params: InstallmentTransaction
   return useQuery({
     queryKey: txKeys.installmentTransactionMappings(params),
     queryFn: () => transactionApi.installmentTransactionMappings(params),
+  })
+}
+
+export function useInstallmentTransactionSuggestions(params: InstallmentTransactionSuggestionParams = {}) {
+  return useQuery({
+    queryKey: txKeys.installmentTransactionSuggestions(params),
+    queryFn: () => transactionApi.installmentTransactionSuggestions(params),
   })
 }
 
@@ -278,6 +299,22 @@ export function useBulkLinkTransactionsToLoan() {
   })
 }
 
+export function useReviewLoanTransactionCandidate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      transactionId,
+      data,
+    }: {
+      transactionId: number
+      data: LoanCandidateReviewPatchRequest
+    }) => transactionApi.reviewLoanTransactionCandidate(transactionId, data),
+    onSuccess: () => {
+      invalidateLoanCandidateInboxQueries(qc)
+    },
+  })
+}
+
 export function useUpdateLoanAccountMetadata() {
   const qc = useQueryClient()
   return useMutation({
@@ -299,6 +336,7 @@ export function useCreateInstallmentPlan() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: txKeys.installmentPlans() })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+      invalidateInstallmentSuggestionQueries(qc)
     },
   })
 }
@@ -311,6 +349,7 @@ export function usePatchInstallmentPlan() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: txKeys.installmentPlans() })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+      invalidateInstallmentSuggestionQueries(qc)
     },
   })
 }
@@ -324,6 +363,7 @@ export function useLinkTransactionToInstallment() {
       void qc.invalidateQueries({ queryKey: ['transactions'] })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+      invalidateInstallmentSuggestionQueries(qc)
     },
   })
 }
@@ -336,6 +376,7 @@ export function useUnlinkTransactionFromInstallment() {
       void qc.invalidateQueries({ queryKey: ['transactions'] })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+      invalidateInstallmentSuggestionQueries(qc)
     },
   })
 }
@@ -349,6 +390,7 @@ export function useBulkLinkTransactionsToInstallment() {
       void qc.invalidateQueries({ queryKey: ['transactions'] })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
       void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
+      invalidateInstallmentSuggestionQueries(qc)
     },
   })
 }

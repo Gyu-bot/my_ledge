@@ -188,6 +188,22 @@ export interface LoanTransactionLinkBulkResponse {
 }
 
 export type LoanLinkStateFilter = 'all' | 'linked' | 'unlinked'
+export type LoanCandidateReviewStatus = 'pending' | 'not_candidate'
+export type LoanCandidateReviewFilter = 'all' | 'pending' | 'not_candidate'
+
+export interface LoanCandidateReviewPatchRequest {
+  review_status: LoanCandidateReviewStatus
+  memo?: string | null
+}
+
+export interface LoanCandidateReviewResponse {
+  candidate_key: string
+  candidate_type: 'loan_transaction'
+  transaction_id: number
+  review_status: LoanCandidateReviewStatus
+  memo: string | null
+  reviewed_at: string | null
+}
 
 export interface LoanTransactionLinkItem {
   transaction_id: number
@@ -236,11 +252,14 @@ export interface LoanTransactionMappingParams {
   linked?: LoanLinkStateFilter
   loan_account_id?: number
   repayment_type?: LoanRepaymentType
+  review_status?: LoanCandidateReviewFilter
 }
 
 export type InstallmentPlanStatus = 'active' | 'completed' | 'cancelled'
 export type InstallmentLinkStateFilter = 'all' | 'linked' | 'unlinked'
 export type InstallmentForecastStatus = 'observed' | 'projected' | 'missed'
+export type InstallmentSuggestionConfidence = 'high' | 'medium' | 'low'
+export type InstallmentSuggestionConflictReason = 'installment_number_already_linked'
 
 export interface InstallmentPlanResponse {
   id: number
@@ -328,6 +347,54 @@ export interface InstallmentTransactionMappingParams {
   search?: string
   linked?: InstallmentLinkStateFilter
   installment_plan_id?: number
+}
+
+export interface InstallmentSuggestionTransactionItem {
+  transaction_id: number
+  date: string
+  time: string
+  type: string
+  effective_category_major: string
+  effective_category_minor: string | null
+  description: string
+  merchant: string
+  amount: number
+  currency: string
+  payment_method: string | null
+  memo: string | null
+  recurring_payment_kind: RecurringPaymentKind | null
+}
+
+export interface InstallmentTransactionSuggestionItem {
+  transaction: InstallmentSuggestionTransactionItem
+  installment_plan_id: number
+  installment_plan_display_name: string
+  installment_plan_merchant: string
+  total_installments: number
+  monthly_amount: number
+  first_payment_date: string
+  suggested_installment_number: number
+  expected_billing_date: string
+  amount_delta: number
+  billing_day_delta: number
+  score: number
+  confidence: InstallmentSuggestionConfidence
+  reason_labels: string[]
+  conflict_reason: InstallmentSuggestionConflictReason | null
+  is_usable: boolean
+}
+
+export interface InstallmentTransactionSuggestionListResponse {
+  total: number
+  page: number
+  per_page: number
+  items: InstallmentTransactionSuggestionItem[]
+}
+
+export interface InstallmentTransactionSuggestionParams {
+  installment_plan_id?: number
+  page?: number
+  per_page?: number
 }
 
 export interface InstallmentTransactionLinkRequest {

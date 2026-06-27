@@ -9,6 +9,7 @@ from app.models.loan_account import LoanAccount
 from app.models.transaction import Transaction
 from app.schemas.loan_mapping import (
     LoanAccountMetadataUpdateRequest,
+    LoanCandidateReviewPatchRequest,
     LoanTransactionLinkBulkUpsertRequest,
     LoanTransactionLinkUpsertRequest,
 )
@@ -19,6 +20,7 @@ from app.services.loan_mapping_service import (
     list_loan_transaction_mappings,
     list_loan_accounts,
     update_loan_account_metadata,
+    update_loan_candidate_review,
     upsert_transaction_loan_link,
 )
 
@@ -278,6 +280,126 @@ async def test_list_loan_transaction_mappings_search_matches_transaction_memo(
 
     assert response.total == 1
     assert response.items[0].memo == "상환 확인 필요"
+
+
+async def test_list_loan_transaction_mappings_filters_dismissed_candidates_by_review_status(
+    db_session: AsyncSession,
+) -> None:
+    dismissed = _transaction()
+    dismissed.date = date(2026, 5, 21)
+    dismissed.description = "카카오뱅크 대출이자"
+    dismissed.merchant = "카카오뱅크"
+    visible = _transaction()
+    visible.date = date(2026, 5, 20)
+    visible.description = "국민은행 원리금 상환"
+    linked = _transaction()
+    linked.date = date(2026, 5, 22)
+    linked.description = "신한은행 대출 상환"
+    linked.merchant = "신한은행"
+    account = LoanAccount(lender="신한은행", product_name="신용대출")
+    db_session.add_all([dismissed, visible, linked, account])
+    await db_session.commit()
+
+    await upsert_transaction_loan_link(
+        db_session,
+        linked.id,
+        LoanTransactionLinkUpsertRequest(
+            loan_account_id=account.id,
+            repayment_type="mixed",
+        ),
+    )
+    await update_loan_candidate_review(
+        db_session,
+        dismissed.id,
+        LoanCandidateReviewPatchRequest(
+            review_status="not_candidate",
+            memo="대출 후보 제외",
+        ),
+    )
+
+    default_unlinked = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search=None,
+        linked="unlinked",
+        loan_account_id=None,
+        repayment_type=None,
+        page=1,
+        per_page=40,
+    )
+    recovery_unlinked = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search=None,
+        linked="unlinked",
+        loan_account_id=None,
+        repayment_type=None,
+        review_status="not_candidate",
+        page=1,
+        per_page=40,
+    )
+    audit_unlinked = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search=None,
+        linked="unlinked",
+        loan_account_id=None,
+        repayment_type=None,
+        review_status="all",
+        page=1,
+        per_page=40,
+    )
+    default_linked = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search=None,
+        linked="linked",
+        loan_account_id=None,
+        repayment_type=None,
+        page=1,
+        per_page=40,
+    )
+
+    assert default_unlinked.total == 1
+    assert [item.transaction_id for item in default_unlinked.items] == [visible.id]
+    assert recovery_unlinked.total == 1
+    assert [item.transaction_id for item in recovery_unlinked.items] == [dismissed.id]
+    assert audit_unlinked.total == 2
+    assert [item.transaction_id for item in audit_unlinked.items] == [
+        dismissed.id,
+        visible.id,
+    ]
+    assert default_linked.total == 1
+    assert default_linked.items[0].transaction_id == linked.id
+    assert default_linked.items[0].link is not None
+
+    restored = await update_loan_candidate_review(
+        db_session,
+        dismissed.id,
+        LoanCandidateReviewPatchRequest(review_status="pending"),
+    )
+    restored_default = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search=None,
+        linked="unlinked",
+        loan_account_id=None,
+        repayment_type=None,
+        page=1,
+        per_page=40,
+    )
+
+    assert restored.review_status == "pending"
+    assert restored_default.total == 2
+    assert [item.transaction_id for item in restored_default.items] == [
+        dismissed.id,
+        visible.id,
+    ]
 
 
 async def test_bulk_upsert_transaction_loan_links_maps_many_transactions_to_one_account(

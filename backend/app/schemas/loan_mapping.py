@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 RepaymentType = Literal["principal", "interest", "mixed", "unknown"]
+LoanCandidateReviewStatus = Literal["pending", "not_candidate"]
+LoanCandidateReviewFilter = Literal["all", "pending", "not_candidate"]
 LoanKind = Literal[
     "unknown",
     "overdraft",
@@ -91,6 +93,20 @@ class LoanTransactionLinkBulkUpsertRequest(LoanTransactionLinkUpsertRequest):
 
 class LoanTransactionLinkBulkUpsertResponse(BaseModel):
     updated: int
+
+
+class LoanCandidateReviewPatchRequest(BaseModel):
+    review_status: LoanCandidateReviewStatus
+    memo: str | None = Field(default=None, max_length=1000)
+
+
+class LoanCandidateReviewResponse(BaseModel):
+    candidate_key: str
+    candidate_type: Literal["loan_transaction"]
+    transaction_id: int
+    review_status: LoanCandidateReviewStatus
+    memo: str | None = None
+    reviewed_at: datetime | None = None
 
 
 class LoanTransactionLinkItem(BaseModel):

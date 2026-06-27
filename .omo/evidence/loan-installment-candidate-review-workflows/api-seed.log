@@ -1,0 +1,4 @@
+^DTraceback (most recent call last):
+  File "/Users/gyurin/dev/my_ledge/backend/../.omo/evidence/loan-installment-candidate-review-workflows/debug_runtime_seed.py", line 9, in <module>
+    from app.models import Base
+ModuleNotFoundError: No module named 'app'

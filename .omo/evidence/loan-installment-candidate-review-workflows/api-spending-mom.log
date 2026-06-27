@@ -1,0 +1,7 @@
+^DHTTP/1.1 200 OK
+[1mdate[0m: Sat, 27 Jun 2026 14:39:10 GMT
+[1mserver[0m: uvicorn
+[1mcontent-length[0m: 468
+[1mcontent-type[0m: application/json
+
+{"items":[{"period":"2026-07","previous_period":"2026-06","category":"쇼핑","current_amount":300000,"previous_amount":300000,"delta_amount":0,"delta_pct":0.0},{"period":"2026-07","previous_period":"2026-06","category":"금융","current_amount":0,"previous_amount":630000,"delta_amount":-630000,"delta_pct":-1.0},{"period":"2026-07","previous_period":"2026-06","category":"식비","current_amount":0,"previous_amount":740000,"delta_amount":-740000,"delta_pct":-1.0}]}

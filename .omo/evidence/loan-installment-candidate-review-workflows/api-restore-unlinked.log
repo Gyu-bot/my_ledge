@@ -1,0 +1,7 @@
+^DHTTP/1.1 200 OK
+[1mdate[0m: Sat, 27 Jun 2026 14:40:33 GMT
+[1mserver[0m: uvicorn
+[1mcontent-length[0m: 180
+[1mcontent-type[0m: application/json
+
+{"candidate_key":"loan_transaction:9002","candidate_type":"loan_transaction","transaction_id":9002,"review_status":"pending","memo":null,"reviewed_at":"2026-06-27T14:40:34.222389"}

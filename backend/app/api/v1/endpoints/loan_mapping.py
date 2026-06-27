@@ -9,6 +9,9 @@ from app.schemas.loan_mapping import (
     LoanAccountCandidateResponse,
     LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
+    LoanCandidateReviewFilter,
+    LoanCandidateReviewPatchRequest,
+    LoanCandidateReviewResponse,
     LoanLinkStateFilter,
     LoanTransactionLinkBulkUpsertRequest,
     LoanTransactionLinkBulkUpsertResponse,
@@ -24,6 +27,7 @@ from app.services.loan_mapping_service import (
     get_transaction_loan_link,
     list_loan_accounts,
     list_loan_transaction_mappings,
+    update_loan_candidate_review,
     update_loan_account_metadata,
     upsert_transaction_loan_link,
 )
@@ -62,6 +66,7 @@ async def get_loan_transaction_links(
     linked: LoanLinkStateFilter = Query(default="all"),
     loan_account_id: int | None = Query(default=None),
     repayment_type: RepaymentType | None = Query(default=None),
+    review_status: LoanCandidateReviewFilter = Query(default="pending"),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=40, ge=1, le=200),
     db_session: AsyncSession = Depends(get_db_session),
@@ -74,9 +79,23 @@ async def get_loan_transaction_links(
         linked=linked,
         loan_account_id=loan_account_id,
         repayment_type=repayment_type,
+        review_status=review_status,
         page=page,
         per_page=per_page,
     )
+
+
+@router.patch(
+    "/loan-transaction-links/{transaction_id}/review",
+    response_model=LoanCandidateReviewResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_loan_transaction_candidate_review(
+    transaction_id: int,
+    payload: LoanCandidateReviewPatchRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LoanCandidateReviewResponse:
+    return await update_loan_candidate_review(db_session, transaction_id, payload)
 
 
 @router.get(

@@ -1,0 +1,4 @@
+^D  File "<string>", line 1
+    import asyncio; from sqlalchemy import select, func; from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker; from app.models.loan_candidate_review import LoanCandidateReview; async def main():
+                                                                                                                                                                                                       ^^^^^
+SyntaxError: invalid syntax

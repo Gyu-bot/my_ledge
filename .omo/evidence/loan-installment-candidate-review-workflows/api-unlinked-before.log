@@ -1,0 +1,7 @@
+^DHTTP/1.1 200 OK
+[1mdate[0m: Sat, 27 Jun 2026 14:39:02 GMT
+[1mserver[0m: uvicorn
+[1mcontent-length[0m: 357
+[1mcontent-type[0m: application/json
+
+{"total":1,"page":1,"per_page":40,"items":[{"transaction_id":9002,"date":"2026-06-11","time":"09:00:00","type":"지출","effective_category_major":"금융","effective_category_minor":null,"description":"카카오뱅크 대출이자","merchant":"카카오뱅크","amount":-210000,"currency":"KRW","payment_method":"테스트카드","memo":null,"link":null}]}

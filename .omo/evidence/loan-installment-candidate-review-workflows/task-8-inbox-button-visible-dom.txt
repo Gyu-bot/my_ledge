@@ -1,0 +1,39 @@
+{
+  "url": "http://127.0.0.1:4174/data/inbox",
+  "buttonCount": 1,
+  "proof": {
+    "buttonRect": {
+      "height": 30,
+      "width": 94.09375,
+      "x": 582.75,
+      "y": 206
+    },
+    "clip": {
+      "height": 151,
+      "width": 1264,
+      "x": 288,
+      "y": 114
+    },
+    "devicePixelRatio": 1,
+    "selected": {
+      "area": 146608,
+      "rect": {
+        "height": 119,
+        "width": 1232,
+        "x": 304,
+        "y": 130
+      },
+      "text": "대출 연결 후보국민은행 대출이자 QA06-20 · -₩350,000 · 금융대출 계좌— 선택 —QA 주담대상환 성격원리금이자원금미정연결대출 후보 아님대출에서 열기"
+    },
+    "viewport": {
+      "height": 900,
+      "width": 1600
+    }
+  },
+  "snapshotHasButton": true,
+  "snapshotHasMerchant": true,
+  "snapshotExcerpt": [
+    "  - generic: 국민은행 대출이자 QA",
+    "  - button \"대출 후보 아님\""
+  ]
+}

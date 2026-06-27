@@ -9,6 +9,8 @@ from app.schemas.common import PaginatedResponse
 InstallmentPlanStatus = Literal["active", "completed", "cancelled"]
 InstallmentForecastStatus = Literal["observed", "projected", "missed"]
 InstallmentLinkStateFilter = Literal["all", "linked", "unlinked"]
+InstallmentSuggestionConfidence = Literal["high", "medium", "low"]
+InstallmentSuggestionConflictReason = Literal["installment_number_already_linked"]
 
 
 class InstallmentPlanCreateRequest(BaseModel):
@@ -108,6 +110,45 @@ class InstallmentTransactionMappingItem(BaseModel):
 
 class InstallmentTransactionMappingListResponse(PaginatedResponse):
     items: list[InstallmentTransactionMappingItem]
+
+
+class InstallmentSuggestionTransactionItem(BaseModel):
+    transaction_id: int
+    date: date
+    time: time
+    type: str
+    effective_category_major: str
+    effective_category_minor: str | None
+    description: str
+    merchant: str
+    amount: int
+    currency: str
+    payment_method: str | None
+    memo: str | None
+    recurring_payment_kind: str | None
+
+
+class InstallmentTransactionSuggestionItem(BaseModel):
+    transaction: InstallmentSuggestionTransactionItem
+    installment_plan_id: int
+    installment_plan_display_name: str
+    installment_plan_merchant: str
+    total_installments: int
+    monthly_amount: int
+    first_payment_date: date
+    suggested_installment_number: int
+    expected_billing_date: date
+    amount_delta: int
+    billing_day_delta: int
+    score: int
+    confidence: InstallmentSuggestionConfidence
+    reason_labels: list[str]
+    conflict_reason: InstallmentSuggestionConflictReason | None
+    is_usable: bool
+
+
+class InstallmentTransactionSuggestionListResponse(PaginatedResponse):
+    items: list[InstallmentTransactionSuggestionItem]
 
 
 class TransactionInstallmentLinkResponse(BaseModel):

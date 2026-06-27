@@ -1,0 +1,7 @@
+^DHTTP/1.1 200 OK
+[1mdate[0m: Sat, 27 Jun 2026 14:44:24 GMT
+[1mserver[0m: uvicorn
+[1mcontent-length[0m: 304
+[1mcontent-type[0m: application/json
+
+{"link":{"transaction_id":9101,"installment_plan_id":7101,"installment_plan_display_name":"애플 스토어","installment_number":2,"total_installments":3,"monthly_amount":300000,"due_date":"2026-07-15","source":"manual","memo":null,"created_at":"2026-06-27T14:44:09","updated_at":"2026-06-27T14:44:09"}}

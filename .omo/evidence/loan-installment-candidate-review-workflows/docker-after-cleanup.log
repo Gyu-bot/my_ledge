@@ -1,0 +1,8 @@
+^DNAMES               PORTS                                         STATUS
+kinlayer-web        0.0.0.0:5173->5173/tcp, [::]:5173->5173/tcp   Up 9 days
+kinlayer-api        0.0.0.0:8765->8765/tcp, [::]:8765->8765/tcp   Up 9 days
+kinlayer-postgres   127.0.0.1:15432->5432/tcp                     Up 11 days (healthy)
+honcho-api-1        127.0.0.1:8000->8000/tcp                      Up 12 days
+honcho-deriver-1    8000/tcp                                      Up 12 days
+honcho-redis-1      127.0.0.1:6379->6379/tcp                      Up 12 days (healthy)
+honcho-database-1   127.0.0.1:5432->5432/tcp                      Up 12 days (healthy)

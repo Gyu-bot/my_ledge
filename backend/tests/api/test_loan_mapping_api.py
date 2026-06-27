@@ -1,10 +1,12 @@
 from datetime import date, datetime, time
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
+from app.models.loan_candidate_review import LoanCandidateReview
 from app.models.transaction import Transaction
 
 
@@ -329,6 +331,165 @@ async def test_bulk_transaction_loan_link_endpoint_maps_selected_transactions(
     assert fetched.json()["link"]["repayment_type"] == "mixed"
 
 
+async def test_loan_candidate_review_endpoint_rejects_missing_api_key(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction()
+    db_session.add(transaction)
+    await db_session.commit()
+
+    response = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        json={"review_status": "not_candidate"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_loan_candidate_review_endpoint_persists_not_candidate_review(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction()
+    db_session.add(transaction)
+    await db_session.commit()
+
+    first_response = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "not_candidate", "memo": "주택담보대출 아님"},
+    )
+    second_response = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "not_candidate", "memo": "주택담보대출 아님"},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json() == {
+        "candidate_key": f"loan_transaction:{transaction.id}",
+        "candidate_type": "loan_transaction",
+        "transaction_id": transaction.id,
+        "review_status": "not_candidate",
+        "memo": "주택담보대출 아님",
+        "reviewed_at": second_response.json()["reviewed_at"],
+    }
+    assert second_response.json()["reviewed_at"] is not None
+
+
+async def test_loan_candidate_review_endpoint_restores_pending_review(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction()
+    db_session.add(transaction)
+    await db_session.commit()
+
+    dismissed = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "not_candidate", "memo": "아님"},
+    )
+    restored = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "pending"},
+    )
+    restored_again = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "pending"},
+    )
+
+    assert dismissed.status_code == 200
+    assert restored.status_code == 200
+    assert restored_again.status_code == 200
+    assert restored_again.json()["review_status"] == "pending"
+    assert restored_again.json()["memo"] is None
+
+
+async def test_loan_candidate_review_endpoint_rejects_not_candidate_when_linked(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction()
+    account = LoanAccount(lender="국민은행", product_name="주택담보대출")
+    db_session.add_all([transaction, account])
+    await db_session.commit()
+
+    link_response = await async_client.put(
+        f"/api/v1/transactions/{transaction.id}/loan-link",
+        headers=api_headers,
+        json={"loan_account_id": account.id, "repayment_type": "mixed"},
+    )
+    response = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "not_candidate"},
+    )
+
+    assert link_response.status_code == 200
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Linked loan transaction cannot be dismissed."}
+
+
+async def test_transaction_loan_link_endpoint_restores_dismissed_review_to_pending(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction()
+    account = LoanAccount(lender="국민은행", product_name="주택담보대출")
+    db_session.add_all([transaction, account])
+    await db_session.commit()
+
+    dismissed = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{transaction.id}/review",
+        headers=api_headers,
+        json={"review_status": "not_candidate", "memo": "대출 후보 제외"},
+    )
+    linked = await async_client.put(
+        f"/api/v1/transactions/{transaction.id}/loan-link",
+        headers=api_headers,
+        json={"loan_account_id": account.id, "repayment_type": "mixed"},
+    )
+    review = await db_session.scalar(
+        select(LoanCandidateReview).where(
+            LoanCandidateReview.transaction_id == transaction.id,
+        )
+    )
+
+    assert dismissed.status_code == 200
+    assert linked.status_code == 200
+    assert review is not None
+    assert review.review_status == "pending"
+    assert review.memo is None
+
+
+async def test_loan_candidate_review_endpoint_rejects_malformed_and_missing_targets(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+) -> None:
+    malformed = await async_client.patch(
+        "/api/v1/loan-transaction-links/999999/review",
+        headers=api_headers,
+        json={"review_status": "ignored"},
+    )
+    missing = await async_client.patch(
+        "/api/v1/loan-transaction-links/999999/review",
+        headers=api_headers,
+        json={"review_status": "pending"},
+    )
+
+    assert malformed.status_code == 422
+    assert missing.status_code == 404
+
+
 async def test_loan_transaction_links_endpoint_lists_expense_candidates_with_link_state(
     async_client: AsyncClient,
     api_headers: dict[str, str],
@@ -403,6 +564,7 @@ async def test_loan_transaction_links_endpoint_lists_expense_candidates_with_lin
     assert body["items"][0]["effective_category_minor"] == "대출상환"
     assert body["items"][0]["link"]["display_name"] == "국민은행 주택담보대출"
     assert body["items"][0]["link"]["repayment_type"] == "mixed"
+    assert "review_status" not in body["items"][0]
     assert body["items"][1]["link"] is None
 
     linked_only = await async_client.get("/api/v1/loan-transaction-links?linked=linked")
@@ -419,3 +581,77 @@ async def test_loan_transaction_links_endpoint_lists_expense_candidates_with_lin
         unlinked.id,
         finance_without_keyword.id,
     ]
+
+
+async def test_loan_transaction_links_endpoint_filters_dismissed_candidates_from_default_counts(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    dismissed = _transaction()
+    dismissed.date = date(2026, 5, 21)
+    dismissed.description = "카카오뱅크 대출이자"
+    dismissed.merchant = "카카오뱅크"
+    visible = _transaction()
+    visible.date = date(2026, 5, 20)
+    visible.description = "국민은행 원리금 상환"
+    linked = _transaction()
+    linked.date = date(2026, 5, 22)
+    linked.description = "신한은행 대출 상환"
+    account = LoanAccount(lender="신한은행", product_name="신용대출")
+    db_session.add_all([dismissed, visible, linked, account])
+    await db_session.commit()
+
+    link_response = await async_client.put(
+        f"/api/v1/transactions/{linked.id}/loan-link",
+        headers=api_headers,
+        json={"loan_account_id": account.id, "repayment_type": "mixed"},
+    )
+    dismiss_response = await async_client.patch(
+        f"/api/v1/loan-transaction-links/{dismissed.id}/review",
+        headers=api_headers,
+        json={"review_status": "not_candidate", "memo": "대출 후보 제외"},
+    )
+
+    default_unlinked = await async_client.get(
+        "/api/v1/loan-transaction-links",
+        params={"linked": "unlinked"},
+    )
+    recovery_unlinked = await async_client.get(
+        "/api/v1/loan-transaction-links",
+        params={"linked": "unlinked", "review_status": "not_candidate"},
+    )
+    audit_unlinked = await async_client.get(
+        "/api/v1/loan-transaction-links",
+        params={"linked": "unlinked", "review_status": "all"},
+    )
+    default_linked = await async_client.get(
+        "/api/v1/loan-transaction-links",
+        params={"linked": "linked"},
+    )
+    malformed = await async_client.get(
+        "/api/v1/loan-transaction-links",
+        params={"review_status": "ignored"},
+    )
+
+    assert link_response.status_code == 200
+    assert dismiss_response.status_code == 200
+    assert default_unlinked.status_code == 200
+    assert default_unlinked.json()["total"] == 1
+    assert [item["transaction_id"] for item in default_unlinked.json()["items"]] == [
+        visible.id,
+    ]
+    assert recovery_unlinked.status_code == 200
+    assert recovery_unlinked.json()["total"] == 1
+    assert recovery_unlinked.json()["items"][0]["transaction_id"] == dismissed.id
+    assert audit_unlinked.status_code == 200
+    assert audit_unlinked.json()["total"] == 2
+    assert [item["transaction_id"] for item in audit_unlinked.json()["items"]] == [
+        dismissed.id,
+        visible.id,
+    ]
+    assert default_linked.status_code == 200
+    assert default_linked.json()["total"] == 1
+    assert default_linked.json()["items"][0]["transaction_id"] == linked.id
+    assert default_linked.json()["items"][0]["link"] is not None
+    assert malformed.status_code == 422

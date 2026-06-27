@@ -24,6 +24,7 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
+| [`loan-installment-candidate-review-workflows.md`](loan-installment-candidate-review-workflows.md) | `completed` | Inbox loan-candidate dismissal, installment transaction suggestions with proposed 회차, and MoM regression guard. | [`../drafts/loan-installment-candidate-review-workflows.md`](../drafts/loan-installment-candidate-review-workflows.md) |
 | [`transaction-source-upload-reconciliation.md`](transaction-source-upload-reconciliation.md) | `completed` | `T030-T031`: transaction source lifecycle, upload preview, explicit reconciliation apply. | [`../drafts/transaction-source-upload-reconciliation.md`](../drafts/transaction-source-upload-reconciliation.md) |
 | [`my-ledge-omo-plan-review.md`](my-ledge-omo-plan-review.md) | `completed` | Meta review scaffold superseded by the concrete plans above. | [`../drafts/my-ledge-omo-plan-review.md`](../drafts/my-ledge-omo-plan-review.md) |
 

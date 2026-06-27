@@ -48,6 +48,7 @@
 - `GET /api/v1/loan-accounts`
 - `GET /api/v1/loan-transaction-links`
 - `GET /api/v1/transactions/{transaction_id}/loan-link`
+- `GET /api/v1/installment-transaction-suggestions`
 - `GET /api/v1/installment-plans`
 - `GET /api/v1/installment-transaction-links`
 - `GET /api/v1/transactions/{transaction_id}/installment-link`
@@ -93,6 +94,7 @@
 - `PUT /api/v1/transactions/{transaction_id}/loan-link`
 - `DELETE /api/v1/transactions/{transaction_id}/loan-link`
 - `PUT /api/v1/transactions/loan-links/bulk`
+- `PATCH /api/v1/loan-transaction-links/{transaction_id}/review`
 - `POST /api/v1/installment-plans`
 - `PATCH /api/v1/installment-plans/{plan_id}`
 - `PUT /api/v1/transactions/{transaction_id}/installment-link`
@@ -610,6 +612,7 @@
   - `linked: "all" | "linked" | "unlinked"` default `all`
   - `loan_account_id`
   - `repayment_type: "principal" | "interest" | "mixed" | "unknown"`
+  - `review_status: "all" | "pending" | "not_candidate"` default `pending`
   - `page` default `1`
   - `per_page` default `40`, max `200`
 - Response model: `LoanTransactionMappingListResponse`
@@ -626,6 +629,29 @@
   - candidate scope is intentionally broad for manual mapping: already linked rows, `금융` major-category expense rows, or rows whose category/description/merchant/payment method contains loan repayment terms such as `대출`, `상환`, `이자`, `원리금`, `원금·이자`
   - `search` matches transaction text and linked loan account lender/product text
   - ordered by `date desc, time desc, id desc`
+
+#### `PATCH /api/v1/loan-transaction-links/{transaction_id}/review`
+
+- Purpose: write one loan candidate review state so `/data/inbox` can omit non-loan candidates without UI-only hiding.
+- Auth: API key required
+- Request model: `LoanCandidateReviewPatchRequest`
+- Request shape:
+  - `review_status: "pending" | "not_candidate"`
+  - optional `memo`
+- Response model: `LoanCandidateReviewResponse`
+- Behavior:
+  - sets/replaces `loan_candidate_reviews` row for transaction
+  - candidate key format uses `loan_transaction:{transaction_id}`
+  - `not_candidate` hides a previously pending candidate from default list and is reversible by patching back to `pending`
+  - restoring (`pending`) updates `reviewed_at`
+  - linked transaction can not be marked `not_candidate`; returns `409` in that case
+- Response shape:
+  - `candidate_key`
+  - `candidate_type: "loan_transaction"`
+  - `transaction_id`
+  - `review_status`
+  - `memo`
+  - `reviewed_at`
 
 #### `PUT /api/v1/transactions/{transaction_id}/loan-link`
 
@@ -719,6 +745,38 @@
   - candidate scope is `recurring_payment_kind='installment'` or rows that already have an installment link
   - excludes deleted and merged transactions through `vw_transactions_effective` semantics
   - ordered by `date desc, time desc, id desc`
+
+#### `GET /api/v1/installment-transaction-suggestions`
+
+- Purpose: read read-only advisory installment transaction suggestions for active installment plans.
+- Auth: none
+- Query params:
+  - `installment_plan_id` (optional, filters by active plan id)
+  - `page` default `1`
+  - `per_page` default `40`, max `200`
+- Response model: `InstallmentTransactionSuggestionListResponse`
+- Response shape:
+  - `total`
+  - `page`
+  - `per_page`
+  - `items[]`
+    - `transaction`
+      - `transaction_id`, `date`, `time`, `type`, `effective_category_major`, `effective_category_minor`, `description`, `merchant`, `amount`, `currency`, `payment_method`, `memo`, `recurring_payment_kind`
+    - `installment_plan_id`, `installment_plan_display_name`, `installment_plan_merchant`
+    - `total_installments`, `monthly_amount`, `first_payment_date`
+    - `suggested_installment_number`, `expected_billing_date`
+    - `amount_delta`, `billing_day_delta`, `score`
+    - `confidence: "high" | "medium" | "low"`
+    - `reason_labels`
+    - `conflict_reason: "installment_number_already_linked" | null`
+    - `is_usable: bool`
+- Behavior:
+  - only active installment plans are considered
+  - `installment_plan_id`가 지정되면 해당 plan만 대상으로 제안한다
+  - suggests only expense (`지출`) rows with `amount < 0`, not deleted, and not already linked
+  - ordering is deterministic: `expected_billing_date`, `plan.display_name`, `transaction.date`, `transaction.id`
+  - amount/날짜 일치성은 허용 오차(`amount tolerance`, `billing day tolerance`)를 적용한 뒤 점수(score)와 confidence를 산정한다
+  - 제안은 advisory only이며, 제안된 회차를 UI가 수동 링크 payload(`installment_number`)로 전달할 수 있다
 
 #### `GET /api/v1/transactions/{transaction_id}/installment-link`
 

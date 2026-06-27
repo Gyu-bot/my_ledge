@@ -20,6 +20,7 @@ import {
   useBulkLinkTransactionsToLoan,
   useLoanAccounts,
   useLoanTransactionMappings,
+  useReviewLoanTransactionCandidate,
   useRecurringCategoryRulesDryRun,
   useUpdateTransaction,
 } from '../../hooks/useTransactions'
@@ -156,8 +157,10 @@ function LoanCandidateCard({
 }) {
   const hasWrite = useWriteAccess()
   const link = useBulkLinkTransactionsToLoan()
+  const review = useReviewLoanTransactionCandidate()
   const [accountKey, setAccountKey] = useState('')
   const [repayment, setRepayment] = useState<LoanRepaymentType>('mixed')
+  const controlsDisabled = !hasWrite || link.isPending || review.isPending
 
   async function connect() {
     const account = accounts.find((candidate) => accountValue(candidate) === accountKey)
@@ -177,6 +180,18 @@ function LoanCandidateCard({
     }
   }
 
+  async function dismissCandidate() {
+    try {
+      await review.mutateAsync({
+        transactionId: item.transaction_id,
+        data: { review_status: 'not_candidate' },
+      })
+      toast.success('대출 후보 제외 완료', { description: item.merchant })
+    } catch (error) {
+      toast.error('대출 후보 제외 실패', { description: String(error) })
+    }
+  }
+
   return (
     <div className="rounded-md border border-border bg-bg-inset px-3.5 py-3">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -186,17 +201,20 @@ function LoanCandidateCard({
       </div>
       <div className="mt-2.5 flex flex-wrap items-end gap-2">
         <Field label="대출 계좌">
-          <Select disabled={!hasWrite} value={accountKey} onChange={(event) => setAccountKey(event.target.value)}>
+          <Select disabled={controlsDisabled} value={accountKey} onChange={(event) => setAccountKey(event.target.value)}>
             <option value="">— 선택 —</option>
             {accounts.map((account) => <option key={accountValue(account)} value={accountValue(account)}>{account.display_name}</option>)}
           </Select>
         </Field>
         <Field label="상환 성격">
-          <Select disabled={!hasWrite} value={repayment} onChange={(event) => setRepayment(event.target.value as LoanRepaymentType)}>
+          <Select disabled={controlsDisabled} value={repayment} onChange={(event) => setRepayment(event.target.value as LoanRepaymentType)}>
             <option value="mixed">원리금</option><option value="interest">이자</option><option value="principal">원금</option><option value="unknown">미정</option>
           </Select>
         </Field>
-        <Button variant="primary" disabled={!hasWrite || !accountKey || link.isPending} onClick={() => void connect()}>연결</Button>
+        <Button variant="primary" disabled={controlsDisabled || !accountKey} onClick={() => void connect()}>연결</Button>
+        <Button variant="secondary" disabled={controlsDisabled} onClick={() => void dismissCandidate()}>
+          {review.isPending ? '처리 중...' : '대출 후보 아님'}
+        </Button>
         <Link to="/data/loans" className="pb-1.5 text-caption text-transfer hover:underline">대출에서 열기</Link>
       </div>
     </div>

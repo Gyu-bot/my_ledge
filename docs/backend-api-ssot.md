@@ -67,6 +67,7 @@
   - `PATCH /api/v1/loan-accounts`
   - `POST /api/v1/installment-plans`
   - `PATCH /api/v1/installment-plans/{id}`
+  - `PATCH /api/v1/loan-transaction-links/{transaction_id}/review`
   - `PUT /api/v1/transactions/{id}/installment-link`
   - `DELETE /api/v1/transactions/{id}/installment-link`
   - `PUT /api/v1/transactions/installment-links/bulk`
@@ -129,6 +130,7 @@
 | `GET` | `/api/v1/transactions/by-category/timeline` | live | timeline aggregate |
 | `GET` | `/api/v1/transactions/payment-methods` | live | payment method aggregate |
 | `GET` | `/api/v1/loan-transaction-links` | live | loan repayment candidate worklist, linked/unlinked filters |
+| `GET` | `/api/v1/installment-transaction-suggestions` | live | suggested installment transaction links for active plans |
 | `GET` | `/api/v1/installment-plans` | live | installment ledger entries |
 | `GET` | `/api/v1/installment-transaction-links` | live | installment candidate worklist, linked/unlinked filters |
 | `GET` | `/api/v1/transactions/{id}/installment-link` | live | transaction-to-installment mapping |
@@ -153,6 +155,7 @@
 | `PUT` | `/api/v1/transactions/{id}/loan-link` | live | API key required, upsert one transaction-to-loan mapping |
 | `DELETE` | `/api/v1/transactions/{id}/loan-link` | live | API key required, remove mapping |
 | `PUT` | `/api/v1/transactions/loan-links/bulk` | live | API key required, map selected transactions to one loan account |
+| `PATCH` | `/api/v1/loan-transaction-links/{transaction_id}/review` | live | API key required, set loan candidate review status |
 | `PATCH` | `/api/v1/loan-accounts` | live | API key required, update loan account display name, loan kind, and user hidden state |
 | `POST` | `/api/v1/installment-plans` | live | API key required, create an installment ledger entry |
 | `PATCH` | `/api/v1/installment-plans/{id}` | live | API key required, update installment ledger metadata |
@@ -266,7 +269,9 @@
 ### Installment Management
 
 - Installment plans live in `installment_plans` and represent a user-managed ledger entry with `display_name`, `merchant`, optional `payment_method`, `total_installments`, `monthly_amount`, `first_payment_date`, `status`, and `memo`.
+- `GET /api/v1/loan-transaction-links` supports `review_status=all|pending|not_candidate` and returns default `pending` when omitted.
 - Installment transaction links live in `installment_transaction_links`; one transaction can link to one plan, and each `(installment_plan_id, installment_number)` can be used once.
+- `GET /api/v1/installment-transaction-suggestions` returns deterministic matching candidates for active installment plans only.
 - `GET /api/v1/installment-transaction-links` returns expense candidates where `recurring_payment_kind='installment'` or an installment link already exists. It supports `linked`, date, search, plan, and pagination filters.
 - The recurring-classification screen may classify a merchant group as `installment`, but the ledger, installment count, per-transaction installment number, and forecast are managed through installment plan/link APIs.
 - `GET /api/v1/installments/forecast` derives the schedule from `first_payment_date + total_installments`. Linked installments are `observed`, unlinked future or current installments are `projected`, and past unlinked installments are `missed`.

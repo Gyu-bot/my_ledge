@@ -14,6 +14,7 @@ from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
+from app.models.loan_candidate_review import LoanCandidateReview
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
@@ -33,6 +34,7 @@ __all__ = [
     "InsuranceContract",
     "Loan",
     "LoanAccount",
+    "LoanCandidateReview",
     "LoanMerchantRule",
     "LoanTransactionLink",
     "MerchantAliasRule",

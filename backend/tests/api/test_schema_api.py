@@ -18,6 +18,7 @@ def test_expected_tables_exist() -> None:
         "investments",
         "loans",
         "loan_accounts",
+        "loan_candidate_reviews",
         "loan_merchant_rules",
         "loan_transaction_links",
         "installment_plans",
@@ -38,6 +39,7 @@ def test_expected_tables_exist() -> None:
     insurance_contracts = Base.metadata.tables["insurance_contracts"]
     loans = Base.metadata.tables["loans"]
     loan_accounts = Base.metadata.tables["loan_accounts"]
+    loan_candidate_reviews = Base.metadata.tables["loan_candidate_reviews"]
     loan_merchant_rules = Base.metadata.tables["loan_merchant_rules"]
     loan_transaction_links = Base.metadata.tables["loan_transaction_links"]
     installment_transaction_links = Base.metadata.tables[
@@ -110,6 +112,13 @@ def test_expected_tables_exist() -> None:
         for constraint in loan_transaction_links.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     } == {("transaction_id",)}
+    assert loan_candidate_reviews.c.transaction_id.foreign_keys
+    assert {"memo", "reviewed_at"}.issubset(set(loan_candidate_reviews.c.keys()))
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in loan_candidate_reviews.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("candidate_key",), ("transaction_id",)}
     assert installment_transaction_links.c.transaction_id.foreign_keys
     assert installment_transaction_links.c.installment_plan_id.foreign_keys
     assert {

@@ -1,8 +1,9 @@
 import calendar
 from collections import defaultdict
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from statistics import median
+from typing import TypedDict, assert_never
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -10,12 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
+from app.models.loan_candidate_review import LoanCandidateReview
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.loan_mapping import (
     LoanAccountCandidateResponse,
     LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
+    LoanCandidateReviewFilter,
+    LoanCandidateReviewPatchRequest,
+    LoanCandidateReviewResponse,
     LoanLinkStateFilter,
     LoanTransactionLinkBulkUpsertRequest,
     LoanTransactionLinkBulkUpsertResponse,
@@ -26,6 +31,22 @@ from app.schemas.loan_mapping import (
     TransactionLoanLinkResponse,
 )
 from app.services.settings_service import get_analytics_settings
+
+
+class LoanSnapshotRecord(TypedDict):
+    lender: str
+    product_name: str
+    latest_snapshot_date: date
+    latest_principal: Decimal | None
+    latest_balance: Decimal | None
+    latest_interest_rate: Decimal | None
+    loan_start_date: date | None
+    loan_maturity_date: date | None
+
+
+class LinkedRepaymentObservations(TypedDict):
+    monthly_totals: list[Decimal]
+    monthly_types: list[set[str]]
 
 
 async def list_loan_accounts(
@@ -121,6 +142,7 @@ async def list_loan_transaction_mappings(
     repayment_type: str | None,
     page: int,
     per_page: int,
+    review_status: LoanCandidateReviewFilter = "pending",
 ) -> LoanTransactionMappingListResponse:
     base_query = _build_loan_transaction_mapping_query(
         start_date=start_date,
@@ -129,6 +151,7 @@ async def list_loan_transaction_mappings(
         linked=linked,
         loan_account_id=loan_account_id,
         repayment_type=repayment_type,
+        review_status=review_status,
     )
     total = (
         await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
@@ -181,6 +204,7 @@ async def upsert_transaction_loan_link(
     link.repayment_type = payload.repayment_type
     link.source = "manual"
     link.memo = payload.memo
+    await _restore_dismissed_loan_candidate_reviews(db_session, [transaction_id])
     await db_session.flush()
     await apply_loan_repayment_estimates_for_latest_snapshots(
         db_session,
@@ -231,6 +255,7 @@ async def bulk_upsert_transaction_loan_links(
         link.source = "manual"
         link.memo = payload.memo
 
+    await _restore_dismissed_loan_candidate_reviews(db_session, payload.transaction_ids)
     await db_session.flush()
     await apply_loan_repayment_estimates_for_latest_snapshots(
         db_session,
@@ -238,6 +263,70 @@ async def bulk_upsert_transaction_loan_links(
     )
     await db_session.commit()
     return LoanTransactionLinkBulkUpsertResponse(updated=len(transactions))
+
+
+async def update_loan_candidate_review(
+    db_session: AsyncSession,
+    transaction_id: int,
+    payload: LoanCandidateReviewPatchRequest,
+) -> LoanCandidateReviewResponse:
+    await _get_transaction_or_404(db_session, transaction_id)
+    link = await db_session.scalar(
+        select(LoanTransactionLink).where(
+            LoanTransactionLink.transaction_id == transaction_id,
+        )
+    )
+    match payload.review_status:
+        case "not_candidate":
+            if link is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Linked loan transaction cannot be dismissed.",
+                )
+        case "pending":
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
+
+    candidate_key = _loan_transaction_candidate_key(transaction_id)
+    review = await db_session.scalar(
+        select(LoanCandidateReview).where(
+            LoanCandidateReview.candidate_key == candidate_key,
+        )
+    )
+    if review is None:
+        review = LoanCandidateReview(
+            candidate_key=candidate_key,
+            candidate_type="loan_transaction",
+            transaction_id=transaction_id,
+            review_status=payload.review_status,
+        )
+        db_session.add(review)
+    else:
+        review.transaction_id = transaction_id
+        review.review_status = payload.review_status
+    review.memo = _normalize_optional_text(payload.memo)
+    review.reviewed_at = datetime.now(UTC)
+    await db_session.commit()
+    await db_session.refresh(review)
+    return _serialize_loan_candidate_review(review)
+
+
+async def _restore_dismissed_loan_candidate_reviews(
+    db_session: AsyncSession,
+    transaction_ids: list[int],
+) -> None:
+    result = await db_session.execute(
+        select(LoanCandidateReview).where(
+            LoanCandidateReview.transaction_id.in_(transaction_ids),
+            LoanCandidateReview.review_status == "not_candidate",
+        )
+    )
+    reviewed_at = datetime.now(UTC)
+    for review in result.scalars().all():
+        review.review_status = "pending"
+        review.memo = None
+        review.reviewed_at = reviewed_at
 
 
 async def delete_transaction_loan_link(
@@ -336,7 +425,7 @@ async def _load_persisted_accounts(db_session: AsyncSession) -> list[LoanAccount
 
 async def _load_latest_loan_snapshots(
     db_session: AsyncSession,
-) -> list[dict[str, object]]:
+) -> list[LoanSnapshotRecord]:
     latest_date_subquery = (
         select(
             Loan.lender.label("lender"),
@@ -393,7 +482,7 @@ async def _load_latest_loan_snapshot_for_key(
     db_session: AsyncSession,
     lender: str,
     product_name: str,
-) -> dict[str, object] | None:
+) -> LoanSnapshotRecord | None:
     result = await db_session.execute(
         select(
             Loan.lender,
@@ -443,6 +532,7 @@ def _build_loan_transaction_mapping_query(
     linked: LoanLinkStateFilter,
     loan_account_id: int | None,
     repayment_type: str | None,
+    review_status: LoanCandidateReviewFilter,
 ):
     effective_category_major = func.coalesce(
         Transaction.category_major_user,
@@ -504,6 +594,10 @@ def _build_loan_transaction_mapping_query(
             LoanAccount,
             LoanAccount.id == LoanTransactionLink.loan_account_id,
         )
+        .outerjoin(
+            LoanCandidateReview,
+            LoanCandidateReview.transaction_id == Transaction.id,
+        )
         .where(Transaction.type == "지출")
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
@@ -521,6 +615,20 @@ def _build_loan_transaction_mapping_query(
         query = query.where(LoanTransactionLink.loan_account_id == loan_account_id)
     if repayment_type is not None:
         query = query.where(LoanTransactionLink.repayment_type == repayment_type)
+    match review_status:
+        case "pending":
+            query = query.where(
+                or_(
+                    LoanCandidateReview.id.is_(None),
+                    LoanCandidateReview.review_status == "pending",
+                )
+            )
+        case "not_candidate":
+            query = query.where(LoanCandidateReview.review_status == "not_candidate")
+        case "all":
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
     if search:
         pattern = f"%{search}%"
         query = query.where(
@@ -771,7 +879,7 @@ async def _load_linked_repayment_observations(
     product_name: str,
     reference_date: date,
     lookback_months: int,
-) -> dict[str, list[object]]:
+) -> LinkedRepaymentObservations:
     window_start = _month_window_start(reference_date, lookback_months)
     window_end = _complete_month_window_end(reference_date)
     if window_end < window_start:
@@ -878,7 +986,7 @@ def _is_estimate_overwritable(source: str | None) -> bool:
 def _build_account_candidate(
     *,
     account: LoanAccount | None,
-    snapshot: dict[str, object] | None,
+    snapshot: LoanSnapshotRecord | None,
     lender: str,
     product_name: str,
     as_of_date: date | None,
@@ -986,6 +1094,23 @@ def _build_account_candidate(
 
 def _account_key(lender: str, product_name: str) -> tuple[str, str]:
     return (lender, product_name)
+
+
+def _loan_transaction_candidate_key(transaction_id: int) -> str:
+    return f"loan_transaction:{transaction_id}"
+
+
+def _serialize_loan_candidate_review(
+    review: LoanCandidateReview,
+) -> LoanCandidateReviewResponse:
+    return LoanCandidateReviewResponse(
+        candidate_key=review.candidate_key,
+        candidate_type="loan_transaction",
+        transaction_id=review.transaction_id,
+        review_status=review.review_status,
+        memo=review.memo,
+        reviewed_at=review.reviewed_at,
+    )
 
 
 def _display_name(

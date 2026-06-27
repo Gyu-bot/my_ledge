@@ -3,36 +3,30 @@ import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
-import { BulkBar } from '../../ds/BulkBar'
-import { Field, Select, TextInput } from '../../ds/Field'
-import { Pagination } from '../../ds/Pagination'
+import { Field, TextInput } from '../../ds/Field'
 import { SegmentedControl } from '../../ds/SegmentedControl'
 import { Stat } from '../../ds/Stat'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { EmptyState } from '../../ds/States'
 import { toast } from '../../ds/toastStore'
-import { EM_DASH, formatSignedWon, formatWon, formatWonCompact } from '../../ds/format'
+import { EM_DASH, formatWon, formatWonCompact } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
+import { InstallmentLinksTab } from './InstallmentLinksTab'
 import {
-  useBulkLinkTransactionsToInstallment,
   useCreateInstallmentPlan,
   useInstallmentForecast,
   useInstallmentPlans,
   useInstallmentTransactionMappings,
-  useLinkTransactionToInstallment,
   usePatchInstallmentPlan,
-  useUnlinkTransactionFromInstallment,
 } from '../../hooks/useTransactions'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type {
   InstallmentForecastStatus,
-  InstallmentLinkStateFilter,
   InstallmentPlanResponse,
   InstallmentPlanStatus,
 } from '../../types/transaction'
 
 type Tab = 'plans' | 'links' | 'forecast'
-const PAGE_SIZE = 40
 
 const PLAN_STATUS_LABEL: Record<InstallmentPlanStatus, string> = { active: '진행 중', completed: '완료', cancelled: '중단' }
 const FORECAST_STATUS: Record<InstallmentForecastStatus, { label: string; variant: 'accent' | 'warn' | 'expense' }> = {
@@ -77,7 +71,7 @@ function PlansTab() {
     }
     try {
       const created = await create.mutateAsync({ display_name: draft.display_name.trim(), merchant: draft.merchant.trim(), payment_method: draft.payment_method.trim() || null, total_installments: total, monthly_amount: monthly, first_payment_date: draft.first_payment_date, memo: draft.memo.trim() || null })
-      toast.success(`${created.display_name} 생성 완료`)
+      toast.success(`${created.display_name} 생성 완료`, { description: '거래 연결 탭에서 제안 회차를 확인해 연결하세요' })
       setDraft({ display_name: '', merchant: '', payment_method: '', total_installments: '3', monthly_amount: '', first_payment_date: localDate(), memo: '' })
     } catch (error) {
       toast.error('할부 계획 생성 실패', { description: String(error) })
@@ -128,111 +122,6 @@ function PlansTab() {
           })}
         </div>
       ) : <EmptyState message="등록된 할부 계획이 없습니다" />}
-    </>
-  )
-}
-
-function LinksTab() {
-  const hasWrite = useWriteAccess()
-  const plans = useInstallmentPlans()
-  const [searchParams] = useSearchParams()
-  const [filter, setFilter] = useState<{ search: string; linked: InstallmentLinkStateFilter; plan: string }>({ search: searchParams.get('search') ?? '', linked: (searchParams.get('linked') as InstallmentLinkStateFilter) || 'all', plan: '' })
-  const [applied, setApplied] = useState(filter)
-  const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [bulkPlan, setBulkPlan] = useState('')
-  const [bulkStart, setBulkStart] = useState('1')
-  const link = useLinkTransactionToInstallment()
-  const unlink = useUnlinkTransactionFromInstallment()
-  const bulkLink = useBulkLinkTransactionsToInstallment()
-  const [rowDrafts, setRowDrafts] = useState<Record<number, { plan: string; number: string }>>({})
-
-  const mappings = useInstallmentTransactionMappings({ page, per_page: PAGE_SIZE, search: applied.search || undefined, linked: applied.linked, installment_plan_id: applied.plan ? Number(applied.plan) : undefined })
-  const items = mappings.data?.items ?? []
-
-  async function saveRow(transactionId: number) {
-    const draft = rowDrafts[transactionId]
-    const planId = Number(draft?.plan)
-    const number = Number(draft?.number)
-    if (!Number.isFinite(planId) || !Number.isFinite(number)) { toast.error('계획과 회차를 입력하세요'); return }
-    try {
-      await link.mutateAsync({ id: transactionId, data: { installment_plan_id: planId, installment_number: number, memo: null } })
-      toast.success('연결 저장 완료')
-    } catch (error) {
-      toast.error('연결 실패', { description: String(error) })
-    }
-  }
-
-  async function applyBulk() {
-    const planId = Number(bulkPlan)
-    const start = Number(bulkStart)
-    if (!Number.isFinite(planId) || !Number.isFinite(start) || selected.size === 0) return
-    try {
-      const result = await bulkLink.mutateAsync({ transaction_ids: [...selected], installment_plan_id: planId, start_installment_number: start, memo: null })
-      toast.success(`${result.updated}건 일괄 연결 완료`)
-      setSelected(new Set())
-      setBulkPlan('')
-    } catch (error) {
-      toast.error('일괄 연결 실패', { description: String(error) })
-    }
-  }
-
-  const inputCls = 'rounded-md border border-border bg-bg-inset px-2.5 py-1.5 text-caption text-text-secondary'
-
-  return (
-    <>
-      <Card title="거래 연결 후보" action={<div className="flex gap-2"><Button variant="primary" onClick={() => { setApplied(filter); setPage(1) }}>적용</Button><Button variant="ghost" onClick={() => { const reset = { search: '', linked: 'all' as InstallmentLinkStateFilter, plan: '' }; setFilter(reset); setApplied(reset); setPage(1) }}>초기화</Button></div>}>
-        <div className="flex flex-wrap items-center gap-2">
-          <input className={`${inputCls} w-40`} placeholder="거래처·설명 검색" value={filter.search} onChange={(e) => setFilter((f) => ({ ...f, search: e.target.value }))} />
-          <Select className={inputCls} value={filter.linked} onChange={(e) => setFilter((f) => ({ ...f, linked: e.target.value as InstallmentLinkStateFilter }))} aria-label="연결 상태"><option value="all">연결 상태 전체</option><option value="linked">연결됨</option><option value="unlinked">미연결</option></Select>
-          <Select className={inputCls} value={filter.plan} onChange={(e) => setFilter((f) => ({ ...f, plan: e.target.value }))} aria-label="계획"><option value="">계획 전체</option>{plans.data?.items.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</Select>
-        </div>
-      </Card>
-
-      <Card title="할부 연결 후보 목록" meta={`${items.length} / ${mappings.data?.total ?? 0}건`} bodyClassName="p-0">
-        {mappings.isLoading ? <div className="p-4"><ListSkeleton rows={6} /></div> :
-         items.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-label">
-              <thead className="bg-bg-inset">
-                <tr>
-                  <th className="px-3 py-2"><input type="checkbox" aria-label="페이지 전체 선택" checked={items.length > 0 && items.every((i) => selected.has(i.transaction_id))} onChange={() => setSelected((c) => { const n = new Set(c); const all = items.every((i) => n.has(i.transaction_id)); items.forEach((i) => all ? n.delete(i.transaction_id) : n.add(i.transaction_id)); return n })} className="h-3 w-3 accent-[var(--ds-accent-fg)]" /></th>
-                  {['날짜', '거래처', '현재 연결', '빠른 연결', '금액'].map((h) => <th key={h} className="px-3 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {items.map((item) => {
-                  const draft = rowDrafts[item.transaction_id] ?? { plan: item.link ? String(item.link.installment_plan_id) : '', number: item.link ? String(item.link.installment_number) : '1' }
-                  return (
-                    <tr key={item.transaction_id} className={selected.has(item.transaction_id) ? 'bg-bg-selected' : ''}>
-                      <td className="px-3 py-2 align-top"><input type="checkbox" aria-label={`${item.merchant} 선택`} checked={selected.has(item.transaction_id)} onChange={() => setSelected((c) => { const n = new Set(c); if (n.has(item.transaction_id)) n.delete(item.transaction_id); else n.add(item.transaction_id); return n })} className="h-3 w-3 accent-[var(--ds-accent-fg)]" /></td>
-                      <td className="tnum px-3 py-2 align-top text-text-faint">{item.date.slice(5)}</td>
-                      <td className="max-w-[140px] px-3 py-2 align-top"><div className="truncate text-text-primary">{item.merchant}</div><div className="truncate text-micro text-text-faint">{item.payment_method ?? ''}</div></td>
-                      <td className="px-3 py-2 align-top">{item.link ? <><Badge variant="transfer">{item.link.installment_plan_display_name}</Badge><div className="tnum mt-1 text-micro text-text-muted">{item.link.installment_number} / {item.link.total_installments}회차</div></> : <Badge variant="warn">미연결</Badge>}</td>
-                      <td className="px-3 py-2 align-top">
-                        <div className="flex flex-wrap items-end gap-1.5">
-                          <Select className="min-w-32 text-caption" aria-label={`${item.merchant} 연결 계획`} disabled={!hasWrite} value={draft.plan} onChange={(e) => setRowDrafts((c) => ({ ...c, [item.transaction_id]: { ...draft, plan: e.target.value } }))}><option value="">— 계획 —</option>{plans.data?.items.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</Select>
-                          <input type="number" min={1} aria-label={`${item.merchant} 회차`} className={`${inputCls} w-16`} disabled={!hasWrite} value={draft.number} onChange={(e) => setRowDrafts((c) => ({ ...c, [item.transaction_id]: { ...draft, number: e.target.value } }))} />
-                          <Button size="sm" variant="primary" disabled={!hasWrite || !draft.plan || link.isPending} onClick={() => void saveRow(item.transaction_id)}>연결</Button>
-                          <Button size="sm" variant="ghost" disabled={!hasWrite || item.link == null || unlink.isPending} onClick={async () => { try { await unlink.mutateAsync(item.transaction_id); toast.success('연결 해제 완료') } catch (e) { toast.error('해제 실패', { description: String(e) }) } }}>해제</Button>
-                        </div>
-                      </td>
-                      <td className={`tnum px-3 py-2 align-top text-right font-semibold ${item.amount < 0 ? 'text-expense' : 'text-income'}`}>{formatSignedWon(item.amount)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            <Pagination page={page} perPage={PAGE_SIZE} total={mappings.data?.total ?? 0} onPageChange={setPage} />
-          </div>
-        ) : <EmptyState className="py-10" message="조건에 맞는 할부 연결 후보가 없습니다" />}
-      </Card>
-
-      <BulkBar count={selected.size} onClear={() => { setSelected(new Set()); setBulkPlan('') }}>
-        <Select className="text-caption" aria-label="일괄 연결 계획" value={bulkPlan} onChange={(e) => setBulkPlan(e.target.value)}><option value="">— 계획 선택 —</option>{plans.data?.items.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</Select>
-        <Field label="시작 회차"><input type="number" min={1} aria-label="시작 회차" className={`${inputCls} w-20`} value={bulkStart} onChange={(e) => setBulkStart(e.target.value)} /></Field>
-        <Button variant="primary" disabled={!hasWrite || !bulkPlan || bulkLink.isPending} onClick={() => void applyBulk()}>일괄 연결 (연속 회차)</Button>
-      </BulkBar>
     </>
   )
 }
@@ -322,7 +211,7 @@ export function InstallmentsPage() {
           <Stat label="잔여 예정" value={totalRemaining > 0 ? formatWonCompact(totalRemaining) : EM_DASH} subTone={totalRemaining > 0 ? 'bad' : 'neutral'} />
           <Stat label="누락" value={totalMissed > 0 ? formatWonCompact(totalMissed) : '없음'} subTone={totalMissed > 0 ? 'bad' : 'good'} />
         </div>
-        {tab === 'plans' ? <PlansTab /> : tab === 'links' ? <LinksTab /> : <ForecastTab />}
+        {tab === 'plans' ? <PlansTab /> : tab === 'links' ? <InstallmentLinksTab /> : <ForecastTab />}
       </div>
     </>
   )

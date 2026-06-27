@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { InboxPage } from '../../features/data/InboxPage'
@@ -9,6 +9,42 @@ function query<T>(data: T) {
 
 const updateMutate = vi.fn().mockResolvedValue({})
 const approveMutate = vi.fn().mockResolvedValue({ updated: 2 })
+const linkMutate = vi.fn().mockResolvedValue({ updated: 1 })
+const reviewMutate = vi.fn()
+
+const loanCandidate = {
+  transaction_id: 51,
+  date: '2026-06-01',
+  merchant: '국민은행 대출이자',
+  amount: -1420000,
+  effective_category_major: '금융',
+  effective_category_minor: null,
+  description: '',
+  time: '',
+  type: '지출',
+  currency: 'KRW',
+  payment_method: null,
+  memo: null,
+  link: null,
+} as const
+
+let hasWriteAccess = true
+let reviewIsPending = false
+let loanMappingData = {
+  total: 1,
+  page: 1,
+  per_page: 20,
+  items: [loanCandidate],
+}
+
+function resetLoanMappingData() {
+  loanMappingData = {
+    total: 1,
+    page: 1,
+    per_page: 20,
+    items: [loanCandidate],
+  }
+}
 
 vi.mock('../../hooks/useCanonicalViews', () => ({
   useCanonicalViewsDashboard: () =>
@@ -30,20 +66,46 @@ vi.mock('../../hooks/useTransactions', () => ({
   useRecurringCategoryRulesDryRun: () =>
     query({ items: [{ merchant: '넷플릭스', proposed_kind: 'monthly_recurring', confidence: 0.92, reason: '매월 반복', category_hint: '구독', apply_scope_options: ['all_matching', 'future_only'], matched_transactions: [{ id: 1, date: '2026-05-15', amount: -17000 }] }] }),
   useLoanTransactionMappings: () =>
-    query({ total: 1, page: 1, per_page: 20, items: [{ transaction_id: 51, date: '2026-06-01', merchant: '국민은행 대출이자', amount: -1420000, effective_category_major: '금융', effective_category_minor: null, description: '', time: '', type: '지출', currency: 'KRW', payment_method: null, memo: null, link: null }] }),
+    query(loanMappingData),
   useLoanAccounts: () => query({ items: [{ loan_account_id: 1, lender: '국민은행', product_name: '주택담보대출', display_name_user: '우리집 주담대', display_name: '우리집 주담대', loan_kind: 'equal_principal_interest', loan_start_date: null, loan_maturity_date: null, as_of_date: null, latest_snapshot_date: null, is_active: true, is_hidden: false, is_matured: false, is_stale: false, lifecycle_status: 'active', latest_balance: null, last_observed_balance: null, last_observed_principal: null, last_observed_snapshot_date: null, included_in_active_summary: true, excluded_from_summary_reason: null, stable_identity_status: 'stable_lender_product', stable_identity_reason: null, latest_interest_rate: null }] }),
   useUpdateTransaction: () => ({ mutateAsync: updateMutate, isPending: false }),
   useApplyRecurringDryRun: () => ({ mutateAsync: approveMutate, isPending: false }),
-  useBulkLinkTransactionsToLoan: () => ({ mutateAsync: vi.fn().mockResolvedValue({ updated: 1 }), isPending: false }),
+  useBulkLinkTransactionsToLoan: () => ({ mutateAsync: linkMutate, isPending: false }),
+  useReviewLoanTransactionCandidate: () => ({ mutateAsync: reviewMutate, isPending: reviewIsPending }),
 }))
 
-vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => true }))
+vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => hasWriteAccess }))
 
 function renderPage() {
   return render(<MemoryRouter><InboxPage /></MemoryRouter>)
 }
 
 describe('InboxPage', () => {
+  beforeEach(() => {
+    hasWriteAccess = true
+    reviewIsPending = false
+    resetLoanMappingData()
+    updateMutate.mockClear()
+    approveMutate.mockClear()
+    linkMutate.mockClear()
+    reviewMutate.mockReset()
+    reviewMutate.mockImplementation(async () => {
+      loanMappingData = {
+        ...loanMappingData,
+        total: 0,
+        items: [],
+      }
+      return {
+        candidate_key: 'loan_transaction:51',
+        candidate_type: 'loan_transaction',
+        transaction_id: 51,
+        review_status: 'not_candidate',
+        memo: null,
+        reviewed_at: '2026-06-27T09:00:00Z',
+      }
+    })
+  })
+
   it('3종 카드(승인 대기·미분류·대출 연결)와 커버리지 게이지를 렌더한다', () => {
     renderPage()
     expect(screen.getByText('승인 대기')).toBeInTheDocument()
@@ -66,6 +128,40 @@ describe('InboxPage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '저장' })[0])
     await waitFor(() => {
       expect(updateMutate).toHaveBeenCalledWith({ id: 1, data: { cost_kind: 'fixed', spend_necessity: null, recurring_payment_kind: null } })
+    })
+  })
+
+  it('대출 후보 카드에 대출 후보 아님 액션을 노출하고 클릭 시 not_candidate 리뷰를 보낸다', async () => {
+    renderPage()
+
+    const dismissButton = screen.getByRole('button', { name: '대출 후보 아님' })
+    expect(dismissButton).toBeInTheDocument()
+
+    fireEvent.click(dismissButton)
+
+    await waitFor(() => {
+      expect(reviewMutate).toHaveBeenCalledWith({
+        transactionId: 51,
+        data: { review_status: 'not_candidate' },
+      })
+    })
+  })
+
+  it('대출 후보 아님 처리 성공 후 재조회 결과를 반영해 대출 후보 행과 카운트를 숨긴다', async () => {
+    const view = renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '대출 후보 아님' }))
+
+    await waitFor(() => {
+      expect(reviewMutate).toHaveBeenCalledTimes(1)
+    })
+
+    view.rerender(<MemoryRouter><InboxPage /></MemoryRouter>)
+
+    await waitFor(() => {
+      expect(screen.queryByText('국민은행 대출이자')).not.toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /전체 2/ })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /대출 연결 0/ })).toBeInTheDocument()
     })
   })
 })
