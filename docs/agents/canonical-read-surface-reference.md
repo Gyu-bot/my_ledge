@@ -18,6 +18,7 @@
 | `period` | 월 단위 문자열 `YYYY-MM`이다. 월말 날짜가 아니라 집계 bucket label이다. |
 | `amount` | 원본 거래 금액이다. BankSalad 원본 기준으로 `지출`은 보통 음수, `수입`은 보통 양수다. |
 | 지출 정규화 | 지출 집계에서는 `-amount`를 사용한다. `지출`인데 양수인 건은 환불/취소로 보고 지출 합계에서 차감된다. |
+| settlement canonical | analytics 집계는 확인된 settlement만 netting 대역으로 재해석한다. |
 | `type='이체'` | 수입/지출 분석에서 제외한다. `transfer_activity_total`처럼 별도 활동량으로만 본다. |
 | `effective_category_*` | 사용자 수정 카테고리가 있으면 사용자 값을, 없으면 원본 import 카테고리를 쓴다. |
 | 삭제/병합 거래 | canonical transaction surface는 기본적으로 `is_deleted=false`, `merged_into_id is null`만 노출한다. 감사성 조회는 raw table 또는 transaction API의 include flag를 쓴다. |
@@ -197,7 +198,7 @@ Response groups:
 |---|---|
 | `period` | `YYYY-MM`. |
 | `income_total` | `type='수입'`의 `amount` 합계. |
-| `expense_total` | `type='지출'`의 `-amount` 합계. 대출 상환도 포함한 총 지출이다. |
+| `expense_total` | `type='지출'`의 `-amount` 합계. 기본은 raw signed 합계이되, 확정 settlement가 있는 경우 economics는 confirmed net amount 기준으로 노출될 수 있다. 대출 상환도 포함한 총 지출이다. |
 | `non_loan_expense_total` | `type='지출'`이고 `loan_account_id is null`인 일반 지출 합계. |
 | `transfer_activity_total` | `type='이체'`의 `abs(amount)` 합계. 순증감이 아니라 활동량이다. |
 | `loan_repayment_total` | `type='지출'`이고 대출 계좌에 연결된 거래의 `-amount` 합계. |
@@ -212,6 +213,24 @@ Response groups:
 | `unclassified_expense_total` | 일반 지출 중 `cost_kind is null`인 금액 합계. |
 | `net_cashflow` | `income_total - expense_total`. 대출 상환은 expense에 이미 포함된다. |
 | `savings_rate` | `net_cashflow / income_total`. 수입이 0이면 `null`. |
+
+### Raw signed vs settlement-netted surfaces
+
+- Raw signed rows:
+  - `GET /api/v1/transactions`와 `vw_transactions_effective`가 `amount` 원본 부호를 그대로 제공합니다.
+  - 환불/취소는 raw positive `type='지출'` 행으로 유지되어 raw signed 월별 expense에 그대로 반영됩니다.
+- settlement-netted surfaces:
+  - `/api/v1/analytics/monthly-cashflow`, `/api/v1/analytics/category-mom`, `/api/v1/analytics/fixed-cost-summary`, `/api/v1/analytics/spending-review-candidates`는 확인된 결제/환불 묶음을 netted economics로 소비합니다.
+
+| 상태 | 분석 의미 | 상태별 규칙 |
+|---|---|---|
+| `auto_confirmed` | 확정 | raw signed를 묶음 net amount로 치환해 반영 |
+| `user_confirmed` | 확정 | raw signed를 묶음 net amount로 치환해 반영 |
+| `review_required` | 미확정 | raw signed semantics 유지, settlement netting 미적용 |
+| `rejected` | 미확정 | raw signed semantics 유지, settlement netting 미적용 |
+
+- `GET /api/v1/analytics/*`는 read-only라서 조회 시 settlement write나 reconcile 작업을 수행하지 않는다.
+- 구매 게이트/리뷰 후보는 같은 settlement metadata를 공유해, confirmed partial refund를 분석 파이프라인에서 이중 계산하지 않는다.
 
 ### `vw_true_spendable_monthly`
 

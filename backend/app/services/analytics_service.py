@@ -1,9 +1,11 @@
 import math
 from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import Iterable
+from datetime import UTC, date, datetime, time, timedelta
+from typing import NotRequired, TypedDict
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, select
+from sqlalchemy import select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +37,50 @@ from app.schemas.analytics import (
 from app.schemas.settings import DiscretionaryVelocitySettings, PurchaseGateSettings
 from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
 from app.services.canonical_views import build_transactions_effective_select
+from app.services.settlement_group_service import (
+    SettlementAnalysisNetting,
+    build_confirmed_settlement_analysis_netting,
+)
+
+
+class AnalyticsRow(TypedDict):
+    id: int
+    date: date
+    time: time
+    type: str
+    amount: int
+    merchant: str | None
+    description: str
+    payment_method: str | None
+    effective_category_major: str | None
+    effective_category_minor: str | None
+    cost_kind: str | None
+    fixed_cost_necessity: str | None
+    spend_necessity: str | None
+    loan_account_id: int | None
+    recurring_payment_kind: str | None
+    settlement_refund_total: NotRequired[int]
+
+
+type PurchaseCandidateSignalValue = int | float | str | bool
+
+
+class PurchaseCandidateBase(TypedDict):
+    transaction_id: int
+    date: date
+    merchant: str
+    amount: int
+    category: str
+    refund_total: int
+
+
+class PurchaseCandidateAggregate(TypedDict):
+    candidate_type: str
+    candidate_types: list[str]
+    base: PurchaseCandidateBase
+    signals: dict[str, PurchaseCandidateSignalValue]
+    risk_level: str
+    reasons: list[str]
 
 
 async def get_monthly_cashflow(
@@ -807,11 +853,10 @@ async def get_purchase_gate_candidates(
     )
 
     eligible_rows = [row for row in rows if _is_purchase_gate_base_row(row)]
-    refund_netting = _build_purchase_gate_refund_netting(eligible_rows)
     purchase_rows = [
         row
         for row in eligible_rows
-        if row["amount"] < 0 and _purchase_gate_net_amount(row, refund_netting) > 0
+        if row["amount"] < 0 and _purchase_gate_net_amount(row) > 0
     ]
     current_rows = [row for row in purchase_rows if ref_start <= row["date"] <= ref_end]
     prior_merchants = {
@@ -827,7 +872,7 @@ async def get_purchase_gate_candidates(
     for row in purchase_rows:
         merchant = row["merchant"] or row["description"] or "미분류"
         category = row["effective_category_major"] or "미분류"
-        amount = _purchase_gate_net_amount(row, refund_netting)
+        amount = _purchase_gate_net_amount(row)
         row_period = _month_key(row["date"])
         if ref_start <= row["date"] <= ref_end:
             current_merchant_total[merchant] += amount
@@ -839,24 +884,23 @@ async def get_purchase_gate_candidates(
     enabled = set(settings.enabled_candidate_types)
     excluded_categories = set(settings.excluded_category_names)
     excluded_merchants = set(settings.excluded_merchants)
-    candidate_map: dict[int, dict[str, object]] = {}
+    candidate_map: dict[int, PurchaseCandidateAggregate] = {}
 
     for row in current_rows:
         merchant = row["merchant"] or row["description"] or "미분류"
         category = row["effective_category_major"] or "미분류"
         if merchant in excluded_merchants or category in excluded_categories:
             continue
-        amount = max(0, -row["amount"])
-        amount = _purchase_gate_net_amount(row, refund_netting)
+        amount = _purchase_gate_net_amount(row)
         if amount < settings.min_candidate_amount:
             continue
-        base = {
+        base: PurchaseCandidateBase = {
             "transaction_id": row["id"],
             "date": row["date"],
             "merchant": merchant,
             "amount": amount,
             "category": category,
-            "refund_total": refund_netting.get(int(row["id"]), 0),
+            "refund_total": int(row.get("settlement_refund_total") or 0),
         }
         if "large_oneoff" in enabled and amount >= settings.large_purchase_threshold:
             _append_purchase_candidate_reason(
@@ -1056,26 +1100,7 @@ async def _load_analytics_transactions(
     start_date: date | None,
     end_date: date | None,
     tx_type: TransactionTypeFilter,
-) -> list[RowMapping]:
-    query, canonical = _build_analytics_query(
-        start_date=start_date,
-        end_date=end_date,
-        tx_type=tx_type,
-    )
-    result = await db_session.execute(
-        query.order_by(
-            canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc()
-        )
-    )
-    return result.mappings().all()
-
-
-def _build_analytics_query(
-    *,
-    start_date: date | None,
-    end_date: date | None,
-    tx_type: TransactionTypeFilter,
-) -> tuple[Select, object]:
+) -> list[AnalyticsRow]:
     canonical = build_transactions_effective_select().subquery(
         "vw_transactions_effective"
     )
@@ -1086,7 +1111,88 @@ def _build_analytics_query(
         query = query.where(canonical.c.date <= end_date)
     if tx_type != "all":
         query = query.where(canonical.c.type == tx_type)
-    return query, canonical
+    result = await db_session.execute(
+        query.order_by(
+            canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc()
+        )
+    )
+    rows = [_parse_analytics_row(row) for row in result.mappings().all()]
+    if not rows:
+        return []
+    settlement_netting = await build_confirmed_settlement_analysis_netting(db_session)
+    adjusted_rows: list[AnalyticsRow] = []
+    for row in rows:
+        adjusted_row = _apply_settlement_netting(row, settlement_netting)
+        if adjusted_row is not None:
+            adjusted_rows.append(adjusted_row)
+    return adjusted_rows
+
+
+def _parse_analytics_row(row: RowMapping) -> AnalyticsRow:
+    parsed: AnalyticsRow = {
+        "id": int(row["id"]),
+        "date": row["date"],
+        "time": row["time"],
+        "type": str(row["type"]),
+        "amount": int(row["amount"]),
+        "merchant": row["merchant"],
+        "description": str(row["description"]),
+        "payment_method": row["payment_method"],
+        "effective_category_major": row["effective_category_major"],
+        "effective_category_minor": row["effective_category_minor"],
+        "cost_kind": row["cost_kind"],
+        "fixed_cost_necessity": row["fixed_cost_necessity"],
+        "spend_necessity": row["spend_necessity"],
+        "loan_account_id": row["loan_account_id"],
+        "recurring_payment_kind": row["recurring_payment_kind"],
+    }
+    settlement_refund_total = row.get("settlement_refund_total")
+    if settlement_refund_total is not None:
+        parsed["settlement_refund_total"] = int(settlement_refund_total)
+    return parsed
+
+
+def _apply_settlement_netting(
+    row: AnalyticsRow,
+    settlement_netting: SettlementAnalysisNetting,
+) -> AnalyticsRow | None:
+    adjusted: AnalyticsRow = {
+        "id": row["id"],
+        "date": row["date"],
+        "time": row["time"],
+        "type": row["type"],
+        "amount": row["amount"],
+        "merchant": row["merchant"],
+        "description": row["description"],
+        "payment_method": row["payment_method"],
+        "effective_category_major": row["effective_category_major"],
+        "effective_category_minor": row["effective_category_minor"],
+        "cost_kind": row["cost_kind"],
+        "fixed_cost_necessity": row["fixed_cost_necessity"],
+        "spend_necessity": row["spend_necessity"],
+        "loan_account_id": row["loan_account_id"],
+        "recurring_payment_kind": row["recurring_payment_kind"],
+    }
+    adjusted["settlement_refund_total"] = 0
+
+    if row["type"] != "지출":
+        return adjusted
+
+    amount = row["amount"]
+    transaction_id = row["id"]
+    if amount < 0:
+        refund_total = settlement_netting.refund_total_by_original_transaction_id.get(
+            transaction_id,
+            0,
+        )
+        adjusted["amount"] = amount + refund_total
+        adjusted["settlement_refund_total"] = refund_total
+    elif transaction_id in settlement_netting.excluded_refund_transaction_ids:
+        adjusted["amount"] = 0
+
+    if adjusted["amount"] == 0:
+        return None
+    return adjusted
 
 
 def _amount_for_analytics(tx_type: str, amount: int) -> int:
@@ -1097,7 +1203,7 @@ def _amount_for_analytics(tx_type: str, amount: int) -> int:
     return amount
 
 
-def _category_value(row: RowMapping, level: TransactionCategoryLevel) -> str:
+def _category_value(row: AnalyticsRow, level: TransactionCategoryLevel) -> str:
     if level == "major":
         return row["effective_category_major"] or "미분류"
     return row["effective_category_minor"] or "미분류"
@@ -1195,7 +1301,7 @@ def _exclude_outlier_amounts(values: list[int]) -> list[int]:
     return filtered or values
 
 
-def _monthly_average(values: object) -> int:
+def _monthly_average(values: Iterable[int]) -> int:
     amounts = list(values)
     if not amounts:
         return 0
@@ -1253,7 +1359,7 @@ def _parse_candidate_key(candidate_key: str) -> tuple[str, int, str]:
     return candidate_type, transaction_id, _canonical_candidate_key(transaction_id)
 
 
-def _is_purchase_gate_base_row(row: RowMapping) -> bool:
+def _is_purchase_gate_base_row(row: AnalyticsRow) -> bool:
     return (
         row["loan_account_id"] is None
         and row["cost_kind"] != "fixed"
@@ -1262,78 +1368,26 @@ def _is_purchase_gate_base_row(row: RowMapping) -> bool:
     )
 
 
-def _is_purchase_gate_queue_row(row: RowMapping) -> bool:
+def _is_purchase_gate_queue_row(row: AnalyticsRow) -> bool:
     return _is_purchase_gate_base_row(row) and max(0, -row["amount"]) > 0
 
 
-def _refund_match_key(row: RowMapping) -> tuple[str, str, str]:
-    merchant = row["merchant"] or row["description"] or "미분류"
-    return (
-        merchant,
-        row["payment_method"] or "",
-        row["currency"] or "KRW",
-    )
-
-
-def _build_purchase_gate_refund_netting(rows: list[RowMapping]) -> dict[int, int]:
-    refunds_by_key: dict[tuple[str, str, str], list[dict[str, object]]] = defaultdict(list)
-    for row in rows:
-        if row["amount"] > 0:
-            refunds_by_key[_refund_match_key(row)].append(
-                {
-                    "id": int(row["id"]),
-                    "date": row["date"],
-                    "remaining": int(row["amount"]),
-                }
-            )
-    for refunds in refunds_by_key.values():
-        refunds.sort(key=lambda item: (item["date"], item["id"]))
-
-    netted: dict[int, int] = {}
-    purchase_rows = sorted(
-        [row for row in rows if row["amount"] < 0],
-        key=lambda row: (row["date"], row["id"]),
-    )
-    for row in purchase_rows:
-        purchase_id = int(row["id"])
-        purchase_amount = -int(row["amount"])
-        remaining_purchase = purchase_amount
-        refund_total = 0
-        for refund in refunds_by_key.get(_refund_match_key(row), []):
-            refund_date = refund["date"]
-            if refund_date < row["date"] or (refund_date - row["date"]).days > 14:
-                continue
-            remaining_refund = int(refund["remaining"])
-            if remaining_refund <= 0:
-                continue
-            applied = min(remaining_purchase, remaining_refund)
-            remaining_purchase -= applied
-            refund["remaining"] = remaining_refund - applied
-            refund_total += applied
-            if remaining_purchase == 0:
-                break
-        if refund_total:
-            netted[purchase_id] = refund_total
-    return netted
-
-
 def _purchase_gate_net_amount(
-    row: RowMapping,
-    refund_netting: dict[int, int],
+    row: AnalyticsRow,
 ) -> int:
-    return max(0, -int(row["amount"]) - refund_netting.get(int(row["id"]), 0))
+    return max(0, -int(row["amount"]))
 
 
 def _append_purchase_candidate_reason(
-    candidate_map: dict[int, dict[str, object]],
+    candidate_map: dict[int, PurchaseCandidateAggregate],
     *,
     candidate_type: str,
-    base: dict[str, object],
-    signals: dict[str, int | float | str | bool],
+    base: PurchaseCandidateBase,
+    signals: dict[str, PurchaseCandidateSignalValue],
     risk_level: str,
     reasons: list[str],
 ) -> None:
-    transaction_id = int(base["transaction_id"])
+    transaction_id = base["transaction_id"]
     namespaced_signals = _namespace_purchase_candidate_signals(candidate_type, signals)
     candidate = candidate_map.get(transaction_id)
     if candidate is None:
@@ -1348,16 +1402,14 @@ def _append_purchase_candidate_reason(
         return
 
     candidate_types = candidate["candidate_types"]
-    assert isinstance(candidate_types, list)
     if candidate_type not in candidate_types:
         candidate_types.append(candidate_type)
     candidate["signals"].update(namespaced_signals)
     candidate["risk_level"] = _higher_purchase_gate_risk_level(
-        str(candidate["risk_level"]),
+        candidate["risk_level"],
         risk_level,
     )
     existing_reasons = candidate["reasons"]
-    assert isinstance(existing_reasons, list)
     for reason in reasons:
         if reason not in existing_reasons:
             existing_reasons.append(reason)
@@ -1365,8 +1417,8 @@ def _append_purchase_candidate_reason(
 
 def _namespace_purchase_candidate_signals(
     candidate_type: str,
-    signals: dict[str, int | float | str | bool],
-) -> dict[str, int | float | str | bool]:
+    signals: dict[str, PurchaseCandidateSignalValue],
+) -> dict[str, PurchaseCandidateSignalValue]:
     return {
         f"{candidate_type}_{signal_name}": value
         for signal_name, value in signals.items()
@@ -1390,16 +1442,16 @@ def _purchase_candidate_item(
     *,
     candidate_type: str,
     candidate_types: list[str],
-    base: dict[str, object],
-    signals: dict[str, int | float | str | bool],
+    base: PurchaseCandidateBase,
+    signals: dict[str, PurchaseCandidateSignalValue],
     risk_level: str,
     reasons: list[str],
     settings: PurchaseGateSettings,
 ) -> PurchaseGateCandidateItem:
-    transaction_id = int(base["transaction_id"])
+    transaction_id = base["transaction_id"]
     item_signals = dict(signals)
     item_reasons = list(reasons)
-    refund_total = int(base.get("refund_total") or 0)
+    refund_total = base["refund_total"]
     if refund_total > 0:
         item_signals["refund_netting_refund_total"] = refund_total
         item_reasons.append(
@@ -1411,9 +1463,9 @@ def _purchase_candidate_item(
         transaction_id=transaction_id,
         candidate_key=_canonical_candidate_key(transaction_id),
         date=base["date"],
-        merchant=str(base["merchant"]),
-        amount=int(base["amount"]),
-        category=str(base["category"]),
+        merchant=base["merchant"],
+        amount=base["amount"],
+        category=base["category"],
         signals=item_signals,
         risk_level=risk_level,
         review_priority=risk_level,

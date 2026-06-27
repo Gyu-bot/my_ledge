@@ -56,7 +56,7 @@ Your next move: approve this plan after `transaction-source-upload-reconciliatio
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] 1. Add settlement grouping model/service and matching algorithm.
+- [x] 1. Add settlement grouping model/service and matching algorithm.
   What to do / Must NOT do: Add storage or canonical layer for settlement groups. Match by normalized merchant, payment method, currency, opposite sign, amount/full-or-partial relationship, date proximity, description similarity, and existing links. Do not change raw transaction signs.
   Parallelization: Wave 1 | Blocked by: `transaction-source-upload-reconciliation` | Blocks: 2, 3
   References (executor has NO interview context - be exhaustive): `Implentation-plan.md:728`, `backend/app/models/transaction.py`, `backend/app/services/analytics_service.py`, `backend/app/services/transactions_service.py`, `backend/tests/services/test_analytics_service.py`, `backend/tests/services/test_transactions_service.py`.
@@ -64,7 +64,7 @@ Your next move: approve this plan after `transaction-source-upload-reconciliatio
   QA scenarios (name the exact tool + invocation): happy: exact full cancellation nets to zero, failure: two possible originals results in review-required, Evidence `.omo/evidence/task-1-settlement-group-canonical-netting.md`.
   Commit: Y | `[backend] settlement group 모델 추가 (codex)`
 
-- [ ] 2. Integrate settlement netting into analysis surfaces.
+- [x] 2. Integrate settlement netting into analysis surfaces.
   What to do / Must NOT do: Provide a shared service/view for settlement-netted spend. Ensure purchase review refund netting does not double-net with the shared layer.
   Parallelization: Wave 2 | Blocked by: 1 | Blocks: 3
   References (executor has NO interview context - be exhaustive): `backend/app/api/v1/endpoints/analytics.py`, `backend/app/services/analytics_service.py`, `backend/app/services/canonical_views_dashboard_service.py`, `backend/tests/api/test_analytics_api.py`, `docs/backend-api-and-metrics-reference.md`.
@@ -72,7 +72,7 @@ Your next move: approve this plan after `transaction-source-upload-reconciliatio
   QA scenarios (name the exact tool + invocation): happy: partial refund lowers analysis total, failure: rejected settlement leaves original raw analysis basis unchanged where applicable, Evidence `.omo/evidence/task-2-settlement-group-canonical-netting.md`.
   Commit: Y | `[backend] settlement netting 분석 반영 (codex)`
 
-- [ ] 3. Document settlement basis and agent interpretation.
+- [x] 3. Document settlement basis and agent interpretation.
   What to do / Must NOT do: Update API/agent docs so consumers know when to use raw signed rows vs settlement-netted surface.
   Parallelization: Wave 3 | Blocked by: 1, 2 | Blocks: final
   References (executor has NO interview context - be exhaustive): `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`, `Implentation-plan.md:728`.
@@ -82,10 +82,10 @@ Your next move: approve this plan after `transaction-source-upload-reconciliatio
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit: every `T032` acceptance criterion mapped to code/test/docs.
-- [ ] F2. Code quality review: ensure matching rules are deterministic and review-required cases are not auto-confirmed.
-- [ ] F3. Real manual QA: run API/service smoke using refund fixtures.
-- [ ] F4. Scope fidelity: confirm no transaction lifecycle or forecasting scope is bundled.
+- [x] F1. Plan compliance audit: every `T032` acceptance criterion mapped to code/test/docs.
+- [x] F2. Code quality review: ensure matching rules are deterministic and review-required cases are not auto-confirmed.
+- [x] F3. Real manual QA: run API/service smoke using refund fixtures.
+- [x] F4. Scope fidelity: confirm no transaction lifecycle or forecasting scope is bundled.
 
 ## Commit strategy
 - Keep model/service and docs in separate commits if the diff is large.

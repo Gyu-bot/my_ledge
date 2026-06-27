@@ -128,7 +128,9 @@ async def test_list_transactions_applies_default_filters_and_pagination(
     )
     await db_session.commit()
 
-    response = await async_client.get("/api/v1/transactions", params={"page": 1, "per_page": 2})
+    response = await async_client.get(
+        "/api/v1/transactions", params={"page": 1, "per_page": 2}
+    )
 
     assert response.status_code == 200
     assert response.json()["total"] == 4
@@ -169,6 +171,61 @@ async def test_list_transactions_supports_is_edited_and_search(
     assert payload["items"][0]["effective_category_minor"] == "배달"
     assert payload["items"][0]["cost_kind"] is None
     assert payload["items"][0]["fixed_cost_necessity"] is None
+
+
+async def test_list_transactions_preserves_raw_signed_amounts_after_settlement_analysis(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 31),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="원결제",
+                merchant="상점A",
+                amount=-180_000,
+                payment_method="카드A",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(10, 5),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="부분 환불",
+                merchant="상점A",
+                amount=80_000,
+                payment_method="카드A",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    analytics_response = await async_client.get(
+        "/api/v1/analytics/monthly-cashflow",
+        params={"start_date": "2026-01-01", "end_date": "2026-02-28"},
+    )
+    assert analytics_response.status_code == 200
+
+    response = await async_client.get(
+        "/api/v1/transactions",
+        params={
+            "start_date": "2026-01-01",
+            "end_date": "2026-02-28",
+            "page": 1,
+            "per_page": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 2
+    assert [item["amount"] for item in payload["items"]] == [80_000, -180_000]
+    assert [item["description"] for item in payload["items"]] == ["부분 환불", "원결제"]
 
 
 async def test_list_transactions_supports_type_source_and_date_filters(
@@ -519,7 +576,7 @@ async def test_summary_and_breakdown_endpoints_use_effective_rules(
         "items": [
             {"period": "2026-02", "amount": -50},
             {"period": "2026-03", "amount": -80},
-        ]
+        ],
     }
     assert by_category.status_code == 200
     assert by_category.json() == {
@@ -649,7 +706,9 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert restore_response.status_code == 200
     assert restore_response.json()["is_deleted"] is False
 
-    stored = await db_session.scalar(select(Transaction).where(Transaction.id == created_id))
+    stored = await db_session.scalar(
+        select(Transaction).where(Transaction.id == created_id)
+    )
     assert stored is not None
     assert stored.category_major_user == "식비"
     assert stored.category_minor_user == "배달"
@@ -719,8 +778,10 @@ async def test_bulk_delete_and_restore_preview_and_execute_soft_delete_rows(
     assert deleted.json()["updated"] == 2
     assert deleted.json()["preview"]["count"] == 2
     stored_rows = (
-        await db_session.execute(select(Transaction).where(Transaction.id.in_(ids)))
-    ).scalars().all()
+        (await db_session.execute(select(Transaction).where(Transaction.id.in_(ids))))
+        .scalars()
+        .all()
+    )
     assert {row.is_deleted for row in stored_rows} == {True}
 
     restore_preview = await async_client.post(
@@ -739,8 +800,10 @@ async def test_bulk_delete_and_restore_preview_and_execute_soft_delete_rows(
     assert restored.status_code == 200
     assert restored.json()["updated"] == 2
     stored_rows = (
-        await db_session.execute(select(Transaction).where(Transaction.id.in_(ids)))
-    ).scalars().all()
+        (await db_session.execute(select(Transaction).where(Transaction.id.in_(ids))))
+        .scalars()
+        .all()
+    )
     assert {row.is_deleted for row in stored_rows} == {False}
 
 

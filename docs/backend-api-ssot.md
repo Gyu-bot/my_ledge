@@ -147,6 +147,8 @@
 | `PATCH` | `/api/v1/transactions/{id}` | live | merchant/category/cost kind/spend necessity/fixed necessity/recurring payment kind/memo |
 | `DELETE` | `/api/v1/transactions/{id}` | live | soft delete |
 | `POST` | `/api/v1/transactions/{id}/restore` | live | restore soft-deleted row |
+| `PUT` | `/api/v1/transactions/{id}/settlement-match` | live | API key required, upsert manual `user_confirmed` or `rejected` settlement override for a refund/cancellation row |
+| `DELETE` | `/api/v1/transactions/{id}/settlement-match` | live | API key required, remove a user-managed settlement override via `original_transaction_id` |
 | `GET` | `/api/v1/transactions/{id}/loan-link` | live | transaction-to-loan repayment mapping |
 | `PUT` | `/api/v1/transactions/{id}/loan-link` | live | API key required, upsert one transaction-to-loan mapping |
 | `DELETE` | `/api/v1/transactions/{id}/loan-link` | live | API key required, remove mapping |
@@ -276,6 +278,18 @@
 - Candidate generation excludes loan-linked transactions, fixed costs, essential variable expenses, and rows whose `spend_necessity` is still unclassified.
 - A transaction appears once even if it triggers multiple signals. `candidate_type` is the representative reason, while `candidate_types[]`, `reasons[]`, and namespaced `signals` carry every matched reason.
 - Canonical review keys are `transaction:{transaction_id}`. Legacy reason keys such as `large_oneoff:42` are still read as fallback state, but new writes store the canonical key.
+
+### Settlement Group Canonical Netting Boundary
+
+- `raw` `transactions` rows preserve original import sign and amount. This includes a positive `type='지출'` refund/cancellation row, which remains positive in raw storage and raw `/api/v1/transactions` responses.
+- Settlement economics are applied only in downstream analytics surfaces as a canonical read layer:
+  - confirmed-only states: `auto_confirmed`, `user_confirmed`
+  - unconfirmed states: `review_required`, `rejected` (no canonical netting)
+  - confirmed netting is skipped if either participant leaves canonical analytics basis (`type='지출'`, `is_deleted=false`, `merged_into_id is null`, non-zero signed amount)
+- `/api/v1/analytics/*` 집계는 confirmed match가 있을 때 해당 구매-환불 묶음을 netted 값으로 계산한다.
+- `/api/v1/analytics/*`는 read-only다. 현재 조회만 수행하며 `settlement_matches` 생성/갱신/reconcile write 동작을 수행하지 않는다.
+- `review_required`/`rejected`의 환불은 raw signed semantics를 유지해 월별 raw expense에 반영되므로, confirmed 환불처럼 즉시 소거되지 않는다.
+- 구매 게이트/리뷰 큐는 동일한 settlement metadata를 공유해 confirmed partial refund를 반복 계산하지 않는다.
 
 ### Snapshot Import Behavior
 

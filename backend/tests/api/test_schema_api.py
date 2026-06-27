@@ -23,6 +23,7 @@ def test_expected_tables_exist() -> None:
         "installment_plans",
         "installment_transaction_links",
         "purchase_gate_reviews",
+        "settlement_matches",
         "upload_logs",
         "user_profile_snapshots",
     }
@@ -43,14 +44,13 @@ def test_expected_tables_exist() -> None:
         "installment_transaction_links"
     ]
     purchase_gate_reviews = Base.metadata.tables["purchase_gate_reviews"]
+    settlement_matches = Base.metadata.tables["settlement_matches"]
     user_profile_snapshots = Base.metadata.tables["user_profile_snapshots"]
 
     assert transactions.c.is_deleted.server_default is not None
     assert transactions.c.source.server_default is not None
     assert transactions.c.merged_into_id.foreign_keys
-    assert {
-        index.name for index in transactions.indexes
-    } == {
+    assert {index.name for index in transactions.indexes} == {
         "idx_tx_datetime",
         "idx_transactions_source_lifecycle_status",
         "idx_transactions_source_row_hash",
@@ -120,6 +120,24 @@ def test_expected_tables_exist() -> None:
     assert {"memo", "reviewed_at", "cooldown_until"}.issubset(
         set(purchase_gate_reviews.c.keys())
     )
+    assert {
+        "original_transaction_id",
+        "settlement_transaction_id",
+        "status",
+        "matched_amount",
+        "matched_at",
+    }.issubset(set(settlement_matches.c.keys()))
+    assert settlement_matches.c.original_transaction_id.foreign_keys
+    assert settlement_matches.c.settlement_transaction_id.foreign_keys
+    assert {index.name for index in settlement_matches.indexes} == {
+        "idx_settlement_matches_settlement_transaction_id",
+        "idx_settlement_matches_status",
+    }
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in settlement_matches.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("original_transaction_id", "settlement_transaction_id")}
     assert {
         tuple(column.name for column in constraint.columns)
         for constraint in user_profile_snapshots.constraints

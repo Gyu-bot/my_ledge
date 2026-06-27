@@ -1041,6 +1041,12 @@
     - `transfer`
     - `net_cashflow`
     - `savings_rate`
+- Behavior:
+  - raw rows are loaded as signed transactions first (`income`/`expense`/`transfer` normalization happens after row loading).
+  - confirmed settlement matches only (`auto_confirmed`, `user_confirmed`) are netted for analytics math.
+  - confirmed netting is applied only while both original/refund participants still satisfy canonical analytics inclusion (`type='지출'`, `is_deleted=false`, `merged_into_id is null`, non-zero signed amount).
+  - `review_required` and `rejected` settlement matches are treated as unconfirmed and remain on raw signed basis.
+  - positive `type='지출'` rows are retained as refund/cancellation offsets on raw surfaces unless a confirmed settlement match applies netting.
 
 #### `GET /api/v1/analytics/category-mom`
 
@@ -1260,6 +1266,7 @@ Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/an
 - Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing='post_transaction'`, `candidate_purpose='future_friction_rule_candidate'`, and `future_friction_suggestion`.
 - `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
 - Positive `type='지출'` cancellation/refund rows are matched to nearby same merchant/payment/currency purchase rows before scoring. Fully refunded purchases are excluded; partial refunds are scored by net spend and expose `refund_netting_refund_total`.
+- Candidate scoring uses shared settlement netting metadata from analytics service, so confirmed refunds are not double-netted by a separate pass.
 
 #### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
@@ -1570,6 +1577,11 @@ Source: `app.services.analytics_service.get_monthly_cashflow`
   - `income += amount`
   - `expense += -amount`
   - `transfer += abs(amount)`
+- settlement handling:
+  - confirmed settlements (`auto_confirmed`, `user_confirmed`) only are folded into netting economics before final rollup.
+  - confirmed settlements are skipped if either participant leaves canonical analytics basis after delete/merge.
+  - `review_required`, `rejected` settlement matches are excluded from confirmed-net math and keep raw signed semantics.
+  - read path is calculation-only and does not create/update settlement match rows.
 - `net_cashflow = income - expense`
 - `savings_rate = net_cashflow / income`
 

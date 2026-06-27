@@ -1,0 +1,465 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.4, pytest-8.4.2, pluggy-1.6.0
+rootdir: /Users/gyurin/dev/my_ledge/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1, asyncio-0.26.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 260 items
+
+tests/api/test_analytics_api.py ............................             [ 10%]
+tests/api/test_assets_api.py ..............                              [ 16%]
+tests/api/test_auto_classification_api.py ........                       [ 19%]
+tests/api/test_canonical_views_api.py ....                               [ 20%]
+tests/api/test_data_management_api.py ...                                [ 21%]
+tests/api/test_installments_api.py .....                                 [ 23%]
+tests/api/test_loan_mapping_api.py .......                               [ 26%]
+tests/api/test_profile_api.py ..                                         [ 27%]
+tests/api/test_schema_api.py ...                                         [ 28%]
+tests/api/test_settings_api.py ....                                      [ 30%]
+tests/api/test_settlement_match_api.py ..                                [ 30%]
+tests/api/test_settlement_match_api_errors.py .                          [ 31%]
+tests/api/test_settlement_match_api_stale_manual.py ....                 [ 32%]
+tests/api/test_settlement_match_api_unlink.py ..                         [ 33%]
+tests/api/test_transactions_api.py ...........                           [ 37%]
+tests/api/test_upload_api.py ....                                        [ 39%]
+tests/api/test_upload_apply_api.py ....                                  [ 40%]
+tests/api/test_upload_preview_api.py ...                                 [ 41%]
+tests/migrations/test_unclassified_work_queue_view_sql.py .              [ 42%]
+tests/parsers/test_decrypt.py .                                          [ 42%]
+tests/parsers/test_snapshots_parser.py .                                 [ 43%]
+tests/parsers/test_transactions_parser.py ..                             [ 43%]
+tests/services/test_analytics_service.py ..............................  [ 55%]
+tests/services/test_assets_service.py ...........                        [ 59%]
+tests/services/test_auto_classification_service.py ........              [ 62%]
+tests/services/test_installment_service.py .                             [ 63%]
+tests/services/test_loan_mapping_service.py ..............               [ 68%]
+tests/services/test_settings_service.py ...                              [ 69%]
+tests/services/test_settlement_group_service.py ..                       [ 70%]
+tests/services/test_settlement_group_service_regression.py ...           [ 71%]
+tests/services/test_settlement_group_service_regression_edges.py ....... [ 74%]
+.                                                                        [ 74%]
+tests/services/test_settlement_group_service_stale_manual.py ....        [ 76%]
+tests/services/test_settlement_match_service.py ..                       [ 76%]
+tests/services/test_source_verification.py ....                          [ 78%]
+tests/services/test_transaction_source_lifecycle_service.py ...          [ 79%]
+tests/services/test_transactions_service.py .....                        [ 81%]
+tests/services/test_upload_apply_service.py ....                         [ 83%]
+tests/services/test_upload_apply_service_failures.py ....                [ 84%]
+tests/services/test_upload_preview_service.py ....                       [ 86%]
+tests/services/test_upload_service.py ...........                        [ 90%]
+tests/services/test_upload_service_legacy.py ...........                 [ 94%]
+tests/services/test_upload_service_legacy_estimation.py ..               [ 95%]
+tests/services/test_upload_service_legacy_import.py ......               [ 97%]
+tests/services/test_upload_service_legacy_reconciliation.py ...          [ 98%]
+tests/test_config.py .                                                   [ 99%]
+tests/test_health.py .                                                   [ 99%]
+tests/test_security.py .                                                 [100%]
+
+=============================== warnings summary ===============================
+tests/api/test_analytics_api.py::test_discretionary_velocity_endpoint_reports_month_progress_against_baseline
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy()
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:874: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    _restore_event_loop_policy(asyncio.get_event_loop_policy()),
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:772: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    old_loop_policy = asyncio.get_event_loop_policy()
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:777: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(policy)
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:1183: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:889: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:794: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(old_loop_policy)
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:942: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:966: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(previous_policy)
+
+tests/api/test_analytics_api.py: 28 warnings
+tests/api/test_assets_api.py: 14 warnings
+tests/api/test_auto_classification_api.py: 8 warnings
+tests/api/test_canonical_views_api.py: 4 warnings
+tests/api/test_data_management_api.py: 3 warnings
+tests/api/test_installments_api.py: 5 warnings
+tests/api/test_loan_mapping_api.py: 7 warnings
+tests/api/test_profile_api.py: 2 warnings
+tests/api/test_schema_api.py: 2 warnings
+tests/api/test_settings_api.py: 4 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_transactions_api.py: 11 warnings
+tests/api/test_upload_api.py: 4 warnings
+tests/api/test_upload_apply_api.py: 4 warnings
+tests/api/test_upload_preview_api.py: 3 warnings
+tests/services/test_analytics_service.py: 30 warnings
+tests/services/test_assets_service.py: 11 warnings
+tests/services/test_auto_classification_service.py: 8 warnings
+tests/services/test_installment_service.py: 1 warning
+tests/services/test_loan_mapping_service.py: 14 warnings
+tests/services/test_settings_service.py: 3 warnings
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/services/test_source_verification.py: 4 warnings
+tests/services/test_transaction_source_lifecycle_service.py: 3 warnings
+tests/services/test_transactions_service.py: 5 warnings
+tests/services/test_upload_apply_service.py: 4 warnings
+tests/services/test_upload_apply_service_failures.py: 4 warnings
+tests/services/test_upload_preview_service.py: 4 warnings
+tests/services/test_upload_service.py: 11 warnings
+tests/services/test_upload_service_legacy.py: 11 warnings
+tests/services/test_upload_service_legacy_estimation.py: 2 warnings
+tests/services/test_upload_service_legacy_import.py: 6 warnings
+tests/services/test_upload_service_legacy_reconciliation.py: 3 warnings
+tests/test_health.py: 1 warning
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:978: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/services/test_analytics_service.py::test_update_purchase_gate_candidate_review_rejects_invalid_candidate_key
+  /Users/gyurin/dev/my_ledge/backend/app/services/analytics_service.py:1043: DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    candidate_type, transaction_id, canonical_candidate_key = _parse_candidate_key(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+===================== 260 passed, 2270 warnings in 36.94s ======================
