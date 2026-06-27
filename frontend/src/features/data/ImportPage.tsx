@@ -10,10 +10,12 @@ import { EmptyState } from '../../ds/States'
 import { Provenance } from '../../ds/Provenance'
 import { toast } from '../../ds/toastStore'
 import { PageHeader } from '../../shell/PageHeader'
-import { useResetData, useUploadFile, useUploadLogs } from '../../hooks/useUpload'
+import { useApplyUploadPreview, useResetData, useUploadLogs, useUploadPreview } from '../../hooks/useUpload'
 import { useCanonicalViewsDashboard } from '../../hooks/useCanonicalViews'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
-import type { DataResetScope } from '../../types/upload'
+import type { DataResetScope, UploadPreviewResponse } from '../../types/upload'
+import { ImportPreviewPanel } from './ImportPreviewPanel'
+import { canApplyChange, changeKey, selectionFromChange } from './importPreviewModel'
 
 const RESET_LABEL: Record<DataResetScope, string> = {
   transactions_only: '거래만 초기화',
@@ -22,32 +24,65 @@ const RESET_LABEL: Record<DataResetScope, string> = {
 
 export function ImportPage() {
   const hasWrite = useWriteAccess()
-  const upload = useUploadFile()
+  const previewUpload = useUploadPreview()
+  const applyPreview = useApplyUploadPreview()
   const reset = useResetData()
   const logs = useUploadLogs(10)
   const canonical = useCanonicalViewsDashboard()
 
   const [file, setFile] = useState<File | null>(null)
   const [snapshotDate, setSnapshotDate] = useState('')
+  const [preview, setPreview] = useState<UploadPreviewResponse | null>(null)
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set())
   const [resetScope, setResetScope] = useState<DataResetScope>('transactions_only')
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  async function runUpload() {
+  function selectFile(nextFile: File) {
+    setFile(nextFile)
+    setPreview(null)
+    setSelectedKeys(new Set())
+  }
+
+  function changeSnapshotDate(nextSnapshotDate: string) {
+    setSnapshotDate(nextSnapshotDate)
+    setPreview(null)
+    setSelectedKeys(new Set())
+  }
+
+  async function runPreview() {
     if (!file || !snapshotDate) return
     try {
-      const result = await upload.mutateAsync({ file, snapshotDate })
-      if (result.status === 'failed') {
-        toast.error('업로드 실패', { description: result.error_message ?? undefined })
-      } else {
-        const s = result.snapshots
-        toast.success(`업로드 ${result.status === 'partial' ? '부분 ' : ''}완료`, {
-          description: `거래 신규 ${result.transactions.new} · 스킵 ${result.transactions.skipped} / 스냅샷 자산 ${s.asset_snapshots}·보험 ${s.insurance_contracts}·투자 ${s.investments}·대출 ${s.loans}`,
-        })
-        setFile(null)
-        setSnapshotDate('')
-      }
+      const result = await previewUpload.mutateAsync({ file, snapshotDate })
+      setPreview(result)
+      setSelectedKeys(new Set(result.safe_changes.filter(canApplyChange).map(changeKey)))
+      toast.success('미리보기 생성 완료', {
+        description: `안전 변경 ${result.summary.safe_change_count}건 · 검토 필요 ${result.summary.review_required_count}건`,
+      })
     } catch (error) {
-      toast.error('업로드 실패', { description: String(error) })
+      toast.error('미리보기 실패', { description: String(error) })
+    }
+  }
+
+  async function runApplyPreview() {
+    if (!file || !snapshotDate || !preview) return
+    const selections = [...preview.safe_changes, ...preview.review_required_changes]
+      .filter((change) => selectedKeys.has(changeKey(change)))
+      .map(selectionFromChange)
+      .filter((selection) => selection !== null)
+
+    if (selections.length === 0) return
+
+    try {
+      const result = await applyPreview.mutateAsync({ file, snapshotDate, selections })
+      toast.success('선택 변경 적용 완료', {
+        description: `선택 ${result.summary.selected_change_count}건 · 적용 ${result.summary.applied_change_count}건`,
+      })
+      setFile(null)
+      setSnapshotDate('')
+      setPreview(null)
+      setSelectedKeys(new Set())
+    } catch (error) {
+      toast.error('적용 실패', { description: String(error) })
     }
   }
 
@@ -75,28 +110,62 @@ export function ImportPage() {
             onDrop={(event) => {
               event.preventDefault()
               const dropped = event.dataTransfer.files[0]
-              if (dropped) setFile(dropped)
+              if (dropped) selectFile(dropped)
             }}
           >
             <Upload className="h-5 w-5 text-text-muted" />
             <span className="text-label text-text-secondary">{file ? file.name : '파일을 드래그하거나 클릭해서 선택'}</span>
             <span className="text-micro text-text-faint">.xlsx</span>
-            <input type="file" accept=".xlsx" className="hidden" onChange={(event) => event.target.files?.[0] && setFile(event.target.files[0])} />
+            <input
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(event) => {
+                const selectedFile = event.target.files?.[0]
+                if (selectedFile) selectFile(selectedFile)
+              }}
+            />
           </label>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <Field label="스냅샷 기준일 (필수)">
-              <TextInput type="date" value={snapshotDate} onChange={(event) => setSnapshotDate(event.target.value)} />
+              <TextInput
+                type="date"
+                value={snapshotDate}
+                onInput={(event) => changeSnapshotDate(event.currentTarget.value)}
+                onChange={(event) => changeSnapshotDate(event.target.value)}
+              />
             </Field>
             <Button
               variant="primary"
-              disabled={!hasWrite || !file || !snapshotDate || upload.isPending}
-              onClick={() => void runUpload()}
+              disabled={!hasWrite || !file || !snapshotDate || previewUpload.isPending}
+              onClick={() => void runPreview()}
             >
-              {upload.isPending ? '업로드 중…' : '업로드 실행'}
+              {previewUpload.isPending ? '미리보기 생성 중...' : '미리보기 생성'}
             </Button>
             {!snapshotDate && file ? <span className="pb-2 text-micro text-warn">스냅샷 기준일을 입력하세요</span> : null}
           </div>
         </Card>
+
+        {preview ? (
+          <ImportPreviewPanel
+            preview={preview}
+            selectedKeys={selectedKeys}
+            pending={applyPreview.isPending}
+            hasWrite={hasWrite}
+            onToggle={(key) => {
+              setSelectedKeys((current) => {
+                const next = new Set(current)
+                if (next.has(key)) {
+                  next.delete(key)
+                } else {
+                  next.add(key)
+                }
+                return next
+              })
+            }}
+            onApply={() => void runApplyPreview()}
+          />
+        ) : null}
 
         <Card
           title="최근 업로드 이력"
@@ -112,31 +181,33 @@ export function ImportPage() {
         >
           {logs.isLoading ? <div className="p-4"><ListSkeleton rows={4} /></div> :
            logs.data && logs.data.items.length > 0 ? (
-            <table className="w-full border-collapse text-label">
-              <thead className="bg-bg-inset">
-                <tr>
-                  {['파일명', '상태', '신규', '스킵', '기준일', '시각'].map((header) => (
-                    <th key={header} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {logs.data.items.map((log) => (
-                  <tr key={log.id}>
-                    <td className="max-w-[180px] truncate px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
-                    <td className="px-4 py-2">
-                      <Badge variant={log.status === 'failed' ? 'expense' : log.status === 'partial' ? 'warn' : 'accent'}>
-                        {log.status ?? '—'}
-                      </Badge>
-                    </td>
-                    <td className="tnum px-4 py-2 text-income">+{log.tx_new ?? 0}</td>
-                    <td className="tnum px-4 py-2 text-text-muted">{log.tx_skipped ?? 0}</td>
-                    <td className="tnum px-4 py-2 text-text-muted">{log.snapshot_date ?? '—'}</td>
-                    <td className="tnum px-4 py-2 text-right text-text-faint">{log.uploaded_at.slice(0, 16).replace('T', ' ')}</td>
+            <div className="overflow-x-auto">
+              <table className="min-w-[520px] w-full border-collapse text-label">
+                <thead className="bg-bg-inset">
+                  <tr>
+                    {['파일명', '상태', '신규', '스킵', '기준일', '시각'].map((header) => (
+                      <th key={header} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{header}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {logs.data.items.map((log) => (
+                    <tr key={log.id}>
+                      <td className="max-w-[180px] truncate px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        <Badge variant={log.status === 'failed' ? 'expense' : log.status === 'partial' ? 'warn' : 'accent'}>
+                          {log.status ?? '—'}
+                        </Badge>
+                      </td>
+                      <td className="tnum px-4 py-2 text-income">+{log.tx_new ?? 0}</td>
+                      <td className="tnum px-4 py-2 text-text-muted">{log.tx_skipped ?? 0}</td>
+                      <td className="tnum px-4 py-2 text-text-muted">{log.snapshot_date ?? '—'}</td>
+                      <td className="tnum px-4 py-2 text-right text-text-faint">{log.uploaded_at.slice(0, 16).replace('T', ' ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : <EmptyState className="py-8" message="업로드 이력이 없습니다" />}
         </Card>
 

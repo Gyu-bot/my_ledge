@@ -157,7 +157,35 @@ Response groups:
 | `is_deleted`, `merged_into_id` | canonical view에서는 기본 제외된 row의 상태 필드다. 이 view 결과에서는 보통 `false`/`null`이다. |
 | `is_edited` | 카테고리 사용자 수정, `merchant != description`, memo 존재, 비용/반복 분류 등 사용자가 손댄 의미가 있으면 true다. |
 | `source` | `import` 또는 `manual`. |
+| `source_lifecycle_status` | import row의 reconciliation 상태 (`active`, `missing_from_latest_export`, `source_changed`, `superseded`, `duplicate_candidate`, `ambiguous`). `duplicate_candidate`/`ambiguous`는 preview/review-required reserve 상태로 해석해야 한다. |
+| `source_row_hash` | 업로드 source signature hash. 동일 row의 재업로드 관측 연결에 사용. |
+| `first_seen_import_id`, `last_seen_import_id` | 최초/최종 확인된 업로드 로그 id. |
+| `source_first_seen_at`, `source_last_seen_at` | 최초/최종 확인 시각. |
+| `superseded_by_transaction_id` | 대체/버전 이동 시 신규 transaction id를 가리킬 수 있는 역추적 필드. |
 | `created_at`, `updated_at` | DB row 생성/수정 시각. |
+
+### 업로드 reconciliation 해석
+
+- raw 거래 행과 lifecycle 상태를 분리해서 본다.
+  - `description`, `amount`, `payment_method`는 source signature 계산의 입력값이다.
+  - `source_lifecycle_status`는 최신 윈도우에서의 생명주기 상태다.
+- 상태 의미:
+  - `active`: 최신 업로드 윈도우에서 유효한 import row.
+  - `missing_from_latest_export`: 최신 윈도우에서 사라졌지만 hard delete되지 않고 보존된 상태.
+  - `source_changed`: fallback 매칭으로 원천 필드 drift가 감지된 경우.
+  - `superseded`: 최신 row로 대체되거나 버전 체인이 이어진 row.
+  - `duplicate_candidate`: hash 중복/동일 후보 중복 가능성으로 review가 필요한 reserve 상태.
+  - `ambiguous`: 후보 매칭이 모호하여 review-required인 reserve 상태.
+- preview/apply 해석:
+  - `POST /api/v1/upload/preview`는 DB write 없이 `safe_changes`와 `review_required_changes`를 반환한다.
+  - `preserved_user_fields`는 재업로드 시 `category_*_user`, `memo`, merchant override, `is_deleted`, `merged_into_id`가 보존된다는 신호다.
+  - review-required 항목(`possible_replacement`, `possible_duplicate`, `ambiguous`)은 승인된 적용 selection 없이 변경되지 않는다.
+  - `POST /api/v1/upload/apply`는 `confirmation=true` 기반으로 선택된 safe change를 반영하고, 명시 승인된 `possible_replacement`만 supersession으로 적용할 수 있다. `possible_duplicate`/`ambiguous`는 적용하지 않는다.
+- 감사/추적:
+  - 적용 결과는 업로드 로그의 `reconciliation_mode`/`reconciliation_audit`에서 판단 근거를 추적할 수 있다.
+  - 에이전트는 raw table/직접 DB DML이 아닌, `schema`, API, 업로드 로그를 이용해 해석해야 한다.
+- raw signed 보존:
+  - raw signed `amount`/`type` 자체를 뒤집는 rewrite가 기본 동작이 아니며, `Transaction`의 사용자 관리 필드는 먼저 안전성 룰에서 보존된다.
 
 주의: 삭제/병합 row까지 봐야 하는 감사성 작업은 raw table이나 transaction API include flag를 사용한다.
 

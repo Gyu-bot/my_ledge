@@ -127,6 +127,61 @@ async def test_build_transactions_effective_select_exposes_merchant_and_marks_me
     assert row["is_edited"] is True
 
 
+async def test_list_transactions_omits_sensitive_source_lineage_fields(
+    db_session: AsyncSession,
+) -> None:
+    transaction = _transaction(
+        tx_date=date(2026, 3, 12),
+        tx_time=time(7, 30),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="기타",
+        description="편의점",
+        amount=-3200,
+        payment_method="카드 A",
+    )
+    transaction.source_lifecycle_status = "missing_from_latest_export"
+    transaction.source_row_hash = "hash-123"
+    transaction.first_seen_import_id = 5
+    transaction.last_seen_import_id = 6
+    transaction.source_first_seen_at = datetime(2026, 3, 12, 7, 30)
+    transaction.source_last_seen_at = datetime(2026, 3, 13, 7, 30)
+    transaction.superseded_by_transaction_id = 99
+    db_session.add(transaction)
+    await db_session.commit()
+
+    response = await list_transactions(
+        db_session,
+        start_date=None,
+        end_date=None,
+        tx_type="all",
+        source="all",
+        category_major=None,
+        payment_method=None,
+        is_edited="all",
+        include_deleted=False,
+        include_merged=False,
+        search=None,
+        cost_kind="all",
+        fixed_cost_necessity="all",
+        spend_necessity="all",
+        recurring_payment_kind="all",
+        page=1,
+        per_page=40,
+    )
+
+    assert response.total == 1
+    assert response.items[0].source == "import"
+    payload = response.items[0].model_dump()
+    assert "source_lifecycle_status" not in payload
+    assert "source_row_hash" not in payload
+    assert "first_seen_import_id" not in payload
+    assert "last_seen_import_id" not in payload
+    assert "source_first_seen_at" not in payload
+    assert "source_last_seen_at" not in payload
+    assert "superseded_by_transaction_id" not in payload
+
+
 async def test_build_transactions_effective_select_exposes_loan_mapping_fields(
     db_session: AsyncSession,
 ) -> None:

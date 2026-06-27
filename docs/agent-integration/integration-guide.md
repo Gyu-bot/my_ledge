@@ -91,6 +91,8 @@ readonly DB role 요구사항:
 
 - `POST /api/v1/upload`
 - `POST /api/v1/data/reset`
+- `POST /api/v1/upload/preview`
+- `POST /api/v1/upload/apply`
 - `PATCH /api/v1/settings/analytics`
 - `POST /api/v1/transactions`
 - `PATCH /api/v1/transactions/{id}`
@@ -214,3 +216,14 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 - API `500`: response body와 `GET /api/v1/upload/logs`를 함께 확인
 - DB timeout: 기간, group, 대상 컬럼을 좁혀 재시도
 - schema/문서 충돌: backend 코드와 [backend-api-ssot.md](../backend-api-ssot.md)를 우선
+
+## 업로드 reconciliation 권장 운영
+
+- 재업로드로 상태를 변경해야 할 때는 `POST /api/v1/upload/preview`로 먼저 실행해 safe/review-required를 분리한다.
+- 에이전트/툴 운영 규칙:
+  - 먼저 `safe_changes`의 `preserved_user_fields`와 `preservation_summary`로 사용자 값 보존이 선행됨을 확인한다.
+  - `review_required_changes`는 사용자 승인 없이 apply하지 않는다. 승인 후 apply 가능한 review-required 타입은 `possible_replacement`뿐이며, `possible_duplicate`/`ambiguous`는 apply에서 거부되므로 별도 수동 해소 대상으로 남긴다.
+  - 승인할 때는 `POST /api/v1/upload/apply`에 동일 파일, `snapshot_date`, `apply_request`(JSON form) 를 전달하고 `confirmation=true`를 설정한다.
+  - apply 응답의 `applied_changes`와 `summary`를 로그로 저장해 감사 추적한다.
+- 직접 DB write 금지 규칙:
+  - raw table/업로드 로그 직접 DML은 금지하고, 변경은 API 또는 허용된 작업만 사용한다.

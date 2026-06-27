@@ -124,6 +124,15 @@ def build_transactions_effective_select(
                 "is_edited"
             ),
             Transaction.source.label("source"),
+            Transaction.source_lifecycle_status.label("source_lifecycle_status"),
+            Transaction.source_row_hash.label("source_row_hash"),
+            Transaction.first_seen_import_id.label("first_seen_import_id"),
+            Transaction.last_seen_import_id.label("last_seen_import_id"),
+            Transaction.source_first_seen_at.label("source_first_seen_at"),
+            Transaction.source_last_seen_at.label("source_last_seen_at"),
+            Transaction.superseded_by_transaction_id.label(
+                "superseded_by_transaction_id"
+            ),
             Transaction.created_at.label("created_at"),
             Transaction.updated_at.label("updated_at"),
         )

@@ -80,6 +80,8 @@
 - `GET /api/v1/auto-classification/recurring-category-rules/dry-run`
 - `POST /api/v1/auto-classification/apply/recurring-dry-run`
 - `POST /api/v1/upload`
+- `POST /api/v1/upload/preview`
+- `POST /api/v1/upload/apply`
 - `POST /api/v1/data/reset`
 - `POST /api/v1/transactions`
 - `PATCH /api/v1/transactions/bulk-update`
@@ -205,6 +207,63 @@
   - final `status` can be `success`, `partial`, or `failed`
   - always writes one `upload_logs` row
 
+#### `POST /api/v1/upload/preview`
+
+- Purpose: build reconciliation plan without mutating transactions
+- Auth: API key required
+- Content type: `multipart/form-data`
+- Request fields:
+  - `file: UploadFile`
+  - `snapshot_date: date`
+- Response model: `UploadPreviewResponse`
+- Response shape:
+  - `filename`
+  - `snapshot_date`
+  - `summary`
+    - `parsed_transaction_count`
+    - `safe_change_count`
+    - `review_required_count`
+    - `change_type_counts`
+  - `safe_changes[]: UploadPreviewChange`
+  - `review_required_changes[]: UploadPreviewChange`
+- Runtime behavior:
+  - parses and normalizes workbook with `open_excel_bytes()` + `openpyxl(..., data_only=True)`
+  - does not persist any transaction mutations
+  - computes matching across latest import window:
+    - exact hash match => `unchanged`
+    - fallback match with drift => `source_fields_changed` / `time_shifted`
+    - unmatched existing import rows => `missing_from_latest_export` (safe)
+    - higher-risk matches => `possible_replacement`, `possible_duplicate`, `ambiguous`
+  - each change includes field diffs, source rows, reason, `review_required`, `auto_apply_safe`, `preserved_user_fields`, and `preservation_summary`
+
+#### `POST /api/v1/upload/apply`
+
+- Purpose: explicitly apply selected preview changes that the backend allows after
+  revalidating the latest preview state. Safe changes are accepted directly;
+  `possible_replacement` is accepted only as an explicit reviewed selection;
+  `possible_duplicate` and `ambiguous` remain rejected.
+- Auth: API key required
+- Content type: `multipart/form-data`
+- Request fields:
+  - `file: UploadFile`
+  - `snapshot_date: date`
+  - `apply_request: UploadApplyRequest` (JSON form field)
+- Response model: `UploadApplyResponse`
+- Response shape:
+  - `status`
+  - `upload_id`
+  - `filename`
+  - `snapshot_date`
+  - `summary`
+  - `applied_changes[]: UploadPreviewChange`
+- Runtime behavior:
+  - 업로드된 파일(`file`)을 서버에서 다시 파싱/복호화하고, 제출된 행 기준으로 최신 preview plan을 재생성·재검증한 뒤, `apply_request.selections`에 일치하는 허용 항목만 적용한다. 허용 항목은 `auto_apply_safe=true`인 safe change와, 명시 승인된 `possible_replacement` supersession이다.
+  - `UploadApplySelection`는 `change_type + source_row_hash + existing_transaction_id` 조합으로 고유해야 하며, 중복 선택은 422로 거절한다.
+  - `possible_replacement`를 제외한 `review_required` 또는 `auto_apply_safe=false` 항목은 적용에서 거부한다. `possible_replacement`는 최신 preview state와 일치하는 명시 selection일 때만 supersession으로 적용할 수 있다.
+  - 결과에는 선택된 change 수, 적용된 change 수, 타입별 카운트를 포함한다.
+  - `missing_from_latest_export`는 삭제 대신 lifecycle 상태 변경으로 남긴다.
+  - 적용 트랜잭션 판단 근거는 업로드 로그의 `reconciliation_audit`(문자열 JSON)로 남을 수 있다.
+
 #### `POST /api/v1/data/reset`
 
 - Purpose: delete current stored data without deleting upload history
@@ -281,10 +340,10 @@
       - `fixed_cost_necessity`
       - `cost_classification_source`
       - `recurring_payment_kind`
-      - `is_deleted`
-      - `merged_into_id`
-      - `is_edited`
-      - `source`
+  - `is_deleted`
+  - `merged_into_id`
+  - `is_edited`
+  - `source`
 - Implementation notes:
   - query is built from `build_transactions_effective_select()`
   - default excludes deleted and merged rows
@@ -1454,17 +1513,26 @@ Source: `app.services.transactions_service._build_transaction_query`
 
 ### Transaction Import Reconciliation
 
-Source: `app.services.upload_service`
+Source: `app.services.upload_service`, `app.services.transaction_source_lifecycle_service`, `app.services.upload_preview_service`, `app.services.upload_apply_service`
 
-- import only compares against `source="import"` rows inside workbook date-time window
-- exact signature:
-  - `date`, `time`, `type`, `category_major`, `category_minor`, `description`, `amount`, `currency`, `payment_method`
-- fallback signature:
-  - `date`, `type`, `description`, `amount`, `currency`, `payment_method`
-- fallback matching uses time-of-day tolerance
-- unmatched existing import rows in window are deleted
-- unmatched parsed rows are inserted
-- result is effectively **window-scoped reconcile**, not append-only import
+- Import lifecycle의 영속 상태는 `source="import"` 거래에서 `active`, `missing_from_latest_export`, `source_changed`, `superseded`를 포함한다.
+- `duplicate_candidate`, `ambiguous`는 `POST /api/v1/upload/preview`에서 도출되는 review-required 후보 상태이며, `apply` 단계에서는 반영하지 않는다. `possible_replacement`만 사용자가 명시 승인한 selection일 때 supersession으로 적용할 수 있다.
+- Reconciliation은 2단계:
+  - `POST /api/v1/upload/preview`: no-write plan generation
+  - `POST /api/v1/upload/apply`: explicit confirmation으로 safe selection과 명시 승인된 `possible_replacement` supersession만 반영
+- 각 transaction은 source lineage로 이어지는 식별자가 존재한다:
+  - `source_row_hash`
+  - `first_seen_import_id`, `last_seen_import_id`
+  - `source_first_seen_at`, `source_last_seen_at`
+  - `superseded_by_transaction_id`
+- 비인증 `GET /api/v1/transactions`는 위 lineage 필드를 반환하지 않고 `source`만 공개한다.
+- Change type model:
+  - safe: `new`, `unchanged`, `source_fields_changed`, `time_shifted`, `missing_from_latest_export`
+  - review-required: `possible_replacement`, `possible_duplicate`, `ambiguous`
+- User-managed field 보존:
+  - `category_*_user`, `memo`, merchant override(`merchant != description`), `is_deleted`, `merged_into_id`는 재적용 시 자동으로 보존됨.
+- 호환성:
+  - 기존 `POST /api/v1/upload`는 즉시 적용 방식 그대로 유지되며, 새 preview/apply 경로는 같은 원천 매칭을 더 안전하게 제어하기 위한 업그레이드 경로다.
 
 ### Snapshot Replace
 

@@ -6,7 +6,7 @@
 
 **Why this approach:** `T030`의 source lifecycle이 먼저 있어야 `T031`의 missing/replacement/source-changed 판단이 안정적이다. 그래서 backend lifecycle과 preview/apply contract를 같은 실행 계획에서 순서대로 묶는다.
 
-**What it will NOT do:** frontend 전체 UX를 한 번에 완성하지 않는다. raw 거래를 hard delete하지 않는다. 사용자 카테고리, memo, 대출/할부 연결, spending review 상태를 재업로드로 덮어쓰지 않는다.
+**What it will NOT do:** `/data/import` preview/apply surface 밖의 frontend 전체 UX를 한 번에 완성하지 않는다. raw 거래를 hard delete하지 않는다. 사용자 카테고리, memo, 대출/할부 연결, spending review 상태를 재업로드로 덮어쓰지 않는다.
 
 **Effort:** Large
 **Risk:** High - 업로드/거래 보존 로직은 데이터 신뢰와 직결된다.
@@ -27,6 +27,7 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
 - Provide no-write upload preview and explicit apply flow.
 - Keep `POST /api/v1/upload` compatibility documented.
 - Add backend tests and contract docs.
+- Add `/data/import` preview/apply surface and browser confirmation for the included frontend flow.
 
 ### Must NOT have (guardrails, anti-slop, scope boundaries)
 - Do not delete or reset existing transactions as part of reconciliation.
@@ -41,6 +42,7 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
 - Required commands:
   - `cd backend && UV_CACHE_DIR=.uv-cache DATABASE_URL=sqlite+aiosqlite:///./test.db uv run pytest tests/services/test_upload_service.py tests/services/test_transactions_service.py tests/api/test_upload_api.py tests/api/test_transactions_api.py`
   - `cd backend && uv run ruff check .`
+  - `cd frontend && npm run typecheck && npm run lint && npm test && npm run build`
   - `git diff --check`
 
 ## Execution strategy
@@ -60,7 +62,7 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] 1. Add transaction source lifecycle storage and source-hash matching.
+- [x] 1. Add transaction source lifecycle storage and source-hash matching.
   What to do / Must NOT do: Add Alembic migration plus SQLAlchemy/Pydantic support for transaction source lineage. Prefer a separate lineage table if the `transactions` table would become overloaded. Do not remove existing `source='import'|'manual'` compatibility.
   Parallelization: Wave 1 | Blocked by: none | Blocks: 2, 3
   References (executor has NO interview context - be exhaustive): `Implentation-plan.md:690`, `backend/app/models/transaction.py`, `backend/app/models/upload_log.py`, `backend/app/services/upload_service.py`, `backend/app/schemas/transaction.py`, `backend/tests/services/test_upload_service.py`, `backend/tests/services/test_transactions_service.py`.
@@ -68,7 +70,7 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
   QA scenarios (name the exact tool + invocation): happy: `cd backend && uv run pytest tests/services/test_upload_service.py -k source_lifecycle`, failure: fixture with changed BankSalad source field and user memo/category override preserved, Evidence `.omo/evidence/task-1-transaction-source-upload-reconciliation.md`.
   Commit: Y | `[backend] 거래 source lifecycle 추가 (codex)`
 
-- [ ] 2. Add no-write upload preview service and API.
+- [x] 2. Add no-write upload preview service and API.
   What to do / Must NOT do: Split parse/compare from DB mutation. Preview must classify changes as `new`, `unchanged`, `source_fields_changed`, `time_shifted`, `possible_replacement`, `missing_from_latest_export`, `possible_duplicate`, `ambiguous` or equivalent. Do not mutate DB during preview.
   Parallelization: Wave 2 | Blocked by: 1 | Blocks: 3
   References (executor has NO interview context - be exhaustive): `Implentation-plan.md:709`, `backend/app/api/v1/endpoints/upload.py`, `backend/app/services/upload_service.py`, `backend/app/schemas/upload.py`, `backend/tests/api/test_upload_api.py`.
@@ -76,7 +78,7 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
   QA scenarios (name the exact tool + invocation): happy: preview returns safe and review-required buckets, failure: ambiguous replacement is never auto-applied, Evidence `.omo/evidence/task-2-transaction-source-upload-reconciliation.md`.
   Commit: Y | `[backend] 업로드 preview contract 추가 (codex)`
 
-- [ ] 3. Add explicit apply flow with auditable reconciliation result.
+- [x] 3. Add explicit apply flow with auditable reconciliation result.
   What to do / Must NOT do: Apply only selected preview changes after explicit confirmation. Record judgment basis in upload log or reconciliation log. Keep legacy upload behavior either as documented compatibility path or internally routed through safe apply defaults.
   Parallelization: Wave 2 | Blocked by: 1, 2 | Blocks: 4
   References (executor has NO interview context - be exhaustive): `backend/app/api/v1/endpoints/upload.py`, `backend/app/services/upload_service.py`, `backend/app/models/upload_log.py`, `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`.
@@ -84,7 +86,7 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
   QA scenarios (name the exact tool + invocation): happy: apply selected safe changes, failure: apply ambiguous change without explicit selection returns validation error, Evidence `.omo/evidence/task-3-transaction-source-upload-reconciliation.md`.
   Commit: Y | `[backend] 업로드 reconciliation apply 추가 (codex)`
 
-- [ ] 4. Update contract docs and run final backend verification.
+- [x] 4. Update contract docs and run final backend verification.
   What to do / Must NOT do: Document lifecycle status, preview/apply flow, legacy upload relation, and agent interpretation. Do not revive `docs/STATUS.md`.
   Parallelization: Wave 3 | Blocked by: 2, 3 | Blocks: final
   References (executor has NO interview context - be exhaustive): `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`, `docs/agent-integration/integration-guide.md`, `Implentation-plan.md:690`.
@@ -92,12 +94,20 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
   QA scenarios (name the exact tool + invocation): happy: `rg -n "missing_from_latest_export|reconciliation preview|source_changed" docs backend/app`, failure: `rg -n "hard delete" docs/backend-api-ssot.md` does not imply lifecycle deletion, Evidence `.omo/evidence/task-4-transaction-source-upload-reconciliation.md`.
   Commit: Y | `[docs] 거래 source lifecycle 문서화 (codex)`
 
+- [x] 5. Add `/data/import` preview/apply frontend surface and browser QA.
+  What to do / Must NOT do: Wire the upload preview/apply API contract into the existing import page. Show safe and review-required buckets, allow only applyable change types to be selected, keep duplicate/ambiguous changes read-only, and preserve recent upload history/reset surfaces. Do not implement canonical/cashflow impact scope in this slice because the user explicitly excluded it on 2026-06-27.
+  Parallelization: Wave 3 | Blocked by: 2, 3 | Blocks: final
+  References (executor has NO interview context - be exhaustive): `frontend/src/features/data/ImportPage.tsx`, `frontend/src/api/upload.ts`, `frontend/src/hooks/useUpload.ts`, `frontend/src/types/upload.ts`, `backend/app/schemas/upload.py`, `docs/frontend-design-tokens.md`.
+  Acceptance criteria (agent-executable): `/data/import` can generate a preview, render selected safe changes plus review-required/read-only changes, and apply the selected change set through the frontend API hook.
+  QA scenarios (name the exact tool + invocation): tests: `cd frontend && npm run typecheck && npm run lint && npm test && npm run build`; browser: Codex in-app browser at `http://127.0.0.1:5174/data/import` with fixture CDP responses for `/api/v1/upload/preview` and `/api/v1/upload/apply`, including mobile viewport overflow check. Evidence `.omo/evidence/task-5-transaction-source-upload-reconciliation.md`.
+  Commit: Y | `[frontend] 업로드 preview apply 화면 추가 (codex)`
+
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit: verify every `T030` and `T031` acceptance item is either complete or explicitly deferred.
-- [ ] F2. Code quality review: inspect migrations, services, and API schemas for destructive update paths.
-- [ ] F3. Real manual QA: run preview/apply against `tmp/2025-05-21~2026-05-21.xlsx` or a derived fixture and record row-count/user-field preservation evidence.
-- [ ] F4. Scope fidelity: confirm no `T032` settlement netting or unrelated frontend work slipped in.
+- [x] F1. Plan compliance audit: verify every `T030` and `T031` acceptance item is either complete or explicitly deferred.
+- [x] F2. Code quality review: inspect migrations, services, and API schemas for destructive update paths.
+- [x] F3. Real manual QA: run preview/apply against `tmp/2025-05-21~2026-05-21.xlsx` or a derived fixture and record row-count/user-field preservation evidence.
+- [x] F4. Scope fidelity: confirm no `T032` settlement netting or unrelated frontend work slipped in.
 
 ## Commit strategy
 - Prefer two or three focused commits if the diff is large: lifecycle storage, preview/apply API, docs/tests.
@@ -108,4 +118,5 @@ Your next move: approve this plan for `$start-work`, or ask for a narrower split
 - Re-import can identify missing, changed, duplicate, and ambiguous source rows without deleting user work.
 - Upload preview is no-write.
 - Apply is explicit and auditable.
+- `/data/import` exposes the preview/apply flow and was browser-checked without a backend data mutation.
 - Backend tests and contract docs prove the behavior.
