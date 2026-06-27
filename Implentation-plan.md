@@ -58,7 +58,7 @@
 
 1. `T012`/`T012A`와 GitHub Issue 기반 agent contract 작업 `T023`-`T029`는 `codex/ready-plan-tasks`에서 구현되었고, GitHub Issues `#7`-`#14`는 완료로 닫혔다.
 2. frontend remake PR `#15`가 `main`에 반영되었다. frontend 의존 settings/smoke 작업은 이제 remake line 보류가 아니라 새 `/data/*`와 `/data/settings` 화면을 기준으로 진행할 수 있다.
-3. 다음 P0 거래 신뢰도 순서는 `T030`-`T032`다: source lifecycle, upload preview/reconciliation, shared settlement groups 순서로 본다.
+3. P0 거래 신뢰도 기반 작업 `T030`-`T032`는 완료되었다: source lifecycle, upload preview/reconciliation, shared settlement groups 순서로 구현했다.
 4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 공식 Toss Securities API 문서가 있어야 진행할 수 있다.
 5. `T033`-`T039`와 `T041`은 거래 신뢰도 작업 이후의 automation, forecasting, decision-support, 제한적 tagging 백로그로 유지한다. 각 항목은 선행 조건이 충족된 뒤 집중된 PR로 시작한다.
 
@@ -74,7 +74,7 @@
 | 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 바로 시작 가능, `T019` 막힘 |
 | 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
 | issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
-| 다음 P0 거래 신뢰도 | `T030`-`T032` | `T030` 완료, `T031` 완료, `T032` 계획됨 |
+| 다음 P0 거래 신뢰도 | `T030`-`T032` | 완료 |
 | 거래 신뢰 이후 자동화와 의사결정 지원 | `T033`-`T039`, `T041` | 계획됨 |
 
 ---
@@ -757,19 +757,19 @@
 
 #### 작업 T032. settlement group canonical netting
 - 우선순위: P0
-- 상태: 계획됨
+- 상태: 완료
 - 선행 조건: T030, T031
 - 완료 기준:
-  - [ ] 원결제, 완전 취소, 부분환불, 복수 부분환불을 하나의 settlement group으로 묶는 model 또는 canonical layer가 도입된다.
-  - [ ] settlement status는 최소 `auto_confirmed`, `review_required`, `user_confirmed`, `rejected`를 표현한다.
-  - [ ] 자동 매칭은 동일/정규화 거래처, 동일 결제수단, 동일 통화, 반대 부호, 절대금액 일치 또는 원결제 이하, 근접 날짜, 원본 설명 유사도, 기존 연결 여부를 사용한다.
-  - [ ] 후보 원결제가 여러 개인 경우 자동 확정하지 않고 review queue로 보낸다.
-  - [ ] 사용자가 settlement 연결을 수정하거나 해제할 수 있다.
-  - [ ] 완전 취소는 실제 지출 합계에서 제외되고, 부분환불은 순액만 반영된다.
-  - [ ] settlement 순액은 월간 지출, 카테고리 지출, 거래처 지출, 이상 지출, 반복결제 탐지, 구매 후 검토, 예산 사용액, 현금흐름 예측에서 공통으로 사용할 수 있다.
-  - [ ] 기존 `T012` spending review refund netting과 중복 계산하지 않고 shared settlement service/view로 수렴한다.
-  - [ ] backend regression test가 완전 취소, 부분환불, 복수 부분환불, 다중 원결제 후보, user rejected fixture를 포함한다.
-  - [ ] API/agent docs가 raw signed transaction과 settlement-netted analysis surface의 차이를 설명한다.
+  - [x] 원결제, 완전 취소, 부분환불, 복수 부분환불을 하나의 settlement group으로 묶는 model 또는 canonical layer가 도입된다.
+  - [x] settlement status는 최소 `auto_confirmed`, `review_required`, `user_confirmed`, `rejected`를 표현한다.
+  - [x] 자동 매칭은 동일/정규화 거래처, 동일 결제수단, 동일 통화, 반대 부호, 절대금액 일치 또는 원결제 이하, 근접 날짜, 원본 설명 유사도, 기존 연결 여부를 사용한다.
+  - [x] 후보 원결제가 여러 개인 경우 자동 확정하지 않고 review queue로 보낸다.
+  - [x] 사용자가 settlement 연결을 수정하거나 해제할 수 있다.
+  - [x] 완전 취소는 실제 지출 합계에서 제외되고, 부분환불은 순액만 반영된다.
+  - [x] settlement 순액은 공통 service/view로 제공되며, 현재 월간 지출, 카테고리 지출, 거래처 지출, 이상 지출, 구매 후 검토 분석에서 재사용한다. 반복결제 탐지, 예산 사용액, 현금흐름 예측 소비면은 후속 구현 시 같은 shared layer를 사용한다.
+  - [x] 기존 `T012` spending review refund netting과 중복 계산하지 않고 shared settlement service/view로 수렴한다.
+  - [x] backend regression test가 완전 취소, 부분환불, 복수 부분환불, 다중 원결제 후보, user rejected fixture를 포함한다.
+  - [x] API/agent docs가 raw signed transaction과 settlement-netted analysis surface의 차이를 설명한다.
 - 참고:
   - `T012`에서 구매 후보용 refund netting은 이미 구현됐지만, 이 task는 분석 전반에 재사용되는 공통 경제적 거래 layer로 승격하는 작업이다.
 

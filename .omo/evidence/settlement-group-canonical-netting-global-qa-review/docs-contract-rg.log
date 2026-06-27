@@ -1,0 +1,34 @@
+docs/backend-api-ssot.md:127:| `GET` | `/api/v1/transactions/summary` | live | `group_by=month|week|day`; response includes `basis` metadata for raw signed aggregation |
+docs/backend-api-ssot.md:150:| `PUT` | `/api/v1/transactions/{id}/settlement-match` | live | API key required, upsert manual `user_confirmed` or `rejected` settlement override for a refund/cancellation row |
+docs/backend-api-ssot.md:151:| `DELETE` | `/api/v1/transactions/{id}/settlement-match` | live | API key required, remove a user-managed settlement override via `original_transaction_id` |
+docs/backend-api-ssot.md:289:- `/api/v1/analytics/*` 집계는 confirmed match가 있을 때 해당 구매-환불 묶음을 netted 값으로 계산한다.
+docs/backend-api-ssot.md:290:- `/api/v1/analytics/*`는 read-only다. 현재 조회만 수행하며 `settlement_matches` 생성/갱신/reconcile write 동작을 수행하지 않는다.
+docs/backend-api-ssot.md:291:- `review_required`/`rejected`의 환불은 raw signed semantics를 유지해 월별 raw expense에 반영되므로, confirmed 환불처럼 즉시 소거되지 않는다.
+docs/backend-api-ssot.md:292:- 구매 게이트/리뷰 큐는 동일한 settlement metadata를 공유해 confirmed partial refund를 반복 계산하지 않는다.
+docs/backend-api-ssot.md:405:- raw signed 보존:
+docs/backend-api-ssot.md:406:  - 거래 원천 금액/서명(`amount`의 부호)은 raw import 기반 값으로 해석되며, preview/apply은 raw signed 값을 재구성하지 않고 거래별 source-관리 변경사항에 대해 결정적/재현 가능한 방식으로만 갱신한다.
+docs/agents/canonical-read-surface-reference.md:21:| settlement canonical | analytics 집계는 확인된 settlement만 netting 대역으로 재해석한다. |
+docs/agents/canonical-read-surface-reference.md:188:- raw signed 보존:
+docs/agents/canonical-read-surface-reference.md:189:  - raw signed `amount`/`type` 자체를 뒤집는 rewrite가 기본 동작이 아니며, `Transaction`의 사용자 관리 필드는 먼저 안전성 룰에서 보존된다.
+docs/agents/canonical-read-surface-reference.md:201:| `expense_total` | `type='지출'`의 `-amount` 합계. 기본은 raw signed 합계이되, 확정 settlement가 있는 경우 economics는 confirmed net amount 기준으로 노출될 수 있다. 대출 상환도 포함한 총 지출이다. |
+docs/agents/canonical-read-surface-reference.md:217:### Raw signed vs settlement-netted surfaces
+docs/agents/canonical-read-surface-reference.md:221:  - 환불/취소는 raw positive `type='지출'` 행으로 유지되어 raw signed 월별 expense에 그대로 반영됩니다.
+docs/agents/canonical-read-surface-reference.md:222:- settlement-netted surfaces:
+docs/agents/canonical-read-surface-reference.md:223:  - `/api/v1/analytics/monthly-cashflow`, `/api/v1/analytics/category-mom`, `/api/v1/analytics/fixed-cost-summary`, `/api/v1/analytics/spending-review-candidates`는 확인된 결제/환불 묶음을 netted economics로 소비합니다.
+docs/agents/canonical-read-surface-reference.md:227:| `auto_confirmed` | 확정 | raw signed를 묶음 net amount로 치환해 반영 |
+docs/agents/canonical-read-surface-reference.md:228:| `user_confirmed` | 확정 | raw signed를 묶음 net amount로 치환해 반영 |
+docs/agents/canonical-read-surface-reference.md:229:| `review_required` | 미확정 | raw signed semantics 유지, settlement netting 미적용 |
+docs/agents/canonical-read-surface-reference.md:230:| `rejected` | 미확정 | raw signed semantics 유지, settlement netting 미적용 |
+docs/agents/canonical-read-surface-reference.md:232:- `GET /api/v1/analytics/*`는 read-only라서 조회 시 settlement write나 reconcile 작업을 수행하지 않는다.
+docs/agents/canonical-read-surface-reference.md:233:- 구매 게이트/리뷰 후보는 같은 settlement metadata를 공유해, confirmed partial refund를 분석 파이프라인에서 이중 계산하지 않는다.
+docs/backend-api-and-metrics-reference.md:392:  - sums raw signed `amount`; this is not necessarily equivalent to canonical cashflow because loan repayments, transfers, deleted rows, and merged rows have endpoint-specific rules
+docs/backend-api-and-metrics-reference.md:1046:  - confirmed settlement matches only (`auto_confirmed`, `user_confirmed`) are netted for analytics math.
+docs/backend-api-and-metrics-reference.md:1048:  - `review_required` and `rejected` settlement matches are treated as unconfirmed and remain on raw signed basis.
+docs/backend-api-and-metrics-reference.md:1049:  - positive `type='지출'` rows are retained as refund/cancellation offsets on raw surfaces unless a confirmed settlement match applies netting.
+docs/backend-api-and-metrics-reference.md:1269:- Candidate scoring uses shared settlement netting metadata from analytics service, so confirmed refunds are not double-netted by a separate pass.
+docs/backend-api-and-metrics-reference.md:1278:  - legacy keys such as `large_oneoff:42` are accepted and rewritten to `transaction:42` on save.
+docs/backend-api-and-metrics-reference.md:1580:- settlement handling:
+docs/backend-api-and-metrics-reference.md:1581:  - confirmed settlements (`auto_confirmed`, `user_confirmed`) only are folded into netting economics before final rollup.
+docs/backend-api-and-metrics-reference.md:1582:  - confirmed settlements are skipped if either participant leaves canonical analytics basis after delete/merge.
+docs/backend-api-and-metrics-reference.md:1583:  - `review_required`, `rejected` settlement matches are excluded from confirmed-net math and keep raw signed semantics.
+docs/backend-api-and-metrics-reference.md:1584:  - read path is calculation-only and does not create/update settlement match rows.

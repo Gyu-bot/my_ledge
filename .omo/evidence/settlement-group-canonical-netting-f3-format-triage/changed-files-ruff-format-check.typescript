@@ -1,0 +1,8 @@
+^DWould reformat: app/services/analytics_service.py
+Would reformat: app/services/settlement_group_matching.py
+Would reformat: tests/api/test_analytics_api.py
+Would reformat: tests/api/test_transactions_api.py
+Would reformat: tests/services/test_analytics_service.py
+Would reformat: tests/services/test_settlement_group_service.py
+Would reformat: tests/services/test_settlement_group_service_regression.py
+7 files would be reformatted, 4 files already formatted

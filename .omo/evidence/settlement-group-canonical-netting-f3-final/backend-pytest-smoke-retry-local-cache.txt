@@ -1,0 +1,18 @@
+^DImportError while loading conftest '/Users/gyurin/dev/my_ledge/backend/tests/conftest.py'.
+tests/conftest.py:14: in <module>
+    from app.main import app
+app/main.py:25: in <module>
+    app = create_app()
+          ^^^^^^^^^^^^
+app/main.py:11: in create_app
+    settings = get_settings()
+               ^^^^^^^^^^^^^^
+app/core/config.py:53: in get_settings
+    return Settings()
+           ^^^^^^^^^^
+.venv/lib/python3.14/site-packages/pydantic_settings/main.py:242: in __init__
+    super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+E   DATABASE_URL
+E     Field required [type=missing, input_value={}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.12/v/missing

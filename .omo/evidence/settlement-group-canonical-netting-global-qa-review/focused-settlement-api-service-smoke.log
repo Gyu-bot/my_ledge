@@ -1,0 +1,144 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.4, pytest-8.4.2, pluggy-1.6.0
+rootdir: /Users/gyurin/dev/my_ledge/backend
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-0.26.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 56 items / 22 deselected / 34 selected
+
+tests/services/test_settlement_group_service.py ..                       [  5%]
+tests/services/test_settlement_group_service_regression.py ...           [ 14%]
+tests/services/test_settlement_group_service_regression_edges.py ....... [ 35%]
+.                                                                        [ 38%]
+tests/services/test_settlement_group_service_stale_manual.py ....        [ 50%]
+tests/services/test_settlement_match_service.py ..                       [ 55%]
+tests/api/test_settlement_match_api.py ..                                [ 61%]
+tests/api/test_settlement_match_api_errors.py .                          [ 64%]
+tests/api/test_settlement_match_api_stale_manual.py ....                 [ 76%]
+tests/api/test_settlement_match_api_unlink.py ..                         [ 82%]
+tests/api/test_analytics_api.py ......                                   [100%]
+
+=============================== warnings summary ===============================
+tests/services/test_settlement_group_service.py::test_reconcile_settlement_matches_auto_confirms_full_cancellation
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy()
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:874: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    _restore_event_loop_policy(asyncio.get_event_loop_policy()),
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:772: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    old_loop_policy = asyncio.get_event_loop_policy()
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:777: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(policy)
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:1183: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:889: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:794: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(old_loop_policy)
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:942: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:966: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(previous_policy)
+
+tests/services/test_settlement_group_service.py: 2 warnings
+tests/services/test_settlement_group_service_regression.py: 3 warnings
+tests/services/test_settlement_group_service_regression_edges.py: 8 warnings
+tests/services/test_settlement_group_service_stale_manual.py: 4 warnings
+tests/services/test_settlement_match_service.py: 2 warnings
+tests/api/test_settlement_match_api.py: 2 warnings
+tests/api/test_settlement_match_api_errors.py: 1 warning
+tests/api/test_settlement_match_api_stale_manual.py: 4 warnings
+tests/api/test_settlement_match_api_unlink.py: 2 warnings
+tests/api/test_analytics_api.py: 6 warnings
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:978: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============== 34 passed, 22 deselected, 307 warnings in 1.03s ================

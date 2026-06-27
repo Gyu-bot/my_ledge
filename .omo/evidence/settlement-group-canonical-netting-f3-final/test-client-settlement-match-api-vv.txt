@@ -1,0 +1,84 @@
+^D============================= test session starts ==============================
+platform darwin -- Python 3.14.4, pytest-8.4.2, pluggy-1.6.0 -- /Users/gyurin/dev/my_ledge/backend/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/gyurin/dev/my_ledge/backend
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-0.26.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions PASSED [ 25%]
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis PASSED [ 50%]
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation PASSED [ 75%]
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:1216: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy()
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:874: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    _restore_event_loop_policy(asyncio.get_event_loop_policy()),
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:772: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    old_loop_policy = asyncio.get_event_loop_policy()
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:777: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(policy)
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:1183: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:889: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:794: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(old_loop_policy)
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:942: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:966: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    asyncio.set_event_loop_policy(previous_policy)
+
+tests/api/test_settlement_match_api.py::test_put_settlement_match_requires_api_key_and_preserves_raw_signed_transactions
+tests/api/test_settlement_match_api.py::test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basis
+tests/api/test_settlement_match_api_errors.py::test_put_settlement_match_rejects_deleted_participant_confirmation
+tests/api/test_settlement_match_api_unlink.py::test_delete_settlement_match_removes_manual_override_and_restores_review_required_candidates
+  /Users/gyurin/dev/my_ledge/backend/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:978: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    policy = asyncio.get_event_loop_policy()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 4 passed, 37 warnings in 0.13s ========================

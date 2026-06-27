@@ -1,11 +1,13 @@
 from datetime import date, datetime, time
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.purchase_gate_review import PurchaseGateReview
+from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
 from app.schemas.analytics import PurchaseGateReviewPatchRequest
 from app.schemas.settings import PurchaseGateSettings
@@ -68,6 +70,18 @@ def _transaction(
         source="import",
         created_at=now,
         updated_at=now,
+    )
+
+
+async def _settlement_match_count(db_session: AsyncSession) -> int:
+    return len(
+        (
+            await db_session.execute(
+                select(SettlementMatch.id).order_by(SettlementMatch.id.asc())
+            )
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -189,6 +203,190 @@ async def test_get_monthly_cashflow_groups_income_expense_and_transfer(
     }
 
 
+async def test_get_monthly_cashflow_uses_confirmed_settlement_net_amount(
+    db_session: AsyncSession,
+) -> None:
+    purchase = _transaction(
+        tx_date=date(2026, 1, 31),
+        tx_time=time(10, 0),
+        tx_type="지출",
+        category_major="식비",
+        category_minor="외식",
+        description="저녁",
+        merchant="식당",
+        amount=-600,
+        payment_method="카드 A",
+    )
+    refund = _transaction(
+        tx_date=date(2026, 2, 1),
+        tx_time=time(10, 30),
+        tx_type="지출",
+        category_major="식비",
+        category_minor="외식",
+        description="저녁 부분 환불",
+        merchant="식당",
+        amount=100,
+        payment_method="카드 A",
+    )
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 5),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=1500,
+                payment_method="계좌 A",
+            ),
+            purchase,
+            refund,
+        ]
+    )
+    await db_session.commit()
+    db_session.add(
+        SettlementMatch(
+            original_transaction_id=purchase.id,
+            settlement_transaction_id=refund.id,
+            status=SettlementMatchStatus.AUTO_CONFIRMED.value,
+            matched_amount=100,
+            matched_at=datetime(2026, 2, 1, 10, 31, 0),
+        )
+    )
+    await db_session.commit()
+    before_count = await _settlement_match_count(db_session)
+
+    response = await get_monthly_cashflow(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 28),
+    )
+
+    assert response.model_dump() == {
+        "items": [
+            {
+                "period": "2026-01",
+                "income": 1500,
+                "expense": 500,
+                "transfer": 0,
+                "net_cashflow": 1000,
+                "savings_rate": 0.6667,
+            }
+        ]
+    }
+    assert await _settlement_match_count(db_session) == before_count
+
+
+async def test_get_monthly_cashflow_does_not_create_settlement_matches(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 31),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="원결제",
+                merchant="상점B",
+                amount=-600,
+                payment_method="카드 A",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(10, 30),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="부분 환불",
+                merchant="상점B",
+                amount=100,
+                payment_method="카드 A",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    assert await _settlement_match_count(db_session) == 0
+
+    await get_monthly_cashflow(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 2, 28),
+    )
+
+    assert await _settlement_match_count(db_session) == 0
+
+
+async def test_get_monthly_cashflow_keeps_review_required_refund_on_raw_basis(
+    db_session: AsyncSession,
+) -> None:
+    from app.services.settlement_group_service import reconcile_settlement_matches
+
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 10),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="의자 구매",
+                merchant="상점A",
+                amount=-1_000,
+                payment_method="카드 A",
+            ),
+            _transaction(
+                tx_date=date(2026, 1, 11),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="의자 재구매",
+                merchant="상점A",
+                amount=-1_000,
+                payment_method="카드 A",
+            ),
+            _transaction(
+                tx_date=date(2026, 1, 12),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="생활",
+                category_minor="쇼핑",
+                description="의자 환불",
+                merchant="상점A",
+                amount=200,
+                payment_method="카드 A",
+            ),
+        ]
+    )
+    await db_session.commit()
+    await reconcile_settlement_matches(db_session)
+    before_count = await _settlement_match_count(db_session)
+
+    response = await get_monthly_cashflow(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+    assert response.model_dump() == {
+        "items": [
+            {
+                "period": "2026-01",
+                "income": 0,
+                "expense": 1800,
+                "transfer": 0,
+                "net_cashflow": -1800,
+                "savings_rate": None,
+            }
+        ]
+    }
+    assert await _settlement_match_count(db_session) == before_count
+
+
 async def test_get_category_mom_uses_effective_categories_and_previous_month_baseline(
     db_session: AsyncSession,
 ) -> None:
@@ -299,6 +497,78 @@ async def test_get_category_mom_uses_effective_categories_and_previous_month_bas
                 "delta_amount": 80,
                 "delta_pct": None,
             },
+        ]
+    }
+
+
+async def test_get_category_mom_keeps_rejected_settlement_on_raw_basis(
+    db_session: AsyncSession,
+) -> None:
+    baseline = _transaction(
+        tx_date=date(2026, 2, 3),
+        tx_time=time(12, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="이전 달 쇼핑",
+        merchant="상점A",
+        amount=-120,
+        payment_method="카드 A",
+    )
+    purchase = _transaction(
+        tx_date=date(2026, 3, 3),
+        tx_time=time(12, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="이번 달 쇼핑",
+        merchant="상점A",
+        amount=-300,
+        payment_method="카드 A",
+    )
+    rejected_refund = _transaction(
+        tx_date=date(2026, 3, 4),
+        tx_time=time(12, 30),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="이번 달 환불",
+        merchant="상점A",
+        amount=100,
+        payment_method="카드 A",
+    )
+    db_session.add_all([baseline, purchase, rejected_refund])
+    await db_session.commit()
+    db_session.add(
+        SettlementMatch(
+            original_transaction_id=purchase.id,
+            settlement_transaction_id=rejected_refund.id,
+            status=SettlementMatchStatus.REJECTED.value,
+            matched_amount=100,
+            matched_at=datetime(2026, 3, 4, 12, 31, 0),
+        )
+    )
+    await db_session.commit()
+
+    response = await get_category_mom(
+        db_session,
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 3, 31),
+        level="major",
+        tx_type="지출",
+    )
+
+    assert response.model_dump() == {
+        "items": [
+            {
+                "period": "2026-03",
+                "previous_period": "2026-02",
+                "category": "생활",
+                "current_amount": 200,
+                "previous_amount": 120,
+                "delta_amount": 80,
+                "delta_pct": 0.6667,
+            }
         ]
     }
 
@@ -628,33 +898,118 @@ async def test_get_merchant_spend_groups_by_merchant_and_limits_results(
     }
 
 
+async def test_get_merchant_spend_uses_confirmed_settlement_net_amount(
+    db_session: AsyncSession,
+) -> None:
+    purchase = _transaction(
+        tx_date=date(2026, 1, 1),
+        tx_time=time(10, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="쿠팡 주문 1",
+        merchant="쿠팡",
+        amount=-100,
+        payment_method="카드 A",
+    )
+    refund = _transaction(
+        tx_date=date(2026, 1, 3),
+        tx_time=time(9, 0),
+        tx_type="지출",
+        category_major="생활",
+        category_minor="쇼핑",
+        description="쿠팡 부분 환불",
+        merchant="쿠팡",
+        amount=20,
+        payment_method="카드 A",
+    )
+    db_session.add_all(
+        [
+            purchase,
+            refund,
+            _transaction(
+                tx_date=date(2026, 1, 2),
+                tx_time=time(8, 30),
+                tx_type="지출",
+                category_major="구독",
+                category_minor="OTT",
+                description="넷플릭스 정기결제",
+                merchant="넷플릭스",
+                amount=-50,
+                payment_method="카드 B",
+            ),
+        ]
+    )
+    await db_session.commit()
+    db_session.add(
+        SettlementMatch(
+            original_transaction_id=purchase.id,
+            settlement_transaction_id=refund.id,
+            status=SettlementMatchStatus.AUTO_CONFIRMED.value,
+            matched_amount=20,
+            matched_at=datetime(2026, 1, 3, 9, 1, 0),
+        )
+    )
+    await db_session.commit()
+
+    response = await get_merchant_spend(
+        db_session,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        tx_type="지출",
+        limit=2,
+    )
+
+    assert response.model_dump() == {
+        "items": [
+            {
+                "merchant": "쿠팡",
+                "amount": 80,
+                "count": 1,
+                "avg_amount": 80.0,
+                "last_seen_at": datetime(2026, 1, 1, 10, 0),
+            },
+            {
+                "merchant": "넷플릭스",
+                "amount": 50,
+                "count": 1,
+                "avg_amount": 50.0,
+                "last_seen_at": datetime(2026, 1, 2, 8, 30),
+            },
+        ]
+    }
+
+
 # ── P1: payment-method-patterns ──────────────────────────────────────────────
+
 
 async def test_get_payment_method_patterns_aggregates_by_method(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 1),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="스타벅스",
-            amount=-10000,
-            payment_method="카드",
-        ),
-        _transaction(
-            tx_date=date(2026, 1, 2),
-            tx_time=time(10, 0),
-            tx_type="지출",
-            category_major="교통",
-            category_minor=None,
-            description="지하철",
-            amount=-10000,
-            payment_method="현금",
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="스타벅스",
+                amount=-10000,
+                payment_method="카드",
+            ),
+            _transaction(
+                tx_date=date(2026, 1, 2),
+                tx_time=time(10, 0),
+                tx_type="지출",
+                category_major="교통",
+                category_minor=None,
+                description="지하철",
+                amount=-10000,
+                payment_method="현금",
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_payment_method_patterns(
@@ -677,18 +1032,20 @@ async def test_get_payment_method_patterns_aggregates_by_method(
 async def test_get_payment_method_patterns_none_becomes_unknown(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 1),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="편의점",
-            amount=-5000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="편의점",
+                amount=-5000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_payment_method_patterns(
@@ -704,31 +1061,34 @@ async def test_get_payment_method_patterns_none_becomes_unknown(
 
 # ── P1: income-stability ──────────────────────────────────────────────────────
 
+
 async def test_get_income_stability_returns_monthly_series_and_stats(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 25),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="월급",
-            amount=2000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 25),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="월급",
-            amount=2000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 25),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=2000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 25),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=2000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_income_stability(
@@ -773,48 +1133,50 @@ async def test_get_income_stability_defaults_to_last_closed_month(
 
     monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
 
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 25),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="월급",
-            amount=3000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 25),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="월급",
-            amount=3000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 25),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="월급",
-            amount=3000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 4, 5),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="보너스",
-            amount=9000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 25),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=3000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 25),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=3000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 25),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=3000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 5),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="보너스",
+                amount=9000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_income_stability(
@@ -839,38 +1201,40 @@ async def test_get_income_stability_defaults_to_last_closed_month(
 async def test_get_income_stability_partial_period_uses_same_day_baseline_cutoff(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 3, 5),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="급여",
-            amount=1000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 20),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="인센티브",
-            amount=9000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 4, 6),
-            tx_time=time(9, 0),
-            tx_type="수입",
-            category_major="급여",
-            category_minor=None,
-            description="급여",
-            amount=1100,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 3, 5),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="급여",
+                amount=1000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 20),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="인센티브",
+                amount=9000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 6),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="급여",
+                amount=1100,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_income_stability(
@@ -893,41 +1257,44 @@ async def test_get_income_stability_partial_period_uses_same_day_baseline_cutoff
 
 # ── P1: recurring-payments ────────────────────────────────────────────────────
 
+
 async def test_get_recurring_payments_detects_monthly(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 1),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="구독",
-            category_minor=None,
-            description="넷플릭스",
-            amount=-15000,
-            payment_method="카드",
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 1),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="구독",
-            category_minor=None,
-            description="넷플릭스",
-            amount=-15000,
-            payment_method="카드",
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 1),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="구독",
-            category_minor=None,
-            description="넷플릭스",
-            amount=-15000,
-            payment_method="카드",
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="구독",
+                category_minor=None,
+                description="넷플릭스",
+                amount=-15000,
+                payment_method="카드",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="구독",
+                category_minor=None,
+                description="넷플릭스",
+                amount=-15000,
+                payment_method="카드",
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="구독",
+                category_minor=None,
+                description="넷플릭스",
+                amount=-15000,
+                payment_method="카드",
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_recurring_payments(
@@ -952,56 +1319,58 @@ async def test_get_recurring_payments_detects_monthly(
 async def test_get_recurring_payments_reports_manual_classification_and_transaction_ids(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 1),
-            tx_time=time(8, 0),
-            tx_type="지출",
-            category_major="통신",
-            category_minor="휴대폰",
-            description="통신비 1월",
-            merchant="통신사",
-            amount=-90000,
-            payment_method="카드 A",
-            recurring_payment_kind="monthly_recurring",
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 1),
-            tx_time=time(8, 0),
-            tx_type="지출",
-            category_major="통신",
-            category_minor="휴대폰",
-            description="통신비 2월",
-            merchant="통신사",
-            amount=-90000,
-            payment_method="카드 A",
-            recurring_payment_kind="monthly_recurring",
-        ),
-        _transaction(
-            tx_date=date(2026, 1, 5),
-            tx_time=time(8, 0),
-            tx_type="지출",
-            category_major="쇼핑",
-            category_minor="전자제품",
-            description="노트북 할부 1월",
-            merchant="전자상가",
-            amount=-120000,
-            payment_method="카드 B",
-            recurring_payment_kind="installment",
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 5),
-            tx_time=time(8, 0),
-            tx_type="지출",
-            category_major="쇼핑",
-            category_minor="전자제품",
-            description="노트북 할부 2월",
-            merchant="전자상가",
-            amount=-120000,
-            payment_method="카드 B",
-            recurring_payment_kind="installment",
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 1),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="통신",
+                category_minor="휴대폰",
+                description="통신비 1월",
+                merchant="통신사",
+                amount=-90000,
+                payment_method="카드 A",
+                recurring_payment_kind="monthly_recurring",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 1),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="통신",
+                category_minor="휴대폰",
+                description="통신비 2월",
+                merchant="통신사",
+                amount=-90000,
+                payment_method="카드 A",
+                recurring_payment_kind="monthly_recurring",
+            ),
+            _transaction(
+                tx_date=date(2026, 1, 5),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="쇼핑",
+                category_minor="전자제품",
+                description="노트북 할부 1월",
+                merchant="전자상가",
+                amount=-120000,
+                payment_method="카드 B",
+                recurring_payment_kind="installment",
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 5),
+                tx_time=time(8, 0),
+                tx_type="지출",
+                category_major="쇼핑",
+                category_minor="전자제품",
+                description="노트북 할부 2월",
+                merchant="전자상가",
+                amount=-120000,
+                payment_method="카드 B",
+                recurring_payment_kind="installment",
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_recurring_payments(
@@ -1025,18 +1394,20 @@ async def test_get_recurring_payments_reports_manual_classification_and_transact
 async def test_get_recurring_payments_filters_by_min_occurrences(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 1),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="일회성결제",
-            amount=-5000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 1),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="일회성결제",
+                amount=-5000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_recurring_payments(
@@ -1051,42 +1422,45 @@ async def test_get_recurring_payments_filters_by_min_occurrences(
 
 # ── P1: spending-anomalies ────────────────────────────────────────────────────
 
+
 async def test_get_spending_anomalies_detects_spike(
     db_session: AsyncSession,
 ) -> None:
     # baseline: 2026-01, 2026-02 각 100000, target: 2026-03 = 200000
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-200000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-200000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_spending_anomalies(
@@ -1112,38 +1486,40 @@ async def test_get_spending_anomalies_filters_by_threshold(
     db_session: AsyncSession,
 ) -> None:
     # baseline과 동일한 지출 → anomaly_score = 0
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_spending_anomalies(
@@ -1159,38 +1535,40 @@ async def test_get_spending_anomalies_filters_by_threshold(
 async def test_get_spending_anomalies_filters_on_anomaly_score(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-300000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-300120,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-350000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-300000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-300120,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-350000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_spending_anomalies(
@@ -1211,38 +1589,40 @@ async def test_get_spending_anomalies_filters_on_anomaly_score(
 async def test_get_spending_anomalies_filters_small_absolute_deltas_by_default(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-300000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-300120,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-350000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-300000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-300120,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-350000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     default_response = await get_spending_anomalies(
@@ -1276,68 +1656,70 @@ async def test_get_spending_anomalies_defaults_to_last_closed_month(
 
     monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
 
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 1, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 15),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-200000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 2, 5),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 5),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 4, 7),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="금융",
-            category_minor=None,
-            description="카드값",
-            amount=-400000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 1, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 15),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-200000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 2, 5),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 5),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 7),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="금융",
+                category_minor=None,
+                description="카드값",
+                amount=-400000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_spending_anomalies(
@@ -1360,38 +1742,40 @@ async def test_get_spending_anomalies_defaults_to_last_closed_month(
 async def test_get_spending_anomalies_partial_period_uses_same_day_baseline_cutoff(
     db_session: AsyncSession,
 ) -> None:
-    db_session.add_all([
-        _transaction(
-            tx_date=date(2026, 3, 5),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="식당",
-            amount=-100000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 3, 20),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="회식",
-            amount=-900000,
-            payment_method=None,
-        ),
-        _transaction(
-            tx_date=date(2026, 4, 6),
-            tx_time=time(9, 0),
-            tx_type="지출",
-            category_major="식비",
-            category_minor=None,
-            description="점심",
-            amount=-110000,
-            payment_method=None,
-        ),
-    ])
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=date(2026, 3, 5),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="식당",
+                amount=-100000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 3, 20),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="회식",
+                amount=-900000,
+                payment_method=None,
+            ),
+            _transaction(
+                tx_date=date(2026, 4, 6),
+                tx_time=time(9, 0),
+                tx_type="지출",
+                category_major="식비",
+                category_minor=None,
+                description="점심",
+                amount=-110000,
+                payment_method=None,
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await get_spending_anomalies(

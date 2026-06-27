@@ -1,0 +1,7 @@
+^DHTTP/1.1 404 Not Found
+[1mdate[0m: Sat, 27 Jun 2026 06:47:30 GMT
+[1mserver[0m: uvicorn
+[1mcontent-length[0m: 22
+[1mcontent-type[0m: application/json
+
+{"detail":"Not Found"}

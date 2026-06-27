@@ -12,6 +12,7 @@ from app.api.v1.endpoints.installments import router as installments_router
 from app.api.v1.endpoints.loan_mapping import router as loan_mapping_router
 from app.api.v1.endpoints.profile import router as profile_router
 from app.api.v1.endpoints.schema import router as schema_router
+from app.api.v1.endpoints.settlement_matches import router as settlement_matches_router
 from app.api.v1.endpoints.settings import router as settings_router
 from app.api.v1.endpoints.transactions import router as transactions_router
 from app.api.v1.endpoints.upload import router as upload_router
@@ -29,4 +30,5 @@ api_router.include_router(profile_router)
 api_router.include_router(installments_router)
 api_router.include_router(loan_mapping_router)
 api_router.include_router(data_management_router)
+api_router.include_router(settlement_matches_router)
 api_router.include_router(transactions_router)

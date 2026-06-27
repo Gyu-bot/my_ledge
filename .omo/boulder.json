@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "active_work_id": "settlement-group-canonical-netting",
+  "works": {
+    "transaction-source-upload-reconciliation": {
+      "work_id": "transaction-source-upload-reconciliation",
+      "active_plan": ".omo/plans/transaction-source-upload-reconciliation.md",
+      "plan_name": "transaction-source-upload-reconciliation",
+      "session_ids": [
+        "codex:019f0376-a3be-74b1-b69f-0038d958ac96"
+      ],
+      "status": "completed",
+      "worktree_path": null
+    },
+    "settlement-group-canonical-netting": {
+      "work_id": "settlement-group-canonical-netting",
+      "active_plan": ".omo/plans/settlement-group-canonical-netting.md",
+      "plan_name": "settlement-group-canonical-netting",
+      "session_ids": [
+        "codex:019f074e-f917-7af0-8a48-d628ad4eed52"
+      ],
+      "status": "completed",
+      "worktree_path": null
+    }
+  }
+}

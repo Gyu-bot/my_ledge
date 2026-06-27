@@ -16,6 +16,7 @@ from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.purchase_gate_review import PurchaseGateReview
+from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
 from app.models.user_profile_snapshot import UserProfileSnapshot
@@ -38,6 +39,8 @@ __all__ = [
     "PurchaseGateReview",
     "RecurringCategoryRule",
     "TimestampMixin",
+    "SettlementMatch",
+    "SettlementMatchStatus",
     "Transaction",
     "UploadLog",
     "UserProfileSnapshot",
