@@ -74,7 +74,7 @@
 | 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 바로 시작 가능, `T019` 막힘 |
 | 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
 | issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
-| 다음 P0 거래 신뢰도 | `T030`-`T032` | `T030` 바로 시작 가능, `T031`-`T032` 계획됨 |
+| 다음 P0 거래 신뢰도 | `T030`-`T032` | `T030` 완료, `T031` 완료, `T032` 계획됨 |
 | 거래 신뢰 이후 자동화와 의사결정 지원 | `T033`-`T039`, `T041` | 계획됨 |
 
 ---
@@ -718,38 +718,39 @@
 
 #### 작업 T030. 거래 source lifecycle
 - 우선순위: P0
-- 상태: 바로 시작 가능
+- 상태: 완료
 - 선행 조건: T000
 - 완료 기준:
-  - [ ] BankSalad upload row와 사용자 수정 거래를 분리하는 transaction source lifecycle model이 도입된다.
-  - [ ] lifecycle status는 최소 `active`, `missing_from_latest_export`, `source_changed`, `superseded`, `duplicate_candidate`, `ambiguous`를 표현한다.
-  - [ ] transaction source tracking이 `source_row_hash`, `first_seen_import_id`, `last_seen_import_id`, `source_first_seen_at`, `source_last_seen_at`, `superseded_by_transaction_id` 또는 동등한 필드를 제공한다.
-  - [ ] 최신 파일에서 사라진 거래를 즉시 hard delete하지 않고 `missing_from_latest_export` 또는 동등한 상태로 보존한다.
-  - [ ] 기존 거래 수정 시 delete 후 insert보다 source field update 또는 supersession을 우선한다.
-  - [ ] BankSalad가 갱신할 수 있는 원본 필드와 업로드가 덮어쓰면 안 되는 사용자 필드가 코드와 contract docs에서 분리된다.
-  - [ ] 사용자 카테고리, 정규화 거래처, 대출 연결, 할부 연결, spending review 상태, memo가 재업로드로 손실되지 않는다.
-  - [ ] 거래별 source 이력 또는 import lineage를 조회할 수 있다.
-  - [ ] backend regression test가 missing row, changed source field, superseded transaction, preserved user override fixture를 포함한다.
-  - [ ] 관련 API/agent contract docs가 lifecycle status 해석 규칙을 설명한다.
+  - [x] BankSalad upload row와 사용자 수정 거래를 분리하는 transaction source lifecycle model이 도입된다.
+  - [x] lifecycle status는 최소 `active`, `missing_from_latest_export`, `source_changed`, `superseded`를 표현하고, `duplicate_candidate`, `ambiguous`는 적용 전 검토가 필요한 review/reserved 상태로 모델에서 구분해 표현한다.
+  - [x] transaction source tracking이 `source_row_hash`, `first_seen_import_id`, `last_seen_import_id`, `source_first_seen_at`, `source_last_seen_at`, `superseded_by_transaction_id` 또는 동등한 필드를 제공한다.
+  - [x] 최신 파일에서 사라진 거래를 즉시 hard delete하지 않고 `missing_from_latest_export` 또는 동등한 상태로 보존한다.
+  - [x] 기존 거래 수정 시 delete 후 insert보다 source field update 또는 supersession을 우선한다.
+  - [x] BankSalad가 갱신할 수 있는 원본 필드와 업로드가 덮어쓰면 안 되는 사용자 필드가 코드와 contract docs에서 분리된다.
+  - [x] 사용자 카테고리, 정규화 거래처, 대출 연결, 할부 연결, spending review 상태, memo가 재업로드로 손실되지 않는다.
+  - [x] 거래별 source 이력 또는 import lineage를 조회할 수 있다.
+  - [x] backend regression test가 missing row, changed source field, superseded transaction, preserved user override fixture를 포함한다.
+  - [x] 관련 API/agent contract docs가 lifecycle status 해석 규칙을 설명한다.
 - 참고:
   - Kept feature roadmap Track A의 첫 P0이다.
   - `transactions` soft delete와 upload incremental insert 동작을 유지하되, 반복 업로드에서 사용자 작업이 사라지지 않게 하는 기반이다.
 
 #### 작업 T031. 업로드 preview와 reconciliation v2
 - 우선순위: P0
-- 상태: 계획됨
+- 상태: 완료
 - 선행 조건: T030
 - 완료 기준:
-  - [ ] upload apply 전에 DB를 변경하지 않는 reconciliation preview API가 제공된다.
-  - [ ] preview flow는 `파일 업로드 -> 파싱 -> reconciliation preview -> 안전 변경 자동 선택 -> 사용자 확인 -> apply`로 분리된다.
-  - [ ] preview change type은 최소 `new`, `unchanged`, `source_fields_changed`, `time_shifted`, `possible_replacement`, `missing_from_latest_export`, `possible_duplicate`, `ambiguous`를 표현한다.
-  - [ ] 안전하게 자동 적용할 변경과 사용자 검토가 필요한 변경이 response에서 분리된다.
-  - [ ] preview item이 기존 값, 신규 값, 판단 근거, 사용자 수정 보존 여부, canonical/cashflow 영향 범위를 보여준다.
-  - [ ] apply API는 explicit confirmation 후 선택된 change set만 반영한다.
-  - [ ] apply 결과와 판단 근거가 upload log 또는 별도 reconciliation log에 기록된다.
-  - [ ] 기존 `POST /api/v1/upload` 호환 경로의 동작과 새 preview/apply flow의 관계가 문서화된다.
-  - [ ] backend API/service test가 preview no-write, safe apply, ambiguous no-auto-apply, upload log 기록을 검증한다.
-  - [ ] frontend surface가 포함되는 경우 `/data/import`에서 preview/apply flow를 브라우저로 확인한다.
+  - [x] upload apply 전에 DB를 변경하지 않는 reconciliation preview API가 제공된다.
+  - [x] preview flow는 `파일 업로드 -> 파싱 -> reconciliation preview -> 안전 변경 자동 선택 -> 사용자 확인 -> apply`로 분리된다.
+  - [x] preview change type은 최소 `new`, `unchanged`, `source_fields_changed`, `time_shifted`, `possible_replacement`, `missing_from_latest_export`, `possible_duplicate`, `ambiguous`를 표현한다.
+  - [x] 안전하게 자동 적용할 변경과 사용자 검토가 필요한 변경이 response에서 분리된다.
+  - [x] preview item이 기존 값, 신규 값, 판단 근거, 사용자 수정 보존 여부를 보여준다.
+  - 제외: canonical/cashflow 영향 범위 표시는 2026-06-27 사용자 지시에 따라 T031 완료 범위에서 제외한다.
+  - [x] apply API는 explicit confirmation 후 선택된 change set만 반영한다.
+  - [x] apply 결과와 판단 근거가 upload log 또는 별도 reconciliation log에 기록된다.
+  - [x] 기존 `POST /api/v1/upload` 호환 경로의 동작과 새 preview/apply flow의 관계가 문서화된다.
+  - [x] backend API/service test가 preview no-write, safe apply, ambiguous no-auto-apply, upload log 기록을 검증한다.
+  - [x] frontend surface가 포함되는 경우 `/data/import`에서 preview/apply flow를 브라우저로 확인한다.
 - 참고:
   - `T030` lifecycle 없이는 replacement/missing/source-changed 판단이 불안정하므로 `T030` 이후에 착수한다.
   - 첫 PR은 backend preview/apply contract만 만들고 frontend는 후속으로 쪼갤 수 있다.

@@ -17,9 +17,10 @@ from app.models.loan import Loan
 from app.models.transaction import Transaction
 from app.parsers.snapshots import parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
-from app.services.upload_service import (
-    _seconds_since_midnight,
-    _transaction_fallback_signature,
+from app.services.transaction_source_identity import fallback_signature_from_row
+from app.services.transaction_source_identity import seconds_since_midnight_from_row
+from app.services.transaction_source_identity import (
+    seconds_since_midnight_from_transaction,
 )
 from app.services.upload_service import normalize_snapshots_for_storage
 
@@ -185,7 +186,7 @@ async def _row_exists_by_import_fallback(
     db_session: AsyncSession,
     row: TransactionRow,
 ) -> bool:
-    fallback_signature = _transaction_fallback_signature(row)
+    fallback_signature = fallback_signature_from_row(row)
     result = await db_session.execute(
         select(Transaction)
         .where(Transaction.date == fallback_signature[0])
@@ -199,9 +200,12 @@ async def _row_exists_by_import_fallback(
             else Transaction.payment_method == fallback_signature[5]
         )
     )
-    row_seconds = _seconds_since_midnight(row)
+    row_seconds = seconds_since_midnight_from_row(row)
     for candidate in result.scalars().all():
-        if abs(_seconds_since_midnight(candidate) - row_seconds) <= 60:
+        if (
+            abs(seconds_since_midnight_from_transaction(candidate) - row_seconds)
+            <= 60
+        ):
             return True
     return False
 

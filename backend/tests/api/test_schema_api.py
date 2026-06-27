@@ -48,7 +48,13 @@ def test_expected_tables_exist() -> None:
     assert transactions.c.is_deleted.server_default is not None
     assert transactions.c.source.server_default is not None
     assert transactions.c.merged_into_id.foreign_keys
-    assert {index.name for index in transactions.indexes} == {"idx_tx_datetime"}
+    assert {
+        index.name for index in transactions.indexes
+    } == {
+        "idx_tx_datetime",
+        "idx_transactions_source_lifecycle_status",
+        "idx_transactions_source_row_hash",
+    }
     assert {
         tuple(column.name for column in constraint.columns)
         for constraint in app_settings.constraints

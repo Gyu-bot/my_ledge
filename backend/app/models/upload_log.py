@@ -21,4 +21,6 @@ class UploadLog(Base):
     tx_new: Mapped[int | None] = mapped_column(Integer)
     tx_skipped: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str | None] = mapped_column(String(20))
+    reconciliation_mode: Mapped[str | None] = mapped_column(String(30))
+    reconciliation_audit: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)

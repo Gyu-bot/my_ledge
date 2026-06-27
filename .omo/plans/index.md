@@ -14,7 +14,6 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
-| [`transaction-source-upload-reconciliation.md`](transaction-source-upload-reconciliation.md) | `drafting` | `T030-T031`: transaction source lifecycle, upload preview, explicit reconciliation apply. | [`../drafts/transaction-source-upload-reconciliation.md`](../drafts/transaction-source-upload-reconciliation.md) |
 | [`settlement-group-canonical-netting.md`](settlement-group-canonical-netting.md) | `drafting` | `T032`: shared settlement group netting for refunds/cancellations. | [`../drafts/settlement-group-canonical-netting.md`](../drafts/settlement-group-canonical-netting.md) |
 | [`settings-analytics-frontend.md`](settings-analytics-frontend.md) | `drafting` | `T013`: complete analytics parameter editing in `/data/settings`. | [`../drafts/settings-analytics-frontend.md`](../drafts/settings-analytics-frontend.md) |
 | [`operational-smoke-capture.md`](operational-smoke-capture.md) | `drafting` | `T014`: read-only operational route/API smoke capture. | [`../drafts/operational-smoke-capture.md`](../drafts/operational-smoke-capture.md) |
@@ -25,6 +24,7 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
+| [`transaction-source-upload-reconciliation.md`](transaction-source-upload-reconciliation.md) | `completed` | `T030-T031`: transaction source lifecycle, upload preview, explicit reconciliation apply. | [`../drafts/transaction-source-upload-reconciliation.md`](../drafts/transaction-source-upload-reconciliation.md) |
 | [`my-ledge-omo-plan-review.md`](my-ledge-omo-plan-review.md) | `completed` | Meta review scaffold superseded by the concrete plans above. | [`../drafts/my-ledge-omo-plan-review.md`](../drafts/my-ledge-omo-plan-review.md) |
 
 ## Blocked Plans

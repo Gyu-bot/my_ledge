@@ -25,6 +25,8 @@
   - read-only 조회 endpoint 대부분
 - `X-API-Key` 필요
   - `POST /api/v1/upload`
+  - `POST /api/v1/upload/preview`
+  - `POST /api/v1/upload/apply`
   - `GET /api/v1/schema`
   - `GET /api/v1/canonical-views/dashboard`
   - `GET /api/v1/settings/analytics`
@@ -89,6 +91,8 @@
 |---|---|---|---|
 | `GET` | `/api/v1/upload/logs` | live | 최근 10건 반환 |
 | `POST` | `/api/v1/upload` | live | multipart + `snapshot_date` required |
+| `POST` | `/api/v1/upload/preview` | live | no-write preview; multipart + `snapshot_date` required |
+| `POST` | `/api/v1/upload/apply` | live | preview+explicit 선택 적용; multipart + `snapshot_date` + `apply_request` required |
 | `POST` | `/api/v1/data/reset` | live | `transactions_only` / `transactions_and_snapshots` |
 | `GET` | `/api/v1/profile` | live | latest BankSalad `1.고객정보` profile snapshot; stores gender/age/KCB score only, not name/email |
 | `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
@@ -354,6 +358,38 @@
 - 저장 파일명은 `upload_logs.id` 기반 prefix와 안전화된 원본 파일명을 사용한다. 예: `000123-finance-sample.xlsx`
 - 저장 후 같은 디렉터리의 파일은 최신 5개만 남기고 오래된 파일을 삭제한다.
 - 직접 service helper를 호출하는 테스트/스크립트 경로는 `persist_upload_file=True` 를 명시한 경우에만 원본 파일을 저장한다.
+
+### Transaction Source Lifecycle & Reconciliation Flow
+
+- Status/의미:
+  - 영속 상태:
+    - `active`: 현재 업로드 윈도우에서 보존되고 최신 import 상태인 row.
+    - `missing_from_latest_export`: 최신 업로드 윈도우에서 사라져 하위 상태로 보존됨(즉시 hard delete 아님).
+    - `source_changed`: fallback 매칭(시간/서명/카테고리 등)으로 같은 원천 row가 `date/time/type/금액/카테고리/설명/통화/결제수단` 기준이 변경됨.
+    - `superseded`: 상위/대체 row가 도입되어 현재 버전이 아닌 row. 신규 업로드가 기존 import row를 대체했을 때 정합성 추적용으로 남음.
+  - preview/review용 reserve 상태:
+    - `duplicate_candidate`: 동일 source hash 또는 동일 매칭 후보가 다수인 경우, 수동 판정이 필요한 후보 상태.
+    - `ambiguous`: incoming row가 다수 후보와 매칭 가능해 자동 적용이 위험해 review_required로 남는 후보 상태.
+  - source lineage 필드:
+  - `source_row_hash`: 업로드 source signature hash.
+  - `first_seen_import_id`, `last_seen_import_id`: 최초/최종 확인 upload 로그 id.
+  - `source_first_seen_at`, `source_last_seen_at`: 최초/최종 확인 시각.
+  - `superseded_by_transaction_id`: superseded된 경우 대체 대상 id.
+- 공개 read 경계:
+  - 비인증 `GET /api/v1/transactions` 응답은 `source`만 공개하고 위 lineage 필드는 포함하지 않는다.
+- 업로드 흐름:
+  - `POST /api/v1/upload/preview`: 파일 파싱만 수행하고 DB를 변경하지 않는 reconciliation plan(변경안)만 반환한다.
+  - `safe` 변경(`new`, `unchanged`, `source_fields_changed`, `time_shifted`, `missing_from_latest_export`)은 기본 자동 적용 후보로 분리.
+  - `review_required` 변경은 사용자 확인 필요. 이 중 `possible_replacement`만 명시 승인된 selection으로 supersession 적용 가능하며, `possible_duplicate`/`ambiguous`는 apply에서 거부하고 수동 해소 대상으로 남긴다.
+  - `POST /api/v1/upload/apply`는 `UploadApplyRequest(confirmation=true)` + preview 결과 selection 중 safe change와 명시 승인된 `possible_replacement`만 반영한다.
+- 변경 상세:
+  - 응답 change 항목은 기존 값/신규 값 차이(field_changes), 판단 근거(reason), 사용자 보존 필드 목록(preserved_user_fields), 보존 요약(preservation_summary)과 함께 보낸다.
+  - `merchant_override`, `category_*_user`, `memo`, `is_deleted`, `merged_into_id` 등 사용자 관리 값은 재적용 시 보존 규칙을 따른다.
+- legacy 경계:
+  - 기존 `POST /api/v1/upload`은 즉시 write하는 기존 동작이며, 업로드/재적용 시 하위 계층(프리뷰+선택 apply)로 분리하지 않고 곧바로 import를 완료한다.
+  - `/api/v1/upload/preview` + `/api/v1/upload/apply`는 동일한 source-matching 규약을 쓰되, preview 단계 분리와 명시적 확인을 추가한 최신 경로다.
+- raw signed 보존:
+  - 거래 원천 금액/서명(`amount`의 부호)은 raw import 기반 값으로 해석되며, preview/apply은 raw signed 값을 재구성하지 않고 거래별 source-관리 변경사항에 대해 결정적/재현 가능한 방식으로만 갱신한다.
 
 ### Reset / Upload Logs Semantics
 
