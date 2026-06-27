@@ -2,6 +2,7 @@ import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HBarList } from '../../ds/charts/HBarList'
 import { LineArea } from '../../ds/charts/LineArea'
+import { MoMList } from '../../ds/charts/MoMList'
 
 const duplicateKeyMessage = 'Encountered two children with the same key'
 
@@ -40,5 +41,24 @@ describe('chart primitives', () => {
     )
 
     expect(consoleError.mock.calls.some(([message]) => String(message).includes(duplicateKeyMessage))).toBe(false)
+  })
+
+  it('MoMList는 API 비율 delta_pct를 화면 퍼센트와 증감액으로 표시한다', () => {
+    const { getByText } = render(
+      <MoMList
+        items={[
+          {
+            category: '식비',
+            current_amount: 740_000,
+            previous_amount: 410_000,
+            delta_amount: 330_000,
+            delta_pct: 0.8049,
+          },
+        ]}
+      />,
+    )
+
+    expect(getByText(/\+80\.5%/)).toBeInTheDocument()
+    expect(getByText('+₩33만')).toBeInTheDocument()
   })
 })

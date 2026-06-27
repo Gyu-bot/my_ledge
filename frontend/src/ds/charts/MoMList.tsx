@@ -1,4 +1,4 @@
-import { formatDeltaPct, formatWonCompact } from '../format'
+import { formatDeltaPct, formatSignedWon } from '../format'
 
 export interface MoMItem {
   category: string
@@ -25,7 +25,7 @@ export function MoMList({ items }: MoMListProps) {
             <div className="flex items-center justify-between gap-3">
               <span className="truncate text-label text-text-secondary">{item.category}</span>
               <span className={`tnum shrink-0 text-label font-semibold ${increase ? 'text-expense' : 'text-income'}`}>
-                {increase ? '▴' : '▾'} {formatDeltaPct(item.delta_pct != null ? item.delta_pct : null)}
+                {increase ? '▴' : '▾'} {formatDeltaPct(item.delta_pct != null ? item.delta_pct * 100 : null)}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-2">
@@ -41,7 +41,7 @@ export function MoMList({ items }: MoMListProps) {
                 )}
               </div>
               <span className="tnum w-20 shrink-0 text-right text-caption text-text-muted">
-                {formatWonCompact(item.current_amount)}
+                {formatSignedWon(item.delta_amount, { compact: true })}
               </span>
             </div>
           </div>

@@ -46,7 +46,7 @@ vi.mock('../../hooks/useAnalytics', () => ({
   useCategoryMoM: () =>
     query({
       items: [
-        { period: '2026-06', previous_period: '2026-05', category: '식비', current_amount: 740_000, previous_amount: 410_000, delta_amount: 330_000, delta_pct: 80.5 },
+        { period: '2026-06', previous_period: '2026-05', category: '식비', current_amount: 740_000, previous_amount: 410_000, delta_amount: 330_000, delta_pct: 0.8049 },
       ],
     }),
   useFixedCostSummary: () =>
@@ -91,6 +91,7 @@ describe('SpendingPage', () => {
     expect(screen.getByText('월별 카테고리 추이')).toBeInTheDocument()
     expect(screen.getByText('카테고리 전월 대비')).toBeInTheDocument()
     expect(screen.getByText(/\+80\.5%/)).toBeInTheDocument()
+    expect(screen.getByText('+₩33만')).toBeInTheDocument()
   })
 
   it('공통 거래 내역 패널이 렌더된다', () => {

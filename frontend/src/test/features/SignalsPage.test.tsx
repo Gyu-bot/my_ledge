@@ -69,7 +69,7 @@ vi.mock('../../hooks/useAnalytics', () => ({
   useCategoryMoM: () =>
     query({
       items: [
-        { period: '2026-06', previous_period: '2026-05', category: '식비', current_amount: 740_000, previous_amount: 410_000, delta_amount: 330_000, delta_pct: 80.5 },
+        { period: '2026-06', previous_period: '2026-05', category: '식비', current_amount: 740_000, previous_amount: 410_000, delta_amount: 330_000, delta_pct: 0.8049 },
       ],
     }),
   useMerchantSpend: () =>
