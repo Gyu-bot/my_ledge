@@ -71,7 +71,7 @@
 |---|---|---|
 | 운영/로드맵 문서 전환 | `T000` | 완료 |
 | 계산 정확성과 agent read contract 기반 | `T001`-`T012A` | 완료 중심 |
-| 사용자 화면과 운영 확인 | `T013`-`T014` | 바로 시작 가능 |
+| 사용자 화면과 운영 확인 | `T013`-`T014` | `T013` PR #20 리뷰 대기, 다음 구현 `T014` |
 | 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 바로 시작 가능, `T019` 막힘 |
 | 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
 | issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
@@ -327,28 +327,27 @@
 
 #### 작업 T013. 설정 화면
 - 우선순위: P1
-- 상태: 바로 시작 가능
+- 상태: PR #20 리뷰 대기
 - 선행 조건: T010
 - 완료 기준:
   - [x] `/data/settings` route와 shell navigation entry가 새 frontend IA에 존재한다.
   - [x] `GET/PATCH /api/v1/settings/analytics` frontend API client와 React Query hook이 존재한다.
   - [x] `financial_targets` 재무 목표 편집 UI가 현재 backend effective/default 값을 조회하고 저장한다.
   - [x] 비상금 목표 개월, 저축률 목표, 부채 상환 전략을 편집할 수 있다.
-  - [ ] 기존 재무 목표 편집 UI와 같은 화면에서 분석 파라미터 섹션별 default/saved/effective 값을 표시한다.
-  - [ ] 분석 파라미터 섹션별 편집 UI를 제공한다.
-  - [ ] purchase gate threshold/settings를 편집할 수 있다.
-  - [ ] discretionary velocity threshold/settings를 편집할 수 있다.
-  - [ ] recurring dry-run 기본값/settings를 편집할 수 있다.
-  - [ ] asset-liability settings 중 `asset_liability_health` 월상환 추정/유동성 설정을 편집할 수 있다.
+  - [x] 기존 재무 목표 편집 UI와 같은 화면에서 분석 파라미터 섹션별 default/saved/effective 값을 표시한다.
+  - [x] 분석 파라미터 섹션별 편집 UI를 제공한다.
+  - [x] purchase gate threshold/settings를 편집할 수 있다.
+  - [x] discretionary velocity threshold/settings를 편집할 수 있다.
+  - [x] recurring dry-run 기본값/settings를 편집할 수 있다.
+  - [x] asset-liability settings 중 `asset_liability_health` 월상환 추정/유동성 설정을 편집할 수 있다.
   - [x] reset-to-default, export/import는 일반 사용자 UI에 노출하지 않고 별도 개발/리뷰 도구로 남긴다.
   - [x] `SettingsPage` vitest가 effective 값 초기화와 저축률 `% -> ratio` PATCH 변환을 검증한다.
-  - [ ] 분석 파라미터 편집까지 포함한 frontend typecheck/lint/test가 통과한다.
-  - [ ] Codex 인앱 브라우저로 `/data/settings` 전체 설정 편집 흐름을 확인한다.
+  - [x] 분석 파라미터 편집까지 포함한 frontend typecheck/lint/test가 통과한다.
+  - [x] Codex 인앱 브라우저로 `/data/settings` 전체 설정 편집 흐름을 확인한다.
   - [x] frontend docs가 `/data/settings` route와 `settings/analytics` + `financial_targets` 설정 surface를 설명한다.
 - 참고:
-  - 상태 근거: `/data/settings` route, navigation, financial targets edit/save는 구현됐고, 분석 파라미터 섹션별 full edit UI는 바로 이어서 작업 가능하므로 바로 시작 가능하다.
-  - frontend/UI 작업이므로 브라우저 또는 동등한 visual check가 필요하다.
-  - Frontend remake PR `#15`에서 `/data/settings`와 재무 목표 편집은 들어왔으나, 분석 파라미터별 default/saved/effective 표시와 편집 폼은 아직 남아 있다.
+  - 상태 근거: PR #20(`codex/settings-analytics-frontend`)에서 분석 파라미터 full edit UI, default/saved/effective help popover, focused tests, typecheck/lint, browser DOM QA를 완료했다.
+  - 다음 구현: 같은 사용자 화면/운영 확인 묶음에서는 `T014` 운영 배포본 스모크 확인을 먼저 실행한다. 기능 구현을 이어갈 때는 `T015` observation/source foundation부터 시작하고, `/data/settings` source-priority UI(`T016A`)는 `T016` backend/API contract가 안정된 뒤 붙인다.
 
 #### 작업 T014. 운영 배포본 스모크 확인
 - 우선순위: P1

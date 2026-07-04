@@ -12,7 +12,13 @@
 **Risk:** Medium - 설정값 단위 변환과 저장 우선순위가 틀리면 분석 결과가 오해될 수 있다.
 **Decisions to sanity-check:** UI는 `/data/settings` 한 화면 안에서 섹션별 편집으로 유지한다.
 
-Your next move: approve this plan for frontend work, or narrow it to one settings section first. Full execution detail follows below.
+Implementation status: completed in PR #20 (`codex/settings-analytics-frontend`).
+
+Next implementation:
+1. Run [`operational-smoke-capture.md`](operational-smoke-capture.md) for `T014` once this PR is merged or when the target URL is confirmed. This is read-only operational/browser evidence work and should not mutate services.
+2. After `T014`, start [`asset-investment-source-priority.md`](asset-investment-source-priority.md) for the next product implementation sequence: `T015` observation/source foundation first, then `T016` source priority API, then `T016A` `/data/settings` source-priority UI only after the backend contract is stable.
+
+Full execution detail follows below.
 
 ---
 
