@@ -15,7 +15,6 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
 | [`settlement-group-canonical-netting.md`](settlement-group-canonical-netting.md) | `drafting` | `T032`: shared settlement group netting for refunds/cancellations. | [`../drafts/settlement-group-canonical-netting.md`](../drafts/settlement-group-canonical-netting.md) |
-| [`operational-smoke-capture.md`](operational-smoke-capture.md) | `drafting` | `T014`: read-only operational route/API smoke capture. | [`../drafts/operational-smoke-capture.md`](../drafts/operational-smoke-capture.md) |
 | [`asset-investment-source-priority.md`](asset-investment-source-priority.md) | `drafting` | `T015-T018` + `T016A`: observation preservation, source priority, resolution, coverage, settings UI. | [`../drafts/asset-investment-source-priority.md`](../drafts/asset-investment-source-priority.md) |
 | [`post-trust-automation-forecasting.md`](post-trust-automation-forecasting.md) | `drafting` | `T033-T039` + `T041`: post-trust automation, forecasting, decision support, limited tags. | [`../drafts/post-trust-automation-forecasting.md`](../drafts/post-trust-automation-forecasting.md) |
 
@@ -25,6 +24,7 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 |---|---|---|---|
 | [`loan-installment-candidate-review-workflows.md`](loan-installment-candidate-review-workflows.md) | `completed` | Inbox loan-candidate dismissal, installment transaction suggestions with proposed 회차, and MoM regression guard. | [`../drafts/loan-installment-candidate-review-workflows.md`](../drafts/loan-installment-candidate-review-workflows.md) |
 | [`settings-analytics-frontend.md`](settings-analytics-frontend.md) | `completed` | `T013`: analytics parameter editing in `/data/settings`; PR #20 is ready for review. | [`../drafts/settings-analytics-frontend.md`](../drafts/settings-analytics-frontend.md) |
+| [`operational-smoke-capture.md`](operational-smoke-capture.md) | `completed` | `T014`: user-owned operational confirmation; not an implementation task. | [`../drafts/operational-smoke-capture.md`](../drafts/operational-smoke-capture.md) |
 | [`transaction-source-upload-reconciliation.md`](transaction-source-upload-reconciliation.md) | `completed` | `T030-T031`: transaction source lifecycle, upload preview, explicit reconciliation apply. | [`../drafts/transaction-source-upload-reconciliation.md`](../drafts/transaction-source-upload-reconciliation.md) |
 | [`my-ledge-omo-plan-review.md`](my-ledge-omo-plan-review.md) | `completed` | Meta review scaffold superseded by the concrete plans above. | [`../drafts/my-ledge-omo-plan-review.md`](../drafts/my-ledge-omo-plan-review.md) |
 

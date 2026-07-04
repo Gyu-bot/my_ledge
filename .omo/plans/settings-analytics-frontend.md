@@ -15,8 +15,8 @@
 Implementation status: completed in PR #20 (`codex/settings-analytics-frontend`).
 
 Next implementation:
-1. Run [`operational-smoke-capture.md`](operational-smoke-capture.md) for `T014` once this PR is merged or when the target URL is confirmed. This is read-only operational/browser evidence work and should not mutate services.
-2. After `T014`, start [`asset-investment-source-priority.md`](asset-investment-source-priority.md) for the next product implementation sequence: `T015` observation/source foundation first, then `T016` source priority API, then `T016A` `/data/settings` source-priority UI only after the backend contract is stable.
+1. `T014` is complete as a user-owned operational confirmation item and is not an implementation task.
+2. Start [`asset-investment-source-priority.md`](asset-investment-source-priority.md) for the next product implementation sequence: `T015` observation/source foundation first, then `T016` source priority API, then `T016A` `/data/settings` source-priority UI only after the backend contract is stable.
 
 Full execution detail follows below.
 

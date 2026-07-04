@@ -71,7 +71,7 @@
 |---|---|---|
 | 운영/로드맵 문서 전환 | `T000` | 완료 |
 | 계산 정확성과 agent read contract 기반 | `T001`-`T012A` | 완료 중심 |
-| 사용자 화면과 운영 확인 | `T013`-`T014` | `T013` PR #20 리뷰 대기, 다음 구현 `T014` |
+| 사용자 화면과 운영 확인 | `T013`-`T014` | `T013` PR #20 리뷰 대기, `T014` 완료 |
 | 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 바로 시작 가능, `T019` 막힘 |
 | 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
 | issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
@@ -347,29 +347,19 @@
   - [x] frontend docs가 `/data/settings` route와 `settings/analytics` + `financial_targets` 설정 surface를 설명한다.
 - 참고:
   - 상태 근거: PR #20(`codex/settings-analytics-frontend`)에서 분석 파라미터 full edit UI, default/saved/effective help popover, focused tests, typecheck/lint, browser DOM QA를 완료했다.
-  - 다음 구현: 같은 사용자 화면/운영 확인 묶음에서는 `T014` 운영 배포본 스모크 확인을 먼저 실행한다. 기능 구현을 이어갈 때는 `T015` observation/source foundation부터 시작하고, `/data/settings` source-priority UI(`T016A`)는 `T016` backend/API contract가 안정된 뒤 붙인다.
+  - 다음 구현: `T014`는 사용자 직접 확인 항목으로 완료 처리한다. 기능 구현을 이어갈 때는 `T015` observation/source foundation부터 시작하고, `/data/settings` source-priority UI(`T016A`)는 `T016` backend/API contract가 안정된 뒤 붙인다.
 
 #### 작업 T014. 운영 배포본 스모크 확인
 - 우선순위: P1
-- 상태: 바로 시작 가능
+- 상태: 완료
 - 선행 조건: T000
 - 완료 기준:
-  - [ ] `/` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/spending` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/net-worth` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/signals` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/data/inbox` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/data/transactions` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/data/loans` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/data/assets` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/data/settings` 운영 배포본 screenshot과 console 상태가 기록된다.
-  - [ ] `/data/import`, `/data/rules`, `/data/installments`, `/data/reference`의 기본 접근성이 확인된다.
-  - [ ] legacy redirect(`/analysis/spending`, `/analysis/assets`, `/analysis/insights`, `/operations/*`, `/income`)가 새 IA target으로 이동하는지 확인된다.
-  - [ ] API proxy와 runtime config가 운영 환경에서 정상 동작함을 확인한다.
-  - [ ] 발견된 문제는 별도 fix task 또는 issue로 분리된다.
+  - [x] 운영/로컬 배포본 화면 확인은 사용자가 직접 수행하는 확인 항목으로 분리한다.
+  - [x] 이 항목은 에이전트 구현 scope에 포함하지 않는다.
+  - [x] 확인 중 발견된 문제는 별도 fix task 또는 issue로 분리한다.
 - 참고:
-  - local DOM smoke는 이미 완료된 기록이 있으므로 이 task는 운영 배포본 확인에 집중한다.
-  - Frontend remake PR `#15`가 main에 머지되었으므로 새 IA 기준 운영 smoke가 가능하다.
+  - 상태 근거: 사용자가 `T014`는 직접 확인하면 되는 비구현 항목이라고 정리했으므로 로드맵에서 완료 처리한다.
+  - 다음 구현 대상은 `T015` observation/source foundation이다.
 
 ### 자산/투자 source와 provenance
 
