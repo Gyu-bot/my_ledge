@@ -116,6 +116,15 @@
 | Import | `features/data/ImportPage.tsx` | `/data/import` |
 | Reference | `features/data/ReferencePage.tsx` | `/data/reference` |
 
+### Settings Page Composition
+
+- `SettingsPage` preserves the financial targets editor for emergency fund months, savings rate, and debt strategy.
+- `AnalyticsSettingsEditor` renders the sectioned analytics settings editor inside `/data/settings`.
+- Editable analytics sections: `purchase_gate`, `discretionary_velocity`, `recurring_dry_run`, `asset_liability_health`.
+- Read-only analytics sections: `spending_anomalies`, `bulk_operations`.
+- Each analytics field presents default, saved, and effective values in helper text before saving only changed user settings.
+- Current primitive usage stays within existing DS components: `Card`, `Field`, `TextInput`, `Select`, `Toggle`, `Button`, `ListSkeleton`, `ErrorState`, and `toast`.
+
 ## API And State Hooks
 
 Current frontend server state is TanStack Query based.

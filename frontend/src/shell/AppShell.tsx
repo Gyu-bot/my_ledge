@@ -46,7 +46,7 @@ export function AppShell() {
   }, [theme])
 
   return (
-    <div className="flex min-h-screen bg-bg-base">
+    <div className="flex h-dvh overflow-hidden bg-bg-base md:h-auto md:min-h-screen md:overflow-visible">
       {/* 데스크톱 사이드바 */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border-subtle bg-bg-surface px-3 py-4 md:flex">
         <div className="px-3 pb-4 text-section text-text-primary">MyLedge</div>
@@ -86,7 +86,7 @@ export function AppShell() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-14 md:overflow-visible md:pb-0">
         {/* 데이터 스튜디오 서브 칩 (모바일 전용 — 데스크톱은 사이드바가 담당) */}
         {inData && (
           <nav
@@ -113,7 +113,7 @@ export function AppShell() {
           </nav>
         )}
 
-        <main className="mx-auto w-full max-w-content flex-1 px-4 pb-20 md:px-6 md:pb-8">
+        <main className="mx-auto w-full max-w-content flex-1 overflow-y-auto px-4 pb-6 md:overflow-visible md:px-6 md:pb-8">
           <Outlet />
         </main>
       </div>

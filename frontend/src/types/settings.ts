@@ -5,113 +5,127 @@ export type PurchaseGateCandidateType =
   | 'merchant_spike'
   | 'discretionary_spike'
 
-export interface SpendingAnomaliesSettings {
-  min_delta_amount: number
-  anomaly_threshold: number
-  baseline_months: number
+export type SpendingAnomaliesSettings = {
+  readonly min_delta_amount: number
+  readonly anomaly_threshold: number
+  readonly baseline_months: number
 }
 
-export interface DiscretionaryVelocitySettings {
-  baseline_months: number
-  outlier_policy: string
-  warning_velocity_ratio: number
-  high_velocity_ratio: number
-  minimum_classification_coverage: number
-  baseline_mode: string
-  excluded_category_names: string[]
-  excluded_merchants: string[]
+export type DiscretionaryVelocitySettings = {
+  readonly baseline_months: number
+  readonly outlier_policy: string
+  readonly warning_velocity_ratio: number
+  readonly high_velocity_ratio: number
+  readonly minimum_classification_coverage: number
+  readonly baseline_mode: string
+  readonly excluded_category_names: readonly string[]
+  readonly excluded_merchants: readonly string[]
 }
 
-export interface PurchaseGateSettings {
-  large_purchase_threshold: number
-  min_candidate_amount: number
-  new_merchant_lookback_months: number
-  merchant_spike_ratio: number
-  discretionary_spike_ratio: number
-  review_cooldown_days: number
-  candidate_risk_threshold: string
-  enabled_candidate_types: PurchaseGateCandidateType[]
-  excluded_category_names: string[]
-  excluded_merchants: string[]
+export type PurchaseGateSettings = {
+  readonly large_purchase_threshold: number
+  readonly min_candidate_amount: number
+  readonly new_merchant_lookback_months: number
+  readonly merchant_spike_ratio: number
+  readonly discretionary_spike_ratio: number
+  readonly review_cooldown_days: number
+  readonly candidate_risk_threshold: string
+  readonly enabled_candidate_types: readonly PurchaseGateCandidateType[]
+  readonly excluded_category_names: readonly string[]
+  readonly excluded_merchants: readonly string[]
 }
 
-export interface RecurringDryRunSettings {
-  min_occurrences: number
-  min_distinct_months: number
-  min_distinct_days: number
-  max_amount_cv: number
-  monthly_interval_days_min: number
-  monthly_interval_days_max: number
-  weekly_interval_days_min: number
-  weekly_interval_days_max: number
-  minimum_confidence: number
-  default_apply_scope: string
-  upload_auto_apply: boolean
+export type RecurringDryRunSettings = {
+  readonly min_occurrences: number
+  readonly min_distinct_months: number
+  readonly min_distinct_days: number
+  readonly max_amount_cv: number
+  readonly monthly_interval_days_min: number
+  readonly monthly_interval_days_max: number
+  readonly weekly_interval_days_min: number
+  readonly weekly_interval_days_max: number
+  readonly minimum_confidence: number
+  readonly default_apply_scope: string
+  readonly upload_auto_apply: boolean
 }
 
-export interface AssetLiabilityHealthSettings {
-  emergency_fund_included_tiers: string[]
-  show_near_liquid_as_secondary: boolean
-  monthly_payment_estimate_lookback_months: number
-  monthly_payment_min_observations: number
-  debt_payment_confidence_requires_user_confirmation: boolean
+export type AssetLiabilityHealthSettings = {
+  readonly emergency_fund_included_tiers: readonly string[]
+  readonly show_near_liquid_as_secondary: boolean
+  readonly monthly_payment_estimate_lookback_months: number
+  readonly monthly_payment_min_observations: number
+  readonly debt_payment_confidence_requires_user_confirmation: boolean
 }
 
-export interface BulkOperationsSettings {
-  require_preview: boolean
-  require_confirmation: boolean
-  show_undo_after_delete: boolean
-  max_bulk_rows_without_extra_confirmation: number
+export type BulkOperationsSettings = {
+  readonly require_preview: boolean
+  readonly require_confirmation: boolean
+  readonly show_undo_after_delete: boolean
+  readonly max_bulk_rows_without_extra_confirmation: number
 }
 
-type Saved<T> = {
-  [K in keyof T]: T[K] | null
+export type FinancialTargetsSettings = {
+  readonly emergency_fund_target_months: number
+  readonly savings_rate_target: number | null
+  readonly debt_strategy_preference: DebtStrategyPreference | null
 }
 
-export interface FinancialTargetsSettings {
-  emergency_fund_target_months: number
-  savings_rate_target: number | null
-  debt_strategy_preference: DebtStrategyPreference | null
+export type SavedResponseSettings<T> = {
+  readonly [K in keyof T]: T[K] | null
 }
 
-export interface FinancialTargetsSettingsPatch {
-  emergency_fund_target_months?: number | null
-  savings_rate_target?: number | null
-  debt_strategy_preference?: DebtStrategyPreference | null
+export type SavedSettingsPatch<T> = {
+  readonly [K in keyof T]?: T[K] | null
 }
 
-export interface AnalyticsSettingsSection {
-  spending_anomalies: SpendingAnomaliesSettings
-  discretionary_velocity: DiscretionaryVelocitySettings
-  purchase_gate: PurchaseGateSettings
-  recurring_dry_run: RecurringDryRunSettings
-  asset_liability_health: AssetLiabilityHealthSettings
-  bulk_operations: BulkOperationsSettings
-  financial_targets: FinancialTargetsSettings
+export type SpendingAnomaliesSavedSettings = SavedResponseSettings<SpendingAnomaliesSettings>
+export type DiscretionaryVelocitySavedSettings = SavedResponseSettings<DiscretionaryVelocitySettings>
+export type PurchaseGateSavedSettings = SavedResponseSettings<PurchaseGateSettings>
+export type RecurringDryRunSavedSettings = SavedResponseSettings<RecurringDryRunSettings>
+export type AssetLiabilityHealthSavedSettings = SavedResponseSettings<AssetLiabilityHealthSettings>
+export type BulkOperationsSavedSettings = SavedResponseSettings<BulkOperationsSettings>
+export type FinancialTargetsSavedSettings = SavedResponseSettings<FinancialTargetsSettings>
+
+export type SpendingAnomaliesSettingsPatch = SavedSettingsPatch<SpendingAnomaliesSettings>
+export type DiscretionaryVelocitySettingsPatch = SavedSettingsPatch<DiscretionaryVelocitySettings>
+export type PurchaseGateSettingsPatch = SavedSettingsPatch<PurchaseGateSettings>
+export type RecurringDryRunSettingsPatch = SavedSettingsPatch<RecurringDryRunSettings>
+export type AssetLiabilityHealthSettingsPatch = SavedSettingsPatch<AssetLiabilityHealthSettings>
+export type BulkOperationsSettingsPatch = SavedSettingsPatch<BulkOperationsSettings>
+export type FinancialTargetsSettingsPatch = SavedSettingsPatch<FinancialTargetsSettings>
+
+export type AnalyticsSettingsSection = {
+  readonly spending_anomalies: SpendingAnomaliesSettings
+  readonly discretionary_velocity: DiscretionaryVelocitySettings
+  readonly purchase_gate: PurchaseGateSettings
+  readonly recurring_dry_run: RecurringDryRunSettings
+  readonly asset_liability_health: AssetLiabilityHealthSettings
+  readonly bulk_operations: BulkOperationsSettings
+  readonly financial_targets: FinancialTargetsSettings
 }
 
-export interface AnalyticsSavedSettingsSection {
-  spending_anomalies: Saved<SpendingAnomaliesSettings>
-  discretionary_velocity: Saved<DiscretionaryVelocitySettings>
-  purchase_gate: Saved<PurchaseGateSettings>
-  recurring_dry_run: Saved<RecurringDryRunSettings>
-  asset_liability_health: Saved<AssetLiabilityHealthSettings>
-  bulk_operations: Saved<BulkOperationsSettings>
-  financial_targets: Saved<FinancialTargetsSettings>
+export type AnalyticsSavedSettingsSection = {
+  readonly spending_anomalies: SpendingAnomaliesSavedSettings
+  readonly discretionary_velocity: DiscretionaryVelocitySavedSettings
+  readonly purchase_gate: PurchaseGateSavedSettings
+  readonly recurring_dry_run: RecurringDryRunSavedSettings
+  readonly asset_liability_health: AssetLiabilityHealthSavedSettings
+  readonly bulk_operations: BulkOperationsSavedSettings
+  readonly financial_targets: FinancialTargetsSavedSettings
 }
 
-export interface AnalyticsSettingsResponse {
-  defaults: AnalyticsSettingsSection
-  saved: AnalyticsSavedSettingsSection
-  effective: AnalyticsSettingsSection
+export type AnalyticsSettingsResponse = {
+  readonly defaults: AnalyticsSettingsSection
+  readonly saved: AnalyticsSavedSettingsSection
+  readonly effective: AnalyticsSettingsSection
 }
 
-export interface AnalyticsSettingsPatchRequest {
-  financial_targets?: FinancialTargetsSettingsPatch
-  spending_anomalies?: Partial<Saved<SpendingAnomaliesSettings>>
-  discretionary_velocity?: Partial<Saved<DiscretionaryVelocitySettings>>
-  purchase_gate?: Partial<Saved<PurchaseGateSettings>>
-  recurring_dry_run?: Partial<Saved<RecurringDryRunSettings>>
-  asset_liability_health?: Partial<Saved<AssetLiabilityHealthSettings>>
-  bulk_operations?: Partial<Saved<BulkOperationsSettings>>
+export type AnalyticsSettingsPatchRequest = {
+  readonly spending_anomalies?: SpendingAnomaliesSettingsPatch
+  readonly discretionary_velocity?: DiscretionaryVelocitySettingsPatch
+  readonly purchase_gate?: PurchaseGateSettingsPatch
+  readonly recurring_dry_run?: RecurringDryRunSettingsPatch
+  readonly asset_liability_health?: AssetLiabilityHealthSettingsPatch
+  readonly bulk_operations?: BulkOperationsSettingsPatch
+  readonly financial_targets?: FinancialTargetsSettingsPatch
 }
