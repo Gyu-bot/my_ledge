@@ -267,15 +267,26 @@ Main blocks:
 ```text
 [financial targets]
 
-[analytics settings snapshot]
+[analytics parameters]
+  [purchase_gate]              [discretionary_velocity]
+  [recurring_dry_run]          [asset_liability_health]
+  [spending_anomalies]         [bulk_operations]
 ```
 
 Main blocks:
 
-- emergency fund target months
-- savings rate target
-- debt strategy preference
-- analytics defaults/saved/effective settings
+- financial targets editor:
+  - emergency fund target months
+  - savings rate target
+  - debt strategy preference
+- analytics settings editor:
+  - default/saved/effective helper text for each visible setting
+  - editable `purchase_gate` values: large purchase threshold, minimum candidate amount, new merchant lookback, spike ratios, cooldown, risk threshold, enabled candidate types, excluded categories, excluded merchants
+  - editable `discretionary_velocity` values: baseline months, velocity thresholds, classification coverage, baseline/outlier mode, excluded categories, excluded merchants
+  - editable `recurring_dry_run` values: occurrence/month/day thresholds, interval bounds, confidence, default apply scope, upload auto-apply
+  - editable `asset_liability_health` values: emergency-fund tiers, near-liquid secondary display, monthly payment lookback/observations, user confirmation requirement
+  - read-only `spending_anomalies` values for anomaly threshold, delta amount, and baseline months
+  - read-only `bulk_operations` values for preview, confirmation, undo, and maximum bulk row safeguards
 
 ## Import `/data/import`
 

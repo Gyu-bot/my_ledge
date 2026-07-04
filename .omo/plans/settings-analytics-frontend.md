@@ -12,7 +12,13 @@
 **Risk:** Medium - 설정값 단위 변환과 저장 우선순위가 틀리면 분석 결과가 오해될 수 있다.
 **Decisions to sanity-check:** UI는 `/data/settings` 한 화면 안에서 섹션별 편집으로 유지한다.
 
-Your next move: approve this plan for frontend work, or narrow it to one settings section first. Full execution detail follows below.
+Implementation status: completed in PR #20 (`codex/settings-analytics-frontend`).
+
+Next implementation:
+1. `T014` is complete as a user-owned operational confirmation item and is not an implementation task.
+2. Start [`asset-investment-source-priority.md`](asset-investment-source-priority.md) for the next product implementation sequence: `T015` observation/source foundation first, then `T016` source priority API, then `T016A` `/data/settings` source-priority UI only after the backend contract is stable.
+
+Full execution detail follows below.
 
 ---
 
@@ -57,7 +63,7 @@ Your next move: approve this plan for frontend work, or narrow it to one setting
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] 1. Inventory and type the current analytics settings contract.
+- [x] 1. Inventory and type the current analytics settings contract.
   What to do / Must NOT do: Read backend schemas/service and frontend API/hook. Add/adjust frontend types only for fields that backend actually returns. Do not invent settings unsupported by backend.
   Parallelization: Wave 1 | Blocked by: none | Blocks: 2
   References (executor has NO interview context - be exhaustive): `Implentation-plan.md:306`, `backend/app/api/v1/endpoints/settings.py`, `backend/app/schemas/settings.py`, `backend/app/services/settings_service.py`, `frontend/src/api/settings.ts`, `frontend/src/hooks/useSettings.ts`.
@@ -65,7 +71,7 @@ Your next move: approve this plan for frontend work, or narrow it to one setting
   QA scenarios (name the exact tool + invocation): happy: mocked settings response renders all sections in a test, failure: missing optional saved value falls back to effective/default display without crash, Evidence `.omo/evidence/task-1-settings-analytics-frontend.md`.
   Commit: Y | `[frontend] settings analytics 타입 확장 (codex)`
 
-- [ ] 2. Build sectioned `/data/settings` editing UI.
+- [x] 2. Build sectioned `/data/settings` editing UI.
   What to do / Must NOT do: Extend `SettingsPage` using existing Ledger DS patterns. Include explicit labels for default/saved/effective and unit conversion for percentages/amounts. Keep dangerous/dev tools hidden.
   Parallelization: Wave 2 | Blocked by: 1 | Blocks: 3
   References (executor has NO interview context - be exhaustive): `frontend/src/features/data/SettingsPage.tsx`, `frontend/src/ds/`, `frontend/src/test/features/SettingsPage.test.tsx`, `frontend/src/AGENTS.md`.
@@ -73,7 +79,7 @@ Your next move: approve this plan for frontend work, or narrow it to one setting
   QA scenarios (name the exact tool + invocation): happy: edit purchase threshold and recurring dry-run default then assert PATCH payload, failure: invalid percent or negative amount shows validation state and does not PATCH, Evidence `.omo/evidence/task-2-settings-analytics-frontend.md`.
   Commit: Y | `[frontend] 분석 설정 편집 화면 완성 (codex)`
 
-- [ ] 3. Update frontend docs and run visual QA.
+- [x] 3. Update frontend docs and run visual QA.
   What to do / Must NOT do: Update current frontend contract docs only for the changed route/section behavior. Start/inspect local frontend only after checking service/port state.
   Parallelization: Wave 3 | Blocked by: 2 | Blocks: final
   References (executor has NO interview context - be exhaustive): `docs/frontend/page-wireframes.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend-design-tokens.md`, `frontend/src/test/features/SettingsPage.test.tsx`.
@@ -83,10 +89,10 @@ Your next move: approve this plan for frontend work, or narrow it to one setting
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit: verify all unchecked `T013` bullets are satisfied.
-- [ ] F2. Code quality review: ensure strict TypeScript and no `any`.
-- [ ] F3. Real manual QA: browser check `/data/settings` desktop/mobile if feasible.
-- [ ] F4. Scope fidelity: confirm no backend source-priority or unrelated UI work slipped in.
+- [x] F1. Plan compliance audit: verify all unchecked `T013` bullets are satisfied.
+- [x] F2. Code quality review: ensure strict TypeScript and no `any`.
+- [x] F3. Real manual QA: browser check `/data/settings` desktop/mobile if feasible.
+- [x] F4. Scope fidelity: confirm no backend source-priority or unrelated UI work slipped in.
 
 ## Commit strategy
 - One frontend commit is acceptable if API types, page UI, and tests are tightly coupled.

@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Card } from '../../ds/Card'
 import { Button } from '../../ds/Button'
+import { Card } from '../../ds/Card'
 import { Field, Select, TextInput } from '../../ds/Field'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { ErrorState } from '../../ds/States'
 import { toast } from '../../ds/toastStore'
-import { PageHeader } from '../../shell/PageHeader'
 import { useAnalyticsSettings, usePatchAnalyticsSettings } from '../../hooks/useSettings'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
+import { PageHeader } from '../../shell/PageHeader'
 import type { DebtStrategyPreference } from '../../types/settings'
+import { AnalyticsSettingsEditor } from './AnalyticsSettingsEditor'
 
-interface TargetsDraft {
-  emergency_fund_target_months: string
-  savings_rate_target: string
-  debt_strategy_preference: '' | DebtStrategyPreference
+type TargetsDraft = {
+  readonly emergency_fund_target_months: string
+  readonly savings_rate_target: string
+  readonly debt_strategy_preference: '' | DebtStrategyPreference
 }
 
 export function SettingsPage() {
@@ -34,7 +35,7 @@ export function SettingsPage() {
     })
   }, [effective, draft])
 
-  async function save() {
+  async function saveTargets() {
     if (!draft) return
     const months = Number.parseInt(draft.emergency_fund_target_months, 10)
     const savingsPct = draft.savings_rate_target.trim() === '' ? null : Number(draft.savings_rate_target)
@@ -66,18 +67,15 @@ export function SettingsPage() {
 
       {settings.isLoading ? <ListSkeleton rows={5} /> :
        settings.error ? <ErrorState onRetry={() => void settings.refetch()} /> :
-       draft ? (
+       draft && settings.data ? (
         <div className="flex flex-col gap-4">
           <Card
             title="재무 목표"
             meta="홈·자산·부채·신호 화면이 이 값을 읽습니다"
-            action={<Button variant="primary" disabled={!hasWrite || patch.isPending} onClick={() => void save()}>목표 저장</Button>}
+            action={<Button variant="primary" disabled={!hasWrite || patch.isPending} onClick={() => void saveTargets()}>목표 저장</Button>}
           >
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field
-                label="비상금 목표 (개월)"
-                hint={`기본 ${defaults?.emergency_fund_target_months ?? 3}개월`}
-              >
+              <Field label="비상금 목표 (개월)" hint={`기본 ${defaults?.emergency_fund_target_months ?? 3}개월`}>
                 <TextInput
                   type="number"
                   min={1}
@@ -102,7 +100,7 @@ export function SettingsPage() {
                 <Select
                   disabled={!hasWrite}
                   value={draft.debt_strategy_preference}
-                  onChange={(event) => setDraft((current) => current && { ...current, debt_strategy_preference: event.target.value as TargetsDraft['debt_strategy_preference'] })}
+                  onChange={(event) => setDraft((current) => current && { ...current, debt_strategy_preference: parseDebtStrategy(event.target.value) })}
                 >
                   <option value="">미설정 (잔액순)</option>
                   <option value="avalanche">고금리 우선 (avalanche)</option>
@@ -112,22 +110,27 @@ export function SettingsPage() {
             </div>
           </Card>
 
-          <Card title="분석 파라미터" meta="섹션별 기본값 · 저장값 · 적용값">
-            <p className="text-caption leading-relaxed text-text-muted">
-              이상 지출 threshold/baseline 개월, 재량 지출 속도, 구매 게이트, 반복 dry-run, 월상환 추정 lookback 등
-              섹션별 분석 파라미터는 백엔드 <code className="font-mono">settings/analytics</code>의 default/saved/effective
-              구조를 그대로 노출합니다. 섹션별 편집 폼은 후속 단계에서 추가합니다 — 현재는 재무 목표만 편집 가능합니다.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-micro text-text-faint">
-              {['spending_anomalies', 'discretionary_velocity', 'purchase_gate', 'recurring_dry_run', 'asset_liability_health', 'bulk_operations'].map((section) => (
-                <span key={section} className="rounded-sm border border-border-subtle bg-bg-inset px-2 py-0.5 font-mono">
-                  {section}
-                </span>
-              ))}
-            </div>
-          </Card>
+          <AnalyticsSettingsEditor
+            analytics={settings.data}
+            hasWrite={hasWrite}
+            isPending={patch.isPending}
+            onSave={async (payload) => {
+              try {
+                await patch.mutateAsync(payload)
+                toast.success('분석 설정 저장 완료')
+              } catch (error) {
+                toast.error('분석 설정 저장 실패', { description: String(error) })
+                throw error
+              }
+            }}
+          />
         </div>
       ) : null}
     </>
   )
+}
+
+function parseDebtStrategy(value: string): '' | DebtStrategyPreference {
+  if (value === 'avalanche' || value === 'snowball') return value
+  return ''
 }

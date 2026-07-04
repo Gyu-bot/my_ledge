@@ -1,24 +1,35 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
+import { Children, cloneElement, useId, type InputHTMLAttributes, type ReactElement, type ReactNode, type SelectHTMLAttributes } from 'react'
 import { cn } from '../lib/utils'
 
 const CONTROL_CLS =
   'rounded-md border border-border bg-bg-inset px-2.5 py-1.5 text-caption text-text-secondary transition-colors duration-fast focus-visible:border-accent disabled:opacity-40'
 
 interface FieldProps {
-  label?: string
+  label?: ReactNode
+  help?: ReactNode
   hint?: ReactNode
-  children: ReactNode
+  children: ReactElement<{ id?: string }>
   className?: string
 }
 
 /** 라벨 + 컨트롤 + 힌트 묶음 (세로 정렬) */
-export function Field({ label, hint, children, className }: FieldProps) {
+export function Field({ label, help, hint, children, className }: FieldProps) {
+  const generatedId = useId()
+  const child = Children.only(children)
+  const controlId = child.props.id ?? generatedId
+  const control = cloneElement(child, { id: controlId })
+
   return (
-    <label className={cn('flex flex-col gap-1', className)}>
-      {label ? <span className="text-micro text-text-muted">{label}</span> : null}
-      {children}
+    <div className={cn('flex flex-col gap-1', className)}>
+      {label ? (
+        <div className="flex items-center gap-1.5 text-micro text-text-muted">
+          <label htmlFor={controlId}>{label}</label>
+          {help}
+        </div>
+      ) : null}
+      {control}
       {hint ? <span className="text-micro text-text-faint">{hint}</span> : null}
-    </label>
+    </div>
   )
 }
 
