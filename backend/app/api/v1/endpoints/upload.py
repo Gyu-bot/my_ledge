@@ -31,7 +31,10 @@ from app.services.upload_apply_service import (
     apply_transaction_upload_workbook,
 )
 from app.services.upload_preview_models import UploadPreviewChangeData
-from app.services.upload_preview_service import preview_transaction_upload_workbook
+from app.services.upload_preview_service import (
+    InvalidUploadWorkbookError,
+    preview_transaction_upload_workbook,
+)
 from app.services.upload_service import import_transactions_from_workbook
 
 router = APIRouter()
@@ -98,11 +101,17 @@ async def preview_upload_workbook(
     snapshot_date: Annotated[date, Form(...)],
     db_session: AsyncSession = Depends(get_db_session),
 ) -> UploadPreviewResponse:
-    preview = await preview_transaction_upload_workbook(
-        db_session=db_session,
-        file_bytes=await file.read(),
-        excel_password=get_settings().excel_password,
-    )
+    try:
+        preview = await preview_transaction_upload_workbook(
+            db_session=db_session,
+            file_bytes=await file.read(),
+            excel_password=get_settings().excel_password,
+        )
+    except InvalidUploadWorkbookError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_workbook", "message": str(exc)},
+        ) from exc
     return UploadPreviewResponse(
         filename=file.filename or "upload.xlsx",
         snapshot_date=snapshot_date,
@@ -152,6 +161,11 @@ async def apply_upload_workbook(
             upload_dir=get_settings().upload_dir,
             excel_password=get_settings().excel_password,
         )
+    except InvalidUploadWorkbookError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_workbook", "message": str(exc)},
+        ) from exc
     except UploadApplySelectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

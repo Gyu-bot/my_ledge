@@ -1,7 +1,9 @@
 import json
+from io import BytesIO
 
 import pytest
 from httpx import AsyncClient
+from openpyxl import Workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import date
@@ -21,6 +23,28 @@ from app.services.upload_preview_models import (
 @pytest.fixture
 def repository_workbook_bytes() -> bytes:
     return b"repository-fixture"
+
+
+def build_workbook_without_snapshot_sheet() -> bytes:
+    workbook = Workbook()
+    workbook.active.title = "가계부 내역"
+    workbook.active.append(
+        [
+            "날짜",
+            "시간",
+            "타입",
+            "대분류",
+            "소분류",
+            "내용",
+            "금액",
+            "화폐",
+            "결제수단",
+            "메모",
+        ]
+    )
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 async def test_upload_apply_requires_api_key(
@@ -249,3 +273,36 @@ async def test_upload_apply_forwards_selection_errors(
     detail = response.json()["detail"]
     assert detail["code"] == "invalid_selection"
     assert detail["selection_index"] == 1
+
+
+async def test_upload_apply_rejects_invalid_workbook(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+) -> None:
+    response = await async_client.post(
+        "/api/v1/upload/apply",
+        headers=api_headers,
+        data={
+            "snapshot_date": "2026-03-24",
+            "apply_request": UploadApplyRequest(
+                confirmation=True,
+                selections=[
+                    UploadApplySelection(
+                        change_type="new",
+                        source_row_hash="row-hash",
+                        existing_transaction_id=None,
+                    )
+                ],
+            ).model_dump_json(),
+        },
+        files={
+            "file": (
+                "broken.xlsx",
+                build_workbook_without_snapshot_sheet(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_workbook"

@@ -1,17 +1,24 @@
 from datetime import datetime, time as time_type
 from io import BytesIO
+from zipfile import BadZipFile
 
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
 from app.parsers.decrypt import open_excel_bytes
+from app.parsers.snapshots import SnapshotParseResult, parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
 from app.services import transaction_source_identity as source_identity
 from app.services import transaction_source_lifecycle_service as lifecycle_service
 from app.services import upload_preview_change_builder as preview_builder
 from app.services import upload_preview_matching as preview_matching
 from app.services import upload_preview_models as preview_models
+
+
+class InvalidUploadWorkbookError(ValueError):
+    pass
 
 
 async def preview_transaction_upload_workbook(
@@ -32,12 +39,35 @@ async def build_transaction_upload_preview_plan_workbook(
     file_bytes: bytes,
     excel_password: str | None = None,
 ) -> preview_models.UploadTransactionPreviewPlan:
-    workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
-    workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
+    parsed_rows, _ = parse_upload_workbook_contents(
+        file_bytes=file_bytes,
+        excel_password=excel_password,
+    )
     return await build_transaction_upload_preview_plan_from_rows(
         db_session=db_session,
-        parsed_rows=parse_transactions(workbook),
+        parsed_rows=parsed_rows,
     )
+
+
+def parse_upload_workbook_contents(
+    *,
+    file_bytes: bytes,
+    excel_password: str | None = None,
+) -> tuple[list[TransactionRow], SnapshotParseResult]:
+    try:
+        workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
+        workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
+        return parse_transactions(workbook), parse_snapshots(workbook)
+    except (
+        BadZipFile,
+        InvalidFileException,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise InvalidUploadWorkbookError(
+            f"Workbook is missing required BankSalad sheets or sections: {exc}"
+        ) from exc
 
 
 async def preview_transaction_upload_from_rows(
@@ -134,17 +164,17 @@ def _build_preview_entries(
         if transaction.id in reserved_existing_ids:
             continue
         missing_change = preview_builder.build_change(
-                change_type="missing_from_latest_export",
-                review_required=False,
-                reason="An imported transaction in the latest preview window is missing from this workbook.",
-                row_hash=(
-                    transaction.source_row_hash
-                    or source_identity.source_row_hash_from_transaction(transaction)
-                ),
-                existing=transaction,
-                incoming=None,
-                candidate_ids=(transaction.id,),
-            )
+            change_type="missing_from_latest_export",
+            review_required=False,
+            reason="An imported transaction in the latest preview window is missing from this workbook.",
+            row_hash=(
+                transaction.source_row_hash
+                or source_identity.source_row_hash_from_transaction(transaction)
+            ),
+            existing=transaction,
+            incoming=None,
+            candidate_ids=(transaction.id,),
+        )
         safe_changes.append(
             preview_models.build_preview_plan_entry(
                 missing_change,

@@ -182,16 +182,7 @@ async def test_apply_workbook_persists_and_replaces_snapshots_and_original(
         )
     ]
     snapshots = build_snapshot_fixture(asset_amount="100")
-    parsed_workbooks: list[object] = []
     estimate_keys: list[list[tuple[str, str]]] = []
-
-    def parse_transaction_fixture(workbook: object) -> list[TransactionRow]:
-        parsed_workbooks.append(workbook)
-        return rows
-
-    def parse_snapshot_fixture(workbook: object) -> SnapshotParseResult:
-        parsed_workbooks.append(workbook)
-        return snapshots
 
     async def capture_estimates(
         _db_session: AsyncSession,
@@ -201,9 +192,10 @@ async def test_apply_workbook_persists_and_replaces_snapshots_and_original(
         estimate_keys.append(loan_keys)
 
     monkeypatch.setattr(
-        upload_apply_service, "parse_transactions", parse_transaction_fixture
+        upload_apply_service,
+        "parse_upload_workbook_contents",
+        lambda **_: (rows, snapshots),
     )
-    monkeypatch.setattr(upload_apply_service, "parse_snapshots", parse_snapshot_fixture)
     monkeypatch.setattr(
         upload_apply_service,
         "apply_loan_repayment_estimates_for_latest_snapshots",
@@ -282,12 +274,60 @@ async def test_apply_workbook_persists_and_replaces_snapshots_and_original(
         [("fixture-lender", "fixture-loan"), ("fixture-lender", "fixture-loan (2)")],
         [("fixture-lender", "fixture-loan"), ("fixture-lender", "fixture-loan (2)")],
     ]
-    assert parsed_workbooks[0] is parsed_workbooks[1]
-    assert parsed_workbooks[2] is parsed_workbooks[3]
     assert (upload_dir / "000001-unsafe-name.xlsx").read_bytes() == workbook_bytes
     assert (upload_dir / "000002-second.xlsx").read_bytes() == workbook_bytes
     assert not (upload_dir / "000000-old.xlsx").exists()
     assert len(list(upload_dir.iterdir())) == 5
+
+
+async def test_apply_workbook_records_nonfatal_warning_when_original_upload_save_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    workbook_bytes = build_fixture_workbook_bytes()
+    rows = [
+        build_preview_transaction_row(
+            tx_date=date(2026, 3, 24),
+            tx_time=time(9, 0),
+            description="fixture-transaction",
+            amount=-100,
+            category_major="fixture-category",
+        )
+    ]
+    snapshots = build_snapshot_fixture(asset_amount="100")
+
+    monkeypatch.setattr(
+        upload_apply_service,
+        "parse_upload_workbook_contents",
+        lambda **_: (rows, snapshots),
+    )
+
+    def fail_persist(**_: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(upload_apply_service, "persist_original_upload", fail_persist)
+
+    result = await apply_transaction_upload_workbook(
+        db_session=db_session,
+        file_bytes=workbook_bytes,
+        filename="warning.xlsx",
+        snapshot_date=date(2026, 3, 24),
+        apply_request=await build_apply_request(db_session, rows),
+        upload_dir=tmp_path / "uploads",
+    )
+
+    upload_log = await db_session.scalar(
+        select(UploadLog).where(UploadLog.id == result.upload_id)
+    )
+
+    assert result.upload_id == 1
+    assert await db_session.scalar(select(func.count()).select_from(Transaction)) == 1
+    assert upload_log is not None
+    assert upload_log.status == "success"
+    assert "warning: original upload not saved: disk full" in (
+        upload_log.error_message or ""
+    )
 
 
 async def test_apply_new_rows_creates_transactions_and_upload_log(

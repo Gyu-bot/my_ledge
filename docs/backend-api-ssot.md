@@ -372,6 +372,7 @@
 ### Upload Retention
 
 - `POST /api/v1/upload`와 `POST /api/v1/upload/apply`는 성공 commit 이후 원본 업로드 파일을 `UPLOAD_DIR`에 저장한다.
+- original upload 저장이 `OSError`로 실패해도 DB commit 결과는 rollback하지 않는다. explicit apply는 success를 유지하고 warning을 upload log에 남긴다.
 - 두 upload 응답의 snapshot summary는 `asset_snapshots`, `insurance_contracts`, `investments`, `loans`를 포함한다. `2.현금흐름현황`은 verification evidence이며 저장하지 않는다.
 - `UPLOAD_DIR` 기본값은 `/data/uploads` 이다.
 - 저장 파일명은 `upload_logs.id` 기반 prefix와 안전화된 원본 파일명을 사용한다. 예: `000123-finance-sample.xlsx`
@@ -397,7 +398,7 @@
 - 공개 read 경계:
   - 비인증 `GET /api/v1/transactions` 응답은 `source`만 공개하고 위 lineage 필드는 포함하지 않는다.
 - 업로드 흐름:
-  - `POST /api/v1/upload/preview`: 파일 파싱만 수행하고 DB를 변경하지 않는 reconciliation plan(변경안)만 반환한다.
+  - `POST /api/v1/upload/preview`: 파일 파싱만 수행하고 DB를 변경하지 않는 reconciliation plan(변경안)만 반환한다. 거래 sheet뿐 아니라 required snapshot sheet/marker도 함께 검증하고, workbook 구조가 맞지 않으면 `422 invalid_workbook`을 반환한다.
   - `safe` 변경(`new`, `unchanged`, `source_fields_changed`, `time_shifted`, `missing_from_latest_export`)은 기본 자동 적용 후보로 분리.
   - `review_required` 변경은 사용자 확인 필요. 이 중 `possible_replacement`만 명시 승인된 selection으로 supersession 적용 가능하며, `possible_duplicate`/`ambiguous`는 apply에서 거부하고 수동 해소 대상으로 남긴다.
   - `POST /api/v1/upload/apply`는 `UploadApplyRequest(confirmation=true)` + preview 결과 selection 중 safe change와 명시 승인된 `possible_replacement`만 반영하고, 같은 DB transaction에서 workbook snapshot을 해당 `snapshot_date`에 replace한다.
