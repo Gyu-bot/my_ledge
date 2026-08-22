@@ -98,13 +98,15 @@ async def import_transactions_from_workbook(
 
     try:
         parsed_snapshots = parse_snapshots(workbook)
-        await _replace_snapshots(db_session, snapshot_date, parsed_snapshots)
+        normalized_snapshots = await replace_snapshots(
+            db_session, snapshot_date, parsed_snapshots
+        )
         await db_session.flush()
         await apply_loan_repayment_estimates_for_latest_snapshots(
             db_session,
             loan_keys=[
                 (str(row["lender"]), str(row["product_name"]))
-                for row in normalize_snapshots_for_storage(parsed_snapshots).loans
+                for row in normalized_snapshots.loans
             ],
         )
         await db_session.commit()
@@ -133,13 +135,12 @@ async def import_transactions_from_workbook(
     if persist_upload_file:
         if upload_dir is None:
             raise ValueError("upload_dir is required when persist_upload_file=True")
-        _save_original_upload(
+        persist_original_upload(
             upload_dir=upload_dir,
             upload_id=upload_id,
             filename=filename,
             file_bytes=file_bytes,
         )
-        _prune_original_uploads(upload_dir=upload_dir, keep=UPLOAD_RETENTION_COUNT)
 
     return TransactionImportResult(
         upload_id=upload_id,
@@ -155,7 +156,7 @@ async def import_transactions_from_workbook(
     )
 
 
-def _save_original_upload(
+def persist_original_upload(
     *,
     upload_dir: Path,
     upload_id: int,
@@ -165,6 +166,7 @@ def _save_original_upload(
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_path = upload_dir / f"{upload_id:06d}-{_safe_upload_filename(filename)}"
     saved_path.write_bytes(file_bytes)
+    _prune_original_uploads(upload_dir=upload_dir, keep=UPLOAD_RETENTION_COUNT)
     return saved_path
 
 
@@ -184,11 +186,11 @@ def _prune_original_uploads(*, upload_dir: Path, keep: int) -> None:
         path.unlink()
 
 
-async def _replace_snapshots(
+async def replace_snapshots(
     db_session: AsyncSession,
     snapshot_date: date,
     parsed_snapshots: SnapshotParseResult,
-) -> None:
+) -> SnapshotParseResult:
     normalized_snapshots = normalize_snapshots_for_storage(parsed_snapshots)
     existing_assets = (
         (
@@ -291,6 +293,7 @@ async def _replace_snapshots(
                 **normalized_snapshots.user_profile,
             )
         )
+    return normalized_snapshots
 
 
 def _resolve_status(*, tx_success: bool, snapshot_success: bool) -> str:

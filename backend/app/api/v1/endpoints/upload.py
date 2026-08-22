@@ -149,6 +149,7 @@ async def apply_upload_workbook(
             filename=file.filename or "upload.xlsx",
             snapshot_date=snapshot_date,
             apply_request=apply_request,
+            upload_dir=get_settings().upload_dir,
             excel_password=get_settings().excel_password,
         )
     except UploadApplySelectionError as exc:
@@ -181,13 +182,21 @@ async def apply_upload_workbook(
                 ambiguous=result.change_type_counts.ambiguous,
             ),
         ),
+        snapshots=UploadSnapshotSummary(
+            asset_snapshots=result.asset_snapshot_count,
+            insurance_contracts=result.insurance_contract_count,
+            investments=result.investment_count,
+            loans=result.loan_count,
+        ),
         applied_changes=[
             _build_upload_preview_change(change) for change in result.applied_changes
         ],
     )
 
 
-def _build_upload_preview_change(change: UploadPreviewChangeData) -> UploadPreviewChange:
+def _build_upload_preview_change(
+    change: UploadPreviewChangeData,
+) -> UploadPreviewChange:
     return UploadPreviewChange(
         change_type=change.change_type,
         review_required=change.review_required,

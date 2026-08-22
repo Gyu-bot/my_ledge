@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import date
+from pathlib import Path
 
 from app.api.v1 import endpoints
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
@@ -17,9 +18,14 @@ from app.services.upload_preview_models import (
 )
 
 
+@pytest.fixture
+def repository_workbook_bytes() -> bytes:
+    return b"repository-fixture"
+
+
 async def test_upload_apply_requires_api_key(
     async_client: AsyncClient,
-    sample_workbook_bytes: bytes,
+    repository_workbook_bytes: bytes,
 ) -> None:
     response = await async_client.post(
         "/api/v1/upload/apply",
@@ -27,7 +33,7 @@ async def test_upload_apply_requires_api_key(
         files={
             "file": (
                 "finance_sample.xlsx",
-                sample_workbook_bytes,
+                repository_workbook_bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         },
@@ -39,7 +45,7 @@ async def test_upload_apply_requires_api_key(
 async def test_upload_apply_rejects_invalid_selection_payload(
     async_client: AsyncClient,
     api_headers: dict[str, str],
-    sample_workbook_bytes: bytes,
+    repository_workbook_bytes: bytes,
 ) -> None:
     response = await async_client.post(
         "/api/v1/upload/apply",
@@ -56,7 +62,7 @@ async def test_upload_apply_rejects_invalid_selection_payload(
         files={
             "file": (
                 "finance_sample.xlsx",
-                sample_workbook_bytes,
+                repository_workbook_bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         },
@@ -72,7 +78,8 @@ async def test_upload_apply_returns_success_payload_from_service(
     monkeypatch: pytest.MonkeyPatch,
     async_client: AsyncClient,
     api_headers: dict[str, str],
-    sample_workbook_bytes: bytes,
+    repository_workbook_bytes: bytes,
+    tmp_path: Path,
 ) -> None:
     async def fake_apply_transaction_upload_workbook(
         db_session: AsyncSession,
@@ -80,12 +87,14 @@ async def test_upload_apply_returns_success_payload_from_service(
         filename: str,
         snapshot_date: date,
         apply_request: UploadApplyRequest,
+        upload_dir: Path,
         excel_password: str | None = None,
     ) -> TransactionUploadApplyResult:
         if not db_session:
             raise AssertionError("missing db_session")
         if not file_bytes or not filename or not snapshot_date or not apply_request:
             raise AssertionError("missing apply arguments")
+        assert upload_dir == tmp_path / "uploads"
         return TransactionUploadApplyResult(
             upload_id=17,
             parsed_transaction_count=1,
@@ -125,6 +134,10 @@ async def test_upload_apply_returns_success_payload_from_service(
             ),
             tx_new=1,
             tx_skipped=0,
+            asset_snapshot_count=2,
+            insurance_contract_count=1,
+            investment_count=3,
+            loan_count=4,
         )
 
     monkeypatch.setattr(
@@ -132,6 +145,7 @@ async def test_upload_apply_returns_success_payload_from_service(
         "apply_transaction_upload_workbook",
         fake_apply_transaction_upload_workbook,
     )
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
 
     response = await async_client.post(
         "/api/v1/upload/apply",
@@ -152,7 +166,7 @@ async def test_upload_apply_returns_success_payload_from_service(
         files={
             "file": (
                 "finance_sample.xlsx",
-                sample_workbook_bytes,
+                repository_workbook_bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         },
@@ -167,13 +181,19 @@ async def test_upload_apply_returns_success_payload_from_service(
     assert payload["summary"]["selected_change_count"] == 1
     assert payload["summary"]["applied_change_count"] == 1
     assert payload["summary"]["change_type_counts"]["new"] == 1
+    assert payload["snapshots"] == {
+        "asset_snapshots": 2,
+        "insurance_contracts": 1,
+        "investments": 3,
+        "loans": 4,
+    }
 
 
 async def test_upload_apply_forwards_selection_errors(
     monkeypatch: pytest.MonkeyPatch,
     async_client: AsyncClient,
     api_headers: dict[str, str],
-    sample_workbook_bytes: bytes,
+    repository_workbook_bytes: bytes,
 ) -> None:
     async def fake_apply_transaction_upload_workbook(
         db_session: AsyncSession,
@@ -181,6 +201,7 @@ async def test_upload_apply_forwards_selection_errors(
         filename: str,
         snapshot_date: date,
         apply_request: UploadApplyRequest,
+        upload_dir: Path,
         excel_password: str | None = None,
     ) -> TransactionUploadApplyResult:
         if not db_session:
@@ -218,7 +239,7 @@ async def test_upload_apply_forwards_selection_errors(
         files={
             "file": (
                 "finance_sample.xlsx",
-                sample_workbook_bytes,
+                repository_workbook_bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         },

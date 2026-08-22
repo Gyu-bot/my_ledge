@@ -1601,7 +1601,7 @@ Source: `app.services.upload_service`, `app.services.transaction_source_lifecycl
 
 ### Snapshot Replace
 
-Source: `app.services.upload_service._replace_snapshots`
+Source: `app.services.upload_service.replace_snapshots`
 
 - for the given `snapshot_date`, existing rows in:
   - `asset_snapshots`

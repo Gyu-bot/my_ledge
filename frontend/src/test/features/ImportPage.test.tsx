@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { Toaster } from '../../ds/toast'
+import { dismissToast, getToasts } from '../../ds/toastStore'
 import { ImportPage } from '../../features/data/ImportPage'
 import type { UploadPreviewResponse } from '../../types/upload'
 
@@ -29,7 +31,7 @@ vi.mock('../../hooks/useCanonicalViews', () => ({
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => true }))
 
 function renderPage() {
-  return render(<MemoryRouter><ImportPage /></MemoryRouter>)
+  return render(<MemoryRouter><ImportPage /><Toaster /></MemoryRouter>)
 }
 
 const previewResponse: UploadPreviewResponse = {
@@ -149,6 +151,7 @@ function chooseFileAndDate(container: HTMLElement) {
 
 describe('ImportPage', () => {
   beforeEach(() => {
+    for (const item of getToasts()) dismissToast(item.id)
     mocks.previewMutateAsync.mockReset()
     mocks.applyMutateAsync.mockReset()
     mocks.resetMutateAsync.mockReset()
@@ -163,6 +166,12 @@ describe('ImportPage', () => {
         selected_change_count: 1,
         applied_change_count: 1,
         change_type_counts: previewResponse.summary.change_type_counts,
+      },
+      snapshots: {
+        asset_snapshots: 2,
+        insurance_contracts: 1,
+        investments: 3,
+        loans: 4,
       },
       applied_changes: [previewResponse.safe_changes[0]],
     })
@@ -196,6 +205,9 @@ describe('ImportPage', () => {
         selections: [{ change_type: 'new', source_row_hash: 'safe-row', existing_transaction_id: null }],
       })
     })
+    expect(
+      await screen.findByText('선택 1건 · 적용 1건 · 스냅샷 자산 2건 · 보험 1건 · 투자 3건 · 대출 4건'),
+    ).toBeInTheDocument()
   })
 
   it('중복 후보와 모호한 항목은 수동 확인 상태로 잠근다', async () => {

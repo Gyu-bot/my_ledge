@@ -2,11 +2,11 @@ from dataclasses import asdict
 from datetime import date
 from io import BytesIO
 import json
+from pathlib import Path
 from typing import assert_never
 
 from openpyxl import load_workbook
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.installment_transaction_link import InstallmentTransactionLink
@@ -16,6 +16,7 @@ from app.models.transaction import Transaction
 from app.models.transaction import TransactionSourceLifecycleStatus
 from app.models.upload_log import UploadLog
 from app.parsers.decrypt import open_excel_bytes
+from app.parsers.snapshots import SnapshotParseResult, parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
 from app.services.upload_apply_models import TransactionUploadApplyResult
@@ -38,6 +39,10 @@ from app.services.upload_preview_models import UploadPreviewSelectionKey
 from app.services.upload_preview_service import (
     build_transaction_upload_preview_plan_from_rows,
 )
+from app.services.loan_mapping_service import (
+    apply_loan_repayment_estimates_for_latest_snapshots,
+)
+from app.services.upload_service import persist_original_upload, replace_snapshots
 
 
 async def apply_transaction_upload_workbook(
@@ -46,17 +51,26 @@ async def apply_transaction_upload_workbook(
     filename: str,
     snapshot_date: date,
     apply_request: UploadApplyRequest,
+    upload_dir: Path,
     excel_password: str | None = None,
 ) -> TransactionUploadApplyResult:
     workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
     workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
-    return await apply_transaction_upload_from_rows(
+    result = await apply_transaction_upload_from_rows(
         db_session=db_session,
         parsed_rows=parse_transactions(workbook),
+        parsed_snapshots=parse_snapshots(workbook),
         filename=filename,
         snapshot_date=snapshot_date,
         apply_request=apply_request,
     )
+    persist_original_upload(
+        upload_dir=upload_dir,
+        upload_id=result.upload_id,
+        filename=filename,
+        file_bytes=file_bytes,
+    )
+    return result
 
 
 async def apply_transaction_upload_from_rows(
@@ -65,46 +79,71 @@ async def apply_transaction_upload_from_rows(
     filename: str,
     snapshot_date: date,
     apply_request: UploadApplyRequest,
+    parsed_snapshots: SnapshotParseResult | None = None,
 ) -> TransactionUploadApplyResult:
     preview_plan = await build_transaction_upload_preview_plan_from_rows(
         db_session=db_session,
         parsed_rows=parsed_rows,
     )
-    selected_entries = _select_apply_entries(preview_plan.entries, apply_request.selections)
-    async with db_session.begin_nested():
-        upload_log = UploadLog(
-            filename=filename,
-            snapshot_date=snapshot_date,
-            status="processing",
-            reconciliation_mode="explicit_apply",
-        )
-        db_session.add(upload_log)
-        await db_session.flush()
-        await db_session.refresh(upload_log)
+    selected_entries = _select_apply_entries(
+        preview_plan.entries, apply_request.selections
+    )
+    asset_snapshot_count = (
+        len(parsed_snapshots.asset_snapshots) if parsed_snapshots else 0
+    )
+    insurance_contract_count = (
+        len(parsed_snapshots.insurance_contracts) if parsed_snapshots else 0
+    )
+    investment_count = len(parsed_snapshots.investments) if parsed_snapshots else 0
+    loan_count = len(parsed_snapshots.loans) if parsed_snapshots else 0
 
-        created_transaction_count = 0
-        for entry in selected_entries:
-            created_transaction_count += await _apply_selected_plan_entry(
-                db_session=db_session,
-                upload_log=upload_log,
-                entry=entry,
-            )
-
-        applied_changes = tuple(entry.change for entry in selected_entries)
-        change_type_counts = preview_builder.build_change_counts(applied_changes)
-        tx_new = created_transaction_count
-        upload_log.tx_total = preview_plan.preview.parsed_transaction_count
-        upload_log.tx_new = tx_new
-        upload_log.tx_skipped = len(applied_changes) - tx_new
-        upload_log.status = "success"
-        upload_log.reconciliation_audit = _build_reconciliation_audit(
-            apply_request=apply_request,
-            applied_changes=applied_changes,
-            change_type_counts=change_type_counts,
-        )
     try:
+        async with db_session.begin_nested():
+            upload_log = UploadLog(
+                filename=filename,
+                snapshot_date=snapshot_date,
+                status="processing",
+                reconciliation_mode="explicit_apply",
+            )
+            db_session.add(upload_log)
+            await db_session.flush()
+            await db_session.refresh(upload_log)
+
+            created_transaction_count = 0
+            for entry in selected_entries:
+                created_transaction_count += await _apply_selected_plan_entry(
+                    db_session=db_session,
+                    upload_log=upload_log,
+                    entry=entry,
+                )
+
+            if parsed_snapshots is not None:
+                normalized_snapshots = await replace_snapshots(
+                    db_session, snapshot_date, parsed_snapshots
+                )
+                await db_session.flush()
+                await apply_loan_repayment_estimates_for_latest_snapshots(
+                    db_session,
+                    loan_keys=[
+                        (str(row["lender"]), str(row["product_name"]))
+                        for row in normalized_snapshots.loans
+                    ],
+                )
+
+            applied_changes = tuple(entry.change for entry in selected_entries)
+            change_type_counts = preview_builder.build_change_counts(applied_changes)
+            tx_new = created_transaction_count
+            upload_log.tx_total = preview_plan.preview.parsed_transaction_count
+            upload_log.tx_new = tx_new
+            upload_log.tx_skipped = len(applied_changes) - tx_new
+            upload_log.reconciliation_audit = _build_reconciliation_audit(
+                apply_request=apply_request,
+                applied_changes=applied_changes,
+                change_type_counts=change_type_counts,
+            )
+            upload_log.status = "success"
         await db_session.commit()
-    except SQLAlchemyError:
+    except Exception:
         await db_session.rollback()
         raise
 
@@ -117,6 +156,10 @@ async def apply_transaction_upload_from_rows(
         applied_changes=applied_changes,
         tx_new=tx_new,
         tx_skipped=len(applied_changes) - tx_new,
+        asset_snapshot_count=asset_snapshot_count,
+        insurance_contract_count=insurance_contract_count,
+        investment_count=investment_count,
+        loan_count=loan_count,
     )
 
 
@@ -231,7 +274,9 @@ async def _apply_selected_plan_entry(
             )
             return 1
         case "possible_duplicate" | "ambiguous":
-            raise AssertionError("review-required changes must be rejected before apply")
+            raise AssertionError(
+                "review-required changes must be rejected before apply"
+            )
         case unreachable:
             assert_never(unreachable)
 

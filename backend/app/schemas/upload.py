@@ -153,4 +153,5 @@ class UploadApplyResponse(BaseModel):
     filename: str
     snapshot_date: date
     summary: UploadApplySummary
+    snapshots: UploadSnapshotSummary
     applied_changes: list[UploadPreviewChange]

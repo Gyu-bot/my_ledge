@@ -1,8 +1,15 @@
+export interface UploadSnapshotSummary {
+  readonly asset_snapshots: number
+  readonly insurance_contracts: number
+  readonly investments: number
+  readonly loans: number
+}
+
 export interface UploadResponse {
   status: string
   upload_id: number
   transactions: { total: number; new: number; skipped: number }
-  snapshots: { asset_snapshots: number; insurance_contracts: number; investments: number; loans: number }
+  snapshots: UploadSnapshotSummary
   error_message: string | null
 }
 
@@ -110,6 +117,7 @@ export interface UploadApplyResponse {
     readonly applied_change_count: number
     readonly change_type_counts: UploadPreviewChangeCounts
   }
+  readonly snapshots: UploadSnapshotSummary
   readonly applied_changes: readonly UploadPreviewChange[]
 }
 
