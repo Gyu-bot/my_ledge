@@ -93,7 +93,7 @@
 | `GET` | `/api/v1/upload/logs` | live | 최근 10건 반환 |
 | `POST` | `/api/v1/upload` | live | multipart + `snapshot_date` required |
 | `POST` | `/api/v1/upload/preview` | live | no-write preview; multipart + `snapshot_date` required |
-| `POST` | `/api/v1/upload/apply` | live | preview+explicit 선택 적용; multipart + `snapshot_date` + `apply_request` required |
+| `POST` | `/api/v1/upload/apply` | live | preview+explicit 선택 적용 + workbook snapshot replace; multipart + `snapshot_date` + `apply_request` required |
 | `POST` | `/api/v1/data/reset` | live | `transactions_only` / `transactions_and_snapshots` |
 | `GET` | `/api/v1/profile` | live | latest BankSalad `1.고객정보` profile snapshot; stores gender/age/KCB score only, not name/email |
 | `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
@@ -301,7 +301,7 @@
 - 업로드는 `snapshot_date`를 필수로 받는다.
 - snapshot 적재는 문서상 UPSERT처럼 보일 수 있지만, **현재 구현은 해당 `snapshot_date` 행을 먼저 삭제한 뒤 새 파싱 결과 전체를 다시 insert** 한다.
 - 즉, contract는 실질적으로 “date-scoped replace”다.
-- same-date snapshot replace preserves saved asset liquidity metadata and loan repayment metadata sources where possible, then reruns linked-loan repayment estimation for the latest affected loan snapshots.
+- legacy `/upload`과 explicit `/upload/apply` 모두 같은 date-scoped snapshot replace를 사용한다. same-date replace는 saved asset liquidity metadata와 loan repayment metadata source를 가능한 범위에서 보존한 뒤 최신 affected loan snapshot의 linked-loan repayment estimation을 다시 실행한다.
 
 ### Loan Repayment Metadata Source
 
@@ -371,8 +371,9 @@
 
 ### Upload Retention
 
-- `POST /api/v1/upload` 는 import log commit 이후 원본 업로드 파일을 `UPLOAD_DIR` 에 저장한다.
-- upload snapshot summary includes `asset_snapshots`, `insurance_contracts`, `investments`, and `loans`; `2.현금흐름현황` is verification evidence only and is not stored.
+- `POST /api/v1/upload`와 `POST /api/v1/upload/apply`는 성공 commit 이후 원본 업로드 파일을 `UPLOAD_DIR`에 저장한다.
+- original upload 저장이 `OSError`로 실패해도 DB commit 결과는 rollback하지 않는다. explicit apply는 success를 유지하고 warning을 upload log에 남긴다.
+- 두 upload 응답의 snapshot summary는 `asset_snapshots`, `insurance_contracts`, `investments`, `loans`를 포함한다. `2.현금흐름현황`은 verification evidence이며 저장하지 않는다.
 - `UPLOAD_DIR` 기본값은 `/data/uploads` 이다.
 - 저장 파일명은 `upload_logs.id` 기반 prefix와 안전화된 원본 파일명을 사용한다. 예: `000123-finance-sample.xlsx`
 - 저장 후 같은 디렉터리의 파일은 최신 5개만 남기고 오래된 파일을 삭제한다.
@@ -397,10 +398,10 @@
 - 공개 read 경계:
   - 비인증 `GET /api/v1/transactions` 응답은 `source`만 공개하고 위 lineage 필드는 포함하지 않는다.
 - 업로드 흐름:
-  - `POST /api/v1/upload/preview`: 파일 파싱만 수행하고 DB를 변경하지 않는 reconciliation plan(변경안)만 반환한다.
+  - `POST /api/v1/upload/preview`: 파일 파싱만 수행하고 DB를 변경하지 않는 reconciliation plan(변경안)만 반환한다. 거래 sheet뿐 아니라 required snapshot sheet/marker도 함께 검증하고, workbook 구조가 맞지 않으면 `422 invalid_workbook`을 반환한다.
   - `safe` 변경(`new`, `unchanged`, `source_fields_changed`, `time_shifted`, `missing_from_latest_export`)은 기본 자동 적용 후보로 분리.
   - `review_required` 변경은 사용자 확인 필요. 이 중 `possible_replacement`만 명시 승인된 selection으로 supersession 적용 가능하며, `possible_duplicate`/`ambiguous`는 apply에서 거부하고 수동 해소 대상으로 남긴다.
-  - `POST /api/v1/upload/apply`는 `UploadApplyRequest(confirmation=true)` + preview 결과 selection 중 safe change와 명시 승인된 `possible_replacement`만 반영한다.
+  - `POST /api/v1/upload/apply`는 `UploadApplyRequest(confirmation=true)` + preview 결과 selection 중 safe change와 명시 승인된 `possible_replacement`만 반영하고, 같은 DB transaction에서 workbook snapshot을 해당 `snapshot_date`에 replace한다.
 - 변경 상세:
   - 응답 change 항목은 기존 값/신규 값 차이(field_changes), 판단 근거(reason), 사용자 보존 필드 목록(preserved_user_fields), 보존 요약(preservation_summary)과 함께 보낸다.
   - `merchant_override`, `category_*_user`, `memo`, `is_deleted`, `merged_into_id` 등 사용자 관리 값은 재적용 시 보존 규칙을 따른다.

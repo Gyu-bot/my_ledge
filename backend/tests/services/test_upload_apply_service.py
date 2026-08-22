@@ -1,19 +1,32 @@
 from datetime import date, time
+from decimal import Decimal
+from io import BytesIO
 import json
+from pathlib import Path
 
-from sqlalchemy import select
+from openpyxl import Workbook
+import pytest
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.asset_snapshot import AssetSnapshot
+from app.models.insurance_contract import InsuranceContract
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
+from app.models.investment import Investment
+from app.models.loan import Loan
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.transaction import Transaction
 from app.models.transaction import TransactionSourceLifecycleStatus
 from app.models.upload_log import UploadLog
+from app.models.user_profile_snapshot import UserProfileSnapshot
+from app.parsers.snapshots import SnapshotParseResult
 from app.parsers.transactions import TransactionRow
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
 from app.services import transaction_source_identity
+from app.services import upload_apply_service
 from app.services.upload_apply_service import (
+    apply_transaction_upload_workbook,
     apply_transaction_upload_from_rows,
 )
 from app.services.upload_preview_service import preview_transaction_upload_from_rows
@@ -71,6 +84,252 @@ def build_preview_transaction(
     )
 
 
+def build_fixture_workbook_bytes() -> bytes:
+    workbook = Workbook()
+    workbook.active.title = "fixture"
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def build_snapshot_fixture(*, asset_amount: str) -> SnapshotParseResult:
+    return SnapshotParseResult(
+        asset_snapshots=[
+            {
+                "side": "asset",
+                "category": "fixture-category",
+                "product_name": "fixture-asset",
+                "amount": Decimal(asset_amount),
+            }
+        ],
+        insurance_contracts=[
+            {
+                "insurer": "fixture-insurer",
+                "product_name": "fixture-insurance",
+                "contract_status": "active",
+                "total_paid": Decimal("10"),
+                "contract_date": None,
+                "maturity_date": None,
+            }
+        ],
+        investments=[
+            {
+                "product_type": "fund",
+                "broker": "fixture-broker",
+                "product_name": "fixture-investment",
+                "cost_basis": Decimal("20"),
+                "market_value": Decimal("21"),
+                "return_rate": Decimal("5"),
+            }
+        ],
+        loans=[
+            {
+                "loan_type": "credit",
+                "lender": "fixture-lender",
+                "product_name": "fixture-loan",
+                "principal": Decimal("30"),
+                "balance": Decimal("25"),
+                "interest_rate": Decimal("3"),
+                "start_date": None,
+                "maturity_date": None,
+            },
+            {
+                "loan_type": "credit",
+                "lender": "fixture-lender",
+                "product_name": "fixture-loan",
+                "principal": Decimal("40"),
+                "balance": Decimal("35"),
+                "interest_rate": Decimal("4"),
+                "start_date": None,
+                "maturity_date": None,
+            },
+        ],
+        user_profile={"gender": "fixture", "age": 30, "credit_score_kcb": 800},
+    )
+
+
+async def build_apply_request(
+    db_session: AsyncSession,
+    rows: list[TransactionRow],
+) -> UploadApplyRequest:
+    preview = await preview_transaction_upload_from_rows(db_session, rows)
+    change = preview.safe_changes[0]
+    return UploadApplyRequest(
+        confirmation=True,
+        selections=[
+            UploadApplySelection(
+                change_type=change.change_type,
+                source_row_hash=change.source_row_hash or "",
+                existing_transaction_id=change.existing_transaction_id,
+            )
+        ],
+    )
+
+
+async def test_apply_workbook_persists_and_replaces_snapshots_and_original(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    workbook_bytes = build_fixture_workbook_bytes()
+    rows = [
+        build_preview_transaction_row(
+            tx_date=date(2026, 3, 24),
+            tx_time=time(9, 0),
+            description="fixture-transaction",
+            amount=-100,
+            category_major="fixture-category",
+        )
+    ]
+    snapshots = build_snapshot_fixture(asset_amount="100")
+    estimate_keys: list[list[tuple[str, str]]] = []
+
+    async def capture_estimates(
+        _db_session: AsyncSession,
+        *,
+        loan_keys: list[tuple[str, str]],
+    ) -> None:
+        estimate_keys.append(loan_keys)
+
+    monkeypatch.setattr(
+        upload_apply_service,
+        "parse_upload_workbook_contents",
+        lambda **_: (rows, snapshots),
+    )
+    monkeypatch.setattr(
+        upload_apply_service,
+        "apply_loan_repayment_estimates_for_latest_snapshots",
+        capture_estimates,
+    )
+
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    for index in range(5):
+        (upload_dir / f"00000{index}-old.xlsx").write_bytes(b"old")
+
+    first = await apply_transaction_upload_workbook(
+        db_session=db_session,
+        file_bytes=workbook_bytes,
+        filename="../../unsafe name.xlsx",
+        snapshot_date=date(2026, 3, 24),
+        apply_request=await build_apply_request(db_session, rows),
+        upload_dir=upload_dir,
+    )
+
+    asset = await db_session.scalar(select(AssetSnapshot))
+    loan = await db_session.scalar(
+        select(Loan).where(Loan.product_name == "fixture-loan")
+    )
+    assert asset is not None
+    assert loan is not None
+    asset.liquidity_tier = "immediate"
+    asset.is_cash_equivalent = True
+    loan.monthly_payment = Decimal("7")
+    loan.monthly_payment_source = "manual"
+    loan.repayment_method = "principal_interest"
+    loan.repayment_method_source = "manual"
+    await db_session.commit()
+
+    snapshots = build_snapshot_fixture(asset_amount="200")
+    second = await apply_transaction_upload_workbook(
+        db_session=db_session,
+        file_bytes=workbook_bytes,
+        filename="second.xlsx",
+        snapshot_date=date(2026, 3, 24),
+        apply_request=await build_apply_request(db_session, rows),
+        upload_dir=upload_dir,
+    )
+
+    replaced_asset = await db_session.scalar(select(AssetSnapshot))
+    replaced_loan = await db_session.scalar(
+        select(Loan).where(Loan.product_name == "fixture-loan")
+    )
+    assert first.asset_snapshot_count == 1
+    assert first.insurance_contract_count == 1
+    assert first.investment_count == 1
+    assert first.loan_count == 2
+    assert second.asset_snapshot_count == 1
+    assert await db_session.scalar(select(func.count()).select_from(Transaction)) == 1
+    assert await db_session.scalar(select(func.count()).select_from(AssetSnapshot)) == 1
+    assert (
+        await db_session.scalar(select(func.count()).select_from(InsuranceContract))
+        == 1
+    )
+    assert await db_session.scalar(select(func.count()).select_from(Investment)) == 1
+    assert await db_session.scalar(select(func.count()).select_from(Loan)) == 2
+    assert (
+        await db_session.scalar(select(func.count()).select_from(UserProfileSnapshot))
+        == 1
+    )
+    assert replaced_asset is not None
+    assert replaced_asset.amount == Decimal("200")
+    assert replaced_asset.liquidity_tier == "immediate"
+    assert replaced_asset.is_cash_equivalent is True
+    assert replaced_loan is not None
+    assert replaced_loan.monthly_payment == Decimal("7")
+    assert replaced_loan.monthly_payment_source == "manual"
+    assert replaced_loan.repayment_method == "principal_interest"
+    assert replaced_loan.repayment_method_source == "manual"
+    assert estimate_keys == [
+        [("fixture-lender", "fixture-loan"), ("fixture-lender", "fixture-loan (2)")],
+        [("fixture-lender", "fixture-loan"), ("fixture-lender", "fixture-loan (2)")],
+    ]
+    assert (upload_dir / "000001-unsafe-name.xlsx").read_bytes() == workbook_bytes
+    assert (upload_dir / "000002-second.xlsx").read_bytes() == workbook_bytes
+    assert not (upload_dir / "000000-old.xlsx").exists()
+    assert len(list(upload_dir.iterdir())) == 5
+
+
+async def test_apply_workbook_records_nonfatal_warning_when_original_upload_save_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    workbook_bytes = build_fixture_workbook_bytes()
+    rows = [
+        build_preview_transaction_row(
+            tx_date=date(2026, 3, 24),
+            tx_time=time(9, 0),
+            description="fixture-transaction",
+            amount=-100,
+            category_major="fixture-category",
+        )
+    ]
+    snapshots = build_snapshot_fixture(asset_amount="100")
+
+    monkeypatch.setattr(
+        upload_apply_service,
+        "parse_upload_workbook_contents",
+        lambda **_: (rows, snapshots),
+    )
+
+    def fail_persist(**_: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(upload_apply_service, "persist_original_upload", fail_persist)
+
+    result = await apply_transaction_upload_workbook(
+        db_session=db_session,
+        file_bytes=workbook_bytes,
+        filename="warning.xlsx",
+        snapshot_date=date(2026, 3, 24),
+        apply_request=await build_apply_request(db_session, rows),
+        upload_dir=tmp_path / "uploads",
+    )
+
+    upload_log = await db_session.scalar(
+        select(UploadLog).where(UploadLog.id == result.upload_id)
+    )
+
+    assert result.upload_id == 1
+    assert await db_session.scalar(select(func.count()).select_from(Transaction)) == 1
+    assert upload_log is not None
+    assert upload_log.status == "success"
+    assert "warning: original upload not saved: disk full" in (
+        upload_log.error_message or ""
+    )
+
+
 async def test_apply_new_rows_creates_transactions_and_upload_log(
     db_session: AsyncSession,
 ) -> None:
@@ -94,7 +353,9 @@ async def test_apply_new_rows_creates_transactions_and_upload_log(
             selections=[
                 UploadApplySelection(
                     change_type="new",
-                    source_row_hash=transaction_source_identity.source_row_hash_from_row(incoming[0]),
+                    source_row_hash=transaction_source_identity.source_row_hash_from_row(
+                        incoming[0]
+                    ),
                     existing_transaction_id=None,
                 )
             ],
@@ -102,14 +363,19 @@ async def test_apply_new_rows_creates_transactions_and_upload_log(
     )
 
     transaction = await db_session.scalar(select(Transaction))
-    upload_log = await db_session.scalar(select(UploadLog).where(UploadLog.id == result.upload_id))
+    upload_log = await db_session.scalar(
+        select(UploadLog).where(UploadLog.id == result.upload_id)
+    )
 
     assert result.tx_new == 1
     assert result.selected_change_count == 1
     assert result.applied_change_count == 1
     assert transaction is not None
     assert transaction.description == "커피"
-    assert transaction.source_lifecycle_status == TransactionSourceLifecycleStatus.ACTIVE.value
+    assert (
+        transaction.source_lifecycle_status
+        == TransactionSourceLifecycleStatus.ACTIVE.value
+    )
     assert upload_log is not None
     assert upload_log.reconciliation_mode == "explicit_apply"
 
@@ -164,7 +430,9 @@ async def test_apply_source_fields_changed_preserves_user_overrides(
         ),
     )
 
-    stored = await db_session.scalar(select(Transaction).where(Transaction.id == existing.id))
+    stored = await db_session.scalar(
+        select(Transaction).where(Transaction.id == existing.id)
+    )
 
     assert result.tx_new == 0
     assert result.applied_change_count == 1
@@ -202,7 +470,9 @@ async def test_apply_missing_from_latest_export_marks_lifecycle_status(
 
     preview = await preview_transaction_upload_from_rows(db_session, incoming)
     missing_change = next(
-        change for change in preview.safe_changes if change.change_type == "missing_from_latest_export"
+        change
+        for change in preview.safe_changes
+        if change.change_type == "missing_from_latest_export"
     )
 
     result = await apply_transaction_upload_from_rows(
@@ -325,12 +595,12 @@ async def test_possible_replacement_requires_review_and_explicit_apply_supersede
 
     rows = list(
         (
-            await db_session.scalars(
-                select(Transaction).order_by(Transaction.id.asc())
-            )
+            await db_session.scalars(select(Transaction).order_by(Transaction.id.asc()))
         ).all()
     )
-    upload_log = await db_session.scalar(select(UploadLog).where(UploadLog.id == result.upload_id))
+    upload_log = await db_session.scalar(
+        select(UploadLog).where(UploadLog.id == result.upload_id)
+    )
     existing_after = next(row for row in rows if row.id == existing.id)
     replacement = next(row for row in rows if row.id != existing.id)
     moved_installment_link = await db_session.scalar(

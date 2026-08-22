@@ -75,7 +75,7 @@ export function ImportPage() {
     try {
       const result = await applyPreview.mutateAsync({ file, snapshotDate, selections })
       toast.success('선택 변경 적용 완료', {
-        description: `선택 ${result.summary.selected_change_count}건 · 적용 ${result.summary.applied_change_count}건`,
+        description: `선택 ${result.summary.selected_change_count}건 · 적용 ${result.summary.applied_change_count}건 · 스냅샷 자산 ${result.snapshots.asset_snapshots}건 · 보험 ${result.snapshots.insurance_contracts}건 · 투자 ${result.snapshots.investments}건 · 대출 ${result.snapshots.loans}건`,
       })
       setFile(null)
       setSnapshotDate('')

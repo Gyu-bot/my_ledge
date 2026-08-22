@@ -1,12 +1,15 @@
 import pytest
 
 from datetime import date, time
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.asset_snapshot import AssetSnapshot
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
+from app.parsers.snapshots import SnapshotParseResult
 from app.parsers.transactions import TransactionRow
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
 from app.services import upload_apply_service
@@ -139,10 +142,16 @@ async def test_apply_rollback_preserves_atomicity_when_mid_apply_fails(
             raise RuntimeError("mid-apply failure")
         return original_builder(row, touch)
 
-    monkeypatch.setattr(upload_apply_service, "build_imported_transaction", failing_builder)
+    monkeypatch.setattr(
+        upload_apply_service, "build_imported_transaction", failing_builder
+    )
 
-    before_tx_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    before_log_count = await db_session.scalar(select(func.count()).select_from(UploadLog))
+    before_tx_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    before_log_count = await db_session.scalar(
+        select(func.count()).select_from(UploadLog)
+    )
 
     with pytest.raises(RuntimeError, match="mid-apply failure"):
         await apply_transaction_upload_from_rows(
@@ -167,8 +176,12 @@ async def test_apply_rollback_preserves_atomicity_when_mid_apply_fails(
             ),
         )
 
-    after_tx_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    after_log_count = await db_session.scalar(select(func.count()).select_from(UploadLog))
+    after_tx_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    after_log_count = await db_session.scalar(
+        select(func.count()).select_from(UploadLog)
+    )
     failure_log = await db_session.scalar(
         select(UploadLog).where(UploadLog.filename == "rollback_mid_failure.xlsx")
     )
@@ -177,6 +190,83 @@ async def test_apply_rollback_preserves_atomicity_when_mid_apply_fails(
     assert after_tx_count == before_tx_count
     assert after_log_count == before_log_count
     assert failure_log is None
+
+
+async def test_apply_snapshot_failure_rolls_back_transactions_and_success_log(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: AsyncSession,
+) -> None:
+    incoming = [
+        build_preview_transaction_row(
+            tx_date=date(2026, 3, 27),
+            tx_time=time(11, 0),
+            description="snapshot-failure",
+            amount=-5000,
+            category_major="fixture-category",
+        )
+    ]
+    preview = await preview_transaction_upload_from_rows(db_session, incoming)
+    change = preview.safe_changes[0]
+    parsed_snapshots = SnapshotParseResult(
+        asset_snapshots=[
+            {
+                "side": "asset",
+                "category": "fixture-category",
+                "product_name": "fixture-asset",
+                "amount": Decimal("100"),
+            }
+        ],
+        investments=[],
+        loans=[],
+    )
+
+    async def failing_replace(
+        session: AsyncSession,
+        snapshot_date: date,
+        _parsed_snapshots: SnapshotParseResult,
+    ) -> SnapshotParseResult:
+        session.add(
+            AssetSnapshot(
+                snapshot_date=snapshot_date,
+                side="asset",
+                category="fixture-category",
+                product_name="fixture-asset",
+                amount=Decimal("100"),
+            )
+        )
+        await session.flush()
+        raise RuntimeError("snapshot persistence failure")
+
+    monkeypatch.setattr(upload_apply_service, "replace_snapshots", failing_replace)
+
+    with pytest.raises(RuntimeError, match="snapshot persistence failure"):
+        await apply_transaction_upload_from_rows(
+            db_session=db_session,
+            parsed_rows=incoming,
+            filename="snapshot_failure.xlsx",
+            snapshot_date=date(2026, 3, 24),
+            apply_request=UploadApplyRequest(
+                confirmation=True,
+                selections=[
+                    UploadApplySelection(
+                        change_type=change.change_type,
+                        source_row_hash=change.source_row_hash or "",
+                        existing_transaction_id=change.existing_transaction_id,
+                    )
+                ],
+            ),
+            parsed_snapshots=parsed_snapshots,
+        )
+
+    assert await db_session.scalar(select(func.count()).select_from(Transaction)) == 0
+    assert await db_session.scalar(select(func.count()).select_from(AssetSnapshot)) == 0
+    assert await db_session.scalar(select(func.count()).select_from(UploadLog)) == 0
+    assert (
+        await db_session.scalar(
+            select(UploadLog).where(UploadLog.filename == "snapshot_failure.xlsx")
+        )
+        is None
+    )
 
 
 async def test_apply_rejects_review_required_ambiguous_without_mutation(
@@ -214,8 +304,12 @@ async def test_apply_rejects_review_required_ambiguous_without_mutation(
     review_change = preview.review_required_changes[0]
     assert review_change.change_type in {"ambiguous", "possible_duplicate"}
 
-    before_tx_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    before_log_count = await db_session.scalar(select(func.count()).select_from(UploadLog))
+    before_tx_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    before_log_count = await db_session.scalar(
+        select(func.count()).select_from(UploadLog)
+    )
 
     with pytest.raises(UploadApplySelectionError) as exc:
         await apply_transaction_upload_from_rows(
@@ -235,10 +329,16 @@ async def test_apply_rejects_review_required_ambiguous_without_mutation(
             ),
         )
 
-    after_tx_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    after_log_count = await db_session.scalar(select(func.count()).select_from(UploadLog))
+    after_tx_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    after_log_count = await db_session.scalar(
+        select(func.count()).select_from(UploadLog)
+    )
     failure_log = await db_session.scalar(
-        select(UploadLog).where(UploadLog.filename == "review_required_no_mutation.xlsx")
+        select(UploadLog).where(
+            UploadLog.filename == "review_required_no_mutation.xlsx"
+        )
     )
 
     assert exc.value.code == "review_required_selection"
@@ -265,8 +365,12 @@ async def test_apply_rejects_review_required_possible_duplicate_without_mutation
     review_change = preview.review_required_changes[0]
     assert review_change.change_type == "possible_duplicate"
 
-    before_tx_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    before_log_count = await db_session.scalar(select(func.count()).select_from(UploadLog))
+    before_tx_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    before_log_count = await db_session.scalar(
+        select(func.count()).select_from(UploadLog)
+    )
 
     with pytest.raises(UploadApplySelectionError) as exc:
         await apply_transaction_upload_from_rows(
@@ -286,10 +390,16 @@ async def test_apply_rejects_review_required_possible_duplicate_without_mutation
             ),
         )
 
-    after_tx_count = await db_session.scalar(select(func.count()).select_from(Transaction))
-    after_log_count = await db_session.scalar(select(func.count()).select_from(UploadLog))
+    after_tx_count = await db_session.scalar(
+        select(func.count()).select_from(Transaction)
+    )
+    after_log_count = await db_session.scalar(
+        select(func.count()).select_from(UploadLog)
+    )
     failure_log = await db_session.scalar(
-        select(UploadLog).where(UploadLog.filename == "review_required_duplicate_no_mutation.xlsx")
+        select(UploadLog).where(
+            UploadLog.filename == "review_required_duplicate_no_mutation.xlsx"
+        )
     )
 
     assert exc.value.code == "review_required_selection"

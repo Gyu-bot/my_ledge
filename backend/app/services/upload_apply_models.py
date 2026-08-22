@@ -42,3 +42,7 @@ class TransactionUploadApplyResult:
     applied_changes: tuple[UploadPreviewChangeData, ...]
     tx_new: int
     tx_skipped: int
+    asset_snapshot_count: int
+    insurance_contract_count: int
+    investment_count: int
+    loan_count: int

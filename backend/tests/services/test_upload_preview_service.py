@@ -1,11 +1,17 @@
 from datetime import date, time
+from io import BytesIO
 
+from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
 from app.parsers.transactions import TransactionRow
-from app.services.upload_preview_service import preview_transaction_upload_from_rows
+from app.services.upload_preview_service import (
+    InvalidUploadWorkbookError,
+    preview_transaction_upload_from_rows,
+    preview_transaction_upload_workbook,
+)
 from app.services import transaction_source_identity
 
 
@@ -71,6 +77,40 @@ async def test_preview_upload_with_no_rows_returns_empty_plan(
     assert result.review_required_count == 0
     assert len(result.safe_changes) == 0
     assert len(result.review_required_changes) == 0
+
+
+async def test_preview_upload_workbook_rejects_missing_snapshot_sheet(
+    db_session: AsyncSession,
+) -> None:
+    workbook = Workbook()
+    workbook.active.title = "가계부 내역"
+    workbook.active.append(
+        [
+            "날짜",
+            "시간",
+            "타입",
+            "대분류",
+            "소분류",
+            "내용",
+            "금액",
+            "화폐",
+            "결제수단",
+            "메모",
+        ]
+    )
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    try:
+        await preview_transaction_upload_workbook(
+            db_session=db_session,
+            file_bytes=buffer.getvalue(),
+        )
+    except InvalidUploadWorkbookError as exc:
+        assert "BankSalad sheets or sections" in str(exc)
+        assert "뱅샐현황" in str(exc)
+    else:
+        raise AssertionError("missing snapshot sheet should be rejected")
 
 
 async def test_preview_upload_marks_identical_rows_as_unchanged(
@@ -176,7 +216,9 @@ async def test_preview_upload_includes_missing_exported_row(
     )
     assert missing_change.existing_transaction_id == existing.id
 
-    existing_row = await db_session.scalar(select(Transaction).where(Transaction.id == existing.id))
+    existing_row = await db_session.scalar(
+        select(Transaction).where(Transaction.id == existing.id)
+    )
     assert existing_row is not None
     assert (
         transaction_source_identity.source_row_hash_from_transaction(existing_row)
