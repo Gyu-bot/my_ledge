@@ -1,5 +1,7 @@
+ARG SOURCE_COMMIT=unknown
 FROM node:20-alpine AS build
 WORKDIR /app
+ARG SOURCE_COMMIT
 ARG VITE_API_KEY
 ENV VITE_API_KEY=${VITE_API_KEY}
 
@@ -7,9 +9,11 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN npm run build && node scripts/write-build-info.mjs
 
 FROM nginx:1.27-alpine
+ARG SOURCE_COMMIT
+LABEL org.opencontainers.image.revision=${SOURCE_COMMIT}
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker-entrypoint.d/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh

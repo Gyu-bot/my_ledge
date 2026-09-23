@@ -64,6 +64,7 @@ services:
       context: ./frontend
       args:
         VITE_API_KEY: ${API_KEY:-replace-me}
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-unknown}
     environment:
       API_KEY: ${API_KEY:-replace-me}
       API_BASE_URL: /api/v1

@@ -274,6 +274,48 @@ docker compose up -d --build db migrate backend frontend
 - `API_KEY` 값을 바꾼 경우 frontend는 재빌드까지는 필요 없고, container 재시작으로 `runtime-config.js`를 다시 생성하면 된다
 - `POST /api/v1/upload` 는 `snapshot_date` 를 필수로 받는다. 업로드 시 기준일을 반드시 함께 보내야 한다
 
+### 프론트엔드 빌드 커밋 확인
+
+프론트엔드 Docker 이미지는 `/build-info.json`과
+`org.opencontainers.image.revision` 이미지 라벨에 빌드 커밋을 기록한다.
+일반 `docker compose build frontend`는 `SOURCE_COMMIT`을 지정하지 않으면
+`unknown`을 기록한다. 서버 체크아웃의 HEAD만으로 실행 이미지의 커밋을 판단하지 않는다.
+
+커밋이 확실한 이미지는 저장소 루트에서 다음과 같이 빌드한다.
+
+```bash
+bash scripts/build-frontend-image.sh my_ledge-frontend
+```
+
+이 helper는 frontend의 미커밋 변경이 있으면 중단하고, 현재 커밋의
+`frontend/` Git archive만 Docker에 전달한다. 로컬 `.env`, 미추적 파일과 기존
+빌드 산출물은 빌드에 섞이지 않는다. 선택적인 `VITE_API_KEY`는 호출 환경에서
+전달하며, 일반 Compose 운영에서는 기존 `runtime-config.js` 주입을 사용한다.
+다른 Compose 프로젝트 이름을 쓴다면 해당 frontend 이미지 태그를 인자로 전달한다.
+helper는 이미지만 빌드하며 실행 중인 컨테이너를 바꾸지 않는다.
+
+배포가 승인된 경우에만 해당 프로젝트에서 기존 이미지를 사용해 frontend를 교체한다.
+
+```bash
+docker compose up -d --no-build --no-deps frontend
+```
+
+읽기 전용 확인:
+
+```bash
+curl --fail http://localhost:3000/build-info.json
+docker inspect --format '{{.Image}}' "$(docker compose ps -q frontend)"
+# 위에서 확인한 실행 이미지 ID를 사용한다. 변경 가능한 이미지 태그와 구분한다.
+docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' <image-id>
+git rev-parse HEAD
+```
+
+JSON은 캐시하지 않으며 누락되면 404를 반환한다. 이 기능 이전의 이미지는
+해당 URL에 SPA HTML을 반환할 수 있으므로 HTTP 200뿐 아니라 JSON 내용도 확인한다.
+`SOURCE_COMMIT=<full-sha> docker compose build frontend` 또는 직접 Docker build로
+지정한 SHA는 호출자가 제공한 정보이며, helper의 Git archive 보장과 다르다.
+커밋 정보는 소스 식별 정보이며 비밀값·사용자 데이터·빌드 환경 전체를 포함하지 않는다.
+
 ### 백엔드 단독 실행
 
 ```bash
