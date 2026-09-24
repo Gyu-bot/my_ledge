@@ -1,6 +1,6 @@
 # Live audit remediation and verified deployment
 
-Status: in-progress
+Status: completed
 Authorization: user explicitly requested every discovered error to be fixed, pushed, deployed to Live, and verified on 2026-09-24. This instruction approves execution of the previously reviewed audit findings and T042/T043; no additional planning approval is pending. No merge into main is implied. OMO generator is not available in this session; this checked-in execution plan records the approved scope directly.
 
 ## Evidence and scope
@@ -109,8 +109,8 @@ The user approved improving the unavailable month-end forecast after reviewing L
 - [x] F01: recurring sources distinguish gross payments, refunds, signed actual expense, historical baseline and remaining estimate. Preserve loan/installment/variable partition priority and existing income behavior.
 - [x] F02: use adequately covered historical remaining dates, capped by baseline minus current gross payments. Sparse/discontinuous explicit recurring histories with current evidence produce a low-confidence estimate with reasons. Refunds and excess observed payments must not invent a second obligation; no payment evidence, stale observations and unrelated genuine missing inputs remain unavailable.
 - [x] F03: additive API fields expose source-level confidence, basis, history/exclusions and warnings. Home and reference distinguish numeric low-confidence forecasts from unavailable totals; recurring details are inspectable.
-- [ ] F04: synthetic regression edge cases, independent review, bounded read-only Live comparison, frontend browser QA and appropriate full checks pass.
-- [ ] F05: commit/push and CI; fresh server-side backup and exact-revision code-only deployment; Live read-only and browser verification; update contracts and completion evidence. Preserve concurrent user data edits.
+- [x] F04: synthetic regression edge cases, independent review, bounded read-only Live comparison, frontend browser QA and appropriate full checks pass.
+- [x] F05: commit/push and CI; fresh server-side backup and exact-revision code-only deployment; Live read-only and browser verification; update contracts and completion evidence. Preserve concurrent user data edits.
 
 
 Follow-up integration evidence:
@@ -118,3 +118,10 @@ Follow-up integration evidence:
 - Final frontend validation: 204 tests across 29 suites, lint, typecheck and production build pass. Numeric low-confidence totals, per-source gross payment/refund evidence and true-null display each have synthetic regression coverage.
 - Independent review found and closed two regressions: incomplete previous-month coverage must not imply inactivity; a material missed split payment after its normal dates must warn without creating a future obligation. Separate synthetic verification confirmed both fixes and small-difference/inactive-source guards.
 - Existing isolated data verifies a numeric low-confidence forecast with no missing-input reasons. Fresh Live verification remains bounded: server-side checks return only booleans/counts/hashes, and DB fingerprints contain no row payload. No new full database export is used and no Live data repair is part of this follow-up.
+
+- Aside desktop clone QA passed: numeric low-confidence Home forecast; payment/refund/remaining/excess/history/warnings matched GET evidence; Reference warnings and Home navigation worked without horizontal clipping or application errors. The task tab was closed. Mobile viewport testing was outside this follow-up's supported browser check.
+- Application revision `e3809b21ab540ca53037eaae2df7528af1b0fc11` passed push/PR CI (35994759592 / 35994761824) and was deployed after a fresh server-side DB/uploads backup. Both healthy image revisions, frontend build metadata and all 128 backend source/configuration hashes match. No schema change or data repair was introduced.
+- Live server-side checks pass all ten arithmetic/evidence invariants: full forecast is available with low confidence, no missing-input reasons, 22 recurring sources and explicit review warnings. All 21 table content fingerprints match the pre-deploy snapshot; observed values and income expectations also have identical digests. Raw payloads remain server-side for these checks.
+
+- Live Aside desktop QA confirmed the numeric low-confidence hero, 22 per-source payment/refund/remaining field sets, and native expansion of both Home recurring evidence and Reference warnings. An existing cached document was replaced by one ordinary reload; the document then loaded the exact deployed JavaScript/CSS, and subsequent Home navigation retained the new UI. No application error was observed; tooling selector/API errors were corrected separately.
+- Follow-up temporary local API/Vite processes and the disposable PostgreSQL container are stopped. Original checkout changes and server untracked files are preserved. PR #22 remains open and unmerged; release backups and rollback images are retained. This final evidence update changes documentation only, not deployed application trees.

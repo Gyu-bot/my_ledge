@@ -62,7 +62,7 @@
 4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 공식 Toss Securities API 문서가 있어야 진행할 수 있다.
 5. `T033`-`T039`와 `T041`은 거래 신뢰도 작업 이후의 automation, forecasting, decision-support, 제한적 tagging 백로그로 유지한다. 각 항목은 선행 조건이 충족된 뒤 집중된 PR로 시작한다.
 6. 대출 후보 `review_status` 및 할부 제안 API는 문서 계약이 SSOT/레퍼런스에 반영되었고, `Implentation-plan.md` 사용자-visible task graph에는 기존 MoM 회귀 커버리지 유지 상태만 보강 노트로 반영되었다.
-7. 2026-09-24 Live 점검 후 `T042` 대출 연결 거래 월상환 추정 복구와 `T043` 진행월 예상 수입·월말 순현금흐름을 추가했다. 후속 사용자 승인으로 `.omo/plans/live-audit-remediation.md`에서 구현·검증·Live 배포와 기존 데이터 복구를 완료했다. PR #22는 main 병합 전 상태이며 배포된 애플리케이션 커밋은 `40b7844`다. `T043`은 `T037` 전체 90일 calendar보다 좁은 월간 선행 작업이다.
+7. 2026-09-24 Live 점검 후 `T042` 대출 연결 거래 월상환 추정 복구와 `T043` 진행월 예상 수입·월말 순현금흐름을 추가했다. 후속 사용자 승인으로 `.omo/plans/live-audit-remediation.md`에서 구현·검증·Live 배포와 기존 데이터 복구를 완료했다. PR #22는 main 병합 전 상태이며 반복 지출 전망 후속 보완까지 배포된 애플리케이션 커밋은 `e3809b2`다. `T043`은 `T037` 전체 90일 calendar보다 좁은 월간 선행 작업이다.
 
 ---
 
@@ -960,7 +960,7 @@
   - 2026-09-24 Live에서 월말 급여 패턴, 진행월 급여 미입금, canonical의 추정 수입 제공, 월간 수입·현금흐름 실적 응답을 직접 대조했다. 기존 추정 기능 부재가 아니라 소비 화면 차이와 정기 수입·잔여 지출 모델의 부족이 범위다.
   - `T023`의 관측/추정 basis 분리와 `T024`의 유동성 입력값 산출 완료 상태는 유지한다. 이 작업은 월간 전망을 보완하며 `T037`의 90일 일별 잔액 calendar 전체를 대체하지 않는다.
   - 코드 경로: `backend/app/services/canonical_views_dashboard_service.py`, `backend/app/services/analytics_service.py`, `backend/app/services/assets_service.py`, `frontend/src/features/home/HomePage.tsx`.
-  - `.omo/plans/live-audit-remediation.md`에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 최초 배포는 반복 지출 이력이 부족하면 전체 전망을 비웠다. 후속 사용자 승인으로 거래처별 납부·환급·잔여일 이력을 구분하고, 근거가 약한 경우 낮은 신뢰도의 전망과 확인 사유를 제공하는 보완을 진행 중이다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
+  - `.omo/plans/live-audit-remediation.md`에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 최초 배포는 반복 지출 이력이 부족하면 전체 전망을 비웠다. 후속 사용자 승인으로 거래처별 납부·환급·잔여일 이력을 구분하고, 근거가 약한 경우 낮은 신뢰도의 전망과 확인 사유를 제공하도록 보완해 Live 검증까지 완료했다. 실제 결제 근거가 전혀 없거나 대출·할부·관측 입력이 불명확한 경우의 산출 불가는 유지한다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
 
 ---
 
