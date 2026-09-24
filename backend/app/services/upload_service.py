@@ -192,6 +192,9 @@ async def replace_snapshots(
     snapshot_date: date,
     parsed_snapshots: SnapshotParseResult,
 ) -> SnapshotParseResult:
+    from app.services.asset_source_service import preserve_banksalad
+
+    await preserve_banksalad(db_session, snapshot_date, parsed_snapshots)
     normalized_snapshots = normalize_snapshots_for_storage(parsed_snapshots)
     existing_assets = (
         (

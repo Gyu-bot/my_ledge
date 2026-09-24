@@ -2,6 +2,12 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.asset_source import (
+    AssetSourceRun,
+    AssetSourceObservation,
+    AssetSourceMapping,
+    AssetSourcePolicyRevision,
+)
 from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
@@ -31,6 +37,10 @@ async def reset_data(
         insurance_contract_count = await _count_rows(db_session, InsuranceContract)
         investment_count = await _count_rows(db_session, Investment)
         loan_count = await _count_rows(db_session, Loan)
+        await db_session.execute(delete(AssetSourceObservation))
+        await db_session.execute(delete(AssetSourceRun))
+        await db_session.execute(delete(AssetSourceMapping))
+        await db_session.execute(delete(AssetSourcePolicyRevision))
         await db_session.execute(delete(AssetSnapshot))
         await db_session.execute(delete(InsuranceContract))
         await db_session.execute(delete(Investment))

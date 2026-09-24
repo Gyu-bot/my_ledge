@@ -99,6 +99,8 @@ Main blocks:
 
 ## Net Worth `/net-worth`
 
+The selected investment source panel is distinct from BankSalad snapshot history and investment detail. It shows the selected holdings value, a separately labeled estimated net worth (or its unavailable reason), per-account configured/effective sources and basis dates, and mixed-date/transfer-risk warnings. A source switch never rewrites the historical chart.
+
 ```text
 [compare mode control]
 
@@ -263,6 +265,8 @@ Main blocks:
 - existing-data bulk apply
 
 ## Settings `/data/settings`
+
+Investment source settings provide BankSalad/Toss default selection and account-group overrides. Show the configured choice separately from effective fallback, account mapping conflicts, basis time, freshness and last sync attempt. Preview the impact before explicit save; editing the draft invalidates the preview. Without write access, the section remains readable. The interface explains that selecting Toss does not itself connect or synchronize a real account.
 
 ```text
 [financial targets]

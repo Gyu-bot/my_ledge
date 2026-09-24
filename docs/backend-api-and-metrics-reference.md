@@ -1893,3 +1893,27 @@ Source: `app.services.analytics_service.get_spending_anomalies`
 - current frontend still contains some fallbacks for older backend contracts, especially around transaction filter options
 - analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live analytics scopes include `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, and `financial_targets`
 - upload file retention is live for `POST /api/v1/upload`: default `UPLOAD_DIR=/data/uploads`, keep latest 5 original files
+
+
+## Selected investment sources and mixed-date net worth
+
+The source-selection foundation adds an explicit current read surface alongside the existing BankSalad snapshot APIs. It does not fetch Toss Securities or alter historical `asset_snapshots` / `investments` to resemble a later API valuation.
+
+### Two distinct value bases
+
+- **BankSalad snapshot net worth**: nonnegative asset rows minus liabilities at one `snapshot_date`, following the existing negative-asset exclusion rule. Snapshot history and comparisons keep this basis.
+- **Selected current estimate**: start with that BankSalad total, subtract each explicitly mapped account component once, then add the selected complete external account value with the same cash scope. Formally `confirmed_net_worth - sum(mapped_bank_account_components) + sum(selected_external_account_values)`.
+- The estimate is unavailable when account/component mapping or cash scope does not establish an equivalent replacement. Unknown values must not be interpreted as zero. Investment detail can be available while the full net-worth estimate is unavailable.
+- Source selection replaces accounts, not individual overlapping fields. A position absent from a complete newer account run is absent; a partial or failed run cannot establish that a holding was sold. A complete empty account is a valid zero, distinct from failure.
+
+### Time semantics
+
+A BankSalad `snapshot_date` is the date the snapshot represents, not the upload time. External `valuation_at` is the valuation basis; the observation/read and ingestion timestamps record when data was received. Late arrival must not make an older valuation supersede a newer valuation. `as_of_date` filters valuation dates under the current policy and mappings; later-ingested observations with an eligible valuation may be included. It does not reconstruct historical knowledge or historical policy. Later valuations are excluded.
+
+A current estimate can legitimately contain several valuation dates. Its account metadata and `mixed_dates` must remain attached to the amount. An API refresh failure preserves the last successful complete account run and exposes failure/freshness rather than silently switching back to BankSalad. Before any usable complete mapped external run exists, the configured Toss source may transparently fall back to BankSalad.
+
+**Cross-account transfer limitation:** if a bank snapshot predates a transfer into the broker while the broker valuation follows it, the bank snapshot can still contain money already included in the broker. Account replacement avoids counting the same broker twice; it does not reconcile this timing gap across other accounts. Therefore the mixed-date total is an estimate, not a same-date confirmed total, spendable cash, investment return, or a reliable historical delta. No historical values or cashflows are invented to bridge the gap.
+
+### Identity and scope
+
+The workbook's broker label is a fallback group identity, not evidence of a unique real securities account. Holdings use account/group plus instrument identity, so equal product names across brokers remain distinct. External replacement requires explicit account mapping. Cash-inclusive and holdings-only valuations are different scopes; keep the selected run's currency/FX basis and cash scope intact. General field overrides and the actual Toss adapter remain separate extensions.

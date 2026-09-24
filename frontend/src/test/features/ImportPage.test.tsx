@@ -228,5 +228,6 @@ describe('ImportPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '초기화 실행' }))
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/자산·보험·투자·대출 스냅샷이 모두 삭제/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/소스 원본 관측, 계좌 연결 매핑, 소스 선택 설정도 함께 초기화/)).toBeInTheDocument()
   })
 })

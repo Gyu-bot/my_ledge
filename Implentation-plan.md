@@ -365,6 +365,9 @@
 
 ### 자산/투자 source와 provenance
 
+> 2026-09-24 사용자가 토스증권을 첫 대상으로 소스 선택 기반 구현을 승인했다. 실행은 `.omo/plans/asset-investment-source-priority.md`에서 추적한다. 뱅샐의 동일 기준일 순자산/과거 스냅샷과 최신 소스 조합 추정액을 구분하며, 소스별 평가·조회·수집 시각과 계좌 매핑/예수금 범위를 보존한다. 시점 사이의 계좌 간 이체는 혼합 기준일 합계에 중복 반영될 수 있으므로 한계를 명시한다. 실제 토스 API 수집기(`T019`)와 운영 배포는 이번 승인 범위에 포함하지 않는다.
+> 구현 결과: `codex/asset-source-selection`에서 투자 기본/계좌 그룹별 소스 선택, 미리보기·명시 적용, 원본 관측 보존, 완전한 계좌 수집 선택, 혼합 기준일 추정값/설정 화면을 구현·로컬 검증했다. 전체 T015–T018의 일반 lifecycle 편집, 세부 필드 우선순위와 확장 provenance는 아직 완료 처리하지 않는다. 검증 상세는 `.omo/evidence/asset-source-selection-implementation.md`를 본다.
+
 #### 작업 T015. 자산/투자 raw observation lifecycle와 selected canonical view
 - 우선순위: P2
 - 상태: 바로 시작 가능

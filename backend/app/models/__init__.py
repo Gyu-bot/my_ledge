@@ -1,3 +1,9 @@
+from app.models.asset_source import (
+    AssetSourceRun,
+    AssetSourceObservation,
+    AssetSourceMapping,
+    AssetSourcePolicyRevision,
+)
 from app.models.app_setting import AppSetting
 from app.models.auto_classification import (
     AutoClassificationSettings,
@@ -23,6 +29,10 @@ from app.models.upload_log import UploadLog
 from app.models.user_profile_snapshot import UserProfileSnapshot
 
 __all__ = [
+    "AssetSourceRun",
+    "AssetSourceObservation",
+    "AssetSourceMapping",
+    "AssetSourcePolicyRevision",
     "AppSetting",
     "AutoClassificationSettings",
     "AssetSnapshot",

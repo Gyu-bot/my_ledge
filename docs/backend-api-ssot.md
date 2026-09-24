@@ -476,3 +476,28 @@
 - `docs/frontend-reimplementation-wireframe-functional-requirements.md`
   - frontend contract 참고 문서
   - backend/API SSOT 문서는 아니다
+
+
+## Investment source selection foundation
+
+This contract is additive. Existing snapshot history, comparisons, `/investments/summary`, and snapshot canonical views retain their BankSalad basis. The external Toss adapter is not implemented by the selection foundation.
+
+| Method | Path | Meaning |
+|---|---|---|
+| `GET` | `/api/v1/assets/source-policy` | Saved investment default, account overrides, freshness threshold, and revision. Non-investment global source stays BankSalad. |
+| `POST` | `/api/v1/assets/source-policy/preview` | Authenticated preview of proposed policy, current/proposed selections, available net-worth impact, and preview token. |
+| `PATCH` | `/api/v1/assets/source-policy` | Authenticated explicit confirmation of the previewed policy; stale preview must be retried. |
+| `GET` | `/api/v1/investments/selected` | Selected current holdings/account source metadata and separate confirmed/estimated net worth; optional `as_of_date` limits valuation dates under the current policy/mappings, not historical knowledge. |
+| `GET` | `/api/v1/assets/source-coverage` | Selected source coverage, freshness, fallbacks, and conflicts. |
+| `GET` | `/api/v1/assets/source-account-mappings` | Explicit BankSalad group ↔ external account mappings. |
+| `POST` | `/api/v1/assets/source-account-mappings` | Authenticated mapping with confirmation, reason, mapped asset components, and equivalent cash scope. |
+
+Policy changes preserve historical observations. The first implementation selects complete accounts, never combines a BankSalad quantity with a Toss price, and never changes non-Toss holdings merely because the investment default is Toss. BankSalad broker groups are provisional identities, not proof that a broker has one account.
+
+`confirmed_net_worth` remains the BankSalad same-date snapshot value. `estimated_net_worth` applies only defensible mapped account replacements and can be `null` when component/cash coverage is unknown. Source-specific basis timestamps, `mixed_dates`, and warnings accompany current estimates. A transfer between source dates can still be double counted across a stale bank account and a fresh securities account; these estimates must not be labeled investment profit, spending capacity, or a same-date confirmed total.
+
+No successful complete mapped Toss observation means a visible BankSalad fallback. After a usable complete run exists, refresh failure/partial results preserve that complete run with freshness/failure metadata. The API collector, authentication with Toss, and automatic scheduling remain outside this contract.
+
+`as_of_date` is a valuation cutoff under **current** source policy/mappings. Later-ingested observations whose valuation falls before the cutoff may be included. The response is not a reconstruction of what was known or configured on that date; explicit date-cutoff responses use `total_basis=valuation_cutoff_current_policy_not_known_at_history`; ordinary latest reads use `selected_current_estimate_with_source_dates`. Use the original snapshot history APIs for BankSalad history. BankSalad `valuation_precision=date` must be rendered as a date, not an invented intraday time.
+
+`investment_total_complete=false` means the numeric investment sum is only a subtotal of known/eligible values; missing valuations or ambiguous normalized identities must be displayed as incomplete and must not produce a full net-worth estimate. Coverage counters have distinct units: `raw`, `selected`, `excluded`, `hidden` count observations; `confirmed` counts mappings; `conflicted`, `stale` count account groups. They must not be divided into one purported completeness ratio.

@@ -18,6 +18,22 @@ Your next move: approve this plan only after deciding to start the asset/investm
 
 > TL;DR (machine): Covers roadmap T015, T016, T016A, T017, T018 without Toss adapter implementation.
 
+## Approved execution clarification — 2026-09-24
+
+The user approved implementation of the source-selection foundation, starting with Toss Securities, and specifically asked about different BankSalad snapshot and API valuation dates. This approval covers the existing foundation plan, not the external Toss adapter, production deployment, or live account synchronization.
+
+- Keep the original BankSalad same-date snapshot totals/history reproducible. Expose selected current investment values and a separately named current estimate; never silently rewrite historical snapshots with later API observations.
+- Preserve source snapshot date, actual valuation time, observation/read time, and ingestion time as separate concepts. A later upload does not make an older valuation current. Explicit historical reads must not select future valuations.
+- Select a complete source run for an entire mapped account. A completed empty holdings result is different from a failed/partial result. Keep the last complete success on refresh failure and report freshness and failure separately.
+- The workbook currently identifies investments by broker/product, not a stable account ID. Label broker-group fallback identities accurately and require explicit unambiguous account mapping before replacement; product-name-only matching is forbidden.
+- Replacing the investment detail alone is insufficient for net worth. An estimate may replace only a mapped BankSalad account component with equivalent scope. Missing/ambiguous account mapping, cash/FX scope, or component coverage must yield an unavailable estimate with a reason rather than a guessed total.
+- Mixed-date amounts can still double count a bank-to-broker transfer that happened between source dates. Expose this limitation and the basis of every selected account; mixed-date estimates are neither same-date confirmed net worth nor investment returns.
+- Source-policy preview and explicit apply must use the same data/policy revision; reject stale previews. A re-upload must preserve policy and prior observation evidence.
+- The settings screen must distinguish configured source from effective source. Choosing Toss before any complete mapped observation exists must transparently show the BankSalad fallback and why.
+- General field-level overrides remain extension points as already stated in T016; investment values are selected together, not mixed across runs.
+
+Implementation status: in progress on `codex/asset-source-selection`. Verification and exact roadmap coverage are recorded below only after tests and review.
+
 ## Scope
 ### Must have
 - Roadmap items: `T015`, `T016`, `T016A`, `T017`, `T018`.
@@ -120,3 +136,18 @@ Your next move: approve this plan only after deciding to start the asset/investm
 - Selected canonical values are explainable and auditable.
 - Source priority can be stored and previewed.
 - Agents can explain mixed-source, stale, conflicted, and coverage states.
+
+
+## Implementation result — investment-account selection slice (2026-09-24)
+
+Implementation and local verification of the investment selection slice are recorded in [`../evidence/asset-source-selection-implementation.md`](../evidence/asset-source-selection-implementation.md). The code provides append-only observations, complete-run selection, policy preview/apply, account mapping, selected current values/coverage and settings/net-worth UI. Source date mismatch is explicit and historical BankSalad surfaces remain separate.
+
+| Todo | Delivered evidence | Wider roadmap boundary |
+|---|---|---|
+| 1 | Raw parsed asset/investment/loan archive, normalized broker/instrument keys, source runs, migration/backfill and reupload parity | General asset/loan lifecycle editing and source-file/row fingerprint linkage remain unchecked in the roadmap. |
+| 2 | Authenticated source policy preview/confirmed apply, revision audit and investment/account overrides | Global source remains BankSalad; field-level and individual-instrument override semantics are extension points. |
+| 3 | Complete account replacement, failed/partial/empty/stale handling, mapping/cash safety and surfaced conflicts | Full generalized conflict-resolution/lifecycle editing workflow remains future work. |
+| 4 | Selected-source/coverage APIs, dates/precision/sync/fallback/conflict metadata and contract docs | Broader source confidence/fingerprint/coverage ratios must not be claimed implemented. |
+| 5 | Settings preview/apply and distinct current-source estimate on net-worth page | Actual Toss connection/scheduling is still T019. |
+
+This is a reviewable implementation of the user-requested investment source selection. The aggregate plan stays `in-progress` because the wider T015–T018 lifecycle/provenance requirements remain; do not bulk-check the original roadmap. No production merge/deployment or real Toss synchronization was performed. Browser QA, full regression results, and precise environment limits are in the evidence file.

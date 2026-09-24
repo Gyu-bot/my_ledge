@@ -1,3 +1,4 @@
+vi.mock('../../features/networth/SelectedInvestmentsPanel', () => ({ SelectedInvestmentsPanel: () => null }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
