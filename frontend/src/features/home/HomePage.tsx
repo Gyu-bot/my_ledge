@@ -119,11 +119,14 @@ function riskVariant(level: AnalyticsRiskLevel): 'expense' | 'warn' | 'accent' {
   return 'accent'
 }
 
-function SignalRow({ label, value, tone = 'neutral' }: { label: string; value: ReactNode; tone?: 'warn' | 'neutral' }) {
+function SignalRow({ label, scope, value, tone = 'neutral' }: { label: string; scope: string; value: ReactNode; tone?: 'warn' | 'neutral' }) {
   return (
     <div className="flex items-center justify-between rounded-md border border-border bg-bg-inset px-3 py-2.5">
-      <span className="text-label text-text-secondary">{label}</span>
-      <span className={`tnum text-label font-semibold ${tone === 'warn' ? 'text-warn' : 'text-text-primary'}`}>
+      <span className="min-w-0">
+        <span className="block text-label text-text-secondary">{label}</span>
+        <span className="mt-0.5 block text-micro text-text-muted">{scope}</span>
+      </span>
+      <span className={`tnum shrink-0 text-label font-semibold ${tone === 'warn' ? 'text-warn' : 'text-text-primary'}`}>
         {value}
       </span>
     </div>
@@ -281,6 +284,16 @@ export function HomePage() {
                 />
                 <Stat
                   label="이번 달 관측 수입"
+                  badge={projection ? <Provenance
+                    title="월 예상 수입 계산"
+                    triggerLabel="월 예상 수입 계산 근거 보기"
+                    rows={[
+                      { label: '관측 수입', value: formatWon(projection.observed_income) },
+                      { label: '남은 예상 수입', value: formatWon(projection.expected_remaining_income) },
+                      { label: '월 예상 수입', value: formatWon(projection.projected_month_income) },
+                    ]}
+                    note="월 예상 수입 = 관측 수입 + 남은 예상 수입"
+                  /> : undefined}
                   value={observedIncome == null ? EM_DASH : formatWonCompact(observedIncome)}
                   sub={projection?.period ?? observedMonth?.period}
                 >
@@ -351,10 +364,10 @@ export function HomePage() {
               title="주의 신호"
               meta={
                 <span className="inline-flex items-center gap-1">
-                  직전 마감월 기준
+                  항목별 기준
                   <Provenance
                     title="주의 신호 기준"
-                    note="이상 지출과 수입 안정성은 직전 마감월 전체를 기준으로 진단합니다. 부분 기간 기준 전환은 신호 화면에서 제공할 예정입니다."
+                    note="이상 지출·수입 안정성은 마감월 기준, 재량 지출 속도는 진행월 기준이며 반복 결제는 전체 이력입니다. 신호 화면에서 마감월·부분 기간 기준을 전환할 수 있습니다."
                   />
                 </span>
               }
@@ -366,13 +379,15 @@ export function HomePage() {
                 <div className="flex flex-col gap-2">
                   <SignalRow
                     label="이상 지출 카테고리"
+                    scope={anomalies.data?.reference_date ? `직전 마감월 · ${anomalies.data.reference_date.slice(0, 7)}` : '직전 마감월'}
                     value={anomalyCount == null ? EM_DASH : `${anomalyCount}건`}
                     tone={(anomalyCount ?? 0) > 0 ? 'warn' : 'neutral'}
                   />
-                  <SignalRow label="반복 결제 감지" value={recurringCount == null ? EM_DASH : `${recurringCount}건`} />
-                  <SignalRow label="수입 안정성" value={incomeStabilityLabel(incomeCV)} />
+                  <SignalRow label="반복 결제 감지" scope="전체 이력 · 현재 구독 수 아님" value={recurringCount == null ? EM_DASH : `${recurringCount}건`} />
+                  <SignalRow label="수입 안정성" scope={incomeStability.data?.reference_date ? `직전 마감월까지 · ${incomeStability.data.reference_date} 기준` : '직전 마감월까지의 수입 이력'} value={incomeStabilityLabel(incomeCV)} />
                   <SignalRow
                     label="재량 지출 속도"
+                    scope={velocityData ? `${velocityData.period} 진행월 · ${velocityData.as_of_date} 기준` : '진행월 · 기준일 확인 불가'}
                     value={
                       velocityData ? (
                         <span className="inline-flex items-center gap-1.5">

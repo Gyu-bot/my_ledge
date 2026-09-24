@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomePage } from '../../features/home/HomePage'
 import { projectionFixture } from './projectionFixtures'
@@ -99,9 +99,9 @@ vi.mock('../../hooks/useAnalytics', () => ({
         { period: '2026-06', income: 100_000, expense: 800_000, transfer: 0, net_cashflow: -700_000, savings_rate: null },
       ],
     }),
-  useSpendingAnomalies: () => query({ total: 2, items: [], assumptions: '' }),
+  useSpendingAnomalies: () => query({ total: 2, items: [], assumptions: '', reference_date: '2026-05-31' }),
   useRecurringPayments: () => query({ total: 14, items: [], assumptions: '' }),
-  useIncomeStability: () => query({ items: [], avg: 0, stdev: 0, coefficient_of_variation: 0.08, assumptions: '' }),
+  useIncomeStability: () => query({ items: [], avg: 0, stdev: 0, coefficient_of_variation: 0.08, assumptions: '', reference_date: '2026-05-31' }),
   useDiscretionaryVelocity: () =>
     query({
       period: '2026-06',
@@ -243,6 +243,29 @@ describe('HomePage', () => {
     expect(screen.getByText('안정')).toBeInTheDocument()
     expect(screen.getByText('1.31x')).toBeInTheDocument()
     expect(screen.getByText('관찰')).toBeInTheDocument()
+  })
+
+  it('주의 신호는 항목별 실제 조회 기간을 표시하고 신호 화면의 현재 전환 기능을 안내한다', () => {
+    renderHome()
+    expect(screen.getByText('항목별 기준')).toBeInTheDocument()
+    expect(screen.getByText('직전 마감월 · 2026-05')).toBeInTheDocument()
+    expect(screen.getByText('직전 마감월까지 · 2026-05-31 기준')).toBeInTheDocument()
+    expect(screen.getByText('2026-06 진행월 · 2026-06-10 기준')).toBeInTheDocument()
+    expect(screen.getByText('전체 이력 · 현재 구독 수 아님')).toBeInTheDocument()
+    expect(screen.queryByText('직전 마감월 기준')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '주의 신호 기준 근거 보기' }))
+    expect(screen.getByText(/신호 화면에서 마감월·부분 기간 기준을 전환할 수 있습니다/)).toBeInTheDocument()
+    expect(screen.queryByText(/제공할 예정/)).not.toBeInTheDocument()
+  })
+
+  it('수입 계산 근거에서 축약 전 정확한 관측·잔여·월 예상액을 확인할 수 있다', () => {
+    monthProjection = { ...monthProjection, observed_income: 17, expected_remaining_income: 3_123_456, projected_month_income: 3_123_473 }
+    renderHome()
+    fireEvent.click(screen.getByRole('button', { name: '월 예상 수입 계산 근거 보기' }))
+    expect(screen.getByText('₩3,123,473')).toBeInTheDocument()
+    expect(screen.getByText('₩3,123,456')).toBeInTheDocument()
+    expect(screen.getAllByText('₩17').length).toBeGreaterThan(0)
+    expect(screen.getByText('월 예상 수입 = 관측 수입 + 남은 예상 수입')).toBeInTheDocument()
   })
 
   it('해야 할 일: 인박스 카운트 + 분류 커버리지', () => {

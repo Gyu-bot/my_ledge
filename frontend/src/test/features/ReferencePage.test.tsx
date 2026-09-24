@@ -19,7 +19,7 @@ vi.mock('../../hooks/useCanonicalViews', () => ({
         unclassified_work_queue_total: 23,
         unclassified_work_queue_page: params.queue_page,
         unclassified_work_queue_per_page: 10,
-        unclassified_work_queue: Array.from({ length: 10 }, (_, i) => ({ transaction_id: i + 1 + (params.queue_page - 1) * 10, merchant: `샘플 미분류 ${i + 1 + (params.queue_page - 1) * 10}`, date: '2026-06-10', priority_reason: '분류 필요', amount_abs: 1000 })),
+        unclassified_work_queue: Array.from({ length: 10 }, (_, i) => ({ transaction_id: i + 1 + (params.queue_page - 1) * 10, merchant: `샘플 미분류 ${i + 1 + (params.queue_page - 1) * 10}`, date: '2026-06-10', priority_reason: ['missing_recurring_kind', 'loan_link_review', 'missing_cost_kind', 'missing_fixed_necessity', 'missing_spend_necessity', 'review', 'future_reason_code'][i % 7], amount_abs: 1000 })),
         merchant_monthly_baseline_total: 45,
         merchant_monthly_baseline: Array.from({ length: 10 }, (_, i) => ({ period: '2026-06', merchant: `샘플 기준선 ${i + 1}`, effective_category_major: '기타', monthly_spend: 5000, baseline_delta: null })),
         recurring_merchant_monthly_total: 19,
@@ -33,7 +33,7 @@ vi.mock('../../hooks/useSchema', () => ({
     isLoading: false,
     isError: false,
     data: { views: [
-      { name: 'vw_additional_live_view', columns: [{ name: 'new_column' }], recommended_for_ai: false },
+      { name: 'vw_additional_live_view', columns: [{ name: 'new_column' }, { name: 'needs_recurring_payment_kind' }], recommended_for_ai: false },
       { name: 'vw_monthly_cashflow', columns: [{ name: 'income_total' }], recommended_for_ai: true },
     ] },
   }),
@@ -72,6 +72,18 @@ describe('ReferencePage projection and completeness', () => {
     expect(screen.getByText('샘플 미분류 20')).toBeInTheDocument()
     expect(screen.getByText('2 / 3 페이지 · 총 23건')).toBeInTheDocument()
   })
+  it('동적 검토 사유는 한국어로 표시하고 알 수 없는 코드도 그대로 노출하지 않는다', () => {
+    renderReference()
+    expect(screen.getAllByText(/반복 결제 유형 분류 필요/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/대출 상환 연결 검토/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/고정·변동 지출 분류 필요/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/· 고정 지출 필요도 분류 필요$/)).toBeInTheDocument()
+    expect(screen.getByText(/· 지출 필요도 분류 필요$/)).toBeInTheDocument()
+    expect(screen.getAllByText(/분류 정보 검토 필요/)).toHaveLength(2)
+    expect(screen.queryByText(/missing_recurring_kind|loan_link_review|future_reason_code/)).not.toBeInTheDocument()
+    expect(screen.getByText(/new_column, needs_recurring_payment_kind/)).toBeInTheDocument()
+  })
+
   it('기준선 요약 제한을 밝히고 선호 목록 밖 스키마도 모두 표시한다', () => {
     renderReference()
     expect(screen.getByText('샘플 기준선 10')).toBeInTheDocument()

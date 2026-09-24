@@ -450,7 +450,7 @@ export function SpendingPage() {
           title="거래 내역"
           meta={
             <span className="flex flex-wrap items-center gap-1.5">
-              {activeChips.length === 0 ? '전역 기간 기준' : null}
+              {activeChips.length === 0 ? `조회 기간 ${cutoffStart ?? range.start} ~ ${cutoffEnd ?? range.end}` : null}
               {activeChips.map((chip) => (
                 <button
                   key={chip.key}

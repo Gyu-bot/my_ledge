@@ -34,6 +34,15 @@ const VIEW_LABELS: Record<string, string> = {
   vw_income_monthly_by_category: '월별 수입 카테고리',
 }
 
+const QUEUE_REASON_LABELS = new Map<string, string>([
+  ['loan_link_review', '대출 상환 연결 검토'],
+  ['missing_cost_kind', '고정·변동 지출 분류 필요'],
+  ['missing_fixed_necessity', '고정 지출 필요도 분류 필요'],
+  ['missing_spend_necessity', '지출 필요도 분류 필요'],
+  ['missing_recurring_kind', '반복 결제 유형 분류 필요'],
+  ['review', '분류 정보 검토 필요'],
+])
+
 function money(value: number | null | undefined) {
   if (value == null) return EM_DASH
   return value < 0 ? `-${formatWonCompact(value)}` : formatWonCompact(value)
@@ -130,7 +139,7 @@ export function ReferencePage() {
                 <div key={item.transaction_id} className="flex items-start justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
                     <div className="truncate text-label text-text-primary">{item.merchant}</div>
-                    <div className="tnum text-caption text-text-muted">{item.date} · {item.priority_reason}</div>
+                    <div className="tnum text-caption text-text-muted">{item.date} · {QUEUE_REASON_LABELS.get(item.priority_reason) ?? '분류 정보 검토 필요'}</div>
                   </div>
                   <span className="tnum shrink-0 text-label text-text-secondary">{money(item.amount_abs)}</span>
                 </div>
