@@ -960,7 +960,7 @@
   - 2026-09-24 Live에서 월말 급여 패턴, 진행월 급여 미입금, canonical의 추정 수입 제공, 월간 수입·현금흐름 실적 응답을 직접 대조했다. 기존 추정 기능 부재가 아니라 소비 화면 차이와 정기 수입·잔여 지출 모델의 부족이 범위다.
   - `T023`의 관측/추정 basis 분리와 `T024`의 유동성 입력값 산출 완료 상태는 유지한다. 이 작업은 월간 전망을 보완하며 `T037`의 90일 일별 잔액 calendar 전체를 대체하지 않는다.
   - 코드 경로: `backend/app/services/canonical_views_dashboard_service.py`, `backend/app/services/analytics_service.py`, `backend/app/services/assets_service.py`, `frontend/src/features/home/HomePage.tsx`.
-  - `.omo/plans/live-audit-remediation.md`에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 남은 지출 이력이 부족하면 전체 월말 전망은 비워 두고 확인된 입력의 부분 차액만 별도 표시한다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
+  - `.omo/plans/live-audit-remediation.md`에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 최초 배포는 반복 지출 이력이 부족하면 전체 전망을 비웠다. 후속 사용자 승인으로 거래처별 납부·환급·잔여일 이력을 구분하고, 근거가 약한 경우 낮은 신뢰도의 전망과 확인 사유를 제공하는 보완을 진행 중이다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
 
 ---
 

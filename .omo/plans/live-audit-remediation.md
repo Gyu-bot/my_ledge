@@ -1,6 +1,6 @@
 # Live audit remediation and verified deployment
 
-Status: completed
+Status: in-progress
 Authorization: user explicitly requested every discovered error to be fixed, pushed, deployed to Live, and verified on 2026-09-24. This instruction approves execution of the previously reviewed audit findings and T042/T043; no additional planning approval is pending. No merge into main is implied. OMO generator is not available in this session; this checked-in execution plan records the approved scope directly.
 
 ## Evidence and scope
@@ -100,3 +100,21 @@ Private detailed evidence remains under gitignored `tmp/live-remediation-2026-09
 
 - Final Aside Live QA reports both PASS with no remaining functional failures. Home/spending/signals/reference, loans/assets/liquidity/installments, inbox/rules/settings were verified against real GET responses and screenshots. Standard reload replaced previously cached HTML; a subsequent ordinary navigation retained the latest bundle. No Live UI writes were performed, no steady-state application HTTP/console/page errors remained, and both task-created browser tabs were closed without touching user tabs.
 - T042/T043 are marked complete in the roadmap and this execution plan is moved to the completed index. The broader T037/automation plan remains unapproved. The final follow-up commit only records documentation; application directory trees remain identical to deployed revision `40b7844`.
+
+
+### Approved recurring forecast follow-up (2026-09-24)
+
+The user approved improving the unavailable month-end forecast after reviewing Live evidence: weak recurring histories were blanking the entire forecast. This extends T043 within the previously approved implementation/deployment flow. No additional data repair or main merge is authorized by this follow-up.
+
+- [x] F01: recurring sources distinguish gross payments, refunds, signed actual expense, historical baseline and remaining estimate. Preserve loan/installment/variable partition priority and existing income behavior.
+- [x] F02: use adequately covered historical remaining dates, capped by baseline minus current gross payments. Sparse/discontinuous explicit recurring histories with current evidence produce a low-confidence estimate with reasons. Refunds and excess observed payments must not invent a second obligation; no payment evidence, stale observations and unrelated genuine missing inputs remain unavailable.
+- [x] F03: additive API fields expose source-level confidence, basis, history/exclusions and warnings. Home and reference distinguish numeric low-confidence forecasts from unavailable totals; recurring details are inspectable.
+- [ ] F04: synthetic regression edge cases, independent review, bounded read-only Live comparison, frontend browser QA and appropriate full checks pass.
+- [ ] F05: commit/push and CI; fresh server-side backup and exact-revision code-only deployment; Live read-only and browser verification; update contracts and completion evidence. Preserve concurrent user data edits.
+
+
+Follow-up integration evidence:
+- Final backend validation: 427 tests pass on Python 3.12, including 12 disposable PostgreSQL concurrency cases; 45 monthly projection service and 7 canonical API cases cover the changed contract. Full Ruff lint and changed-file formatting pass.
+- Final frontend validation: 204 tests across 29 suites, lint, typecheck and production build pass. Numeric low-confidence totals, per-source gross payment/refund evidence and true-null display each have synthetic regression coverage.
+- Independent review found and closed two regressions: incomplete previous-month coverage must not imply inactivity; a material missed split payment after its normal dates must warn without creating a future obligation. Separate synthetic verification confirmed both fixes and small-difference/inactive-source guards.
+- Existing isolated data verifies a numeric low-confidence forecast with no missing-input reasons. Fresh Live verification remains bounded: server-side checks return only booleans/counts/hashes, and DB fingerprints contain no row payload. No new full database export is used and no Live data repair is part of this follow-up.

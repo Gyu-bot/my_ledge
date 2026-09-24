@@ -24,6 +24,7 @@ from app.schemas.income_projection import (
     IncomeProjectionSource,
     MonthlyProjection,
     ProjectionCoverage,
+    RecurringExpenseProjectionSource,
     income_source_key,
 )
 from app.services.canonical_views import build_transactions_effective_select
@@ -367,6 +368,140 @@ def _plan_matches(row: dict[str, Any], plan: InstallmentPlan) -> bool:
     )
 
 
+def _recurring_source(
+    items: list[dict[str, Any]],
+    reference: date,
+    coverage: ProjectionCoverage,
+    observed_day: int,
+) -> RecurringExpenseProjectionSource | None:
+    """Separate paid cash and refunds before estimating additional payments.
+
+    A weak current explicit recurrence can yield a low-confidence scenario.
+    Historical-only weak recurrences stay inactive; refunds never reinstate a
+    payment already observed. Income stability rules remain unchanged.
+    """
+    period = _period(reference)
+    periods = coverage.adequately_covered_periods
+    current = [row for row in items if _period(row["date"]) == period]
+    payments = [row for row in items if row["amount"] < 0]
+    estimate, included, excluded, selected_rows = _stable_history(
+        payments, periods, income=False
+    )
+    previous_period = _period(_shift_month(reference.replace(day=1), -1))
+    stable_recent = estimate is not None and previous_period in included
+    stable_before_coverage_gap = (
+        estimate is not None
+        and previous_period not in periods
+        and bool(periods)
+        and periods[-1] in included
+    )
+    warnings = []
+    confidence = "medium"
+    basis = "충분히 관측된 마감월의 총결제액 중앙값. 환급은 결제액에서 차감하지 않음"
+    if stable_before_coverage_gap:
+        # Incomplete exports are not evidence that a subscription stopped. Keep
+        # the latest adequately observed stable pattern, with lower confidence.
+        # A missing payment in that adequately covered month still fails this
+        # branch and follows the existing inactive/current-evidence rules.
+        confidence = "low"
+        warnings.append(
+            "직전 마감월의 전체 거래 관측이 부족하여 중단 여부를 판단할 수 없음; 마지막 충분히 관측된 월까지의 안정 이력을 사용함"
+        )
+    elif not stable_recent:
+        if not current or not any(
+            row.get("recurring_payment_kind") == "monthly_recurring" for row in items
+        ):
+            return None
+        confidence = "low"
+        if estimate is not None:
+            warnings.append(
+                "직전 마감월의 결제액이 안정 범위를 벗어나거나 관측되지 않아 이전 안정 이력을 사용함"
+            )
+        else:
+            totals: dict[str, int] = defaultdict(int)
+            for row in payments:
+                if _period(row["date"]) in periods:
+                    totals[_period(row["date"])] -= row["amount"]
+            # Prefer the accepted subset when the stability filter retained
+            # fewer than three months, otherwise use available gross payments.
+            included = included or sorted(totals)
+            selected_rows = [
+                row for row in payments if _period(row["date"]) in included
+            ]
+            excluded = [value for value in periods if value not in included]
+            if included:
+                estimate = round(median(totals[value] for value in included))
+                warnings.append(
+                    "최근 안정적인 3개월 결제 이력이 부족하여 관측된 과거 총결제액으로 낮은 신뢰도 추정"
+                )
+    paid = sum(-row["amount"] for row in current if row["amount"] < 0)
+    refunded = sum(row["amount"] for row in current if row["amount"] > 0)
+    if estimate is None and paid:
+        estimate = paid
+        remaining = 0
+        basis = "과거 결제 근거가 없어 이번 달 명시적 반복 결제를 이번 주기 관측액으로 사용; 추가 결제는 가정하지 않음"
+        warnings.append(
+            "과거 결제 이력이 없어 이번 달 관측 결제만 반영함; 같은 달 추가 결제 여부 확인 필요"
+        )
+    elif estimate is None:
+        remaining = None
+        confidence = "unavailable"
+        basis = "충분히 관측된 과거월과 이번 달에 총결제 근거가 없음"
+        warnings.append(
+            "환급만으로 월 결제 기준액이나 잔여 지출을 추정할 수 없음"
+            if refunded
+            else "총결제 근거가 없어 월 결제 기준액이나 잔여 지출을 추정할 수 없음"
+        )
+    else:
+        tails = [
+            sum(
+                -row["amount"]
+                for row in selected_rows
+                if _period(row["date"]) == value
+                and min(row["date"].day, _month_end(reference).day) > observed_day
+            )
+            for value in included
+        ]
+        remaining = min(max(estimate - paid, 0), round(median(tails)))
+        basis += "; 월 기준액에서 이미 결제한 금액을 뺀 차액과 과거 동일 잔여 날짜 결제액 중앙값 중 작은 금액만 추가 예상"
+        # Use the same lower bound as the history stability band. Small FX or
+        # billing differences do not imply a missing installment, but a large
+        # shortfall after the observed payment dates still needs review.
+        if remaining == 0 and paid < estimate * 0.7:
+            warnings.append(
+                "과거 납부일 이후 이번 달 결제가 관측되지 않아 추가 청구를 가정하지 않음; 결제 누락·중단 여부 확인 필요"
+                if paid == 0
+                else "과거 납부일 이후 이번 달 결제액이 월 기준에 크게 미달함; 추가 청구를 가정하지 않으며 분할 결제 누락·금액 변경 여부 확인 필요"
+            )
+    additional = max(paid - estimate, 0) if estimate is not None else 0
+    if refunded:
+        warnings.append(
+            "이번 달 환급은 관측 순지출에 반영했으며 새로운 납부 의무로 가정하지 않음; 재청구 여부 확인 필요"
+        )
+    if additional:
+        warnings.append(
+            "월 기준을 초과한 결제는 관측 지출에 포함됨; 추가 청구·금액 변경 여부 확인 필요"
+        )
+    if warnings and confidence != "unavailable":
+        confidence = "low"
+    return RecurringExpenseProjectionSource(
+        source_key="expense:" + " ".join(items[0]["merchant"].lower().split()),
+        merchant=items[0]["merchant"],
+        expected_monthly_amount=estimate,
+        observed_payment_amount=paid,
+        observed_refund_amount=refunded,
+        observed_net_expense=paid - refunded,
+        expected_remaining=remaining,
+        additional_observed_amount=additional,
+        confidence=confidence,
+        status="review" if warnings else "expected" if remaining else "observed",
+        basis=basis,
+        history_periods=included,
+        excluded_periods=sorted(set(excluded) | set(coverage.excluded_periods)),
+        warnings=warnings,
+    )
+
+
 def _expense_components(
     rows: list[dict[str, Any]],
     reference: date,
@@ -495,35 +630,29 @@ def _expense_components(
             installment_remaining += plan.monthly_amount
 
     recurring_remaining = 0
+    recurring_sources = []
     merchant_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in partitions["recurring"]:
         merchant_rows[_payer(row)].append(row)
-    for items in merchant_rows.values():
-        estimate, included, _, _ = _stable_history(
-            items, coverage.adequately_covered_periods, income=False
-        )
-        if (
-            estimate is None
-            or not coverage.adequately_covered_periods
-            or coverage.adequately_covered_periods[-1] not in included
-        ):
+    for _, items in sorted(merchant_rows.items()):
+        source = _recurring_source(items, reference, coverage, observed_day)
+        if source is None:
             explicit_recurring = any(
                 row.get("recurring_payment_kind") == "monthly_recurring"
                 for row in items
             )
-            if explicit_recurring and any(
-                _period(row["date"]) == period for row in items
-            ):
-                reasons["recurring"].append(
-                    "명시적으로 반복 분류된 일부 지출의 최근 안정적인 3개월 이력이 부족함"
-                )
-            elif not explicit_recurring:
+            if not explicit_recurring:
                 # One-off or variable fixed classifications must not invalidate
                 # all forecasts; estimate their residual days with other spend.
                 partitions["variable"].extend(items)
             continue
-        paid = sum(-row["amount"] for row in items if _period(row["date"]) == period)
-        recurring_remaining += max(estimate - paid, 0)
+        recurring_sources.append(source)
+        if source.expected_remaining is None:
+            reasons["recurring"].append(
+                f"{source.merchant}: 반복 지출의 총결제 근거가 없어 잔여 지출 추정 불가"
+            )
+        else:
+            recurring_remaining += source.expected_remaining
 
     variable_remaining = None
     if len(coverage.adequately_covered_periods) >= MIN_MONTHS:
@@ -551,9 +680,16 @@ def _expense_components(
     bases = {
         "loan": f"대출 스냅샷 {', '.join(snapshot_dates) or '없음'}의 월상환액 - 이번 달 해당 계좌에 연결된 실제 상환; 상환일 정보는 없음",
         "installment": "활성 할부 일정의 이번 달 예정액 - 실제 연결 또는 금액·입금처·일정 일치 결제; 지난 미연결 회차는 확인 필요",
-        "recurring": "최근 충분히 관측된 3개월 이상 동일 거래처 반복 순지출 중앙값 - 이번 달 실제 순지출; 확정 계약이 아닌 관측 패턴",
+        "recurring": "거래처별 과거 총결제액과 이미 결제한 금액, 동일 잔여 날짜 결제 패턴으로 추가 지출 추정. 환급은 관측 순지출에만 반영; 이력 부족은 항목별 낮은 신뢰도로 표시",
         "variable": "대출·할부·안정적 반복 지출을 제외한 변동·미분류·비정기 고정 지출의 동일 잔여 일자 구간 중앙값; 환급 포함",
     }
+    recurring_warnings = sorted(
+        {
+            f"{source.merchant}: {warning}"
+            for source in recurring_sources
+            for warning in source.warnings
+        }
+    )
     return [
         ExpenseProjectionComponent(
             kind=kind,
@@ -561,6 +697,13 @@ def _expense_components(
             known_expected_remaining=values[kind] or 0,
             basis=bases[kind],
             missing_reasons=sorted(set(reasons[kind])),
+            confidence="unavailable"
+            if reasons[kind]
+            else "low"
+            if kind == "recurring" and recurring_warnings
+            else "medium",
+            warnings=recurring_warnings if kind == "recurring" else [],
+            sources=recurring_sources if kind == "recurring" else [],
         )
         for kind in ("loan", "installment", "recurring", "variable")
     ]
@@ -626,6 +769,7 @@ async def get_monthly_projection(
     reasons = [
         reason for component in components for reason in component.missing_reasons
     ]
+    warnings = [warning for component in components for warning in component.warnings]
     if not sources:
         reasons.append(
             "정기 수입을 식별할 급여 이력이나 사용자 예상 설정이 없음; 기타 수입은 반복하지 않음"
@@ -681,11 +825,12 @@ async def get_monthly_projection(
         confidence="unavailable"
         if projected_expense is None
         else "low"
-        if reasons
+        if reasons or warnings
         else "medium",
         included_periods=coverage.adequately_covered_periods,
         excluded_periods=coverage.excluded_periods,
         missing_reasons=sorted(set(reasons)),
+        warnings=sorted(set(warnings)),
         limitations=[
             "월간 수입·지출 시나리오이며 현재 현금 잔액이나 확정 잔액 예측이 아님",
             "과거 관측 패턴은 예정 계약을 보장하지 않음; 보너스·보험금·환급·중고판매·소액 급여정산은 자동 반복 수입에서 제외",

@@ -34,15 +34,51 @@ import {
   useRecurringCategoryRulesDryRun,
   useTransactionList,
 } from '../../hooks/useTransactions'
-import type { MonthlyProjection } from '../../types/canonicalViews'
+import type { MonthlyProjection, RecurringExpenseProjectionSource } from '../../types/canonicalViews'
 import type { AnalyticsRiskLevel } from '../../types/analytics'
 
 const CONFIDENCE_LABELS = { high: '높음', medium: '보통', low: '낮음', unavailable: '산출 불가' }
 const INCOME_STATUS_LABELS = { expected: '입금 예정', received: '입금 확인', partial: '일부 입금', late: '입금 지연', stopped: '중단', uncertain: '검토 필요' }
 const EXPENSE_LABELS = { loan: '대출', installment: '할부', recurring: '반복결제', variable: '변동 지출' }
+const RECURRING_STATUS_LABELS = { expected: '추가 지출 예상', observed: '추가 예상 없음', review: '확인 필요' }
 
 function projectionMoney(value: number | null | undefined) {
   return value == null ? '산출 불가' : formatSignedWon(value, { compact: true })
+}
+
+function RecurringExpenseDetails({ sources }: { sources: RecurringExpenseProjectionSource[] }) {
+  if (sources.length === 0) return null
+  const reviewCount = sources.filter((source) => source.status === 'review').length
+  return (
+    <details className="mt-3 rounded-md border border-border bg-bg-inset p-3 text-caption">
+      <summary className="cursor-pointer font-medium text-text-secondary">
+        반복결제 거래처별 근거 {sources.length}곳{reviewCount > 0 ? ` · 확인 필요 ${reviewCount}곳` : ''}
+      </summary>
+      <p className="mt-2 text-text-muted">실제 납부와 환급을 따로 확인하고, 과거의 남은 날짜에 발생한 결제를 바탕으로 잔여액을 추정합니다. 환급을 새로 낼 금액으로 더하지 않습니다.</p>
+      <ul aria-label="반복결제 거래처별 전망" className="mt-2 divide-y divide-border-subtle">
+        {sources.map((source) => (
+          <li key={source.source_key} className="py-3 last:pb-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 break-words font-semibold text-text-primary">{source.merchant}</span>
+              <Badge variant={source.status === 'review' ? 'warn' : source.status === 'expected' ? 'estimate' : 'neutral'}>{RECURRING_STATUS_LABELS[source.status]}</Badge>
+              <span className="text-micro text-text-muted">신뢰도 {CONFIDENCE_LABELS[source.confidence]}</span>
+            </div>
+            <dl className="tnum mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-text-secondary">
+              <div><dt className="inline">이번 달 납부 </dt><dd className="inline">{formatWon(source.observed_payment_amount)}</dd></div>
+              <div><dt className="inline">이번 달 환급 </dt><dd className="inline">{formatWon(source.observed_refund_amount)}</dd></div>
+              <div><dt className="inline">월 지출 기준 </dt><dd className="inline">{source.expected_monthly_amount == null ? '산출 불가' : formatWon(source.expected_monthly_amount)}</dd></div>
+              <div className="text-estimate"><dt className="inline">남은 예상 </dt><dd className="inline">{source.expected_remaining == null ? '산출 불가' : formatWon(source.expected_remaining)}</dd></div>
+              <div className="col-span-2"><dt className="inline">관측 순지출 </dt><dd className="inline">{formatSignedWon(source.observed_net_expense)}</dd></div>
+            </dl>
+            {source.additional_observed_amount > 0 ? <p className="tnum mt-1 text-text-secondary">기준 초과 결제 {formatWon(source.additional_observed_amount)} · 이번 달 실적에 반영</p> : null}
+            <p className="mt-2 text-text-muted">{source.basis}</p>
+            <p className="mt-1 text-micro text-text-muted">근거 월 {source.history_periods.join(', ') || '없음'} · 제외 월 {source.excluded_periods.join(', ') || '없음'}</p>
+            {source.warnings.length > 0 ? <ul aria-label={`${source.merchant} 확인 사항`} className="mt-1 list-inside list-disc text-warn">{source.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
 }
 
 function ProjectionDetails({ projection }: { projection: MonthlyProjection }) {
@@ -73,9 +109,12 @@ function ProjectionDetails({ projection }: { projection: MonthlyProjection }) {
             {projection.expense_components.map((component) => (
               <li key={component.kind} className="py-3 first:pt-0">
                 <div className="flex justify-between gap-3 text-label"><span>{EXPENSE_LABELS[component.kind]}</span><span className="tnum">{projectionMoney(component.expected_remaining)}</span></div>
-                {component.expected_remaining == null ? <p className="tnum mt-1 text-caption text-text-secondary">확인 가능한 잔여 예상 지출 {projectionMoney(component.known_expected_remaining)}</p> : null}
+                <p className="mt-1 text-micro text-text-muted">신뢰도 {CONFIDENCE_LABELS[component.confidence]}</p>
+                {component.expected_remaining == null ? <p className="tnum mt-1 text-caption text-text-secondary">추정 가능한 항목의 잔여 지출 {projectionMoney(component.known_expected_remaining)}</p> : null}
                 <p className="mt-1 text-caption text-text-muted">{component.basis}</p>
                 {component.missing_reasons.length > 0 ? <p className="mt-1 text-caption text-warn">{component.missing_reasons.join(' · ')}</p> : null}
+                {component.warnings.length > 0 ? <p className="mt-1 text-caption text-warn">{component.kind === 'recurring' ? `확인 사항 ${component.warnings.length}건 · 거래처별 근거에서 확인하세요.` : `확인 사항: ${component.warnings.join(' · ')}`}</p> : null}
+                {component.kind === 'recurring' ? <RecurringExpenseDetails sources={component.sources} /> : null}
               </li>
             ))}
           </ul>
@@ -94,6 +133,7 @@ function ProjectionDetails({ projection }: { projection: MonthlyProjection }) {
         </dl>
       </details>
       {projection.missing_reasons.length > 0 ? <p className="mt-3 text-caption text-warn">산출 제한: {projection.missing_reasons.join(' · ')}</p> : null}
+      {projection.warnings.length > 0 ? <p aria-label="전망 확인 사항" className="mt-3 text-caption text-warn">전망 확인 사항 {projection.warnings.length}건 · 각 지출의 전망 근거에서 확인하세요.</p> : null}
       {projection.limitations.length > 0 ? <ul className="mt-2 list-inside list-disc text-caption text-text-muted">{projection.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul> : null}
     </Card>
   )
@@ -263,17 +303,18 @@ export function HomePage() {
                   label="월말 예상 순현금흐름"
                   className="border-t-2 border-t-estimate md:col-span-2 xl:row-span-2"
                   value={projectionMoney(projection?.projected_month_end_net)}
-                  badge={<Badge variant={projection?.projected_month_end_net == null ? 'warn' : 'estimate'}>{projection?.projected_month_end_net == null ? '입력 부족' : '예상'}</Badge>}
+                  badge={<Badge variant={projection?.projected_month_end_net == null || projection.confidence === 'low' ? 'warn' : 'estimate'}>{projection?.projected_month_end_net == null ? '입력 부족' : projection.confidence === 'low' ? '예상 · 신뢰도 낮음' : '예상'}</Badge>}
                   sub={projection ? `${projection.period} · 기준일 ${projection.as_of_date}` : '월간 전망 데이터가 없습니다'}
                 >
                   <div className="mt-3 space-y-2 text-caption">
                     <div className="flex flex-wrap justify-between gap-2 text-text-secondary"><span>관측 순현금흐름</span><span className="tnum font-semibold">{observedNet == null ? EM_DASH : formatSignedWon(observedNet, { compact: true })}</span></div>
                     <p className="text-text-muted">현재 계좌 잔액과는 별개이며, 남은 예상 수입과 지출을 반영한 월간 전망입니다.</p>
+                    {projection?.projected_month_end_net != null && projection.confidence === 'low' ? <p className="text-warn">확인이 필요한 가정을 포함한 추정입니다. 아래 전망 근거를 확인하세요.</p> : null}
                     {projection?.projected_month_end_net == null ? <p className="text-warn">남은 지출 등 전망 입력이 부족하면 월말 예상액을 표시하지 않습니다.</p> : null}
                     {projection?.projected_month_end_net == null && projection ? <div className="space-y-1 border-t border-border pt-2 text-text-secondary">
-                      <p className="tnum">확인 가능한 잔여 예상 지출 {projectionMoney(projection.known_expected_remaining_expense)}</p>
-                      <p className="tnum">확인된 입력만 반영한 차액 {projectionMoney(projection.net_after_known_remaining_expense)}</p>
-                      <p className="text-warn">월말 전망 아님 · 미확정 지출은 차감되지 않았습니다.</p>
+                      <p className="tnum">추정 가능한 항목의 잔여 지출 {projectionMoney(projection.known_expected_remaining_expense)}</p>
+                      <p className="tnum">일부 항목의 추정만 반영한 차액 {projectionMoney(projection.net_after_known_remaining_expense)}</p>
+                      <p className="text-warn">월말 전망 아님 · 추정하지 못한 지출은 차감되지 않았습니다.</p>
                     </div> : null}
                   </div>
                 </Stat>

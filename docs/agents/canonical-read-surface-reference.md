@@ -130,15 +130,17 @@ Queue 필터는 count/limit/offset 전에 적용된다. 월별 두 관측 배열
 | `projected_month_end_net` | `projected_month_income - projected_month_expense`; 불명확하면 null. 월간 순수입 시나리오이며 월말 은행 잔액이 아니다. |
 | `net_after_known_remaining_expense` | 예상수입 - 관측순지출 - 알려진 잔여지출. 미확정 지출이 빠진 부분 계산이며 월말 전망/사용 가능 금액이 아니다. |
 | `income_sources[]` | 출처 key/거래처, 예상·관측·잔여 금액, `expected_day`와 예상일/범위, 상태, confidence, 관측/제외 월, 매칭 거래 ids, 이유. |
-| `expense_components[]` | `kind=loan|installment|recurring|variable`, nullable `expected_remaining`, `known_expected_remaining`, 기준과 missing reasons. |
+| `expense_components[]` | `kind=loan|installment|recurring|variable`, nullable `expected_remaining`, `known_expected_remaining`, 기준·missing reasons·confidence·warnings. 반복 지출은 거래처별 `sources`도 제공한다. 알려진 부분합에도 낮은 신뢰도의 추정이 포함되며 확정 청구액이 아니다. |
+| `expense_components[].sources[]` | 거래처별 월 기준액, 실제 총결제액·환급·순지출, 잔여 예상액, 기준초과 결제액, `expected|observed|review` 상태, confidence, 근거·사용/제외 월·warnings. |
 | `coverage`, `included_periods`, `excluded_periods` | 최근 6개 마감월의 관측밀도·누락/제외와 업로드 기준일. |
-| `confidence`, `missing_reasons`, `limitations` | 추정 한계와 값이 없는 이유. null은 0이 아니다. |
+| `confidence`, `warnings`, `missing_reasons`, `limitations` | 낮은 신뢰도로 추정 가능한 사유와 실제 산출 불가 사유를 구분한다. null은 0이 아니다. |
 
 - 급여 카테고리/정규화된 지급처를 기준으로 최근 6개월 중 충분히 관측된 최소 3개월의 안정적인 중앙값을 학습한다. 보너스·보험금·환급·중고판매·소액 정산은 자동 정기수입에서 제외하지만 관측 수입은 보존한다. 예상일은 과거 입금일/월말 패턴을 사용한다.
 - `expected|received|partial|late|stopped|uncertain`을 구분한다. 과거 분할 입금 횟수에 미달하거나 사용자 기대값보다 덜 들어오면 차액만 유지한다. 그 외에는 실제 수령이 예상의 80% 이상이면 예상수입을 다시 더하지 않는다. 지연은 예상일 뒤까지 실제 관측된 경우에만 표시한다. 사용자 예상액/입금일/중단 설정이 자동 학습보다 우선한다.
 - `expected_day=31`은 월말 패턴이며 `expected_date`는 해당 월 일수로 조정한 날짜다. 수동 기대값으로 복사할 때 2월 28일 같은 개별 날짜 대신 `expected_day`를 유지해야 다른 달에도 월말이 보존된다. 기대일 미확정이면 null이다.
-- 잔여 지출은 대출 → 할부 → 안정적 반복 지출 → 나머지 변동·미분류·비정기 고정 지출 순서로 분리해 중복을 막는다. 이미 관측된 납부액을 차감하고, 지난 미연결 할부를 미래 채무로 더하지 않는다. 반복 근거가 없는 일반 고정비는 잔여일 패턴에 포함하지만 명시적 반복 분류의 부족한 근거는 미확정으로 남긴다.
-- 잔여일 추정은 오늘이 아니라 현재 월 마지막 관측일 이후의 과거 동일 일자 구간을 사용한다. 최종 거래가 기준일보다 7일 초과 오래됐거나 일부 지출이 미확정이면 완전한 월말 전망은 null이다. 알려진 부분합이 있어도 누락 비용과 새 지출은 보장되지 않는다.
+- 잔여 지출은 대출 → 할부 → 안정적 반복 지출 → 나머지 변동·미분류·비정기 고정 지출 순서로 분리해 중복을 막는다. 이미 관측된 납부액을 차감하고, 지난 미연결 할부를 미래 채무로 더하지 않는다. 반복 근거가 없는 일반 고정비는 잔여일 패턴에 포함한다. 이번 달 관측이 있는 명시적 반복 지출은 짧거나 불연속적인 이력도 낮은 신뢰도로 추정하고 근거를 표시한다. 직전 달 전체 관측이 부족하면 마지막 충분 관측월까지의 안정 이력을 낮은 신뢰도로 유지하며 결제 중단으로 단정하지 않는다. 환급만 있고 결제 근거가 전혀 없으면 미확정으로 남긴다.
+- 반복 지출은 환급을 빼기 전 총결제액으로 기준을 학습한다. 잔여액은 과거 동일 잔여 날짜 총결제액 중앙값과 `월 기준액 - 이번 달 총결제액` 중 작은 값이며 0 미만이 되지 않는다. 과거 31일은 현재 월말로 보정한다. 환급은 실제 순지출에만 반영하고 재청구를 가정하지 않는다. 기준초과 결제는 실제 지출에만 포함하며 일회성이라고 단정하지 않는다. 과거 근거 없이 이번 달 결제만 있으면 추가 예상 0인 낮은 신뢰도 시나리오임을 밝힌다.
+- 잔여일 추정은 오늘이 아니라 현재 월 마지막 관측일 이후의 과거 동일 일자 구간을 사용한다. 최종 거래가 기준일보다 7일 초과 오래됐거나 일부 지출에 실제로 추정 근거가 없으면 완전한 월말 전망은 null이다. 반복 지출의 경고만 있는 경우 숫자를 유지하고 신뢰도를 낮춘다. 알려진 부분합이 있어도 누락 비용과 새 지출은 보장되지 않는다.
 - `GET/PATCH /settings/income-expectations`는 인증이 필요하다. `{items: [...]}` 전체 목록을 교체하며, source key는 `income:` + casefold/공백 정규화 merchant다. 각 항목은 예상액·1–31일 입금일·중단 여부를 저장한다. `items:[]`는 모든 수동 기대값을 해제한다. GET/전망 계산은 학습 결과를 저장하지 않는다.
 
 정확한 임계값·입력 제한·공식은 [상세 API 문서](../backend-api-and-metrics-reference.md#monthly-projection-month_projection)를 따른다. 이 값으로 지출 가능 여부를 단정하지 않는다.

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomePage } from '../../features/home/HomePage'
-import { projectionFixture } from './projectionFixtures'
+import { lowConfidenceProjectionFixture, projectionFixture } from './projectionFixtures'
 
 let monthProjection = projectionFixture()
 let emptyDatabase = false
@@ -208,8 +208,69 @@ describe('HomePage', () => {
     renderHome()
     expect(screen.getByText('입력 부족')).toBeInTheDocument()
     expect(screen.getByText('산출 제한: 변동 지출 이력 부족')).toBeInTheDocument()
-    expect(screen.getByText('확인된 입력만 반영한 차액 +₩140만')).toBeInTheDocument()
-    expect(screen.getByText('월말 전망 아님 · 미확정 지출은 차감되지 않았습니다.')).toBeInTheDocument()
+    expect(screen.getByText('일부 항목의 추정만 반영한 차액 +₩140만')).toBeInTheDocument()
+    expect(screen.getByText('월말 전망 아님 · 추정하지 못한 지출은 차감되지 않았습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('예상 · 신뢰도 낮음')).not.toBeInTheDocument()
+  })
+
+  it('반복지출 이력이 약해도 계산된 월말 전망과 낮은 신뢰도를 함께 표시한다', () => {
+    monthProjection = lowConfidenceProjectionFixture()
+    renderHome()
+    const hero = screen.getByText('월말 예상 순현금흐름').parentElement!
+    expect(within(hero).getByText('+₩140만')).toBeInTheDocument()
+    expect(within(hero).getByText('예상 · 신뢰도 낮음')).toBeInTheDocument()
+    expect(within(hero).getByText(/확인이 필요한 가정을 포함한 추정/)).toBeInTheDocument()
+    expect(screen.queryByText('입력 부족')).not.toBeInTheDocument()
+    expect(screen.queryByText(/산출 제한:/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('전망 확인 사항')).toHaveTextContent('2건')
+  })
+
+  it('반복결제 상세에서 실제 납부와 환급, 남은 예상, 기준 초과 결제를 구분한다', () => {
+    monthProjection = lowConfidenceProjectionFixture()
+    renderHome()
+    const summary = screen.getByText('반복결제 거래처별 근거 3곳 · 확인 필요 2곳')
+    fireEvent.click(summary)
+    expect(summary.closest('details')).toHaveAttribute('open')
+    const sources = within(screen.getByRole('list', { name: '반복결제 거래처별 전망' }))
+    const insurance = within(sources.getByText('샘플 보험').closest('li')!)
+    expect(insurance.getByText('이번 달 납부').parentElement).toHaveTextContent('₩100,000')
+    expect(insurance.getByText('이번 달 환급').parentElement).toHaveTextContent('₩20,000')
+    expect(insurance.getByText('남은 예상').parentElement).toHaveTextContent('₩0')
+    expect(insurance.getByText('관측 순지출').parentElement).toHaveTextContent('+₩80,000')
+    expect(insurance.getByText('근거 월 2026-04, 2026-05 · 제외 월 2026-03')).toBeInTheDocument()
+    expect(insurance.getByText('안정적인 이력이 2개월뿐이어서 추정 신뢰도가 낮습니다.')).toBeInTheDocument()
+    const subscription = within(sources.getByText('샘플 구독').closest('li')!)
+    expect(subscription.getByText('남은 예상').parentElement).toHaveTextContent('₩100,000')
+    expect(subscription.getByText('추가 지출 예상')).toBeInTheDocument()
+    expect(sources.getByText('기준 초과 결제 ₩15,000 · 이번 달 실적에 반영')).toBeInTheDocument()
+    expect(screen.getByText(/환급을 새로 낼 금액으로 더하지 않습니다/)).toBeInTheDocument()
+    expect(screen.queryByText('납부 완료')).not.toBeInTheDocument()
+  })
+
+  it('추가 예상이 없는 거래처도 납부 완료로 단정하지 않고 환급 순지출의 음수를 보존한다', () => {
+    monthProjection = lowConfidenceProjectionFixture()
+    const recurring = monthProjection.expense_components.find((component) => component.kind === 'recurring')!
+    recurring.sources[0] = { ...recurring.sources[0], observed_payment_amount: 0, observed_refund_amount: 20_000, observed_net_expense: -20_000, status: 'observed' }
+    renderHome()
+    fireEvent.click(screen.getByText('반복결제 거래처별 근거 3곳 · 확인 필요 1곳'))
+    const insurance = within(screen.getByText('샘플 보험').closest('li')!)
+    expect(insurance.getByText('추가 예상 없음')).toBeInTheDocument()
+    expect(insurance.getByText('관측 순지출').parentElement).toHaveTextContent('-₩20,000')
+    expect(insurance.getByText('남은 예상').parentElement).toHaveTextContent('₩0')
+    expect(screen.queryByText('납부 완료')).not.toBeInTheDocument()
+  })
+
+  it('거래처별 추정 근거가 전혀 없으면 월 기준액과 잔여액을 0원으로 표시하지 않는다', () => {
+    monthProjection = lowConfidenceProjectionFixture()
+    const recurring = monthProjection.expense_components.find((component) => component.kind === 'recurring')!
+    recurring.sources[0] = { ...recurring.sources[0], expected_monthly_amount: null, expected_remaining: null, confidence: 'unavailable' }
+    monthProjection = { ...monthProjection, expected_remaining_expense: null, projected_month_expense: null, projected_month_end_net: null, confidence: 'unavailable' }
+    renderHome()
+    fireEvent.click(screen.getByText('반복결제 거래처별 근거 3곳 · 확인 필요 2곳'))
+    const insurance = within(screen.getByText('샘플 보험').closest('li')!)
+    expect(insurance.getByText('월 지출 기준').parentElement).toHaveTextContent('산출 불가')
+    expect(insurance.getByText('남은 예상').parentElement).toHaveTextContent('산출 불가')
+    expect(insurance.getByText('남은 예상').parentElement).not.toHaveTextContent('₩0')
   })
 
   it('같은 달 실적과 전망을 함께 비교하고 차트 데이터는 실적 그대로 보존한다', () => {

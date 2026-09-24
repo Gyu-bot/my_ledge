@@ -158,12 +158,31 @@ export interface IncomeProjectionSource {
   matched_transaction_ids: number[]
   reason: string
 }
+export interface RecurringExpenseProjectionSource {
+  source_key: string
+  merchant: string
+  expected_monthly_amount: number | null
+  observed_payment_amount: number
+  observed_refund_amount: number
+  observed_net_expense: number
+  expected_remaining: number | null
+  additional_observed_amount: number
+  confidence: ProjectionConfidence
+  status: 'expected' | 'observed' | 'review'
+  basis: string
+  history_periods: string[]
+  excluded_periods: string[]
+  warnings: string[]
+}
 export interface ExpenseProjectionComponent {
   kind: 'loan' | 'installment' | 'recurring' | 'variable'
   expected_remaining: number | null
   known_expected_remaining: number
   basis: string
+  confidence: ProjectionConfidence
   missing_reasons: string[]
+  warnings: string[]
+  sources: RecurringExpenseProjectionSource[]
 }
 export interface MonthlyProjection {
   period: string
@@ -183,6 +202,7 @@ export interface MonthlyProjection {
   included_periods: string[]
   excluded_periods: string[]
   missing_reasons: string[]
+  warnings: string[]
   limitations: string[]
   income_sources: IncomeProjectionSource[]
   expense_components: ExpenseProjectionComponent[]

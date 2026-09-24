@@ -73,12 +73,32 @@ class IncomeProjectionSource(BaseModel):
     reason: str
 
 
+class RecurringExpenseProjectionSource(BaseModel):
+    source_key: str
+    merchant: str
+    expected_monthly_amount: int | None = Field(ge=0)
+    observed_payment_amount: int = Field(ge=0)
+    observed_refund_amount: int = Field(ge=0)
+    observed_net_expense: int
+    expected_remaining: int | None = Field(ge=0)
+    additional_observed_amount: int = Field(ge=0)
+    confidence: Confidence
+    status: Literal["expected", "observed", "review"]
+    basis: str
+    history_periods: list[str] = Field(default_factory=list)
+    excluded_periods: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ExpenseProjectionComponent(BaseModel):
     kind: Literal["loan", "installment", "recurring", "variable"]
     expected_remaining: int | None
     known_expected_remaining: int = 0
     basis: str
     missing_reasons: list[str] = Field(default_factory=list)
+    confidence: Confidence = "medium"
+    warnings: list[str] = Field(default_factory=list)
+    sources: list[RecurringExpenseProjectionSource] = Field(default_factory=list)
 
 
 class MonthlyProjection(BaseModel):
@@ -99,6 +119,7 @@ class MonthlyProjection(BaseModel):
     included_periods: list[str]
     excluded_periods: list[str]
     missing_reasons: list[str]
+    warnings: list[str] = Field(default_factory=list)
     limitations: list[str]
     income_sources: list[IncomeProjectionSource]
     expense_components: list[ExpenseProjectionComponent]

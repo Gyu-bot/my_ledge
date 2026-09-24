@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ReferencePage } from '../../features/data/ReferencePage'
-import { projectionFixture } from './projectionFixtures'
+import { lowConfidenceProjectionFixture, projectionFixture } from './projectionFixtures'
 
 const paramsSeen = vi.fn()
+let monthProjection = projectionFixture()
+beforeEach(() => { monthProjection = projectionFixture(); paramsSeen.mockClear() })
 vi.mock('../../hooks/useCanonicalViews', () => ({
   useCanonicalViewsDashboard: (params: { queue_page: number; queue_limit: number }) => {
     paramsSeen(params)
@@ -15,7 +17,7 @@ vi.mock('../../hooks/useCanonicalViews', () => ({
         data_coverage: { first_transaction_date: '2026-03-01', last_transaction_date: '2026-06-10' },
         monthly_cashflow: [{ period: '2026-06', income_total: 100_000, expense_total: 800_000, net_cashflow: -700_000, savings_rate: null, savings_rate_basis: 'insufficient_partial_month_income', is_complete_month: false, loan_repayment_total: 200_000 }],
         true_spendable_monthly: [{ estimated_income_total: 5_000_000, is_income_estimated: true }],
-        month_projection: projectionFixture(),
+        month_projection: monthProjection,
         unclassified_work_queue_total: 23,
         unclassified_work_queue_page: params.queue_page,
         unclassified_work_queue_per_page: 10,
@@ -61,6 +63,30 @@ describe('ReferencePage projection and completeness', () => {
     expect(screen.queryByText('₩500만')).not.toBeInTheDocument()
     expect(screen.getByText('부분월 수입 부족으로 산출하지 않음')).toBeInTheDocument()
     expect(screen.getByText('현재 계좌 잔액과 별개')).toBeInTheDocument()
+  })
+  it('낮은 신뢰도의 수치 전망에 확인 사항과 홈 상세 근거 링크를 제공한다', () => {
+    monthProjection = lowConfidenceProjectionFixture()
+    renderReference()
+    const hero = screen.getByText('월말 예상 순현금흐름').parentElement!
+    expect(within(hero).getByText('₩140만')).toBeInTheDocument()
+    expect(within(hero).getByText('예상 · 신뢰도 낮음')).toBeInTheDocument()
+    expect(screen.getByText('낮음')).toBeInTheDocument()
+    const summary = screen.getByText('전망 확인 사항 2건')
+    fireEvent.click(summary)
+    expect(summary.closest('details')).toHaveAttribute('open')
+    expect(screen.getByText('샘플 보험: 안정적인 이력이 2개월뿐이어서 추정 신뢰도가 낮습니다.')).toBeVisible()
+    expect(screen.getByRole('link', { name: '홈에서 입금 일정과 반복결제 거래처별 전망 근거 보기' })).toHaveAttribute('href', '/')
+    expect(screen.queryByText('산출 불가')).not.toBeInTheDocument()
+  })
+  it('필수 입력이 없으면 월말 전망을 산출 불가로 유지하고 부분 추정 차액을 구분한다', () => {
+    monthProjection = { ...monthProjection, expected_remaining_expense: null, projected_month_expense: null, projected_month_end_net: null, confidence: 'unavailable', missing_reasons: ['대출 상환 예정액 누락'] }
+    renderReference()
+    const hero = screen.getByText('월말 예상 순현금흐름').parentElement!
+    expect(within(hero).getByText('산출 불가')).toBeInTheDocument()
+    expect(within(hero).getByText('입력 부족')).toBeInTheDocument()
+    expect(screen.getByText('산출 제한: 대출 상환 예정액 누락')).toBeInTheDocument()
+    expect(screen.getByText(/일부 항목의 추정만 반영한 차액 ₩140만 · 월말 전망 아님/)).toBeInTheDocument()
+    expect(screen.queryByText('예상 · 신뢰도 낮음')).not.toBeInTheDocument()
   })
   it('반환된 큐를 모두 표시하고 전체 개수 기준으로 페이지 이동한다', () => {
     renderReference()

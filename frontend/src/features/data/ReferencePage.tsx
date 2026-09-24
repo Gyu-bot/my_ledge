@@ -93,14 +93,18 @@ export function ReferencePage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Stat label="월 예상 수입" value={money(projection.projected_month_income)} badge={<Badge variant="estimate">예상</Badge>} sub={`관측 ${money(projection.observed_income)} + 남은 예상 ${money(projection.expected_remaining_income)}`} />
               <Stat label="월 예상 순지출" value={projection.projected_month_expense == null ? '산출 불가' : money(projection.projected_month_expense)} sub={`관측 ${money(projection.observed_net_expense)} + 남은 예상 ${projection.expected_remaining_expense == null ? '미확정' : money(projection.expected_remaining_expense)}`} />
-              <Stat label="월말 예상 순현금흐름" value={projection.projected_month_end_net == null ? '산출 불가' : money(projection.projected_month_end_net)} badge={<Badge variant="estimate">예상</Badge>} sub="현재 계좌 잔액과 별개" />
+              <Stat label="월말 예상 순현금흐름" value={projection.projected_month_end_net == null ? '산출 불가' : money(projection.projected_month_end_net)} badge={<Badge variant={projection.projected_month_end_net == null || projection.confidence === 'low' ? 'warn' : 'estimate'}>{projection.projected_month_end_net == null ? '입력 부족' : projection.confidence === 'low' ? '예상 · 신뢰도 낮음' : '예상'}</Badge>} sub="현재 계좌 잔액과 별개" />
               <Stat label="전망 신뢰도" value={({ high: '높음', medium: '보통', low: '낮음', unavailable: '산출 불가' })[projection.confidence]} sub={`거래 관측 ${projection.observed_through ?? '없음'}`} />
             </div>
-            {projection.projected_month_end_net == null ? <p className="tnum mt-3 text-caption text-warn">확인 가능한 잔여 예상 지출 {money(projection.known_expected_remaining_expense)} · 확인된 입력만 반영한 차액 {money(projection.net_after_known_remaining_expense)} · 월말 전망 아님 (미확정 지출 미반영)</p> : null}
+            {projection.projected_month_end_net == null ? <p className="tnum mt-3 text-caption text-warn">추정 가능한 항목의 잔여 지출 {money(projection.known_expected_remaining_expense)} · 일부 항목의 추정만 반영한 차액 {money(projection.net_after_known_remaining_expense)} · 월말 전망 아님 (추정하지 못한 지출 미반영)</p> : null}
             <p className="mt-3 text-caption text-text-muted">최신 업로드 {projection.coverage.latest_upload_date ?? '없음'} · 포함 월 {projection.included_periods.join(', ') || '없음'} · 제외 월 {projection.excluded_periods.join(', ') || '없음'} · 누락 월 {projection.coverage.missing_periods.join(', ') || '없음'}</p>
             {projection.missing_reasons.length > 0 ? <p className="mt-2 text-caption text-warn">산출 제한: {projection.missing_reasons.join(' · ')}</p> : null}
+            {projection.warnings.length > 0 ? <details className="mt-2 rounded-md border border-border bg-bg-inset p-3 text-caption text-warn">
+              <summary className="cursor-pointer font-medium">전망 확인 사항 {projection.warnings.length}건</summary>
+              <ul className="mt-2 list-inside list-disc">{projection.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+            </details> : null}
             {projection.limitations.length > 0 ? <p className="mt-2 text-caption text-text-muted">{projection.limitations.join(' · ')}</p> : null}
-            <Link to="/" className="mt-2 inline-block text-caption text-transfer hover:underline">홈에서 입금 일정과 지출별 전망 근거 보기</Link>
+            <Link to="/" className="mt-2 inline-block text-caption text-transfer hover:underline">홈에서 입금 일정과 반복결제 거래처별 전망 근거 보기</Link>
           </> : <EmptyState message="월간 전망 데이터가 없습니다" />}
         </Card>
 
