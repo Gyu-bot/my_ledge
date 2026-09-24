@@ -14,7 +14,6 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
-| [`live-audit-remediation.md`](live-audit-remediation.md) | `in-progress` | User-approved Live audit fixes, T042/T043, push and verified deployment. | — |
 | [`settlement-group-canonical-netting.md`](settlement-group-canonical-netting.md) | `drafting` | `T032`: shared settlement group netting for refunds/cancellations. | [`../drafts/settlement-group-canonical-netting.md`](../drafts/settlement-group-canonical-netting.md) |
 | [`asset-investment-source-priority.md`](asset-investment-source-priority.md) | `drafting` | `T015-T018` + `T016A`: observation preservation, source priority, resolution, coverage, settings UI. | [`../drafts/asset-investment-source-priority.md`](../drafts/asset-investment-source-priority.md) |
 | [`post-trust-automation-forecasting.md`](post-trust-automation-forecasting.md) | `drafting` | `T033-T039` + `T041`: post-trust automation, forecasting, decision support, limited tags. | [`../drafts/post-trust-automation-forecasting.md`](../drafts/post-trust-automation-forecasting.md) |
@@ -23,6 +22,7 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
+| [`live-audit-remediation.md`](live-audit-remediation.md) | `completed` | T042/T043 and accepted audit fixes deployed and repaired on Live; PR #22 awaits merge authorization. | — |
 | [`frontend-build-trace.md`](frontend-build-trace.md) | `completed` | Trace frontend Docker builds to a committed source archive and expose read-only build metadata. | — |
 | [`loan-installment-candidate-review-workflows.md`](loan-installment-candidate-review-workflows.md) | `completed` | Inbox loan-candidate dismissal, installment transaction suggestions with proposed 회차, and MoM regression guard. | [`../drafts/loan-installment-candidate-review-workflows.md`](../drafts/loan-installment-candidate-review-workflows.md) |
 | [`settings-analytics-frontend.md`](settings-analytics-frontend.md) | `completed` | `T013`: analytics parameter editing in `/data/settings`; PR #20 is ready for review. | [`../drafts/settings-analytics-frontend.md`](../drafts/settings-analytics-frontend.md) |
@@ -42,5 +42,3 @@ These user-facing roadmap areas still need their own OMO execution plan or decom
 
 - `T020`: transfer tracking is paused and should remain separate.
 - `T022`: long-term product expansion queue must be decomposed into smaller plans before execution.
-- `T042`: loan repayment estimate persistence, recalculation, cache refresh, and scoped repair of existing invalid estimate states. Execution and scoped API repair are now tracked in `live-audit-remediation.md`. See `../../Implentation-plan.md`.
-- `T043`: current-month recurring-income projection and month-end net cashflow, with observed/expected separation and actual-payment reconciliation. Execution is now tracked in `live-audit-remediation.md`; this monthly precursor does not approve the full `T037` automation/forecasting plan. See `../../Implentation-plan.md`.

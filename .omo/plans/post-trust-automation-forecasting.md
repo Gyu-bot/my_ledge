@@ -30,9 +30,9 @@ Your next move: approve only when post-trust automation work should begin. Full 
 - Limited multi-dimensional transaction tags.
 
 ### Related follow-ups registered on 2026-09-24 (separate execution plans)
-- Roadmap `T042` fixes existing loan repayment estimate persistence/recalculation and data recovery; complete the relevant correction before using those estimates as forecast inputs.
+- Roadmap `T042` fixes existing loan repayment estimate persistence/recalculation and data recovery; the correction and scoped Live repair are completed in `live-audit-remediation.md` and provide the monthly forecast inputs.
 - Roadmap `T043` adds a focused current-month recurring-income and month-end net cashflow projection. It builds on existing `T023`/`T024` income baselines, separates observed and outstanding expected payments, and does not wait for this entire automation bundle.
-- `T037` retains its 90-day daily-balance scope and should reuse `T043` income reconciliation when available. The user later approved T042/T043 execution in `live-audit-remediation.md`; that focused authorization does not approve this entire automation bundle.
+- `T037` retains its 90-day daily-balance scope and should reuse `T043` income reconciliation from the completed monthly implementation. The user approved T042/T043 execution in `live-audit-remediation.md`; that focused authorization does not approve this entire automation bundle.
 
 ### Must NOT have (guardrails, anti-slop, scope boundaries)
 - Do not use LLM/ML where deterministic rules are specified.
