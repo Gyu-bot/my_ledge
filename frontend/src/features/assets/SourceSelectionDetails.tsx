@@ -21,7 +21,7 @@ export function SourceSelectionDetails({ data }: { data: SelectedInvestments }) 
                 <span className="tnum">{account.conflicts.some((reason) => ['missing_valuation', 'instrument_mapping_ambiguous', 'currency_mismatch'].includes(reason)) ? '확인된 소계 ' : ''}{sourceMoney(account.market_value)}</span>
               </div>
               <p>설정 {SOURCE_LABEL[account.configured_source]} → 적용 {account.effective_source ? SOURCE_LABEL[account.effective_source] : '미선택'} · {sourceBasis(account.configured_source_basis)}</p>
-              <p className="text-text-muted">평가 시점 {sourceTime(account.valuation_at, account.valuation_precision ?? (account.effective_source === 'banksalad_snapshot' ? 'date' : 'timestamp'))} · 수집 시점 {sourceTime(account.ingested_at)}</p>
+              <p className="text-text-muted">{account.valuation_precision === 'observation_proxy' ? '조회 시각 (평가시각 미제공)' : '평가 시점'} {sourceTime(account.valuation_at, account.valuation_precision === 'observation_proxy' ? 'timestamp' : account.valuation_precision ?? (account.effective_source === 'banksalad_snapshot' ? 'date' : 'timestamp'))} · 수집 시점 {sourceTime(account.ingested_at)}</p>
               {account.observed_at && <p className="text-text-muted">원본 관측 시점 {sourceTime(account.observed_at)}</p>}
               {account.configured_source === 'toss_securities_api' && <p className="text-text-muted">토스 최근 수집 {sourceTime(account.last_attempt_at ?? null)} ({syncStatus(account.last_attempt_status)}) · 마지막 정상 수집 {sourceTime(account.last_success_at ?? null)}</p>}
               <p className="text-text-muted">선택 수집 #{account.selected_run_id ?? '없음'} · 보유 {account.holdings_count}건 {account.is_stale && <Badge variant="warn">오래된 평가값</Badge>}</p>

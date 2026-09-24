@@ -1,0 +1,73 @@
+{
+  "tested_at_kst": "2026-09-24T23:18:58+09:00",
+  "target": "http://127.0.0.1:5275/data/settings",
+  "backend": "http://127.0.0.1:8675 isolated synthetic data",
+  "desktop": {
+    "width": 1280,
+    "height": 900,
+    "document_client_width": 1274,
+    "document_scroll_width": 1274,
+    "main_client_width": 1034,
+    "main_scroll_width": 1034,
+    "root_horizontal_overflow": false
+  },
+  "mobile": {
+    "width": 390,
+    "height": 844,
+    "document_client_width": 390,
+    "document_scroll_width": 390,
+    "body_scroll_width": 390,
+    "main_client_width": 384,
+    "main_scroll_width": 384,
+    "root_horizontal_overflow": false,
+    "note": "Settings data submenu is intentionally horizontally scrollable; no root overflow. Assets screen had no overflowing elements."
+  },
+  "flow": {
+    "configured_initial": true,
+    "mapping_initial": false,
+    "confirmation_checkbox_initial": false,
+    "confirmation_text": "내 토스 계좌는 하나이며, 뱅샐의 토스증권 투자 그룹과 같은 계좌이고 이 그룹에는 국내·미국 주식(ETF 포함)만 있습니다",
+    "unchecked_sync_holdings_count": 2,
+    "unchecked_sync_mapping_connected": false,
+    "unchecked_sync_excluded_from_aggregation": true,
+    "cooldown_initial_seconds": 60,
+    "confirmed_sync_holdings_count": 2,
+    "confirmed_sync_mapping_connected": true,
+    "investment_source_applied": "toss_securities_api",
+    "applied_after_reload": true
+  },
+  "selected_investments_api": {
+    "investment_total": 360000,
+    "investment_total_complete": true,
+    "confirmed_net_worth": 1300000,
+    "estimated_net_worth": null,
+    "items": [
+      {"product_name": "QA 국내주식", "market_value": 100000, "currency": "KRW"},
+      {"product_name": "QA 미국주식", "market_value": 260000, "currency": "KRW"}
+    ],
+    "holdings_count": 2,
+    "valuation_precision": "observation_proxy",
+    "conflicts": [
+      "provider_valuation_timestamp_unavailable",
+      "different_valuation_dates",
+      "value_difference",
+      "net_worth_replacement_scope_unconfirmed"
+    ]
+  },
+  "final_time_revalidation": {
+    "status_recent_observed_kst": "2026-09-24 23:11 KST",
+    "status_ingested_kst": "2026-09-24 23:11 KST",
+    "source_details_observed_kst": "2026-09-24 23:11 KST",
+    "source_details_ingested_kst": "2026-09-24 23:11 KST",
+    "result": "pass"
+  },
+  "optional_mocks": {
+    "executed": false,
+    "reason": "Aside attached-page harness did not expose page.route; server environment was not changed.",
+    "contracts_recorded": [
+      "configured false status",
+      "401 Invalid API key",
+      "success_partial with rate_limited"
+    ]
+  }
+}

@@ -4,19 +4,19 @@
 
 **What you'll get:** Toss Securities 공식 API 문서가 확인된 뒤, 토스 증권계좌 투자 holdings 평가액을 별도 source로 수집하고 selected investment summary에 반영한다.
 
-**Why this approach:** 이 작업은 인증/조회 필드/저장 가능 범위가 공식 문서에 의해 결정된다. 그래서 지금은 blocked plan으로 두고, source-priority foundation이 끝난 뒤 시작한다.
+**Why this approach:** 이 작업은 인증/조회 필드/저장 가능 범위가 공식 문서에 의해 결정된다. 2026-09-24 공식 v1.2.17 확인 및 키 사용 승인 후 기존 source-priority foundation 위에 구현한다.
 
 **What it will NOT do:** 일반 자산, 대출, 보험, profile snapshot을 Toss로 대체하지 않는다. BankSalad `investments` raw row를 직접 수정하지 않는다. 투자 성과/수익률 분석을 만들지 않는다.
 
 **Effort:** Large
 **Risk:** High - 외부 API, 인증, 민감정보, stale/failure 처리 리스크가 있다.
-**Decisions to sanity-check:** 공식 문서와 인증 방식이 확인되기 전에는 실행하지 않는다.
+**Decisions to sanity-check:** 국내·미국 주식 범위, 조회시각 대용, 별도 FX, 현금 미포함을 명시한다.
 
-Your next move: keep this plan blocked until official Toss Securities API docs and credentials/storage decisions are available. Full execution detail follows below.
+2026-09-24: user authorized implementation with the existing 1Password vault credentials. Official OpenAPI v1.2.17 reviewed; manual collector implementation in progress. Full execution detail follows below.
 
 ---
 
-> TL;DR (machine): Blocked roadmap T019; execute only after official Toss docs and asset-investment source foundation.
+> TL;DR (machine): T019 in progress; official contract and user credential-use authorization available. See task-0 evidence for provider limitations.
 
 ## Scope
 ### Must have
@@ -61,7 +61,7 @@ Your next move: keep this plan blocked until official Toss Securities API docs a
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] 0. Unblock with official Toss Securities API docs.
+- [x] 0. Unblock with official Toss Securities API docs.
   What to do / Must NOT do: Review `https://developers.tossinvest.com/docs` or user-provided official docs at execution time. Confirm auth, holdings endpoint fields, pagination, rate limits, allowed storage, sandbox/live behavior, and error semantics. Do not start adapter coding until this is documented.
   Parallelization: Wave 0 | Blocked by: official docs/access | Blocks: 1, 2, 3
   References (executor has NO interview context - be exhaustive): `Implentation-plan.md:479`, `.omo/plans/asset-investment-source-priority.md`, official Toss docs.
@@ -69,7 +69,7 @@ Your next move: keep this plan blocked until official Toss Securities API docs a
   QA scenarios (name the exact tool + invocation): happy: docs confirm holdings valuation fields, failure: docs omit required valuation/account identity field and plan remains blocked, Evidence `.omo/evidence/task-0-toss-securities-holdings-valuation.md`.
   Commit: N | docs/evidence only unless user asks
 
-- [ ] 1. Build Toss holdings adapter and observation persistence.
+- [x] 1. Build Toss holdings adapter and observation persistence.
   What to do / Must NOT do: Implement a backend client with mocked tests. Store source run and observations separately from BankSalad `investments`. Redact secrets from logs.
   Parallelization: Wave 1 | Blocked by: 0 and asset source foundation | Blocks: 2
   References (executor has NO interview context - be exhaustive): `backend/app/services/assets_service.py`, `backend/app/models/investment.py`, `backend/app/schemas/asset.py`, `backend/tests/services/test_assets_service.py`.
@@ -77,7 +77,7 @@ Your next move: keep this plan blocked until official Toss Securities API docs a
   QA scenarios (name the exact tool + invocation): happy: complete holdings response persists observations, failure: API error records failed run and preserves previous successful run, Evidence `.omo/evidence/task-1-toss-securities-holdings-valuation.md`.
   Commit: Y | `[backend] Toss holdings adapter 추가 (codex)`
 
-- [ ] 2. Map Toss observations into selected investment summary.
+- [x] 2. Map Toss observations into selected investment summary.
   What to do / Must NOT do: Use source priority and canonical investment identity. Toss-selected accounts replace BankSalad holdings for that account; never double count.
   Parallelization: Wave 2 | Blocked by: 1 | Blocks: 3
   References (executor has NO interview context - be exhaustive): `.omo/plans/asset-investment-source-priority.md`, `backend/app/api/v1/endpoints/assets.py`, `backend/app/services/assets_service.py`, `backend/tests/api/test_assets_api.py`.
@@ -85,7 +85,7 @@ Your next move: keep this plan blocked until official Toss Securities API docs a
   QA scenarios (name the exact tool + invocation): happy: selected Toss source changes investment items with basis metadata, failure: partial Toss run excluded from canonical candidate, Evidence `.omo/evidence/task-2-toss-securities-holdings-valuation.md`.
   Commit: Y | `[backend] Toss selected investment summary 반영 (codex)`
 
-- [ ] 3. Document sync/stale/failure semantics and run verification.
+- [x] 3. Document sync/stale/failure semantics and run verification.
   What to do / Must NOT do: Update API/agent docs with confirmed/current net-worth distinction, stale behavior, and scope limits. Do not describe this as investment performance analysis.
   Parallelization: Wave 3 | Blocked by: 1, 2 | Blocks: final
   References (executor has NO interview context - be exhaustive): `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`, `Implentation-plan.md:479`.
@@ -95,10 +95,10 @@ Your next move: keep this plan blocked until official Toss Securities API docs a
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit: verify `T019` bullets are mapped after official docs.
-- [ ] F2. Code quality review: inspect secret handling, retry/failure behavior, and no double counting.
-- [ ] F3. Real manual QA: run a mocked/sandbox sync; live sync only with explicit credentials approval.
-- [ ] F4. Scope fidelity: confirm no non-investment Toss replacement or performance attribution slipped in.
+- [x] F1. Plan compliance audit: verify `T019` bullets are mapped after official docs.
+- [x] F2. Code quality review: inspect secret handling, retry/failure behavior, and no double counting.
+- [x] F3. Real manual QA: run a mocked/sandbox sync; live sync only with explicit credentials approval.
+- [x] F4. Scope fidelity: confirm no non-investment Toss replacement or performance attribution slipped in.
 
 ## Commit strategy
 - Keep official-doc evidence separate if committed.
@@ -108,3 +108,13 @@ Your next move: keep this plan blocked until official Toss Securities API docs a
 - Plan remains blocked until official docs are confirmed.
 - Once unblocked, Toss holdings are stored as separate observations.
 - Selected investment summary can use Toss source without mutating BankSalad rows or double counting.
+
+## 2026-09-24 implementation scope decision
+
+Existing single-account vault credential usage is explicitly approved. Manual sync and explicit whole-account mapping extend the completed selection foundation. Official API has no holdings valuation timestamp, so use observation_proxy and preserve FX window. No raw quote-time claims, cash replacement, auto scheduling, trades, or operating-server deployment. Existing broader allocation/delta roadmap checkboxes are not silently completed. Runtime/auth keys remain out of tracked files. See `../evidence/task-0-toss-securities-holdings-valuation.md`.
+
+## Implementation verification
+
+Local collector, settings UI, 1Password runtime references, API docs and mocked verification are implemented. Full backend 504 passed/12 PostgreSQL-only concurrency tests skipped; frontend237 passed with lint/typecheck/build. Subsequent helper-only tests13 passed. Source migration upgrade/downgrade and existing-row preservation covered. Review findings (stock-only scope and Decimal overflow) fixed with regression tests; independent rereview found no further actionable issue. See `../evidence/toss-integration-implementation.md`. Real credential probe remains pending desktop 1Password authentication; no operational deployment performed. Wider T019 allocation/delta remains open in human roadmap.
+
+Final local verification: desktop1280/mobile390 synthetic browser flow passed; final status/source timestamps both23:11KST after UTC normalization. Root visually checked final mobile and desktop captures. Full actual-key verification is still waiting for 1Password desktop authentication; this is not a production deployment claim.

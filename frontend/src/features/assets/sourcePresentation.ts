@@ -24,11 +24,13 @@ export function sourceTime(value: string | null, precision: 'date' | 'timestamp'
 const REASON_LABEL: Record<string, string> = {
   account_mapping_required: '토스증권 계좌와 뱅샐 계좌 그룹의 연결 확인이 필요합니다.',
   account_mapping_ambiguous: '계좌 연결 범위를 확인해야 합니다.',
+  unsupported_holdings_scope: '뱅샐 투자 그룹에 국내·미국 주식(ETF 포함) 외의 자산이 있어 토스 API로 대체하지 않고 뱅샐을 유지합니다.',
   no_successful_complete_run: '토스증권의 완전한 정상 수집 결과가 없어 뱅샐을 사용합니다.',
   missing_in_toss: '토스증권 정상 수집 결과가 없습니다.',
   instrument_mapping_ambiguous: '종목 식별 근거가 불충분합니다.',
   investment_total_incomplete: '투자 평가액은 확인된 항목의 소계입니다. 누락·식별·통화 문제로 전체 합계를 확정할 수 없습니다.',
   missing_valuation: '평가액이 없는 보유 항목이 있습니다.',
+  provider_valuation_timestamp_unavailable: '토스가 평가 시각을 제공하지 않아 조회 시각 기준 추정값을 사용합니다.',
   currency_mismatch: '통화 기준이 달라 합산할 수 없습니다.',
   stale_comparison: '비교 대상 평가값이 오래되었습니다.',
   different_valuation_dates: '소스 사이의 평가 시점이 다릅니다.',

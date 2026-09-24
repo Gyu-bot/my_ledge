@@ -26,6 +26,7 @@ class AssetSourceRun(Base):
     cash_balance: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
     cash_included: Mapped[bool] = mapped_column(default=False)
     error: Mapped[str | None] = mapped_column(Text)
+    provenance: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
 
 
 class AssetSourceObservation(Base):

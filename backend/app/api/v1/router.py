@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from app.api.v1.endpoints.toss import router as toss_router
 from app.api.v1.endpoints.asset_sources import router as asset_sources_router
 
 from app.api.v1.endpoints.analytics import router as analytics_router
@@ -34,3 +35,5 @@ api_router.include_router(loan_mapping_router)
 api_router.include_router(data_management_router)
 api_router.include_router(settlement_matches_router)
 api_router.include_router(transactions_router)
+
+api_router.include_router(toss_router)

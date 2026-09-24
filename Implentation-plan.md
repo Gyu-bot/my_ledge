@@ -59,7 +59,7 @@
 1. `T012`/`T012A`와 GitHub Issue 기반 agent contract 작업 `T023`-`T029`는 `codex/ready-plan-tasks`에서 구현되었고, GitHub Issues `#7`-`#14`는 완료로 닫혔다.
 2. frontend remake PR `#15`가 `main`에 반영되었다. frontend 의존 settings/smoke 작업은 이제 remake line 보류가 아니라 새 `/data/*`와 `/data/settings` 화면을 기준으로 진행할 수 있다.
 3. P0 거래 신뢰도 기반 작업 `T030`-`T032`는 완료되었다: source lifecycle, upload preview/reconciliation, shared settlement groups 순서로 구현했다.
-4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 공식 Toss Securities API 문서가 있어야 진행할 수 있다.
+4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 2026-09-24 공식 API 계약 확인과 사용자 키 사용 승인 후 구현을 진행한다.
 5. `T033`-`T039`와 `T041`은 거래 신뢰도 작업 이후의 automation, forecasting, decision-support, 제한적 tagging 백로그로 유지한다. 각 항목은 선행 조건이 충족된 뒤 집중된 PR로 시작한다.
 6. 대출 후보 `review_status` 및 할부 제안 API는 문서 계약이 SSOT/레퍼런스에 반영되었고, `Implentation-plan.md` 사용자-visible task graph에는 기존 MoM 회귀 커버리지 유지 상태만 보강 노트로 반영되었다.
 7. 2026-09-24 Live 점검 후 `T042` 대출 연결 거래 월상환 추정 복구와 `T043` 진행월 예상 수입·월말 순현금흐름을 추가했다. 후속 사용자 승인으로 `.omo/plans/live-audit-remediation.md`에서 구현·검증·Live 배포와 기존 데이터 복구를 완료했다. PR #22는 main 병합 전 상태이며 반복 지출 전망 후속 보완까지 배포된 애플리케이션 커밋은 `e3809b2`다. `T043`은 `T037` 전체 90일 calendar보다 좁은 월간 선행 작업이다.
@@ -73,7 +73,7 @@
 | 운영/로드맵 문서 전환 | `T000` | 완료 |
 | 계산 정확성과 agent read contract 기반 | `T001`-`T012A` | 완료 중심 |
 | 사용자 화면과 운영 확인 | `T013`-`T014` | `T013` PR #20 리뷰 대기, `T014` 완료 |
-| 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 바로 시작 가능, `T019` 막힘 |
+| 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 선택 기반 구현, `T019` 수동 API 연동 진행 |
 | 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
 | issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
 | 다음 P0 거래 신뢰도 | `T030`-`T032` | 완료 |
@@ -496,30 +496,31 @@
 
 #### 작업 T019. Toss Securities holdings valuation 연동
 - 우선순위: P2
-- 상태: 막힘
+- 상태: 수동 수집·소스 반영 로컬 구현 및 모의 검증 완료, 실제 키 검증/운영 연결 대기
 - 선행 조건: T015, T016, T017, T018, 공식 Toss Securities API 문서
 - 완료 기준:
   - [ ] 사용자가 제공한 Toss Securities 공식 문서 기준으로 인증, 조회 가능 holdings 필드, rate limit, 저장 가능 범위가 확인된다.
-  - [ ] Toss Securities adapter는 증권계좌 투자 holdings만 조회하고 일반 자산/대출/보험/profile은 조회하거나 대체하지 않는다.
-  - [ ] Toss API 조회 결과는 별도 investment observation table에 저장하며, 기존 BankSalad `investments` snapshot row를 직접 수정하지 않는다.
-  - [ ] 저장 필드는 최소 broker/source account identity, product identifier/name, quantity 또는 units, cost basis if available, market value, currency, observed_at, valuation_as_of, source_run_id를 포함한다.
-  - [ ] BankSalad snapshot의 Toss Securities 투자 row를 식별할 수 있는 mapping/normalization이 제공된다.
+  - [x] Toss Securities adapter는 증권계좌 투자 holdings만 조회하고 일반 자산/대출/보험/profile은 조회하거나 대체하지 않는다.
+  - [x] Toss API 조회 결과는 별도 investment observation table에 저장하며, 기존 BankSalad `investments` snapshot row를 직접 수정하지 않는다.
+  - [x] 저장 필드는 최소 broker/source account identity, product identifier/name, quantity 또는 units, cost basis if available, market value, currency, observed_at, valuation_as_of, source_run_id를 포함한다.
+  - [x] BankSalad snapshot의 Toss Securities 투자 row를 식별할 수 있는 mapping/normalization이 제공된다.
   - [ ] Toss API 종목 식별자와 BankSalad `product_name`을 연결하는 mapping은 자동 정규화 preview 후 저장하며, 불확실한 이름 매칭은 canonical replacement에 바로 사용하지 않는다.
-  - [ ] source priority가 `toss_securities_api`일 때 selected canonical investment view가 Toss Securities 계좌 내 항목을 Toss API observation 값으로 완전 대체한다.
-  - [ ] source priority가 `banksalad_snapshot`이거나 Toss observation이 없으면 기존 BankSalad 투자 snapshot 값으로 fallback한다.
-  - [ ] `GET /api/v1/investments/summary` 또는 새 canonical investment summary API가 selected source 기준 items/totals와 source metadata를 반환한다.
+  - [x] source priority가 `toss_securities_api`일 때 selected canonical investment view가 Toss Securities 계좌 내 항목을 Toss API observation 값으로 완전 대체한다.
+  - [x] source priority가 `banksalad_snapshot`이거나 Toss observation이 없으면 기존 BankSalad 투자 snapshot 값으로 fallback한다.
+  - [x] `GET /api/v1/investments/summary` 또는 새 canonical investment summary API가 selected source 기준 items/totals와 source metadata를 반환한다.
   - [ ] broker/product type/product 기준 allocation ratio와 previous-snapshot delta가 제공된다.
-  - [ ] 인증정보와 API 오류 detail은 로그에 민감정보를 남기지 않는다.
-  - [ ] 일부 조회 실패는 `success_partial`로 기록하고 canonical source 후보에서 제외한다.
-  - [ ] 수동 새로고침, pagination, rate limit, 원화/외화 평가액, 환율 기준 저장을 처리한다.
-  - [ ] 기존 확정 순자산(`동일 BankSalad snapshot_date의 총자산 - 총부채`)과 현재 추정 순자산(`최신 BankSalad 비토스 자산 + selected Toss 투자자산 - 최신 BankSalad 부채`)을 구분한다.
+  - [x] 인증정보와 API 오류 detail은 로그에 민감정보를 남기지 않는다.
+  - [x] 일부 조회 실패는 `success_partial`로 기록하고 canonical source 후보에서 제외한다.
+  - [x] 수동 새로고침, pagination, rate limit, 원화/외화 평가액, 환율 기준 저장을 처리한다.
+  - [x] 기존 확정 순자산(`동일 BankSalad snapshot_date의 총자산 - 총부채`)과 현재 추정 순자산(`최신 BankSalad 비토스 자산 + selected Toss 투자자산 - 최신 BankSalad 부채`)을 구분한다.
   - [ ] API 연동 이후 일별 대표 투자 observation을 보존하되, API 연동 이전 history를 임의로 복원하지 않는다.
-  - [ ] 실패한 sync가 직전 정상 observation을 덮지 않으며, 장기 stale 상태도 자동 source 전환이 아니라 경고와 수동 전환 선택지로 표현한다.
-  - [ ] 1차 범위는 보유 평가액과 투자 구성 비중만이며, 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution은 구현하지 않는다.
-  - [ ] BankSalad snapshot만으로 투자 성과/수익률을 해석하지 않는다.
+  - [x] 실패한 sync가 직전 정상 observation을 덮지 않으며, 장기 stale 상태도 자동 source 전환이 아니라 경고와 수동 전환 선택지로 표현한다.
+  - [x] 1차 범위는 보유 평가액과 투자 구성 비중만이며, 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution은 구현하지 않는다.
+  - [x] BankSalad snapshot만으로 투자 성과/수익률을 해석하지 않는다.
 - 참고:
-  - 상태 근거: 공식 Toss Securities API 문서가 제공되어야 인증, 조회 필드, 저장 가능 범위를 확정할 수 있으므로 막혀 있다.
-  - 이 작업은 공식 Toss Securities API 문서가 제공될 때까지 막혀 있다.
+  - 구현 증거: `.omo/evidence/toss-integration-implementation.md`. 소스는 국내·미국 주식만, 평가시각은 observation_proxy. 1Password CLI 인증이 완료되지 않아 실제 계좌 조회 성공은 아직 미확인.
+  - 2026-09-24 공식 OpenAPI v1.2.17 확인 및 기존 1Password 개인 볼트 키 사용 승인. 수동 API 수집과 명시적 단일계좌 매핑을 구현한다.
+  - 공급자가 평가시각/예수금을 제공하지 않으므로 조회시각 대용과 별도 환율 기준을 보존한다. 보존기간/샌드박스는 문서에서 확인되지 않았다.
   - 투자 성과 분석은 holdings valuation source가 안정화된 뒤 별도 task로 승격한다.
 
 ### 보류/제품 구조

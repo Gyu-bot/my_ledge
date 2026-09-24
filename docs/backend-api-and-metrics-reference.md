@@ -1917,3 +1917,11 @@ A current estimate can legitimately contain several valuation dates. Its account
 ### Identity and scope
 
 The workbook's broker label is a fallback group identity, not evidence of a unique real securities account. Holdings use account/group plus instrument identity, so equal product names across brokers remain distinct. External replacement requires explicit account mapping. Cash-inclusive and holdings-only valuations are different scopes; keep the selected run's currency/FX basis and cash scope intact. General field overrides and the actual Toss adapter remain separate extensions.
+
+### Toss 주식 평가 조회
+
+공식 v1.2.17 holdings의 통화별 합계는 해당 통화 종목의 합이며 환산 총액이 아니다. 각 종목의 수수료 차감 전 `marketValue.amount`를 사용한다. KRW 종목은 원금액, USD 종목은 `amount × 별도 exchange-rate.midRate`를 Decimal로 계산하고 0.01 KRW 단위로 반올림한다. `quantity`, 원통화 평가액/매입금액, 현재가(원통화), 환율을 관측 payload에 남긴다. 손익/성과 계산은 구현하지 않는다.
+
+빈 items는 KRW/USD 합이 0일 때 완전한 0건 수집이다. 항목 누락/중복/지원 외 통화/overview 불일치/환율 오류는 부분 또는 실패로 기록하고 선택 후보에서 제외한다. 공급자에 holdings 평가 timestamp가 없어 `valuation_at=observed_at`은 명시적 observation_proxy이다. 환율 유효구간은 별도로 저장되며 같은 시각의 확정 평가를 뜻하지 않는다. 조회 최신성과 시세 최신성은 다르다.
+
+계좌 그룹을 Toss로 교체하려면 동일한 단일계좌 및 국내·미국 주식 범위를 확인한다. 비주식/미분류 항목이 있으면 `unsupported_holdings_scope`로 뱅샐 유지. 예수금은 API가 제공하지 않으므로 매수가능액 등을 현금으로 대용하지 않는다. BankSalad 자산 component mapping과 cash_scope가 확인되기 전 estimated_net_worth=null은 정상적인 미확정 상태다.

@@ -6,6 +6,7 @@ import { selectedInvestments, sourcePolicy, sourcePreview } from './sourcePolicy
 const mocks = vi.hoisted(() => ({
   writable: true, loading: false, error: false, selectedError: false, otherBroker: false,
   preview: vi.fn(), apply: vi.fn(), refetch: vi.fn(),
+  sync: vi.fn(),
 }))
 vi.mock('../../hooks/useSourcePolicy', () => ({
   useSourcePolicy: () => ({ data: mocks.loading || mocks.error ? undefined : sourcePolicy, isLoading: mocks.loading, error: mocks.error, refetch: mocks.refetch }),
@@ -14,12 +15,17 @@ vi.mock('../../hooks/useSourcePolicy', () => ({
   useApplySourcePolicy: () => ({ mutateAsync: mocks.apply, isPending: false }),
 }))
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => mocks.writable }))
+vi.mock('../../hooks/useTossIntegration', () => ({
+  useTossIntegrationStatus: () => ({ data: { configured: true, mapping_connected: false, cooldown_seconds: 0, last_attempt: null }, isLoading: false }),
+  useSyncTossIntegration: () => ({ mutateAsync: mocks.sync, isPending: false }),
+}))
 
 beforeEach(() => {
   mocks.writable = true; mocks.loading = false; mocks.error = false; mocks.selectedError = false; mocks.otherBroker = false
   mocks.preview.mockReset().mockResolvedValue(sourcePreview)
   mocks.apply.mockReset().mockResolvedValue({ ...sourcePolicy, revision: 2, ...sourcePreview.policy })
   mocks.refetch.mockReset()
+  mocks.sync.mockReset().mockResolvedValue({ status: 'success_complete', holdings_count: 1, mapping_connected: false })
 })
 
 describe('SourcePolicyEditor', () => {
@@ -27,7 +33,7 @@ describe('SourcePolicyEditor', () => {
     render(<SourcePolicyEditor />)
     expect(screen.getByLabelText('토스증권 투자 기본 소스')).toHaveValue('banksalad_snapshot')
     expect(screen.getByText(/Toss 투자 항목만 대체, 나머지는 BankSalad 유지/)).toBeInTheDocument()
-    expect(screen.getByText(/API 자동 연결은 아직 제공되지 않습니다/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '토스 보유자산 새로고침' })).toBeInTheDocument()
     expect(screen.getByText(/뱅샐 스냅샷 2026-09-01/)).toBeInTheDocument()
     expect(screen.getByText(/평가 시점.*2026.*09.*01.*수집 시점.*2026.*09.*03/)).toBeInTheDocument()
     expect(screen.getByText(/평가 시점/)).toHaveTextContent('(날짜 기준)')
@@ -61,6 +67,20 @@ describe('SourcePolicyEditor', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('다시 미리보기'))
     expect(screen.queryByRole('button', { name: '확인 후 소스 적용' })).not.toBeInTheDocument()
     expect(screen.queryByText('소스 선택을 저장했습니다.')).not.toBeInTheDocument()
+  })
+
+  it('토스 재조회가 시작되면 이전 데이터의 미리보기를 폐기하고 소스 적용은 별도로 둔다', async () => {
+    let complete: ((value: unknown) => void) | undefined
+    mocks.sync.mockImplementation(() => new Promise((resolve) => { complete = resolve }))
+    render(<SourcePolicyEditor />)
+    fireEvent.click(screen.getByRole('button', { name: '변경 미리보기' }))
+    expect(await screen.findByRole('button', { name: '확인 후 소스 적용' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '토스 보유자산 새로고침' }))
+    expect(screen.queryByRole('button', { name: '확인 후 소스 적용' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '변경 미리보기' })).toBeDisabled()
+    complete?.({ status: 'success_complete', holdings_count: 1, mapping_connected: false })
+    await waitFor(() => expect(screen.getByRole('button', { name: '변경 미리보기' })).not.toBeDisabled())
+    expect(mocks.apply).not.toHaveBeenCalled()
   })
 
   it('읽기 전용에서는 소스 선택·미리보기·저장을 허용하지 않는다', () => {

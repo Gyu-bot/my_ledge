@@ -67,6 +67,10 @@ class SourceHolding(BaseModel):
     market_value: Decimal | None
     currency: str
     source: Source
+    quantity: Decimal | None = None
+    native_currency: str | None = None
+    native_market_value: Decimal | None = None
+    exchange_rate: Decimal | None = None
 
 
 class SourceAccountStatus(BaseModel):
@@ -76,7 +80,7 @@ class SourceAccountStatus(BaseModel):
     effective_source: Source | None
     selected_run_id: int | None
     valuation_at: datetime | None
-    valuation_precision: Literal["date", "timestamp"] = "date"
+    valuation_precision: Literal["date", "timestamp", "observation_proxy"] = "date"
     ingested_at: datetime | None
     account_scope: Literal["broker_group"] = "broker_group"
     configured_source_basis: str = "investment_default"
@@ -151,6 +155,9 @@ class ExternalHoldingInput(StrictModel):
     product_name: str = Field(min_length=1, max_length=200)
     market_value: Decimal = Field(ge=0, allow_inf_nan=False)
     currency: Literal["KRW"] = "KRW"
+    native_currency: Literal["KRW", "USD"] | None = None
+    native_market_value: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
+    native_cost_basis: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     quantity: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     unit_price: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     exchange_rate: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -167,6 +174,7 @@ class ExternalRunInput(StrictModel):
     cash_balance: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     cash_included: bool = False
     error: str | None = None
+    provenance: dict = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_complete(self):

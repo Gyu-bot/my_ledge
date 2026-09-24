@@ -14,11 +14,8 @@ from app.models.investment import Investment
 from app.models.loan import Loan
 
 
-def _migration():
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "alembic/versions/20260924_0031_asset_source_selection.py"
-    )
+def _migration(filename="20260924_0031_asset_source_selection.py"):
+    path = Path(__file__).resolve().parents[2] / "alembic/versions" / filename
     spec = importlib.util.spec_from_file_location("asset_source_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -139,6 +136,7 @@ def test_empty_database_schema_matches_models():
         _legacy_schema(connection)
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
+            _migration("20260924_0032_toss_provenance.py").upgrade()
         inspector = sa.inspect(connection)
         for name in (
             "asset_source_runs",
@@ -168,4 +166,37 @@ def test_empty_database_schema_matches_models():
             inspector.get_foreign_keys("asset_source_observations")[0]["referred_table"]
             == "asset_source_runs"
         )
+    engine.dispose()
+
+
+def test_toss_provenance_migration_preserves_existing_runs():
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        _legacy_schema(connection)
+        with Operations.context(MigrationContext.configure(connection)):
+            _migration().upgrade()
+        table = sa.Table("asset_source_runs", sa.MetaData(), autoload_with=connection)
+        connection.execute(
+            table.insert().values(
+                source="toss_securities_api",
+                account_key="test",
+                broker="토스증권",
+                status="success_complete",
+                valuation_at=datetime(2026, 9, 24),
+                currency="KRW",
+                cash_included=False,
+            )
+        )
+        before = _read(connection, "asset_source_runs")
+        migration = _migration("20260924_0032_toss_provenance.py")
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        after = _read(connection, "asset_source_runs")
+        assert after[0]["provenance"] == {}
+        assert [
+            {k: v for k, v in row.items() if k != "provenance"} for row in after
+        ] == before
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.downgrade()
+        assert _read(connection, "asset_source_runs") == before
     engine.dispose()

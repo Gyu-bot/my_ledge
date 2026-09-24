@@ -10,6 +10,7 @@ import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type { InvestmentSource, SourcePolicyFields, SourcePolicyPreview } from '../../types/sourcePolicy'
 import { SourceSelectionDetails } from '../assets/SourceSelectionDetails'
 import { SOURCE_LABEL, sourceMoney } from '../assets/sourcePresentation'
+import { TossIntegrationPanel } from './TossIntegrationPanel'
 
 function sourceValue(value: string): InvestmentSource { return value === 'toss_securities_api' ? value : 'banksalad_snapshot' }
 function policyFields(policy: SourcePolicyFields): SourcePolicyFields {
@@ -25,8 +26,9 @@ export function SourcePolicyEditor() {
   const [draft, setDraft] = useState<SourcePolicyFields | null>(null)
   const [preview, setPreview] = useState<SourcePolicyPreview | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [syncPending, setSyncPending] = useState(false)
   const effective = draft ?? (policyQuery.data ? policyFields(policyQuery.data) : null)
-  const busy = previewMutation.isPending || applyMutation.isPending
+  const busy = previewMutation.isPending || applyMutation.isPending || syncPending
   const editable = hasWrite && !busy
 
   function edit(next: SourcePolicyFields) {
@@ -67,10 +69,14 @@ export function SourcePolicyEditor() {
     <Card title="투자 데이터 소스" meta="기본 소스와 계좌 그룹별 예외를 선택합니다" className="mb-4">
       <div className="mb-4 space-y-2 text-caption text-text-muted">
         <p>Toss 투자 항목만 대체, 나머지는 BankSalad 유지. 원본과 과거 스냅샷은 변경하지 않습니다.</p>
-        <p>토스증권 API 자동 연결은 아직 제공되지 않습니다. 소스 선택은 저장할 수 있으며, 완전한 수집 결과가 없으면 실제 적용 소스와 대체 사유를 표시합니다.</p>
+        <p>토스증권의 완전한 수집 결과가 없으면 실제 적용 소스와 대체 사유를 표시합니다.</p>
         <p>뱅샐에 계좌번호가 없으면 증권사 단위 계좌 그룹으로 표시합니다. 여러 실제 계좌를 연결하려면 명시적 매핑 확인이 필요합니다.</p>
         {!hasWrite && <p className="text-warn">읽기 전용 · 소스 변경에는 쓰기 권한이 필요합니다.</p>}
       </div>
+      <TossIntegrationPanel disabled={previewMutation.isPending || applyMutation.isPending} onSyncStateChange={(pending) => {
+        setSyncPending(pending)
+        if (pending) { setPreview(null); setMessage(null) }
+      }} />
       {policyQuery.isLoading ? <ListSkeleton rows={3} /> : policyQuery.error || !effective ? (
         <ErrorState message="소스 설정을 불러오지 못했습니다" onRetry={() => void policyQuery.refetch()} />
       ) : (

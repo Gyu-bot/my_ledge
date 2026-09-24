@@ -501,3 +501,14 @@ No successful complete mapped Toss observation means a visible BankSalad fallbac
 `as_of_date` is a valuation cutoff under **current** source policy/mappings. Later-ingested observations whose valuation falls before the cutoff may be included. The response is not a reconstruction of what was known or configured on that date; explicit date-cutoff responses use `total_basis=valuation_cutoff_current_policy_not_known_at_history`; ordinary latest reads use `selected_current_estimate_with_source_dates`. Use the original snapshot history APIs for BankSalad history. BankSalad `valuation_precision=date` must be rendered as a date, not an invented intraday time.
 
 `investment_total_complete=false` means the numeric investment sum is only a subtotal of known/eligible values; missing valuations or ambiguous normalized identities must be displayed as incomplete and must not produce a full net-worth estimate. Coverage counters have distinct units: `raw`, `selected`, `excluded`, `hidden` count observations; `confirmed` counts mappings; `conflicted`, `stale` count account groups. They must not be divided into one purported completeness ratio.
+
+### 토스증권 수동 수집 (T019)
+
+- `GET /api/v1/integrations/toss/status`: `configured`, 비밀값 없는 `last_attempt`(run_id/status/observed_at/ingested_at/error_code), `mapping_connected`, `cooldown_seconds`.
+- `POST /api/v1/integrations/toss/sync`: `X-API-Key` 필요. 요청 `{ "confirm_single_account_mapping": false }`; 키/토큰/계좌번호는 요청에서 받지 않는다. 응답 run_id/status/holdings_count/mapping_connected/error_code/observed_at. 공급자 실패도 기록된 run과 안전한 error_code를 200으로 반환한다. 미설정503, 진행 중·60초 cooldown409, 인증401.
+- 확인을 true로 보낼 때만 정확히 하나인 BROKERAGE 계좌와 기존 뱅샐 토스증권 그룹을 연결한다. 사용자는 동일 계좌이며 국내·미국 주식(ETF 포함)만인 그룹임을 확인한다. 비주식/알 수 없는 product_type, 다중계좌, 기존 매핑 충돌은 자동 연결/대체하지 않는다. 매핑 오류여도 조회된 관측치는 보존되며 소스 정책은 자동 변경하지 않는다.
+- 완전 수집은 공식 API의 국내·미국 주식 범위에만 해당한다. 채권·옵션·예수금은 미포함이다. `marketCountry:symbol`로 종목을 식별하고 계좌 그룹 전체를 선택하므로 이름 유사도 기반 매칭은 하지 않는다. 기존 매핑 이후 뱅샐에 비주식 항목이 생겨도 `unsupported_holdings_scope`로 뱅샐을 유지한다.
+- 국내/해외 금액 합계 검증, USD 원화 환산, FX 유효기간 검증을 통과해야 `success_complete`. 일부 항목 또는 FX 오류는 `success_partial`로 이전 정상 수집을 유지한다. 조회 실패는 failed이며 원문 오류/토큰을 저장하거나 응답에 넣지 않는다.
+- `asset_source_runs.provenance`: `valuation_time_basis=observation_proxy`, `provider_valuation_at=null`, `holdings_scope=kr_us_stocks`, API 버전, 원통화 합계와 FX의 midRate/유효구간/조회시각. 원천 holdings에는 평가시각이 없으므로 valuation_at은 조회시각 대용이고 `valuation_precision=observation_proxy`로 반환한다. 이때 stale는 조회 경과시간이며 시세 최신성을 보장하지 않는다.
+- `/investments/selected` item의 quantity/native_currency/native_market_value/exchange_rate로 원화 추정의 근거를 확인한다. FX는 별도로 조회하므로 원자적 스냅샷이 아니다. 기존 BankSalad 순자산/과거 스냅샷 API는 유지한다. 자산 component·현금 범위가 확인되지 않은 새 매핑은 현재 추정 순자산을 null로 유지한다.
+- 실행 키는 backend 환경변수만 사용한다. 단일 프로세스 토큰 메모리 재사용, 고정 조회 경로, 제한된 429 재시도, 수동 새로고침만 제공한다. 자동 스케줄/주문/이체는 없다. 설정은 [toss-securities-setup.md](toss-securities-setup.md).

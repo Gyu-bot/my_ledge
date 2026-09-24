@@ -435,3 +435,9 @@ DB queue의 `needs_recurring_payment_kind`는 검토 필요 신호다. 실제 �
 
 - `/investments/selected?as_of_date=...`는 현재 정책·매핑으로 해당 날짜 이하의 평가값을 선택한다. 나중에 업로드된 과거 평가값도 포함할 수 있어 “그날 알고 있던 값”을 복원하는 API가 아니다. 응답의 `total_basis`를 함께 설명한다.
 - `investment_total_complete=false`이면 투자 합계는 불완전한 부분합이다. 누락값을 0으로 해석하지 않고, 계좌/종목 충돌 이유를 함께 표시한다. coverage의 관측 건수와 계좌 그룹 건수는 단위가 다르므로 하나의 완성률로 계산하지 않는다.
+
+### Toss 수동 수집의 시점·범위
+
+`/investments/selected`의 Toss 항목은 국내·미국 주식(ETF 포함) 범위다. 채권/옵션/예수금을 포함하는 전체 계좌 잔액으로 해석하지 않는다. `valuation_precision=observation_proxy`이면 공급자 평가시각은 미제공이며 `valuation_at`은 조회시각 대용이다. stale=false도 실시간 시세임을 증명하지 않는다. USD→KRW는 별도로 조회한 midRate를 곱한 추정이고 quantity/native_currency/native_market_value/exchange_rate로 확인한다.
+
+수동 `POST /integrations/toss/sync`는 인증된 수집 쓰기 API다. 읽기 전용 소비자는 `/integrations/toss/status`와 selected surface만 읽는다. 실패·부분 수집은 직전 정상치를 보존하고 자동으로 BankSalad 전환하지 않는다. 최초 정상치가 없거나 비주식 scope가 충돌하면 명시적 fallback 사유를 따른다. 계좌 연결은 소스 적용과 별도이며, 소스 정책은 미리보기 후 확인해야 바뀐다. 자산 component/현금 범위가 미확정이면 전체 추정 순자산은 null이다.

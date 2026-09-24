@@ -49,6 +49,12 @@ def normalized(value: str) -> str:
     return "".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
+def stock_scope_supported(product_types) -> bool:
+    return all(
+        normalized(kind or "") in {"주식", "etf", "etn"} for kind in product_types
+    )
+
+
 def account_key(broker: str) -> str:
     return (
         "banksalad:broker:"
@@ -164,7 +170,7 @@ async def preserve_banksalad(db: AsyncSession, snapshot_date: date, snapshots) -
 async def record_external_run(
     db: AsyncSession, payload: ExternalRunInput
 ) -> AssetSourceRun:
-    """Internal future-adapter boundary. No public credential or ingestion endpoint."""
+    """Internal adapter boundary. No public credential or ingestion endpoint."""
     now = datetime.now(timezone.utc)
     if utc(payload.valuation_at) > now:
         raise ValueError("future valuation is not allowed")
@@ -184,6 +190,7 @@ async def record_external_run(
         cash_balance=payload.cash_balance,
         cash_included=payload.cash_included,
         error=payload.error,
+        provenance=payload.provenance,
     )
     db.add(run)
     await db.flush()
@@ -366,6 +373,20 @@ async def select_investments(
         attempts = sorted(
             external, key=lambda r: (utc(r.ingested_at), r.id), reverse=True
         )
+        bank_types = (
+            [
+                o.payload.get("product_type")
+                for o in by_run[bank_run.id]
+                if o.kind == "investment"
+            ]
+            if bank_run
+            else [i.product_type for i in old]
+        )
+        unsupported_scope = (
+            complete
+            and complete.provenance.get("holdings_scope") == "kr_us_stocks"
+            and not stock_scope_supported(bank_types)
+        )
         if configured == TOSS:
             if not mapping:
                 fallback = "account_mapping_required"
@@ -373,6 +394,9 @@ async def select_investments(
             elif complete is None:
                 fallback = "no_successful_complete_run"
                 conflicts.append("missing_in_toss")
+            elif unsupported_scope:
+                fallback = "unsupported_holdings_scope"
+                conflicts.append("unsupported_holdings_scope")
             else:
                 selected = complete
                 if attempts and attempts[0].status != "success_complete":
@@ -411,6 +435,10 @@ async def select_investments(
                 market_value=p.get("market_value"),
                 currency=p.get("currency", "KRW"),
                 source=effective_source,
+                quantity=p.get("quantity"),
+                native_currency=p.get("native_currency"),
+                native_market_value=p.get("native_market_value"),
+                exchange_rate=p.get("exchange_rate"),
             )
             for i, p in rows
         ]
@@ -442,6 +470,8 @@ async def select_investments(
         if valuation:
             dates.add(valuation.date())
         if effective_source == TOSS:
+            if selected.provenance.get("valuation_time_basis") == "observation_proxy":
+                conflicts.append("provider_valuation_timestamp_unavailable")
             if bank_run and bank_run.valuation_at != selected.valuation_at:
                 conflicts.append("different_valuation_dates")
             bank_values = (
@@ -507,6 +537,10 @@ async def select_investments(
                 valuation_at=valuation,
                 valuation_precision="date"
                 if effective_source == BANKSALAD
+                else "observation_proxy"
+                if selected
+                and selected.provenance.get("valuation_time_basis")
+                == "observation_proxy"
                 else "timestamp",
                 ingested_at=utc(selected.ingested_at) if selected else None,
                 observed_at=utc(selected.observed_at)

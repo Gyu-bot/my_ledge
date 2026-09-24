@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     database_url: str = Field(validation_alias="DATABASE_URL")
     excel_password: str | None = Field(default=None, validation_alias="EXCEL_PASSWORD")
     api_key: str | None = Field(default=None, validation_alias="API_KEY")
+    toss_client_id: SecretStr | None = Field(
+        default=None, validation_alias="TOSS_CLIENT_ID"
+    )
+    toss_client_secret: SecretStr | None = Field(
+        default=None, validation_alias="TOSS_CLIENT_SECRET"
+    )
     upload_dir: Path = Field(
         default=Path("/data/uploads"), validation_alias="UPLOAD_DIR"
     )
@@ -25,6 +31,15 @@ class Settings(BaseSettings):
         default_factory=list,
         validation_alias="CORS_ORIGINS",
     )
+
+    @field_validator("toss_client_id", "toss_client_secret", mode="before")
+    @classmethod
+    def empty_toss_credentials_are_unconfigured(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        if isinstance(value, SecretStr) and not value.get_secret_value().strip():
+            return None
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod

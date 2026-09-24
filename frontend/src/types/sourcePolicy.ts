@@ -23,7 +23,7 @@ export interface SourceAccount {
   last_success_at?: string | null
   last_attempt_at?: string | null
   last_attempt_status?: string | null
-  valuation_precision?: 'date' | 'timestamp'
+  valuation_precision?: 'date' | 'timestamp' | 'observation_proxy'
   valuation_at: string | null
   ingested_at: string | null
   is_stale: boolean
