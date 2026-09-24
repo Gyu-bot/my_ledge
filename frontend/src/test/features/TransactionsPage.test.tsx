@@ -5,6 +5,7 @@ import { TransactionsPage } from '../../features/data/TransactionsPage'
 
 const mutationMocks = vi.hoisted(() => ({
   bulkUpdate: vi.fn(),
+  update: vi.fn(),
   bulkRestorePreview: vi.fn(),
   bulkRestore: vi.fn(),
 }))
@@ -21,7 +22,8 @@ vi.mock('../../hooks/useTransactions', () => {
         ],
       }),
     useTransactionFilterOptions: () => wrap({ category_options: ['식비', '구독'], category_minor_options: ['배달'], category_minor_options_by_major: { 식비: ['배달'] }, payment_method_options: ['카드 A'] }),
-    useUpdateTransaction: noop,
+    useTransactionDetail: (id: number | null) => wrap(id ? { id, date: '2026-01-01', time: '05:52:21', merchant: '연결된 거래', amount: -1200, payment_method: '카드 B', description: '원본', cost_kind: 'fixed', spend_necessity: 'essential', recurring_payment_kind: 'monthly_recurring', effective_category_major: '구독', effective_category_minor: null, category_major_user: null, category_minor_user: null, memo: null, source: 'import' } : undefined),
+    useUpdateTransaction: () => ({ mutateAsync: mutationMocks.update.mockResolvedValue({}), isPending: false }),
     useDeleteTransaction: noop,
     useRestoreTransaction: noop,
     useBulkUpdateTransactions: () => ({
@@ -57,8 +59,8 @@ vi.mock('../../hooks/useTransactions', () => {
 })
 
 vi.mock('../../hooks/useAnalytics', () => ({
-  useRecurringPayments: () => ({
-    data: { total: 1, page: 1, per_page: 20, items: [{ merchant: '넷플릭스', category: '구독', avg_amount: 17000, interval_type: 'monthly', avg_interval_days: 30, occurrences: 12, confidence: 0.9, last_date: '2026-06-01', recurring_payment_kind: 'monthly_recurring', installment_count: 0, monthly_recurring_count: 12, not_recurring_count: 0, unclassified_count: 0, transaction_ids: [1] }], assumptions: '' },
+  useRecurringPayments: (page: number) => ({
+    data: { total: 21, page, per_page: 20, items: [{ merchant: page === 1 ? '넷플릭스' : '왓챠', category: '구독', avg_amount: 17000, interval_type: 'monthly', avg_interval_days: 30, occurrences: 12, confidence: 0.9, last_date: '2026-06-01', recurring_payment_kind: 'monthly_recurring', installment_count: 0, monthly_recurring_count: 12, not_recurring_count: 0, unclassified_count: 0, transaction_ids: page === 1 ? [1, 2] : [3] }], assumptions: '' },
     isLoading: false, error: null, refetch: vi.fn(),
   }),
 }))
@@ -90,6 +92,7 @@ function renderPage(path = '/data/transactions') {
 describe('TransactionsPage', () => {
   beforeEach(() => {
     mutationMocks.bulkUpdate.mockClear()
+    mutationMocks.update.mockClear()
     mutationMocks.bulkRestorePreview.mockClear()
     mutationMocks.bulkRestore.mockClear()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -154,4 +157,25 @@ describe('TransactionsPage', () => {
     expect(screen.getByText('반복 결제 후보')).toBeInTheDocument()
     expect(screen.getByText('넷플릭스')).toBeInTheDocument()
   })
+  it('거래 ID 링크는 현재 페이지 밖의 거래 상세와 시각/결제수단을 연다', async () => {
+    renderPage('/data/transactions?transaction_id=99')
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('연결된 거래')).toBeInTheDocument()
+    expect(within(dialog).getByText(/05:52:21/)).toBeInTheDocument()
+    expect(within(dialog).getByText('카드 B')).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText('메모'), { target: { value: '확인함' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.update).toHaveBeenCalledWith({ id: 99, data: { memo: '확인함' } }))
+  })
+
+  it('그룹 선택은 페이지를 넘겨도 모든 거래 ID를 적용한다', async () => {
+    renderPage('/data/transactions?view=groups')
+    fireEvent.click(screen.getByLabelText('넷플릭스 선택'))
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    fireEvent.click(screen.getByLabelText('왓챠 선택'))
+    fireEvent.change(screen.getByLabelText('선택 그룹 분류'), { target: { value: 'monthly_recurring' } })
+    fireEvent.click(screen.getByRole('button', { name: '선택 그룹 적용' }))
+    await waitFor(() => expect(mutationMocks.bulkUpdate).toHaveBeenCalledWith({ ids: [1, 2, 3], recurring_payment_kind: 'monthly_recurring' }))
+  })
+
 })

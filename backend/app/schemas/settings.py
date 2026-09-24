@@ -81,7 +81,7 @@ class RecurringDryRunSettings(BaseModel):
     weekly_interval_days_min: int
     weekly_interval_days_max: int
     minimum_confidence: float
-    default_apply_scope: str
+    default_apply_scope: Literal["all_matching", "reviewed_only"]
     upload_auto_apply: bool
 
 
@@ -210,7 +210,7 @@ class RecurringDryRunSettingsPatch(BaseModel):
     weekly_interval_days_min: int | None = Field(default=None, ge=1)
     weekly_interval_days_max: int | None = Field(default=None, ge=1)
     minimum_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-    default_apply_scope: str | None = None
+    default_apply_scope: Literal["all_matching", "reviewed_only"] | None = None
     upload_auto_apply: bool | None = None
 
 

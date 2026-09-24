@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { canonicalViewsApi } from '../api/canonicalViews'
+import { canonicalViewsApi, type CanonicalDashboardParams } from '../api/canonicalViews'
 
-export function useCanonicalViewsDashboard() {
+export function useCanonicalViewsDashboard(params: CanonicalDashboardParams = {}) {
+  const request = { months: 12, merchant_limit: 10, queue_limit: 10, ...params }
   return useQuery({
-    queryKey: ['canonical-views', 'dashboard'],
-    queryFn: () => canonicalViewsApi.dashboard({ months: 12, merchant_limit: 10, queue_limit: 10 }),
+    queryKey: ['canonical-views', 'dashboard', request],
+    queryFn: () => canonicalViewsApi.dashboard(request),
     refetchOnMount: 'always',
     refetchOnWindowFocus: 'always',
   })

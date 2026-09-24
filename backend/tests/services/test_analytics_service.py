@@ -469,6 +469,9 @@ async def test_get_category_mom_uses_effective_categories_and_previous_month_bas
     )
 
     assert response.model_dump() == {
+        "reference_date": date(2026, 3, 31),
+        "is_partial_period": False,
+        "comparison_basis": "full_previous_month",
         "items": [
             {
                 "period": "2026-03",
@@ -497,7 +500,7 @@ async def test_get_category_mom_uses_effective_categories_and_previous_month_bas
                 "delta_amount": 80,
                 "delta_pct": None,
             },
-        ]
+        ],
     }
 
 
@@ -559,6 +562,9 @@ async def test_get_category_mom_keeps_rejected_settlement_on_raw_basis(
     )
 
     assert response.model_dump() == {
+        "reference_date": date(2026, 3, 31),
+        "is_partial_period": False,
+        "comparison_basis": "full_previous_month",
         "items": [
             {
                 "period": "2026-03",
@@ -569,7 +575,7 @@ async def test_get_category_mom_keeps_rejected_settlement_on_raw_basis(
                 "delta_amount": 80,
                 "delta_pct": 0.6667,
             }
-        ]
+        ],
     }
 
 
@@ -682,6 +688,8 @@ async def test_get_fixed_cost_summary_reports_fixed_variable_and_unclassified_to
         "discretionary_spend_total": 90,
         "unclassified_total": 30,
         "unclassified_count": 1,
+        "necessity_unclassified_total": 30,
+        "necessity_unclassified_count": 1,
     }
 
 
@@ -795,6 +803,8 @@ async def test_get_fixed_cost_trend_groups_cost_classification_by_month(
                 "discretionary_spend_total": 90,
                 "unclassified_total": 0,
                 "unclassified_count": 0,
+                "necessity_unclassified_total": 0,
+                "necessity_unclassified_count": 0,
                 "fixed_ratio": 0.5769,
             },
             {
@@ -810,6 +820,8 @@ async def test_get_fixed_cost_trend_groups_cost_classification_by_month(
                 "discretionary_spend_total": 0,
                 "unclassified_total": 30,
                 "unclassified_count": 1,
+                "necessity_unclassified_total": 30,
+                "necessity_unclassified_count": 1,
                 "fixed_ratio": 0.8,
             },
         ]
@@ -1100,7 +1112,8 @@ async def test_get_income_stability_returns_monthly_series_and_stats(
     assert response.avg == 2000
     assert response.stdev == 0.0
     assert response.coefficient_of_variation == 0.0
-    assert response.assumptions == "월별 수입 기준, 이체 제외"
+    assert "월별 수입 기준, 이체 제외" in response.assumptions
+    assert "수입이 관측된 월만" in response.assumptions
     assert [item.model_dump() for item in response.items] == [
         {"period": "2026-01", "income": 2000},
         {"period": "2026-02", "income": 2000},

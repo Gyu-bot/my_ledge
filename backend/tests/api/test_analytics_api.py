@@ -157,6 +157,8 @@ async def test_discretionary_velocity_endpoint_reports_month_progress_against_ba
         "assumptions": [
             "최근 6개 마감월 중 데이터가 있는 월의 재량 지출을 사용합니다.",
             "baseline_spend_at_same_progress는 마감월 월평균에 월 진행률을 곱한 값입니다.",
+            "현재 지출과 기준월 모두 환급을 차감한 순지출이며, 확정 정산은 원거래에 반영합니다.",
+            "분류 커버리지는 환급을 제외한 결제액 중 필요도가 분류된 금액의 비율입니다.",
         ],
     }
 
@@ -654,6 +656,9 @@ async def test_category_mom_endpoint_returns_latest_month_comparison(
 
     assert response.status_code == 200
     assert response.json() == {
+        "reference_date": "2026-03-31",
+        "is_partial_period": False,
+        "comparison_basis": "full_previous_month",
         "items": [
             {
                 "period": "2026-03",
@@ -664,7 +669,7 @@ async def test_category_mom_endpoint_returns_latest_month_comparison(
                 "delta_amount": 150,
                 "delta_pct": 0.5,
             }
-        ]
+        ],
     }
 
 
@@ -791,6 +796,9 @@ async def test_category_mom_endpoint_keeps_rejected_settlement_on_raw_basis(
 
     assert response.status_code == 200
     assert response.json() == {
+        "reference_date": "2026-03-31",
+        "is_partial_period": False,
+        "comparison_basis": "full_previous_month",
         "items": [
             {
                 "period": "2026-03",
@@ -801,7 +809,7 @@ async def test_category_mom_endpoint_keeps_rejected_settlement_on_raw_basis(
                 "delta_amount": 80,
                 "delta_pct": 0.6667,
             }
-        ]
+        ],
     }
 
 
@@ -867,6 +875,8 @@ async def test_fixed_cost_summary_endpoint_returns_totals_and_unclassified(
         "discretionary_spend_total": 0,
         "unclassified_total": 30,
         "unclassified_count": 1,
+        "necessity_unclassified_total": 100,
+        "necessity_unclassified_count": 2,
     }
 
 
@@ -936,6 +946,8 @@ async def test_fixed_cost_trend_endpoint_returns_monthly_totals(
             "unclassified_total": 0,
             "unclassified_count": 0,
             "fixed_ratio": 0.5882,
+            "necessity_unclassified_total": 70,
+            "necessity_unclassified_count": 1,
         },
         {
             "period": "2026-03",
@@ -951,6 +963,8 @@ async def test_fixed_cost_trend_endpoint_returns_monthly_totals(
             "unclassified_total": 0,
             "unclassified_count": 0,
             "fixed_ratio": 1.0,
+            "necessity_unclassified_total": 0,
+            "necessity_unclassified_count": 0,
         },
     ]
 

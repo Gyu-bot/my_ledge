@@ -59,6 +59,9 @@ export function usePatchAssetLiquidity() {
       assetApi.patchAssetLiquidity(id, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['assets'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+      void qc.invalidateQueries({ queryKey: ['canonical-views'] })
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
     },
   })
 }
@@ -70,6 +73,9 @@ export function usePatchLoanRepaymentMetadata() {
       assetApi.patchLoanRepaymentMetadata(id, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['assets'] })
+      void qc.invalidateQueries({ queryKey: ['analytics'] })
+      void qc.invalidateQueries({ queryKey: ['canonical-views'] })
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
     },
   })
 }

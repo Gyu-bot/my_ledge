@@ -27,6 +27,12 @@ export function formatSignedWon(amount: number, options: { compact?: boolean } =
   return `${amount < 0 ? '-' : '+'}${body}`
 }
 
+/** 순액: 지출·환급 등 분석 금액의 음수 부호를 보존한다. */
+export function formatNetWon(amount: number, options: { compact?: boolean } = {}): string {
+  const body = options.compact ? formatWonCompact(amount) : formatWon(amount)
+  return amount < 0 ? `-${body}` : body
+}
+
 /** 백분율: 소수 1자리 고정. null/undefined → "—" */
 export function formatPct(value: number | null | undefined, decimals = 1): string {
   if (value == null || Number.isNaN(value)) return '—'

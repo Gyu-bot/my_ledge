@@ -1,6 +1,5 @@
 import calendar
 from datetime import date
-from statistics import median
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -19,11 +18,12 @@ from app.schemas.canonical_views import (
     CanonicalViewsDashboardResponse,
 )
 
+from app.services.monthly_projection_service import (
+    covered_periods,
+    get_monthly_projection,
+)
+
 T = TypeVar("T", bound=BaseModel)
-INCOME_ESTIMATE_LOOKBACK_MONTHS = 6
-INCOME_ESTIMATE_MIN_ADJUSTED_MONTHS = 3
-INCOME_OUTLIER_RATIO = 0.3
-INCOME_ESTIMATE_THRESHOLD_RATIO = 0.5
 
 
 def _to_items(rows: list[RowMapping], model: type[T]) -> list[T]:
@@ -63,149 +63,23 @@ async def _load_data_coverage(db_session: AsyncSession) -> CanonicalDataCoverage
     )
 
 
-def _is_complete_month(period: str, coverage: CanonicalDataCoverage) -> bool:
-    if (
-        coverage.first_transaction_date is None
-        or coverage.last_transaction_date is None
-    ):
-        return False
-    year, month = (int(part) for part in period.split("-", 1))
-    month_start = date(year, month, 1)
-    month_end = date(year, month, calendar.monthrange(year, month)[1])
-    return (
-        coverage.first_transaction_date <= month_start
-        and coverage.last_transaction_date >= month_end
-    )
-
-
-def _apply_complete_month_flags(
-    items: list[T],
-    coverage: CanonicalDataCoverage,
-) -> list[T]:
-    return [
-        item.model_copy(
-            update={"is_complete_month": _is_complete_month(item.period, coverage)}
-        )
-        for item in items
-    ]
-
-
 def _apply_cashflow_basis(
     items: list[CanonicalMonthlyCashflowItem],
 ) -> list[CanonicalMonthlyCashflowItem]:
-    enriched: list[CanonicalMonthlyCashflowItem] = []
-    for item in items:
-        if item.income_total <= 0 or item.savings_rate is None:
-            basis = "no_income"
-        elif item.is_complete_month:
-            basis = "observed_closed_month"
-        else:
-            estimated_income, _, _, _ = _estimate_income_from_closed_months(
-                items,
-                current_period=item.period,
-            )
-            if (
-                estimated_income is not None
-                and item.income_total < estimated_income * INCOME_ESTIMATE_THRESHOLD_RATIO
-            ):
-                basis = "insufficient_partial_month_income"
-            else:
-                basis = "observed_partial_month"
-        enriched.append(item.model_copy(update={"savings_rate_basis": basis}))
-    return enriched
-
-
-def _estimate_income_from_closed_months(
-    monthly_cashflow: list[CanonicalMonthlyCashflowItem],
-    *,
-    current_period: str,
-) -> tuple[int | None, int, str | None, list[str]]:
-    closed_months = [item for item in monthly_cashflow if item.period < current_period]
-    recent_months = closed_months[-INCOME_ESTIMATE_LOOKBACK_MONTHS:]
-    if len(recent_months) < INCOME_ESTIMATE_MIN_ADJUSTED_MONTHS:
-        return None, len(recent_months), None, []
-
-    income_median = median(item.income_total for item in recent_months)
-    lower_bound = income_median * (1 - INCOME_OUTLIER_RATIO)
-    upper_bound = income_median * (1 + INCOME_OUTLIER_RATIO)
-    adjusted_months = [
-        item
-        for item in recent_months
-        if lower_bound <= item.income_total <= upper_bound
-    ]
-    excluded_periods = [
-        item.period for item in recent_months if item not in adjusted_months
-    ]
-
-    if len(adjusted_months) >= INCOME_ESTIMATE_MIN_ADJUSTED_MONTHS:
-        estimated_income = round(
-            sum(item.income_total for item in adjusted_months) / len(adjusted_months)
+    return [
+        item.model_copy(
+            update={
+                "savings_rate_basis": (
+                    "no_income"
+                    if item.income_total <= 0 or item.savings_rate is None
+                    else "observed_closed_month"
+                    if item.is_complete_month
+                    else "observed_partial_month"
+                )
+            }
         )
-        source = (
-            "trailing_6_outlier_adjusted_avg"
-            if excluded_periods
-            else "trailing_6_closed_month_avg"
-        )
-        return estimated_income, len(adjusted_months), source, excluded_periods
-
-    return (
-        round(income_median),
-        len(recent_months),
-        "trailing_6_income_median",
-        excluded_periods,
-    )
-
-
-def _enrich_true_spendable_items(
-    true_spendable: list[CanonicalTrueSpendableMonthlyItem],
-    *,
-    monthly_cashflow: list[CanonicalMonthlyCashflowItem],
-    reference_date: date,
-) -> list[CanonicalTrueSpendableMonthlyItem]:
-    current_period = _reference_period(reference_date)
-    (
-        estimated_income,
-        estimate_month_count,
-        estimate_source,
-        excluded_income_periods,
-    ) = _estimate_income_from_closed_months(
-        monthly_cashflow,
-        current_period=current_period,
-    )
-    enriched: list[CanonicalTrueSpendableMonthlyItem] = []
-    for item in true_spendable:
-        observed_income = item.income_total
-        update: dict[str, Any] = {
-            "observed_income_total": observed_income,
-        }
-        if (
-            item.period == current_period
-            and estimated_income is not None
-            and observed_income < estimated_income * INCOME_ESTIMATE_THRESHOLD_RATIO
-        ):
-            update.update(
-                {
-                    "income_basis": "estimated",
-                    "is_income_estimated": True,
-                    "estimated_income_total": estimated_income,
-                    "income_estimate_month_count": estimate_month_count,
-                    "income_estimate_source": estimate_source,
-                    "excluded_income_periods": excluded_income_periods,
-                    "estimated_spendable_before_variable_spend": (
-                        estimated_income
-                        - item.loan_repayment_total
-                        - item.fixed_commitment_total
-                    ),
-                    "estimated_remaining_after_variable_spend": (
-                        estimated_income
-                        - item.loan_repayment_total
-                        - item.fixed_commitment_total
-                        - item.variable_total
-                    ),
-                }
-            )
-        enriched.append(item.model_copy(update=update))
-    return enriched
+        for item in items
+    ]
 
 
 def _queue_issue_types(item: CanonicalUnclassifiedWorkQueueItem) -> list[str]:
@@ -252,41 +126,63 @@ def _enrich_unclassified_queue_items(
     return enriched
 
 
-def _filter_unclassified_queue_items(
-    items: list[CanonicalUnclassifiedWorkQueueItem],
+def _queue_sql_filters(
     *,
     issue_types: str | None,
     period_from: str | None,
     period_to: str | None,
     current_only: bool,
     reference_date: date,
-) -> list[CanonicalUnclassifiedWorkQueueItem]:
-    requested_issues = {
-        item.strip()
-        for item in (issue_types or "").split(",")
-        if item.strip()
+    search: str | None,
+) -> tuple[str, dict[str, Any]]:
+    clauses = ["1 = 1"]
+    params: dict[str, Any] = {}
+    issue_columns = {
+        "cost_kind": "COALESCE(q.needs_cost_kind, false)",
+        "spend_necessity": "(COALESCE(q.needs_fixed_cost_necessity, false) OR COALESCE(q.needs_spend_necessity, false))",
+        "recurring_kind": "COALESCE(q.needs_recurring_payment_kind, false)",
+        "loan_link": "COALESCE(q.needs_loan_link_review, false)",
     }
-    current_period = _reference_period(reference_date)
-    filtered = items
-    if requested_issues:
-        filtered = [
-            item
-            for item in filtered
-            if requested_issues.intersection(item.issue_types)
-        ]
+    issue_columns["recurring_payment_kind"] = issue_columns["recurring_kind"]
+    issue_columns["loan_link_review"] = issue_columns["loan_link"]
+    requested = {
+        item.strip() for item in (issue_types or "").split(",") if item.strip()
+    }
+    if requested:
+        clauses.append(
+            "("
+            + " OR ".join(
+                issue_columns.get(item, "false") for item in sorted(requested)
+            )
+            + ")"
+        )
     if current_only:
-        filtered = [
-            item for item in filtered if _reference_period(item.date) == current_period
-        ]
-    if period_from is not None:
-        filtered = [
-            item for item in filtered if _reference_period(item.date) >= period_from
-        ]
-    if period_to is not None:
-        filtered = [
-            item for item in filtered if _reference_period(item.date) <= period_to
-        ]
-    return filtered
+        clauses.append("q.date >= :current_start AND q.date <= :current_end")
+        params.update(
+            current_start=reference_date.replace(day=1),
+            current_end=reference_date.replace(
+                day=calendar.monthrange(reference_date.year, reference_date.month)[1]
+            ),
+        )
+    if period_from:
+        clauses.append("q.date >= :date_from")
+        params["date_from"] = date.fromisoformat(period_from + "-01")
+    if period_to:
+        last = date.fromisoformat(period_to + "-01")
+        clauses.append("q.date <= :date_to")
+        params["date_to"] = last.replace(
+            day=calendar.monthrange(last.year, last.month)[1]
+        )
+    if search:
+        clauses.append(
+            "(LOWER(q.merchant) LIKE :search ESCAPE '!' OR LOWER(q.effective_category_major) LIKE :search ESCAPE '!' OR LOWER(COALESCE(q.effective_category_minor, '')) LIKE :search ESCAPE '!')"
+        )
+        params["search"] = (
+            "%"
+            + search.casefold().replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            + "%"
+        )
+    return " AND ".join(clauses), params
 
 
 async def get_canonical_views_dashboard(
@@ -295,6 +191,8 @@ async def get_canonical_views_dashboard(
     months: int = 12,
     merchant_limit: int = 10,
     queue_limit: int = 10,
+    queue_page: int = 1,
+    search: str | None = None,
     issue_types: str | None = None,
     period_from: str | None = None,
     period_to: str | None = None,
@@ -360,48 +258,105 @@ async def get_canonical_views_dashboard(
         """,
         {"limit": merchant_limit},
     )
+    queue_where, queue_params = _queue_sql_filters(
+        issue_types=issue_types,
+        period_from=period_from,
+        period_to=period_to,
+        current_only=current_only,
+        reference_date=resolved_reference_date,
+        search=search,
+    )
+    queue_total_rows = await _fetch_rows(
+        db_session,
+        f"SELECT COUNT(*) AS total FROM vw_unclassified_work_queue q WHERE {queue_where}",
+        queue_params,
+    )
+    queue_total = int(queue_total_rows[0]["total"])
     unclassified_queue = await _fetch_rows(
         db_session,
-        """
-        SELECT
-            transaction_id,
-            date,
-            type,
-            merchant,
-            effective_category_major,
-            effective_category_minor,
-            amount,
-            amount_abs,
-            COALESCE(needs_cost_kind, false) AS needs_cost_kind,
-            COALESCE(needs_fixed_cost_necessity, false) AS needs_fixed_cost_necessity,
-            COALESCE(needs_spend_necessity, false) AS needs_spend_necessity,
-            COALESCE(needs_recurring_payment_kind, false) AS needs_recurring_payment_kind,
-            COALESCE(needs_loan_link_review, false) AS needs_loan_link_review,
-            merchant_expense_count,
-            priority_score,
-            priority_reason
-        FROM vw_unclassified_work_queue
-        ORDER BY priority_score DESC, date DESC, transaction_id ASC
-        LIMIT :limit
+        f"""
+        SELECT q.transaction_id, q.date, q.type, q.merchant,
+            q.effective_category_major, q.effective_category_minor, q.amount, q.amount_abs,
+            t.cost_kind, t.fixed_cost_necessity, t.spend_necessity, t.recurring_payment_kind,
+            COALESCE(q.needs_cost_kind, false) AS needs_cost_kind,
+            COALESCE(q.needs_fixed_cost_necessity, false) AS needs_fixed_cost_necessity,
+            COALESCE(q.needs_spend_necessity, false) AS needs_spend_necessity,
+            COALESCE(q.needs_recurring_payment_kind, false) AS needs_recurring_payment_kind,
+            COALESCE(q.needs_loan_link_review, false) AS needs_loan_link_review,
+            q.merchant_expense_count, q.priority_score, q.priority_reason
+        FROM vw_unclassified_work_queue q
+        LEFT JOIN transactions t ON t.id = q.transaction_id
+        WHERE {queue_where}
+        ORDER BY q.priority_score DESC, q.date DESC, q.transaction_id ASC
+        LIMIT :limit OFFSET :offset
         """,
-        {"limit": queue_limit},
+        {
+            **queue_params,
+            "limit": queue_limit,
+            "offset": (queue_page - 1) * queue_limit,
+        },
+    )
+    summary_counts = await _fetch_rows(
+        db_session,
+        """SELECT
+        (SELECT COUNT(*) FROM vw_merchant_monthly_baseline) AS merchant_total,
+        (SELECT COUNT(*) FROM vw_recurring_merchant_monthly) AS recurring_total""",
+        {},
+    )
+    projection = await get_monthly_projection(
+        db_session, reference_date=resolved_reference_date
     )
 
     monthly_cashflow_items = _to_items(monthly_cashflow, CanonicalMonthlyCashflowItem)
-    data_coverage = await _load_data_coverage(db_session)
-    monthly_cashflow_items = _apply_complete_month_flags(
-        monthly_cashflow_items,
-        data_coverage,
+    periods = sorted(
+        {item.period for item in monthly_cashflow_items}
+        | {str(row["period"]) for row in true_spendable}
     )
+    sufficiently_covered: list[str] = []
+    if periods:
+        observed_dates = await _fetch_rows(
+            db_session,
+            """
+            SELECT DISTINCT date FROM transactions
+            WHERE is_deleted = false AND merged_into_id IS NULL
+              AND date >= :start_date AND date <= :reference_date
+        """,
+            {
+                "start_date": date.fromisoformat(periods[0] + "-01"),
+                "reference_date": resolved_reference_date,
+            },
+        )
+        sufficiently_covered, _, _ = covered_periods(
+            [
+                row["date"]
+                if isinstance(row["date"], date)
+                else date.fromisoformat(row["date"])
+                for row in observed_dates
+            ],
+            [
+                period
+                for period in periods
+                if period < _reference_period(resolved_reference_date)
+            ],
+        )
+    data_coverage = await _load_data_coverage(db_session)
+    monthly_cashflow_items = [
+        item.model_copy(
+            update={"is_complete_month": item.period in sufficiently_covered}
+        )
+        for item in monthly_cashflow_items
+    ]
     monthly_cashflow_items = _apply_cashflow_basis(monthly_cashflow_items)
     true_spendable_items = _to_items(
         true_spendable,
         CanonicalTrueSpendableMonthlyItem,
     )
-    true_spendable_items = _apply_complete_month_flags(
-        true_spendable_items,
-        data_coverage,
-    )
+    true_spendable_items = [
+        item.model_copy(
+            update={"is_complete_month": item.period in sufficiently_covered}
+        )
+        for item in true_spendable_items
+    ]
 
     unclassified_queue_items = _enrich_unclassified_queue_items(
         _to_items(
@@ -409,23 +364,18 @@ async def get_canonical_views_dashboard(
             CanonicalUnclassifiedWorkQueueItem,
         )
     )
-    unclassified_queue_items = _filter_unclassified_queue_items(
-        unclassified_queue_items,
-        issue_types=issue_types,
-        period_from=period_from,
-        period_to=period_to,
-        current_only=current_only,
-        reference_date=resolved_reference_date,
-    )
-
     return CanonicalViewsDashboardResponse(
         data_coverage=data_coverage,
+        month_projection=projection,
+        merchant_monthly_baseline_total=int(summary_counts[0]["merchant_total"]),
+        recurring_merchant_monthly_total=int(summary_counts[0]["recurring_total"]),
+        unclassified_work_queue_total=queue_total,
+        unclassified_work_queue_page=queue_page,
+        unclassified_work_queue_per_page=queue_limit,
+        unclassified_work_queue_total_pages=(queue_total + queue_limit - 1)
+        // queue_limit,
         monthly_cashflow=monthly_cashflow_items,
-        true_spendable_monthly=_enrich_true_spendable_items(
-            true_spendable_items,
-            monthly_cashflow=monthly_cashflow_items,
-            reference_date=resolved_reference_date,
-        ),
+        true_spendable_monthly=true_spendable_items,
         loan_repayment_monthly=_to_items(
             loan_repayments,
             CanonicalLoanRepaymentMonthlyItem,

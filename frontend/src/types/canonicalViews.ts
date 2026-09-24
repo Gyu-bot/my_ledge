@@ -91,6 +91,10 @@ export interface CanonicalUnclassifiedWorkQueueItem {
   effective_category_minor: string | null
   amount: number
   amount_abs: number
+  cost_kind: 'fixed' | 'variable' | null
+  fixed_cost_necessity: 'essential' | 'discretionary' | null
+  spend_necessity: 'essential' | 'discretionary' | null
+  recurring_payment_kind: 'installment' | 'monthly_recurring' | 'not_recurring' | null
   needs_cost_kind: boolean
   needs_fixed_cost_necessity: boolean
   needs_spend_necessity: boolean
@@ -111,10 +115,96 @@ export interface CanonicalDataCoverage {
 
 export interface CanonicalViewsDashboardResponse {
   data_coverage: CanonicalDataCoverage
+  month_projection: MonthlyProjection | null
+  merchant_monthly_baseline_total: number
+  recurring_merchant_monthly_total: number
+  unclassified_work_queue_total: number
+  unclassified_work_queue_page: number
+  unclassified_work_queue_per_page: number
+  unclassified_work_queue_total_pages: number
   monthly_cashflow: CanonicalMonthlyCashflowItem[]
   true_spendable_monthly: CanonicalTrueSpendableMonthlyItem[]
   loan_repayment_monthly: CanonicalLoanRepaymentMonthlyItem[]
   merchant_monthly_baseline: CanonicalMerchantMonthlyBaselineItem[]
   recurring_merchant_monthly: CanonicalRecurringMerchantMonthlyItem[]
   unclassified_work_queue: CanonicalUnclassifiedWorkQueueItem[]
+}
+
+
+export type ProjectionConfidence = 'high' | 'medium' | 'low' | 'unavailable'
+export interface ProjectionCoverage {
+  basis: string
+  latest_upload_date: string | null
+  first_observed_date: string | null
+  last_observed_date: string | null
+  adequately_covered_periods: string[]
+  excluded_periods: string[]
+  missing_periods: string[]
+}
+export interface IncomeProjectionSource {
+  source_key: string
+  merchant: string
+  expected_amount: number
+  observed_amount: number
+  remaining_amount: number
+  expected_date: string | null
+  expected_day: number | null
+  expected_date_from: string | null
+  expected_date_to: string | null
+  status: 'expected' | 'received' | 'partial' | 'late' | 'stopped' | 'uncertain'
+  confidence: ProjectionConfidence
+  history_periods: string[]
+  excluded_periods: string[]
+  matched_transaction_ids: number[]
+  reason: string
+}
+export interface RecurringExpenseProjectionSource {
+  source_key: string
+  merchant: string
+  expected_monthly_amount: number | null
+  observed_payment_amount: number
+  observed_refund_amount: number
+  observed_net_expense: number
+  expected_remaining: number | null
+  additional_observed_amount: number
+  confidence: ProjectionConfidence
+  status: 'expected' | 'observed' | 'review'
+  basis: string
+  history_periods: string[]
+  excluded_periods: string[]
+  warnings: string[]
+}
+export interface ExpenseProjectionComponent {
+  kind: 'loan' | 'installment' | 'recurring' | 'variable'
+  expected_remaining: number | null
+  known_expected_remaining: number
+  basis: string
+  confidence: ProjectionConfidence
+  missing_reasons: string[]
+  warnings: string[]
+  sources: RecurringExpenseProjectionSource[]
+}
+export interface MonthlyProjection {
+  period: string
+  as_of_date: string
+  observed_through: string | null
+  observed_income: number
+  expected_remaining_income: number
+  projected_month_income: number
+  observed_net_expense: number
+  expected_remaining_expense: number | null
+  known_expected_remaining_expense: number
+  net_after_known_remaining_expense: number
+  projected_month_expense: number | null
+  observed_net_cashflow: number
+  projected_month_end_net: number | null
+  confidence: ProjectionConfidence
+  included_periods: string[]
+  excluded_periods: string[]
+  missing_reasons: string[]
+  warnings: string[]
+  limitations: string[]
+  income_sources: IncomeProjectionSource[]
+  expense_components: ExpenseProjectionComponent[]
+  coverage: ProjectionCoverage
 }

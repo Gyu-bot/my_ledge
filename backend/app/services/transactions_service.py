@@ -7,6 +7,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
+from app.models.loan_transaction_link import LoanTransactionLink
 from app.services.canonical_views import build_transactions_effective_select
 from app.schemas.transaction import (
     CategorySummaryItem,
@@ -70,10 +71,14 @@ async def list_transactions(
         include_merged=include_merged,
         search=search,
     )
-    total = await db_session.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    total = (
+        await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
+        or 0
+    )
     result = await db_session.execute(
-        base_query
-        .order_by(canonical.c.date.desc(), canonical.c.time.desc(), canonical.c.id.desc())
+        base_query.order_by(
+            canonical.c.date.desc(), canonical.c.time.desc(), canonical.c.id.desc()
+        )
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -103,11 +108,16 @@ async def list_transaction_filter_options(
         .order_by(canonical.c.effective_category_major.asc())
     )
     category_minor_rows = await db_session.execute(
-        select(canonical.c.effective_category_major, canonical.c.effective_category_minor)
+        select(
+            canonical.c.effective_category_major, canonical.c.effective_category_minor
+        )
         .where(canonical.c.effective_category_major.is_not(None))
         .where(canonical.c.effective_category_minor.is_not(None))
         .distinct()
-        .order_by(canonical.c.effective_category_major.asc(), canonical.c.effective_category_minor.asc())
+        .order_by(
+            canonical.c.effective_category_major.asc(),
+            canonical.c.effective_category_minor.asc(),
+        )
     )
     payment_method_rows = await db_session.execute(
         select(canonical.c.payment_method)
@@ -167,7 +177,7 @@ async def summarize_transactions(
             amount_sign_convention="raw_signed_amount",
             included_types=_included_transaction_types(tx_type),
             excluded_types=_excluded_transaction_types(tx_type),
-            includes_loan_repayments=tx_type in {"all", "지출"},
+            includes_loan_repayments=tx_type in {"all", "income_expense", "지출"},
             excludes_deleted=True,
             excludes_merged=True,
             canonical_cashflow_equivalent=False,
@@ -175,7 +185,7 @@ async def summarize_transactions(
         items=[
             TransactionSummaryItem(period=period, amount=amount)
             for period, amount in sorted(grouped.items())
-        ]
+        ],
     )
 
 
@@ -211,7 +221,9 @@ async def summarize_by_category(
 
     items = [
         CategorySummaryItem(category=category, amount=amount)
-        for category, amount in sorted(grouped.items(), key=lambda item: (item[1], item[0]))
+        for category, amount in sorted(
+            grouped.items(), key=lambda item: (item[1], item[0])
+        )
     ]
     return CategorySummaryResponse(items=items)
 
@@ -242,7 +254,9 @@ async def summarize_by_payment_method(
     return PaymentMethodSummaryResponse(
         items=[
             PaymentMethodSummaryItem(payment_method=payment_method, amount=amount)
-            for payment_method, amount in sorted(grouped.items(), key=lambda item: (item[1], item[0] or ""))
+            for payment_method, amount in sorted(
+                grouped.items(), key=lambda item: (item[1], item[0] or "")
+            )
         ]
     )
 
@@ -275,7 +289,9 @@ async def summarize_category_timeline(
             if level == "major"
             else transaction["effective_category_minor"]
         )
-        grouped[(_period_key(transaction["date"], "month"), category or "미분류")] += transaction["amount"]
+        grouped[(_period_key(transaction["date"], "month"), category or "미분류")] += (
+            transaction["amount"]
+        )
 
     return CategoryTimelineResponse(
         items=[
@@ -295,10 +311,12 @@ async def create_transaction(
         description=payload_data["description"],
     )
     payload_data["cost_kind"] = _normalized_cost_kind(payload_data.get("cost_kind"))
-    payload_data["fixed_cost_necessity"], payload_data["spend_necessity"] = _normalized_necessity_pair(
-        cost_kind=payload_data["cost_kind"],
-        fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
-        spend_necessity=payload_data.get("spend_necessity"),
+    payload_data["fixed_cost_necessity"], payload_data["spend_necessity"] = (
+        _normalized_necessity_pair(
+            cost_kind=payload_data["cost_kind"],
+            fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
+            spend_necessity=payload_data.get("spend_necessity"),
+        )
     )
     payload_data["cost_classification_source"] = (
         "manual"
@@ -326,54 +344,67 @@ async def update_transaction(
 ) -> TransactionResponse:
     transaction = await _get_transaction_or_404(db_session, transaction_id)
     update_fields = payload.model_dump(exclude_unset=True)
-    effective_cost_kind = _resolve_effective_cost_kind(
-        incoming_cost_kind=update_fields.get("cost_kind"),
-        current_cost_kind=transaction.cost_kind,
-    )
-    if "cost_kind" in update_fields:
-        transaction.cost_kind = effective_cost_kind
-        transaction.cost_classification_source = "manual"
-    if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
-        transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
-            cost_kind=effective_cost_kind,
-            fixed_cost_necessity=update_fields.get(
-                "fixed_cost_necessity",
-                transaction.fixed_cost_necessity,
-            ),
-            spend_necessity=update_fields.get(
-                "spend_necessity",
-                transaction.spend_necessity,
-            ),
-        )
-    elif (
-        "spend_necessity" in update_fields
-    ):
-        transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
-            cost_kind=effective_cost_kind,
-            fixed_cost_necessity=transaction.fixed_cost_necessity,
-            spend_necessity=update_fields.get(
-                "spend_necessity",
-                transaction.spend_necessity,
-            ),
-        )
-    if (
-        "spend_necessity" in update_fields
-        or "fixed_cost_necessity" in update_fields
-        or "cost_kind" in update_fields
-    ):
-        transaction.cost_classification_source = "manual"
-
-    for field, value in update_fields.items():
-        if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
-            continue
-        if field == "merchant":
-            value = _normalized_merchant(merchant=value, description=transaction.description)
-        elif field == "recurring_payment_kind":
-            value = _normalized_recurring_payment_kind(value)
-        setattr(transaction, field, value)
+    _apply_transaction_updates(transaction, update_fields)
     await db_session.commit()
     await db_session.refresh(transaction)
     return _serialize_transaction_model(transaction)
+
+
+async def get_transaction(
+    db_session: AsyncSession,
+    transaction_id: int,
+) -> TransactionResponse:
+    return _serialize_transaction_model(
+        await _get_transaction_or_404(db_session, transaction_id)
+    )
+
+
+def _apply_transaction_updates(transaction: Transaction, fields: dict) -> None:
+    # Null cost_kind has historically been a no-op. Necessity null is an
+    # explicit clear; omitted fields must never reclassify imported evidence.
+    before = (
+        transaction.cost_kind,
+        transaction.fixed_cost_necessity,
+        transaction.spend_necessity,
+    )
+    cost_kind = fields.get("cost_kind") or transaction.cost_kind
+    necessity = transaction.spend_necessity
+    if "spend_necessity" in fields:
+        necessity = fields["spend_necessity"]
+    elif "fixed_cost_necessity" in fields:
+        necessity = fields["fixed_cost_necessity"]
+    elif cost_kind != transaction.cost_kind:
+        necessity = necessity or transaction.fixed_cost_necessity
+
+    if {"cost_kind", "fixed_cost_necessity", "spend_necessity"} & fields.keys():
+        if (
+            "spend_necessity" in fields
+            or "fixed_cost_necessity" in fields
+            or cost_kind != transaction.cost_kind
+        ):
+            transaction.fixed_cost_necessity = (
+                necessity if cost_kind == "fixed" else None
+            )
+            transaction.spend_necessity = necessity
+        transaction.cost_kind = cost_kind
+        after = (
+            transaction.cost_kind,
+            transaction.fixed_cost_necessity,
+            transaction.spend_necessity,
+        )
+        if before != after:
+            transaction.cost_classification_source = "manual"
+
+    for field, value in fields.items():
+        if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
+            continue
+        if field == "merchant":
+            value = _normalized_merchant(
+                merchant=value, description=transaction.description
+            )
+        elif field == "recurring_payment_kind":
+            value = _normalized_recurring_payment_kind(value)
+        setattr(transaction, field, value)
 
 
 async def soft_delete_transaction(
@@ -382,6 +413,7 @@ async def soft_delete_transaction(
 ) -> None:
     transaction = await _get_transaction_or_404(db_session, transaction_id)
     transaction.is_deleted = True
+    await _refresh_linked_loan_estimates(db_session, [transaction.id])
     await db_session.commit()
 
 
@@ -391,6 +423,7 @@ async def restore_transaction(
 ) -> TransactionResponse:
     transaction = await _get_transaction_or_404(db_session, transaction_id)
     transaction.is_deleted = False
+    await _refresh_linked_loan_estimates(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
     return _serialize_transaction_model(transaction)
@@ -422,6 +455,7 @@ async def bulk_delete_transactions(
     preview = _build_bulk_mutation_preview(transactions)
     for transaction in transactions:
         transaction.is_deleted = True
+    await _refresh_linked_loan_estimates(db_session, [row.id for row in transactions])
     await db_session.commit()
     return TransactionBulkMutationResponse(updated=len(transactions), preview=preview)
 
@@ -438,6 +472,7 @@ async def bulk_restore_transactions(
     preview = _build_bulk_mutation_preview(transactions)
     for transaction in transactions:
         transaction.is_deleted = False
+    await _refresh_linked_loan_estimates(db_session, [row.id for row in transactions])
     await db_session.commit()
     return TransactionBulkMutationResponse(updated=len(transactions), preview=preview)
 
@@ -452,52 +487,34 @@ async def bulk_update_transactions(
     transactions = result.scalars().all()
     update_fields = payload.model_dump(exclude={"ids"}, exclude_unset=True)
     for transaction in transactions:
-        effective_cost_kind = _resolve_effective_cost_kind(
-            incoming_cost_kind=update_fields.get("cost_kind"),
-            current_cost_kind=transaction.cost_kind,
-        )
-        if "cost_kind" in update_fields:
-            transaction.cost_kind = effective_cost_kind
-            transaction.cost_classification_source = "manual"
-        if "fixed_cost_necessity" in update_fields or "cost_kind" in update_fields:
-            transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
-                cost_kind=effective_cost_kind,
-                fixed_cost_necessity=update_fields.get(
-                    "fixed_cost_necessity",
-                    transaction.fixed_cost_necessity,
-                ),
-                spend_necessity=update_fields.get(
-                    "spend_necessity",
-                    transaction.spend_necessity,
-                ),
-            )
-        elif (
-            "spend_necessity" in update_fields
-        ):
-            transaction.fixed_cost_necessity, transaction.spend_necessity = _normalized_necessity_pair(
-                cost_kind=effective_cost_kind,
-                fixed_cost_necessity=transaction.fixed_cost_necessity,
-                spend_necessity=update_fields.get(
-                    "spend_necessity",
-                    transaction.spend_necessity,
-                ),
-            )
-        if (
-            "spend_necessity" in update_fields
-            or "fixed_cost_necessity" in update_fields
-            or "cost_kind" in update_fields
-        ):
-            transaction.cost_classification_source = "manual"
-        for field, value in update_fields.items():
-            if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
-                continue
-            if field == "merchant":
-                value = _normalized_merchant(merchant=value, description=transaction.description)
-            elif field == "recurring_payment_kind":
-                value = _normalized_recurring_payment_kind(value)
-            setattr(transaction, field, value)
+        _apply_transaction_updates(transaction, update_fields)
     await db_session.commit()
     return TransactionBulkUpdateResponse(updated=len(transactions))
+
+
+async def _refresh_linked_loan_estimates(
+    db_session: AsyncSession,
+    transaction_ids: list[int],
+) -> None:
+    if not transaction_ids:
+        return
+    account_ids = set(
+        (
+            await db_session.scalars(
+                select(LoanTransactionLink.loan_account_id)
+                .where(LoanTransactionLink.transaction_id.in_(transaction_ids))
+                .distinct()
+            )
+        ).all()
+    )
+    if account_ids:
+        from app.services.loan_mapping_service import (
+            apply_loan_repayment_estimates_for_accounts,
+        )
+
+        await apply_loan_repayment_estimates_for_accounts(
+            db_session, account_ids=account_ids
+        )
 
 
 async def _load_bulk_mutation_targets(
@@ -534,7 +551,8 @@ def _build_bulk_mutation_preview(
         expense_total += amount
         merchant_totals[transaction.merchant or transaction.description] += amount
     representative_merchants = [
-        merchant for merchant, _amount in sorted(
+        merchant
+        for merchant, _amount in sorted(
             merchant_totals.items(),
             key=lambda item: (-item[1], item[0]),
         )[:5]
@@ -583,7 +601,9 @@ async def _load_filtered_transactions(
         search=search,
     )
     result = await db_session.execute(
-        query.order_by(canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc())
+        query.order_by(
+            canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc()
+        )
     )
     return result.mappings().all()
 
@@ -625,9 +645,11 @@ def _build_transaction_query(
     if spend_necessity != "all":
         query = query.where(canonical.c.spend_necessity == spend_necessity)
     if recurring_payment_kind != "all":
-        query = query.where(canonical.c.recurring_payment_kind == recurring_payment_kind)
+        query = query.where(
+            canonical.c.recurring_payment_kind == recurring_payment_kind
+        )
     if tx_type != "all":
-        query = query.where(canonical.c.type == tx_type)
+        query = query.where(canonical.c.type.in_(_included_transaction_types(tx_type)))
     if source != "all":
         query = query.where(canonical.c.source == source)
     if is_edited == "true":
@@ -654,7 +676,9 @@ async def _get_transaction_or_404(
 ) -> Transaction:
     transaction = await db_session.get(Transaction, transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found."
+        )
     return transaction
 
 
@@ -756,16 +780,6 @@ def _normalized_cost_kind(cost_kind: str | None) -> str:
     return "fixed" if cost_kind == "fixed" else "variable"
 
 
-def _resolve_effective_cost_kind(
-    *,
-    incoming_cost_kind: str | None,
-    current_cost_kind: str | None,
-) -> str:
-    if incoming_cost_kind is not None:
-        return _normalized_cost_kind(incoming_cost_kind)
-    return _normalized_cost_kind(current_cost_kind)
-
-
 def _normalized_necessity_pair(
     *,
     cost_kind: str,
@@ -781,7 +795,7 @@ def _normalized_necessity_pair(
         else None
     )
     if cost_kind == "fixed":
-        normalized = explicit_fixed_necessity or explicit_spend_necessity
+        normalized = explicit_spend_necessity or explicit_fixed_necessity
         return normalized, normalized
     return None, explicit_spend_necessity or "discretionary"
 
@@ -806,6 +820,8 @@ def _period_key(tx_date: date, group_by: TransactionGroupBy) -> str:
 def _included_transaction_types(tx_type: TransactionTypeFilter) -> list[str]:
     if tx_type == "all":
         return ["지출", "수입", "이체"]
+    if tx_type == "income_expense":
+        return ["지출", "수입"]
     return [tx_type]
 
 

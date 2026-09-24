@@ -31,6 +31,8 @@
   - `GET /api/v1/canonical-views/dashboard`
   - `GET /api/v1/settings/analytics`
   - `PATCH /api/v1/settings/analytics`
+  - `GET /api/v1/settings/income-expectations`
+  - `PATCH /api/v1/settings/income-expectations`
   - `GET /api/v1/auto-classification/settings`
   - `PATCH /api/v1/auto-classification/settings`
   - `GET /api/v1/auto-classification/category-rules`
@@ -65,6 +67,7 @@
   - `DELETE /api/v1/transactions/{id}/loan-link`
   - `PUT /api/v1/transactions/loan-links/bulk`
   - `PATCH /api/v1/loan-accounts`
+  - `POST /api/v1/loan-accounts/recalculate-estimates`
   - `POST /api/v1/installment-plans`
   - `PATCH /api/v1/installment-plans/{id}`
   - `PATCH /api/v1/loan-transaction-links/{transaction_id}/review`
@@ -84,7 +87,7 @@
 |---|---|---|---|
 | `GET` | `/api/v1/health` | live | healthcheck |
 | `GET` | `/api/v1/schema` | live | API key required |
-| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, canonical view row dashboard, optional `reference_date`, data coverage, complete-month flags, current-month estimated true-spendable enrichment |
+| `GET` | `/api/v1/canonical-views/dashboard` | live | API key required, observed canonical rows, separate `month_projection`, filtered/paginated review queue with total counts |
 
 ### Upload / Operations
 
@@ -98,6 +101,8 @@
 | `GET` | `/api/v1/profile` | live | latest BankSalad `1.고객정보` profile snapshot; stores gender/age/KCB score only, not name/email |
 | `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
 | `PATCH` | `/api/v1/settings/analytics` | live | API key required, persisted analytics settings |
+| `GET` | `/api/v1/settings/income-expectations` | live | API key required, saved expected income sources |
+| `PATCH` | `/api/v1/settings/income-expectations` | live | API key required, replace the complete expected-income `items` list |
 | `GET` | `/api/v1/auto-classification/settings` | live | API key required, upload auto-apply toggles |
 | `PATCH` | `/api/v1/auto-classification/settings` | live | API key required, persist upload auto-apply toggles |
 | `GET` | `/api/v1/auto-classification/category-rules` | live | API key required, category-to-cost-kind rules |
@@ -115,7 +120,7 @@
 | `GET` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, category-to-recurring-kind rules |
 | `POST` | `/api/v1/auto-classification/recurring-category-rules` | live | API key required, upsert a recurring category rule |
 | `DELETE` | `/api/v1/auto-classification/recurring-category-rules/{id}` | live | API key required |
-| `POST` | `/api/v1/auto-classification/apply/recurring-category-rules` | live | API key required, apply rules to recurring candidates or fixed costs only |
+| `POST` | `/api/v1/auto-classification/apply/recurring-category-rules` | live | API key required, apply rules only to candidates passing the shared evidence gate |
 | `GET` | `/api/v1/auto-classification/recurring-category-rules/dry-run` | live | API key required, preview recurring rule proposals and matching transactions |
 | `POST` | `/api/v1/auto-classification/apply/recurring-dry-run` | live | API key required, approve one dry-run proposal with explicit apply scope |
 
@@ -124,9 +129,10 @@
 | Method | Path | Status | Notes |
 |---|---|---|---|
 | `GET` | `/api/v1/transactions` | live | pagination, search, edited/deleted/merged filters 지원 |
+| `GET` | `/api/v1/transactions/{id}` | live | one stored transaction by id; `404` if absent; independent of list filters |
 | `GET` | `/api/v1/transactions/filter-options` | live | category/payment method distinct options |
 | `GET` | `/api/v1/transactions/summary` | live | `group_by=month|week|day`; response includes `basis` metadata for raw signed aggregation |
-| `GET` | `/api/v1/transactions/by-category` | live | `level=major|minor`, `type=지출|수입|이체|all` |
+| `GET` | `/api/v1/transactions/by-category` | live | `level=major|minor`, `type=지출|수입|이체|income_expense|all` |
 | `GET` | `/api/v1/transactions/by-category/timeline` | live | timeline aggregate |
 | `GET` | `/api/v1/transactions/payment-methods` | live | payment method aggregate |
 | `GET` | `/api/v1/loan-transaction-links` | live | loan repayment candidate worklist, linked/unlinked filters |
@@ -157,6 +163,7 @@
 | `PUT` | `/api/v1/transactions/loan-links/bulk` | live | API key required, map selected transactions to one loan account |
 | `PATCH` | `/api/v1/loan-transaction-links/{transaction_id}/review` | live | API key required, set loan candidate review status |
 | `PATCH` | `/api/v1/loan-accounts` | live | API key required, update loan account display name, loan kind, and user hidden state |
+| `POST` | `/api/v1/loan-accounts/recalculate-estimates` | live | API key required, recalculate latest estimates for explicitly selected loan accounts |
 | `POST` | `/api/v1/installment-plans` | live | API key required, create an installment ledger entry |
 | `PATCH` | `/api/v1/installment-plans/{id}` | live | API key required, update installment ledger metadata |
 | `PUT` | `/api/v1/transactions/{id}/installment-link` | live | API key required, upsert one transaction-to-installment mapping |
@@ -228,6 +235,9 @@
   - `effective_category_major`
   - `effective_category_minor`
   - `is_edited`
+- `type=income_expense` includes income and expense and excludes transfers; `all` still includes transfers. Raw signed `amount` is preserved.
+- Single/bulk PATCH preserve omitted fields. Explicit `spend_necessity:null` clears necessity; this field takes precedence over `fixed_cost_necessity`, including when null. The compatibility fixed field is synchronized only for fixed costs. `cost_kind:null` retains the existing kind; `recurring_payment_kind:null` clears recurring classification.
+- `cost_classification_source='manual'` is set only when cost kind/necessity actually changes; memo-only edits and unchanged classification values preserve the source.
 
 ### Recurring Payment Classification
 
@@ -237,16 +247,18 @@
   - `monthly_recurring`: a fresh monthly recurring charge such as utilities or subscriptions
   - `not_recurring`: explicitly reviewed non-recurring merchant activity
 - `GET /api/v1/analytics/recurring-payments` groups by merchant and returns transaction ids plus classification counts. The operations recurring-classification screen uses those ids for bulk updates; insights surfaces display the saved result only.
-- Category-based recurring-payment classification is live via `recurring_category_rules`. It only fills unclassified `recurring_payment_kind` values for transactions whose merchant passes the recurring-candidate gate or whose `cost_kind='fixed'`; explicit manual/previous values are preserved.
-- `GET /api/v1/auto-classification/recurring-category-rules/dry-run` returns group proposals with `merchant`, `proposed_kind`, `confidence`, `matched_transactions`, `reason`, `category_hint`, and `apply_scope_options`.
-- `POST /api/v1/auto-classification/apply/recurring-dry-run` applies one proposal. The default `apply_scope` is `all_matching`, which backfills matching existing rows; `future_only` stores no historical row mutation and is an explicit no-op for current rows until a future-rule store exists.
+- Category rules, upload auto-apply, dry-run and approval share the same effective-category, occurrence, cadence, amount-variation and confidence gates. Fixed costs do not bypass them. Only negative valid expense observations form evidence; only unclassified recurring values are changed. Explicit contrary classifications are excluded.
+- Dry-run returns `merchant`, `proposed_kind`, `confidence`, `matched_transactions`, `reason`, `category_hint`, `apply_scope_options`, `default_apply_scope`, and an evidence/settings/rule-bound `preview_token`.
+- Approval requires that token and recomputes candidates. Changed evidence or proposal returns `409`. `all_matching` applies exactly the current eligible set; `reviewed_only` requires a nonempty eligible `transaction_ids` subset. Omitted scope uses effective settings. `future_only` is unsupported (`422`).
+- `/analytics/recurring-payments` is a separate observation signal: `activity=all|active|history`, `recent_days`, and item `activity_status` distinguish active candidates from historical, irregular, non-positive-net and explicitly non-recurring activity. Refunds net into amounts; this does not establish a subscription contract.
 
 ### Auto Classification
 
 - Category rules live in `category_classification_rules`.
 - Category rules match effective category values, so `category_major_user/category_minor_user` take precedence over imported categories.
 - Applying category rules writes `transactions.cost_kind`, `transactions.fixed_cost_necessity` for fixed rules, `transactions.spend_necessity`, and `transactions.cost_classification_source='auto'`.
-- User edits through transaction update/bulk-update write `cost_classification_source='manual'`; later auto-apply never overwrites those manual rows.
+- Actual cost-kind/necessity changes through transaction update/bulk-update write `cost_classification_source='manual'`; later auto-apply never overwrites those manual rows.
+- New category and recurring-category rules must reference an effective expense category currently present in valid transactions (`422` otherwise). Existing invalid rules remain visible with `category_valid=false` and `validation_message`; reads do not delete them.
 - Loan merchant rules live in `loan_merchant_rules` and exact-match either `transactions.merchant` or `transactions.description` according to `match_field`.
 - `match_field='merchant'` means the analysis/canonical merchant value, which can be normalized by merchant alias rules or edited by the user. `match_field='description'` means the imported raw transaction description.
 - `loan_merchant_rules` are unique by `(match_field, merchant)`. The `merchant` column stores the exact match value for the selected field.
@@ -261,7 +273,7 @@
 - `cost_kind` and `spend_necessity` are independent axes:
   - `cost_kind`: repeatability/predictability (`fixed` or `variable`)
   - `spend_necessity`: need/control axis (`essential` or `discretionary`)
-- For `cost_kind='variable'`, omitted or null `spend_necessity` is normalized to `discretionary`. Variable expense is `essential` only when explicitly selected.
+- Creation and category-rule normalization default a variable expense's missing necessity to `discretionary`. Transaction PATCH instead preserves omission and honors an explicit null; missing necessity remains visible as unknown in analytics.
 - `fixed_cost_necessity` remains a compatibility field for fixed costs. New summary surfaces use `spend_necessity` for both fixed and variable expenses.
 - Required spend is interpreted as `essential_fixed_total + essential_variable_total + loan_repayment_total`.
 - Discretionary spend is interpreted as `discretionary_fixed_total + discretionary_variable_total`.
@@ -272,9 +284,12 @@
 - `GET /api/v1/loan-transaction-links` supports `review_status=all|pending|not_candidate` and returns default `pending` when omitted.
 - Installment transaction links live in `installment_transaction_links`; one transaction can link to one plan, and each `(installment_plan_id, installment_number)` can be used once.
 - `GET /api/v1/installment-transaction-suggestions` returns deterministic matching candidates for active installment plans only.
-- `GET /api/v1/installment-transaction-links` returns expense candidates where `recurring_payment_kind='installment'` or an installment link already exists. It supports `linked`, date, search, plan, and pagination filters.
+- Suggestions respect payment method and can use confirmed alias continuity with exact amount evidence. Cross-plan ambiguity, competing transactions and occupied installments are flagged across all active plans before a plan filter is applied. Suggestions never create links automatically.
+- Deleted/merged transaction links stay stored but are excluded from plan linked counts and observed forecasts. `inactive_installment_link` exposes `conflicting_transaction_id/state`. Explicit unlink with `require_inactive=true` requires that transaction still be inactive (`409` if restored); there is no automatic link deletion.
+- `GET /api/v1/installment-transaction-links` returns expense candidates with installment classification, an existing link, or a read-only active-plan matching suggestion. It supports `linked`, date, search, plan, and pagination filters.
 - The recurring-classification screen may classify a merchant group as `installment`, but the ledger, installment count, per-transaction installment number, and forecast are managed through installment plan/link APIs.
 - `GET /api/v1/installments/forecast` derives the schedule from `first_payment_date + total_installments`. Linked installments are `observed`, unlinked future or current installments are `projected`, and past unlinked installments are `missed`.
+- `missed` means **past unconfirmed**, not unpaid debt. Items expose `status_label` and `is_future_obligation`; monthly `past_unconfirmed_total` is also returned under the compatibility alias `missed_total`. Past unconfirmed amounts must not be added to future obligations.
 - Forecast totals are a projection surface. Existing cashflow/canonical views stay observation-only, so projected installment totals must not be double-counted with already observed transactions.
 
 ### Purchase Gate
@@ -283,6 +298,7 @@
 - Candidate generation excludes loan-linked transactions, fixed costs, essential variable expenses, and rows whose `spend_necessity` is still unclassified.
 - A transaction appears once even if it triggers multiple signals. `candidate_type` is the representative reason, while `candidate_types[]`, `reasons[]`, and namespaced `signals` carry every matched reason.
 - Canonical review keys are `transaction:{transaction_id}`. Legacy reason keys such as `large_oneoff:42` are still read as fallback state, but new writes store the canonical key.
+- Unconfirmed one-charge/one-refund pairs with equal date, merchant, payment method and amount can expose `possible_cancellation` and evidence ids. This is a low-confidence review hint, never a settlement write or confirmed cancellation. Response `start_date`/`end_date` state the evaluated period.
 
 ### Settlement Group Canonical Netting Boundary
 
@@ -302,20 +318,24 @@
 - snapshot 적재는 문서상 UPSERT처럼 보일 수 있지만, **현재 구현은 해당 `snapshot_date` 행을 먼저 삭제한 뒤 새 파싱 결과 전체를 다시 insert** 한다.
 - 즉, contract는 실질적으로 “date-scoped replace”다.
 - legacy `/upload`과 explicit `/upload/apply` 모두 같은 date-scoped snapshot replace를 사용한다. same-date replace는 saved asset liquidity metadata와 loan repayment metadata source를 가능한 범위에서 보존한 뒤 최신 affected loan snapshot의 linked-loan repayment estimation을 다시 실행한다.
+- Asset liquidity overrides carry forward from the nearest same-or-earlier snapshot with an unambiguous `side/category/product_name` identity. Explicit `null` (automatic) and `false` are preserved; duplicate/generated-suffix identities do not receive cross-date guesses.
 
 ### Loan Repayment Metadata Source
 
 - `loans.monthly_payment_source` and `loans.repayment_method_source` are nullable string sources exposed on loan summary and repayment metadata responses.
 - Stored live values are `manual` and `estimated_from_linked_transactions`.
 - Manual `PATCH /api/v1/loans/{loan_id}/repayment-metadata` marks only the supplied field sources as `manual`.
-- After loan-link writes and snapshot imports, My Ledge estimates latest loan snapshot `monthly_payment` from linked repayment transaction monthly totals using the effective `asset_liability_health.monthly_payment_estimate_*` settings. Estimation uses completed months only; overdraft accounts (`loan_kind='overdraft'`) use a recent completed-month average, while other loan kinds use completed-month median.
+- Omission preserves a field; explicit null is a manual missing value and zero is a valid manual value. `monthly_payment_mode='automatic'` or `repayment_method_mode='automatic'` clears that manual override and recalculates the latest snapshot. A mode and its value cannot be supplied together (`422`); automatic mode on a historical snapshot returns `409`.
+- `POST /loan-accounts/recalculate-estimates` accepts 1–100 `loan_account_ids` and optional `reset_invalid_manual_null` (default false). It touches only selected latest snapshots. The opt-in reset applies only to `monthly_payment_source='manual'` with a null amount; non-null manual amounts and manual repayment methods are preserved. Missing accounts return `404`; an account with no snapshot returns `409` before changes.
+- Summary, metadata and recalculation responses expose `monthly_payment_missing_reason`, `monthly_payment_estimate_basis`, observation months, window and minimum observations. A missing estimate is not zero.
+- After loan-link writes, linked-transaction delete/restore (single or bulk), account kind changes and snapshot imports, My Ledge refreshes latest affected loan estimates using effective `asset_liability_health.monthly_payment_estimate_*` settings. Estimation uses completed linked-transaction months only; overdraft accounts (`loan_kind='overdraft'`) use a recent completed-month average, while other loan kinds use completed-month median.
 - Auto-estimation never overwrites `monthly_payment_source='manual'`. When linked observations fall below the configured minimum, stale `estimated_from_linked_transactions` monthly payments are cleared. When all observed linked repayment months use `repayment_type='mixed'`, My Ledge can auto-fill `repayment_method='principal_interest'` with `repayment_method_source='estimated_from_linked_transactions'`; stale estimated repayment methods are cleared only when linked observations no longer support an inferred method.
 - Loan summary also joins the stable `loan_accounts` row by `lender + product_name` and exposes nullable `loan_kind`. If the snapshot repayment method is missing or non-manual `unknown`, compatible `loan_kind` values can be used as a read-only display fallback with `repayment_method_source='derived_from_loan_account'`; this does not write back to `loans`.
 
 ### Analytics Settings
 
 - `GET /api/v1/settings/analytics` 와 `PATCH /api/v1/settings/analytics` 는 `X-API-Key` 인증이 필요하다.
-- persisted setting 범위는 `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations` 다.
+- persisted setting 범위는 `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets` 다.
 - 응답은 `defaults`, `saved`, `effective` 를 나눠 반환한다.
 - `spending_anomalies` 지원 필드:
   - `min_delta_amount` default `100000`
@@ -327,6 +347,27 @@
 - `discretionary_velocity` 기본값은 `baseline_months=6`, `warning_velocity_ratio=1.2`, `high_velocity_ratio=1.5`, `minimum_classification_coverage=0.7`.
 - `purchase_gate` 기본값은 큰 지출 `100000`, 새 거래처 lookback 6개월, spike ratio `merchant=2.0`, `discretionary=1.5`, review cooldown 14일.
 - `bulk_operations`는 preview/confirmation 기본 ON, `max_bulk_rows_without_extra_confirmation=100`.
+- Recurring upload auto-apply is one effective setting shared with the legacy auto-classification settings endpoint. Recurring default scope is `all_matching|reviewed_only`; reversed interval min/max ranges are rejected.
+- An unsupported historical default scope remains inspectable in `saved` while `effective` falls back to `reviewed_only`.
+
+### Observed Values and Monthly Projection
+
+- Dashboard canonical monthly rows remain observed values. Legacy `true_spendable_monthly.estimated_*` fields are retained as nullable compatibility fields; forecasts use the separate `month_projection` object.
+- `month_projection` separates observed income/expense, remaining expected income/expense, and projected month-end net. It supplies source evidence, dates, confidence, coverage, excluded periods and missing reasons. Unknown expense components propagate null to the full expense/net forecast; null is not zero.
+- Recurring components expose source-level gross payments, refunds, net actuals, baseline and remaining estimates with confidence, warnings and history. Weak current explicit recurring histories can yield a numeric low-confidence scenario. Refunds do not generate a replacement obligation; excess observed payments stay in actuals. Sources without payment evidence and genuinely unknown loan/installment/coverage inputs still propagate null.
+- Remaining recurring estimates use historical payment dates after the observation cutoff, capped by the baseline less current gross payments. `warnings` mark reviewable estimates separately from `missing_reasons`; `expected|observed|review` describes projection evidence, not a confirmed contract state.
+- Components retain `known_expected_remaining`; the total is `known_expected_remaining_expense`. `net_after_known_remaining_expense` subtracts only those estimated portions (including low-confidence ones) and omits unknown expense, so it is a partial calculation rather than the full month-end forecast or a cash balance.
+- `GET/PATCH /settings/income-expectations` stores expected amount/day/stopped status per normalized income source. PATCH replaces all `items`; an empty list removes all overrides. Reads and projections do not write settings, transactions or links.
+- Dashboard queue search, issue and month filters run before counting and pagination. `queue_page`, `queue_limit` (1–100), total and total-pages metadata describe the filtered queue; returned row count is not the queue total.
+- Exact forecasting formulas and coverage rules are documented in [backend-api-and-metrics-reference.md](backend-api-and-metrics-reference.md); consumer interpretation is in [agents/canonical-read-surface-reference.md](agents/canonical-read-surface-reference.md).
+
+### Signed Analytics and Asset Basis
+
+- Category month comparison exposes `reference_date`, `is_partial_period` and `comparison_basis`; a partial selected month is compared with the same day range in the previous month, including when the target month has no rows.
+- Expense refunds remain signed in recurring amounts, necessity buckets, anomalies and discretionary velocity. Anomalies include `direction`; necessity-unclassified amounts/counts are separate from cost-kind-unclassified values.
+- Snapshot totals, history, comparison, net-worth breakdown and liquidity health share `aggregation_basis='nonnegative_asset_rows_minus_liability_rows'`. Raw negative asset rows are preserved and excluded from asset totals; their signed sum is `negative_asset_excluded_total`.
+- Liquidity defaults are anchored to the selected snapshot date. Required spend nets essential expenses and adds linked debt expense only when it is not already essential. Debt payment uses the selected loan snapshot once. Input dates, required-spend period/components and debt-payment snapshot date are returned as provenance.
+- Asset liquidity PATCH preserves omitted fields; explicit null restores automatic/heuristic behavior and explicit false is an override.
 
 ### Investment / Loan Summary
 

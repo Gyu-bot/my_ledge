@@ -13,7 +13,9 @@ export function usePatchAnalyticsSettings() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['settings'] })
       // 목표를 소비하는 화면들(홈/자산·부채/신호) 갱신
-      void qc.invalidateQueries({ queryKey: ['assets', 'liquidityHealth'] })
+      for (const key of ['assets', 'analytics', 'canonical-views', 'transactions']) {
+        void qc.invalidateQueries({ queryKey: [key] })
+      }
     },
   })
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
@@ -24,6 +24,7 @@ import {
   useRestoreTransaction,
   useTransactionFilterOptions,
   useTransactionList,
+  useTransactionDetail,
   useUpdateTransaction,
 } from '../../hooks/useTransactions'
 import { useRecurringPayments } from '../../hooks/useAnalytics'
@@ -34,6 +35,7 @@ import type {
   SpendNecessity,
   TransactionBulkMutationPreview,
   TransactionResponse,
+  TransactionUpdateRequest,
 } from '../../types/transaction'
 
 const PAGE_SIZE = 40
@@ -95,7 +97,7 @@ function draftFrom(tx: TransactionResponse): EditDraft {
     category_major_user: tx.category_major_user ?? tx.effective_category_major,
     category_minor_user: tx.category_minor_user ?? tx.effective_category_minor ?? '',
     cost_kind: tx.cost_kind ?? '',
-    spend_necessity: tx.spend_necessity ?? '',
+    spend_necessity: tx.spend_necessity ?? tx.fixed_cost_necessity ?? '',
     recurring_payment_kind: tx.recurring_payment_kind ?? '',
     memo: tx.memo ?? '',
   }
@@ -104,6 +106,10 @@ function draftFrom(tx: TransactionResponse): EditDraft {
 function RowsView() {
   const hasWrite = useWriteAccess()
   const filterOptions = useTransactionFilterOptions()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const transactionIdParam = Number(searchParams.get('transaction_id'))
+  const linkedId = Number.isSafeInteger(transactionIdParam) && transactionIdParam > 0 ? transactionIdParam : null
+  const linkedTransaction = useTransactionDetail(linkedId)
   const [filterDraft, setFilterDraft] = useState<FilterState>(DEFAULT_FILTER)
   const [applied, setApplied] = useState<FilterState>(DEFAULT_FILTER)
   const [page, setPage] = useState(1)
@@ -140,7 +146,21 @@ function RowsView() {
   const bulkSettings = settings.data?.effective.bulk_operations
 
   const rows = list.data?.items ?? []
-  const detailTx = rows.find((tx) => tx.id === detailId) ?? null
+  const detailTx = rows.find((tx) => tx.id === detailId) ?? (linkedTransaction.data?.id === detailId ? linkedTransaction.data : null)
+  const initializedLink = useRef<number | null>(null)
+  useEffect(() => {
+    if (linkedId === null) initializedLink.current = null
+    if (linkedTransaction.data && linkedId !== null && initializedLink.current !== linkedId) {
+      initializedLink.current = linkedId
+      setDetailId(linkedTransaction.data.id)
+      setEditDraft(draftFrom(linkedTransaction.data))
+    }
+  }, [linkedId, linkedTransaction.data])
+
+  function closeDetail() {
+    setDetailId(null)
+    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('transaction_id'); return next }, { replace: true })
+  }
   const minorOptions = useMemo(() => {
     const byMajor = filterOptions.data?.category_minor_options_by_major ?? {}
     return (major: string) => byMajor[major] ?? filterOptions.data?.category_minor_options ?? []
@@ -165,23 +185,27 @@ function RowsView() {
   const selectableIds = rows.filter((tx) => !tx.is_deleted || applied.include_deleted).map((tx) => tx.id)
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id))
 
+  const editChanges: TransactionUpdateRequest = {}
+  if (detailTx && editDraft) {
+    const original = draftFrom(detailTx)
+    if (editDraft.merchant !== original.merchant) editChanges.merchant = editDraft.merchant || null
+    if (editDraft.category_major_user !== original.category_major_user) editChanges.category_major_user = editDraft.category_major_user || null
+    if (editDraft.category_minor_user !== original.category_minor_user) editChanges.category_minor_user = editDraft.category_minor_user || null
+    if (editDraft.cost_kind && editDraft.cost_kind !== original.cost_kind) editChanges.cost_kind = editDraft.cost_kind
+    if (editDraft.spend_necessity !== original.spend_necessity) editChanges.spend_necessity = editDraft.spend_necessity || null
+    if (editDraft.recurring_payment_kind !== original.recurring_payment_kind) editChanges.recurring_payment_kind = editDraft.recurring_payment_kind || null
+    if (editDraft.memo !== original.memo) editChanges.memo = editDraft.memo || null
+  }
+
   async function saveEdit() {
-    if (!detailTx || !editDraft) return
+    if (!detailTx || !editDraft || Object.keys(editChanges).length === 0) return
     try {
       await update.mutateAsync({
         id: detailTx.id,
-        data: {
-          merchant: editDraft.merchant || null,
-          category_major_user: editDraft.category_major_user || null,
-          category_minor_user: editDraft.category_minor_user || null,
-          cost_kind: editDraft.cost_kind || null,
-          spend_necessity: editDraft.spend_necessity || null,
-          recurring_payment_kind: editDraft.recurring_payment_kind || null,
-          memo: editDraft.memo || null,
-        },
+        data: editChanges,
       })
       toast.success('수정 완료')
-      setDetailId(null)
+      closeDetail()
     } catch (error) {
       toast.error('수정 실패', { description: String(error) })
     }
@@ -267,11 +291,12 @@ function RowsView() {
 
   return (
     <>
+      {linkedTransaction.error && <EmptyState message="연결된 거래를 불러오지 못했습니다"><Button onClick={() => void linkedTransaction.refetch()}>다시 조회</Button></EmptyState>}
       <Card title="필터" meta="조회 범위를 고정한 뒤 수정 대상을 좁힙니다" action={<div className="flex gap-2"><Button variant="primary" onClick={applyFilter}>적용</Button><Button variant="ghost" onClick={resetFilter}>초기화</Button></div>}>
         <div className="flex flex-wrap items-center gap-2">
           <input className={`${inputCls} w-40`} placeholder="🔍 거래처·설명·메모" value={filterDraft.search} onChange={(e) => setFilterDraft((f) => ({ ...f, search: e.target.value }))} />
           <Select className={inputCls} value={filterDraft.type} onChange={(e) => setFilterDraft((f) => ({ ...f, type: e.target.value }))} aria-label="거래 유형"><option value="">유형 전체</option><option>지출</option><option>수입</option><option>이체</option></Select>
-          <Select className={inputCls} value={filterDraft.source} onChange={(e) => setFilterDraft((f) => ({ ...f, source: e.target.value }))} aria-label="입력 출처"><option value="">출처 전체</option><option value="import">import</option><option value="manual">manual</option></Select>
+          <Select className={inputCls} value={filterDraft.source} onChange={(e) => setFilterDraft((f) => ({ ...f, source: e.target.value }))} aria-label="입력 출처"><option value="">출처 전체</option><option value="import">가져오기</option><option value="manual">수동 입력</option></Select>
           <Select className={inputCls} value={filterDraft.category_major} onChange={(e) => setFilterDraft((f) => ({ ...f, category_major: e.target.value }))} aria-label="대분류"><option value="">대분류 전체</option>{filterOptions.data?.category_options.map((c) => <option key={c} value={c}>{c}</option>)}</Select>
           <Select className={inputCls} value={filterDraft.payment_method} onChange={(e) => setFilterDraft((f) => ({ ...f, payment_method: e.target.value }))} aria-label="결제수단"><option value="">결제수단 전체</option>{filterOptions.data?.payment_method_options.map((p) => <option key={p} value={p}>{p}</option>)}</Select>
           <Select className={inputCls} value={filterDraft.cost_kind} onChange={(e) => setFilterDraft((f) => ({ ...f, cost_kind: e.target.value }))} aria-label="고정/변동"><option value="">고정/변동 전체</option><option value="fixed">고정비</option><option value="variable">변동비</option></Select>
@@ -353,9 +378,9 @@ function RowsView() {
 
       <DetailPanel
         open={detailTx != null && editDraft != null}
-        onClose={() => setDetailId(null)}
+        onClose={closeDetail}
         title={detailTx?.merchant ?? ''}
-        subtitle={detailTx ? <span className="tnum">{detailTx.date} · {formatSignedWon(detailTx.amount)}</span> : undefined}
+        subtitle={detailTx ? <span className="tnum">{detailTx.date} {detailTx.time || '시각 미제공'} · {formatSignedWon(detailTx.amount)}</span> : undefined}
         footer={
           detailTx && (
             <div className="flex justify-between gap-2">
@@ -364,7 +389,7 @@ function RowsView() {
               ) : (
                 <Button variant="danger" disabled={!hasWrite} onClick={async () => { try { await del.mutateAsync(detailTx.id); toast.success('삭제 완료', { action: { label: '복원', onClick: () => void restore.mutateAsync(detailTx.id) } }); setDetailId(null) } catch (e) { toast.error('삭제 실패', { description: String(e) }) } }}>삭제</Button>
               )}
-              <Button variant="primary" disabled={!hasWrite || update.isPending} onClick={() => void saveEdit()}>저장</Button>
+              <Button variant="primary" disabled={!hasWrite || update.isPending || Object.keys(editChanges).length === 0} onClick={() => void saveEdit()}>저장</Button>
             </div>
           )
         }
@@ -372,8 +397,10 @@ function RowsView() {
         {detailTx && editDraft && (
           <div className="flex flex-col gap-3">
             <div className="rounded-md border border-border-subtle bg-bg-inset px-3 py-2 text-caption text-text-muted">
+              <div>결제수단: <span className="text-text-secondary">{detailTx.payment_method || '미제공'}</span></div>
+              <div>거래 번호: {detailTx.id}</div>
               <div>원본 설명: <span className="text-text-secondary">{detailTx.description}</span></div>
-              <div className="mt-1">출처: {detailTx.source === 'manual' ? '수동 추가' : 'import'}{detailTx.cost_classification_source === 'auto' ? ' → 자동 분류' : detailTx.is_edited ? ' → 수동 수정' : ''}</div>
+              <div className="mt-1">출처: {detailTx.source === 'manual' ? '수동 추가' : '가져오기'}{detailTx.cost_classification_source === 'auto' ? ' → 자동 분류' : detailTx.is_edited ? ' → 수동 수정' : ''}</div>
             </div>
             <Field label="분석용 거래처"><TextInput value={editDraft.merchant} disabled={!hasWrite} onChange={(e) => setEditDraft((d) => d && { ...d, merchant: e.target.value })} /></Field>
             <div className="grid grid-cols-2 gap-3">
@@ -394,9 +421,11 @@ function RowsView() {
 function GroupsView() {
   const hasWrite = useWriteAccess()
   const [page, setPage] = useState(1)
-  const recurring = useRecurringPayments(page, 20)
+  const [activity, setActivity] = useState<'all' | 'active' | 'history'>('all')
+  const [recentDays, setRecentDays] = useState(90)
+  const recurring = useRecurringPayments(page, 20, { activity, recent_days: recentDays })
   const bulkUpdate = useBulkUpdateTransactions()
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Map<string, number[]>>(new Map())
   const [bulkKind, setBulkKind] = useState<'' | RecurringPaymentKind>('')
   const items = recurring.data?.items ?? []
 
@@ -412,11 +441,11 @@ function GroupsView() {
 
   async function applyBulk() {
     if (bulkKind === '' || selected.size === 0) return
-    const ids = items.filter((item) => selected.has(item.merchant)).flatMap((item) => item.transaction_ids)
+    const ids = [...new Set([...selected.values()].flat())]
     try {
       const result = await bulkUpdate.mutateAsync({ ids, recurring_payment_kind: bulkKind || null })
       toast.success(`${selected.size}개 그룹 분류 저장`, { description: `${result.updated}건 반영` })
-      setSelected(new Set())
+      setSelected(new Map())
       setBulkKind('')
     } catch (error) {
       toast.error('분류 저장 실패', { description: String(error) })
@@ -425,7 +454,16 @@ function GroupsView() {
 
   return (
     <>
-      <Card title="반복 결제 후보" meta="거래처 그룹 단위로 같은 반복 성격을 저장합니다" bodyClassName="p-0">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="반복 결제 이력 범위"><Select value={activity} onChange={(event) => { setActivity(event.target.value as typeof activity); setPage(1); setSelected(new Map()) }}>
+          <option value="all">전체 관측 이력</option><option value="active">최근 반복 관측</option><option value="history">과거 이력</option>
+        </Select></Field>
+        <Field label="최근 관측 기준"><Select value={recentDays} onChange={(event) => { setRecentDays(Number(event.target.value)); setPage(1); setSelected(new Map()) }}>
+          <option value={30}>최근 30일</option><option value={90}>최근 90일</option><option value={180}>최근 180일</option>
+        </Select></Field>
+        <span className="pb-1.5 text-caption text-text-muted">{recurring.data?.total ?? 0}개 그룹 · 조회 범위를 바꾸면 선택이 해제됩니다.</span>
+      </div>
+      <Card title="반복 결제 후보" meta="관측된 반복 결제 이력입니다. 현재 활성 구독을 확정하는 목록은 아닙니다. 선택한 거래는 페이지를 넘겨도 유지됩니다" bodyClassName="p-0">
         {recurring.isLoading ? <div className="p-4"><ListSkeleton rows={6} /></div> :
          items.length > 0 ? (
           <div className="overflow-x-auto">
@@ -433,18 +471,20 @@ function GroupsView() {
               <thead className="bg-bg-inset">
                 <tr>
                   <th className="px-3 py-2" />
-                  {['거래처', '카테고리', '주기', '평균', '횟수', '분류 변경'].map((h) => <th key={h} className="px-3 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}
+                  {['거래처', '카테고리', '주기', '최근 관측일', '평균', '횟수', '분류 변경'].map((h) => <th key={h} className="px-3 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
                 {items.map((item) => {
-                  const isSelected = selected.has(item.merchant)
+                  const groupKey = JSON.stringify([item.merchant, item.category])
+                  const isSelected = selected.has(groupKey)
                   return (
                     <tr key={`${item.merchant}:${item.category}`} className={isSelected ? 'bg-bg-selected' : ''}>
-                      <td className="px-3 py-2"><input type="checkbox" aria-label={`${item.merchant} 선택`} disabled={!hasWrite} checked={isSelected} onChange={() => setSelected((c) => { const n = new Set(c); if (n.has(item.merchant)) n.delete(item.merchant); else n.add(item.merchant); return n })} className="h-3 w-3 accent-[var(--ds-accent-fg)]" /></td>
+                      <td className="px-3 py-2"><input type="checkbox" aria-label={`${item.merchant} 선택`} disabled={!hasWrite} checked={isSelected} onChange={() => setSelected((c) => { const n = new Map(c); if (n.has(groupKey)) n.delete(groupKey); else n.set(groupKey, [...item.transaction_ids]); return n })} className="h-3 w-3 accent-[var(--ds-accent-fg)]" /></td>
                       <td className="max-w-[160px] truncate px-3 py-2 text-text-primary">{item.merchant}</td>
                       <td className="px-3 py-2 text-text-muted">{item.category}</td>
-                      <td className="px-3 py-2 text-caption text-text-muted">{item.interval_type}</td>
+                      <td className="px-3 py-2 text-caption text-text-muted">{{ monthly: '매월', weekly: '매주', irregular: '불규칙', yearly: '매년', biweekly: '격주' }[item.interval_type] ?? '주기 미확정'}</td>
+                      <td className="tnum px-3 py-2 text-caption text-text-muted">{item.last_date}</td>
                       <td className="tnum px-3 py-2 text-right text-text-secondary">{formatWon(item.avg_amount)}</td>
                       <td className="tnum px-3 py-2 text-right text-text-muted">{item.occurrences}회</td>
                       <td className="px-3 py-2">
@@ -471,7 +511,7 @@ function GroupsView() {
         ) : <EmptyState className="py-10" message="반복 결제 후보가 없습니다" />}
       </Card>
 
-      <BulkBar count={selected.size} onClear={() => { setSelected(new Set()); setBulkKind('') }}>
+      <BulkBar count={selected.size} onClear={() => { setSelected(new Map()); setBulkKind('') }}>
         <Select className="text-caption" aria-label="선택 그룹 분류" value={bulkKind} onChange={(e) => setBulkKind(e.target.value as typeof bulkKind)}>
           <option value="">— 분류 선택 —</option>
           <option value="installment">할부</option>

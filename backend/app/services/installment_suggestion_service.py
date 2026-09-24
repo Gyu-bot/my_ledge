@@ -1,9 +1,12 @@
+from collections import Counter, defaultdict
+from dataclasses import replace
 from datetime import date
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.auto_classification import MerchantAliasRule
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.transaction import Transaction
@@ -15,11 +18,12 @@ from app.services.installment_suggestion_types import (
     InstallmentSuggestionCandidate,
     serialize_installment_suggestion,
 )
-from app.services.installment_service import _add_months
+from app.services.installment_service import _add_months, _inactive_transaction_state
 
 _BILLING_DATE_TOLERANCE_DAYS = 3
 _AMOUNT_TOLERANCE_RATIO = 0.10
 _AMOUNT_TOLERANCE_FLOOR = 10_000
+
 
 async def list_installment_transaction_suggestions(
     db_session: AsyncSession,
@@ -30,22 +34,11 @@ async def list_installment_transaction_suggestions(
 ) -> InstallmentTransactionSuggestionListResponse:
     if installment_plan_id is not None:
         await _ensure_plan_exists(db_session, installment_plan_id)
-    plans = await _load_active_plans(db_session, installment_plan_id)
-    if not plans:
-        return InstallmentTransactionSuggestionListResponse(
-            total=0,
-            page=page,
-            per_page=per_page,
-            items=[],
-        )
-
-    transactions = await _load_unlinked_expense_transactions(db_session)
-    occupied_numbers = await _load_occupied_plan_numbers(db_session, plans)
-    suggestions = _build_suggestions(
-        plans=plans,
-        transactions=transactions,
-        occupied_numbers=occupied_numbers,
-    )
+    suggestions = await load_installment_suggestion_candidates(db_session)
+    if installment_plan_id is not None:
+        suggestions = [
+            item for item in suggestions if item.plan.id == installment_plan_id
+        ]
     start = (page - 1) * per_page
     end = start + per_page
     return InstallmentTransactionSuggestionListResponse(
@@ -55,6 +48,41 @@ async def list_installment_transaction_suggestions(
         items=[
             serialize_installment_suggestion(item) for item in suggestions[start:end]
         ],
+    )
+
+
+async def load_installment_suggestion_candidates(
+    db_session: AsyncSession,
+) -> list[InstallmentSuggestionCandidate]:
+    """Read-only candidates with conflicts computed across every active plan."""
+    plans = await _load_active_plans(db_session, None)
+    if not plans:
+        return []
+    transactions = await _load_unlinked_expense_transactions(db_session)
+    occupied_numbers = await _load_occupied_plan_numbers(db_session, plans)
+    linked_result = await db_session.execute(
+        select(InstallmentTransactionLink.installment_plan_id, Transaction)
+        .join(Transaction, Transaction.id == InstallmentTransactionLink.transaction_id)
+        .where(
+            InstallmentTransactionLink.installment_plan_id.in_(
+                [plan.id for plan in plans]
+            )
+        )
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .where(Transaction.type == "지출")
+        .where(Transaction.amount < 0)
+    )
+    linked_evidence: dict[int, list[Transaction]] = defaultdict(list)
+    for plan_id, transaction in linked_result.all():
+        linked_evidence[plan_id].append(transaction)
+    alias_rules = list((await db_session.scalars(select(MerchantAliasRule))).all())
+    return _build_suggestions(
+        plans=plans,
+        transactions=transactions,
+        occupied_numbers=occupied_numbers,
+        linked_evidence=linked_evidence,
+        alias_rules=alias_rules,
     )
 
 
@@ -94,6 +122,7 @@ async def _load_unlinked_expense_transactions(
         )
         .where(Transaction.type == "지출")
         .where(Transaction.amount < 0)
+        .where(Transaction.currency == "KRW")
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
         .where(InstallmentTransactionLink.id.is_(None))
@@ -105,25 +134,33 @@ async def _load_unlinked_expense_transactions(
 async def _load_occupied_plan_numbers(
     db_session: AsyncSession,
     plans: list[InstallmentPlan],
-) -> set[tuple[int, int]]:
+) -> dict[tuple[int, int], tuple[int, str | None]]:
     result = await db_session.execute(
         select(
             InstallmentTransactionLink.installment_plan_id,
             InstallmentTransactionLink.installment_number,
-        ).where(
+            Transaction,
+        )
+        .join(Transaction, Transaction.id == InstallmentTransactionLink.transaction_id)
+        .where(
             InstallmentTransactionLink.installment_plan_id.in_(
                 [plan.id for plan in plans]
             )
         )
     )
-    return {(plan_id, number) for plan_id, number in result.all()}
+    return {
+        (plan_id, number): (transaction.id, _inactive_transaction_state(transaction))
+        for plan_id, number, transaction in result.all()
+    }
 
 
 def _build_suggestions(
     *,
     plans: list[InstallmentPlan],
     transactions: list[Transaction],
-    occupied_numbers: set[tuple[int, int]],
+    occupied_numbers: dict[tuple[int, int], tuple[int, str | None]],
+    linked_evidence: dict[int, list[Transaction]],
+    alias_rules: list[MerchantAliasRule],
 ) -> list[InstallmentSuggestionCandidate]:
     suggestions: list[InstallmentSuggestionCandidate] = []
     for plan in plans:
@@ -132,9 +169,27 @@ def _build_suggestions(
                 transaction=transaction,
                 plan=plan,
                 occupied_numbers=occupied_numbers,
+                linked_evidence=linked_evidence.get(plan.id, []),
+                alias_rules=alias_rules,
             )
             if suggestion is not None:
                 suggestions.append(suggestion)
+    plans_per_transaction = Counter(item.transaction.id for item in suggestions)
+    transactions_per_slot = Counter(
+        (item.plan.id, item.installment_number) for item in suggestions
+    )
+    for index, item in enumerate(suggestions):
+        if item.conflict_reason is not None:
+            continue
+        conflict_reason = None
+        if plans_per_transaction[item.transaction.id] > 1:
+            conflict_reason = "ambiguous_plan_match"
+        elif transactions_per_slot[(item.plan.id, item.installment_number)] > 1:
+            conflict_reason = "competing_transactions"
+        if conflict_reason is not None:
+            suggestions[index] = replace(
+                item, conflict_reason=conflict_reason, confidence="low"
+            )
     return sorted(
         suggestions,
         key=lambda item: (
@@ -150,9 +205,16 @@ def _match_transaction_to_plan(
     *,
     transaction: Transaction,
     plan: InstallmentPlan,
-    occupied_numbers: set[tuple[int, int]],
+    occupied_numbers: dict[tuple[int, int], tuple[int, str | None]],
+    linked_evidence: list[Transaction],
+    alias_rules: list[MerchantAliasRule],
 ) -> InstallmentSuggestionCandidate | None:
-    if transaction.merchant != plan.merchant:
+    if plan.payment_method and transaction.payment_method != plan.payment_method:
+        return None
+    merchant_reason = _merchant_continuity_reason(
+        transaction, plan, linked_evidence=linked_evidence, alias_rules=alias_rules
+    )
+    if merchant_reason is None:
         return None
     installment_number = _suggest_installment_number(
         first_payment_date=plan.first_payment_date,
@@ -176,11 +238,18 @@ def _match_transaction_to_plan(
         amount_delta=amount_delta,
         billing_day_delta=billing_day_delta,
     )
-    conflict_reason = (
-        "installment_number_already_linked"
-        if (plan.id, installment_number) in occupied_numbers
-        else None
-    )
+    if merchant_reason != "same_merchant":
+        reason_labels[0] = merchant_reason
+        score = min(score, 89)
+        confidence = "medium"
+    conflicting = occupied_numbers.get((plan.id, installment_number))
+    conflict_reason = None
+    if conflicting is not None:
+        conflict_reason = (
+            "inactive_installment_link"
+            if conflicting[1] is not None
+            else "installment_number_already_linked"
+        )
     return InstallmentSuggestionCandidate(
         transaction=transaction,
         plan=plan,
@@ -192,7 +261,53 @@ def _match_transaction_to_plan(
         confidence=confidence,
         reason_labels=reason_labels,
         conflict_reason=conflict_reason,
+        conflicting_transaction_id=conflicting[0] if conflicting is not None else None,
+        conflicting_transaction_state=conflicting[1]
+        if conflicting is not None
+        else None,
     )
+
+
+def _merchant_continuity_reason(
+    transaction: Transaction,
+    plan: InstallmentPlan,
+    *,
+    linked_evidence: list[Transaction],
+    alias_rules: list[MerchantAliasRule],
+) -> str | None:
+    if transaction.merchant == plan.merchant:
+        return "same_merchant"
+    # Alias/description continuity is only evidence for review. Require exact
+    # amount and an observed payment method; loose text similarity is insufficient.
+    if abs(transaction.amount) != plan.monthly_amount or not transaction.payment_method:
+        return None
+    matching_evidence = [
+        linked
+        for linked in linked_evidence
+        if linked.payment_method == transaction.payment_method
+        and linked.currency == transaction.currency
+        and abs(linked.amount) == plan.monthly_amount
+    ]
+    if transaction.description.strip() and any(
+        linked.description.strip().casefold()
+        == transaction.description.strip().casefold()
+        for linked in matching_evidence
+    ):
+        return "same_linked_description"
+    if any(linked.merchant == transaction.merchant for linked in matching_evidence):
+        return "confirmed_merchant_alias"
+    normalized_merchants = {
+        rule.normalized_merchant
+        for rule in alias_rules
+        if rule.alias_pattern.strip()
+        and rule.alias_pattern.casefold() in transaction.description.casefold()
+    }
+    if (
+        normalized_merchants == {plan.merchant}
+        and plan.payment_method == transaction.payment_method
+    ):
+        return "merchant_alias_rule"
+    return None
 
 
 def _suggest_installment_number(

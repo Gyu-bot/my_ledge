@@ -60,6 +60,8 @@
 - `GET /api/v1/canonical-views/dashboard`
 - `GET /api/v1/settings/analytics`
 - `PATCH /api/v1/settings/analytics`
+- `GET /api/v1/settings/income-expectations`
+- `PATCH /api/v1/settings/income-expectations`
 - `GET /api/v1/auto-classification/settings`
 - `PATCH /api/v1/auto-classification/settings`
 - `GET /api/v1/auto-classification/category-rules`
@@ -91,6 +93,7 @@
 - `POST /api/v1/transactions/{transaction_id}/restore`
 - `POST /api/v1/transactions/merge`
 - `PATCH /api/v1/loan-accounts`
+- `POST /api/v1/loan-accounts/recalculate-estimates`
 - `PUT /api/v1/transactions/{transaction_id}/loan-link`
 - `DELETE /api/v1/transactions/{transaction_id}/loan-link`
 - `PUT /api/v1/transactions/loan-links/bulk`
@@ -133,29 +136,72 @@
 
 #### `GET /api/v1/canonical-views/dashboard`
 
-- Purpose: actual row values from P0/P0.5 canonical views for the frontend canonical dashboard
-- Auth: API key required
-- Request query:
-  - `months`: integer, default `12`, range `1..36`
-  - `merchant_limit`: integer, default `10`, range `1..50`
-  - `queue_limit`: integer, default `10`, range `1..50`
-- Response model: `CanonicalViewsDashboardResponse`
-- Response shape:
-  - `monthly_cashflow[]`: rows from `vw_monthly_cashflow`, recent months in ascending display order
-  - `true_spendable_monthly[]`: rows from `vw_true_spendable_monthly`, enriched with optional current-month income estimates
-  - `loan_repayment_monthly[]`: recent rows from `vw_loan_repayment_monthly`
-  - `merchant_monthly_baseline[]`: top recent rows from `vw_merchant_monthly_baseline`
-  - `recurring_merchant_monthly[]`: recent rows from `vw_recurring_merchant_monthly`
-  - `unclassified_work_queue[]`: top priority rows from `vw_unclassified_work_queue`
-  - `data_coverage`: first/last observed transaction dates
-- Notes:
-  - view names are hardcoded in the service; this endpoint is not an arbitrary SQL execution surface
-  - intended consumer is `/operations/canonical-views`
-  - for the current calendar month only, if observed income is less than 50% of the recent income baseline, true-spendable rows keep observed fields and add `income_basis='estimated'`, `estimated_income_total`, `estimated_spendable_before_variable_spend`, and `estimated_remaining_after_variable_spend`
-  - the income baseline uses up to 6 closed months, removes months outside ±30% of the median as outliers, and averages the remaining months when at least 3 remain; otherwise it falls back to the 6-month median
-  - `income_estimate_source`, `income_estimate_month_count`, and `excluded_income_periods` explain the estimate source and excluded months
-  - estimated fields are API-level interpretation helpers, not DB view columns
-  - `monthly_cashflow[]` and `true_spendable_monthly[]` include `is_complete_month`; a month is complete only when its first and last calendar days are inside the observed transaction range
+- Auth: API key required. Reads allowlisted canonical views and a separate read-only monthly projection; it is not an arbitrary SQL interface.
+- Query:
+  - `months`: default `12`, range `1..36`; `merchant_limit`: default `10`, range `1..50`.
+  - `queue_limit`: default `10`, range `1..100`; `queue_page`: default `1`, minimum `1`.
+  - `search`: optional, maximum 200 characters; searches queue merchant/effective category text with literal LIKE escaping.
+  - `issue_types`: comma-separated OR of `cost_kind`, `spend_necessity`, `recurring_kind`, `loan_link`; unknown-only values match no rows.
+  - `period_from`, `period_to`: optional `YYYY-MM`; `current_only`: default false, restricts queue to the reference calendar month.
+  - `reference_date`: optional, default server date; fixes projection and current-month queue interpretation, not a historical snapshot of all canonical rows.
+- Response (`CanonicalViewsDashboardResponse`):
+  - `monthly_cashflow[]`, `true_spendable_monthly[]`, `loan_repayment_monthly[]`: observed canonical monthly rows.
+  - `merchant_monthly_baseline[]`, `recurring_merchant_monthly[]` plus `merchant_monthly_baseline_total`, `recurring_merchant_monthly_total`: limited rows and full view row counts (not distinct merchants).
+  - `unclassified_work_queue[]` plus `unclassified_work_queue_total`, `_page`, `_per_page`, `_total_pages`: queue filters apply in SQL before count/limit/offset. Total pages is ceiling(total/per-page); an out-of-range page is empty, not clamped. Items include current nullable cost/necessity/recurring classifications alongside issue fields.
+  - `data_coverage`: first/last valid observed transaction dates; this range alone does not prove complete data.
+  - `month_projection`: the reference month's observed-plus-remaining scenario, described below.
+- Both observed monthly groups use the same `is_complete_month` transaction-density heuristic, assessed for returned closed months independently of the projection's six-month learning window. Current/future months are false. This is not source completeness certification. Cashflow `savings_rate_basis` is `no_income`, `observed_closed_month`, or `observed_partial_month`.
+- Legacy true-spendable forecast fields remain in the schema for compatibility but are no longer populated: `income_basis='observed'`, `is_income_estimated=false`, `observed_income_total=income_total`, `estimated_*`/`income_estimate_source=null`, count zero and excluded periods empty. Consumers must use `month_projection` for forecasts, without replacing observed canonical values.
+
+#### Monthly Projection (`month_projection`)
+
+Source: `app.services.monthly_projection_service`; model: `MonthlyProjection`. No GET persists expectations, classifications, links or derived forecasts.
+
+| Field | Formula or meaning |
+|---|---|
+| `period`, `as_of_date`, `observed_through` | Reference month/date and latest valid observation at or before that date. |
+| `observed_income` | Sum of all observed income rows in the reference month through the reference date. |
+| `expected_remaining_income` | Sum of source-level remaining expectations after matching actual receipts. |
+| `projected_month_income` | `observed_income + expected_remaining_income`. |
+| `observed_net_expense` | Signed net expense (`sum(-amount)` for expense rows); refunds reduce it. Transfers are excluded. |
+| `expected_remaining_expense` | Sum of complete expense components; null if any component is unknown or observation is stale. |
+| `known_expected_remaining_expense` | Sum of the known portions of components, even when their complete amount is unknown. |
+| `projected_month_expense` | `observed_net_expense + expected_remaining_expense`, or null. |
+| `observed_net_cashflow` | `observed_income - observed_net_expense`. |
+| `projected_month_end_net` | `projected_month_income - projected_month_expense`, or null. A monthly flow scenario, not a cash balance. |
+| `net_after_known_remaining_expense` | `projected_month_income - observed_net_expense - known_expected_remaining_expense`. A partial calculation excluding unknown expenses, **not** a full month-end forecast or safe-to-spend amount. |
+| `confidence`, `warnings`, `missing_reasons`, `limitations` | Warnings identify reviewable low-confidence estimates; missing inputs still make totals unavailable. Null totals must not become zero. |
+| `included_periods`, `excluded_periods`, `coverage` | Historical observation coverage used or excluded, with missing periods and latest successful upload snapshot date when available. |
+| `income_sources[]` | Source key/merchant, expected/observed/remaining amount, `expected_day`, expected date/window, status/confidence, history/exclusions, matched transaction ids and reason. |
+| `expense_components[]` | `kind`, nullable `expected_remaining`, `known_expected_remaining`, `basis`, `missing_reasons`, `confidence`, `warnings`, and recurring-only `sources`. Known portions can include low-confidence estimates; they are not confirmed bills. |
+| `expense_components[].sources[]` | Recurring source key/merchant; nullable `expected_monthly_amount`, gross `observed_payment_amount`, gross `observed_refund_amount`, signed `observed_net_expense`, nullable `expected_remaining`, `additional_observed_amount`; confidence, `expected|observed|review` status, basis, history/excluded periods and warnings. |
+
+Coverage and income model:
+
+- Reads valid canonical transactions from the first day six months before `as_of_date` through that date. Each closed month qualifies with at least eight distinct observed dates, an observation in the first seven and last seven days, and no consecutive observed-date gap over ten days. The successful-upload date is provenance, not proof that every day/account was imported.
+- Automatic sources are positive salary-category income grouped by normalized merchant. Bonus, insurance payout, refund, resale/settlement-like descriptions/categories are excluded from recurring expectations; all actual income still remains in `observed_income`. Explicit expectations can identify a non-salary source, subject to the same one-off exclusion.
+- A learned source needs at least three adequately covered positive income months, then at least three within ±30% of their median. Expected amount is the rounded median of accepted monthly totals. Small rows below 10% of the median monthly maximum are excluded as adjustments.
+- `expected_day` is the median last receipt day, or `31` for a learned month-end pattern; it is null without an expectation. `expected_date` clips that day to the actual month length. When saving a detected source as an override, preserve `expected_day=31` rather than using a February date's day. Split-receipt ranges and a four-day tolerance accommodate timing shifts. A date spread over eight days without the month-end pattern is uncertain.
+- User amount/day overrides supersede learning; `stopped=true` gives zero remaining. Missing recent receipts can mark an unobserved source stopped. Recent amounts outside the regular range or discontinuous history can instead make it uncertain and suppress remaining income. `expected`, `received`, `partial`, `late`, `stopped`, and `uncertain` remain distinct states.
+- Actual receipts at least 10% of expected amount are matched. A partial total below the full expectation retains its difference when historical split-receipt count is not met or a user expectation exists. Otherwise at least 80% received prevents adding an expected duplicate. An unusually large/out-of-window receipt can be uncertain with zero remainder. Late status requires transaction observation beyond the expected window, not wall-clock time alone.
+
+Expense model:
+
+1. Loan-linked expense takes precedence. Latest loan snapshots at or before reference date provide monthly payments; subtract that account's current observed net repayments, floor remaining at zero. Missing payment/link ambiguity makes the component incomplete while preserving known amounts. No repayment day is inferred.
+2. Installment-linked or schedule-matching expense comes next. Active current-month schedules subtract linked or unique exact merchant/payment/amount/date-match actuals read-only. Ambiguity or loan overlap remains unknown. A past unlinked due amount is excluded from future obligations and reported for review, not converted to arrears.
+3. Recurring sources use gross outgoing payments for learning and subtract gross current payments; refunds reduce actual net expense but never restore an already observed payment obligation. Stable evidence needs at least three covered months within the existing ±30% median band and the immediately previous calendar month among them. For a weak explicit monthly-recurring source with current observations, use its accepted historical subset when available, otherwise covered positive-payment months, with low confidence and warnings. If only a current gross payment exists, assume that monthly cycle is observed and add zero further payment with an explicit review warning. Refund-only sources without any usable gross-payment evidence remain unknown. If the immediately previous month has inadequate overall coverage, an older stable pattern including the latest adequately covered month is retained with low confidence even before a current payment. A missing payment in an adequately covered recent month remains evidence of inactivity; weak historical-only explicit sources are not revived. Unstable ordinary fixed costs move to the residual model.
+   - Remaining amount is `min(max(monthly_baseline - current_gross_payments, 0), median(historical_gross_payments_after_observed_day))`. Historical days are clipped to the reference month's final day. This prevents early full payment and small amount changes after the normal payment date from inventing extra bills while retaining evidenced later split payments.
+   - Current gross payments above the baseline are `additional_observed_amount`, part of actual expense only. They indicate a baseline excess, not a proven one-off charge. Refunds, excess payments and weak histories carry review warnings. When the historical tail is zero and current gross payments are below 70% of the monthly baseline, a missing/changed payment warning lowers confidence without inventing a future charge; small amount differences within that historical stability tolerance do not. These are scenarios, not contract or settlement reconciliation.
+4. The `variable` component is residual variable/unclassified/non-regular fixed spend after the preceding partitions. It uses the median historical signed expense for days after the current month's **last observed day**, with at least three adequately covered months; floor at zero.
+
+Each transaction belongs to one model partition. Known portions survive a component's missing reason. Full expense/month-end projections are null if any component is unknown, there is no observed transaction, or the latest observation is more than seven days before reference. Confidence is unavailable when the full expense is unknown, otherwise low when reasons or component warnings remain and medium when none remain. Warning-only recurring sources do not create missing-input reasons or null totals. The returned scenario does not guarantee future employment, contracts, new spending or available bank cash.
+
+#### `GET /api/v1/settings/income-expectations` / `PATCH /api/v1/settings/income-expectations`
+
+- Both require `X-API-Key`; schema is `IncomeExpectationsSettings` (`items`, maximum 50 unique sources).
+- Each item: `source_key`, `merchant` (1–500 characters, whitespace normalized), `expected_amount` (integer 0–1,000,000,000,000), `expected_day` (1–31), `stopped` (default false).
+- Source key must equal `income:` plus the merchant with case folding and collapsed whitespace; duplicate keys or mismatched identities return `422`.
+- GET returns only saved expectations, empty when none exist. PATCH **replaces the complete list** despite its verb; `items: []` removes all overrides. Store is `app_settings`, scope `forecast.income_expectations`, key `items`. It is separate from analytics knob defaults/saved/effective settings.
 
 ### Upload / Operations
 
@@ -314,7 +360,7 @@
 - Query params:
   - `start_date`
   - `end_date`
-  - `type: "지출" | "수입" | "이체" | "all"` default `all`
+  - `type: "지출" | "수입" | "이체" | "income_expense" | "all"` default `all`
   - `source: "import" | "manual" | "all"` default `all`
   - `category_major`
   - `payment_method`
@@ -351,6 +397,14 @@
   - default excludes deleted and merged rows
   - `search` is `ILIKE %keyword%` over `description`, `merchant`, `memo`, `payment_method`
   - ordered by `date asc, time asc, id asc`
+
+`income_expense` selects income and expense while excluding transfers. It is shared by transaction/analytics endpoints using `TransactionTypeFilter`; `all` still includes transfers. Amounts remain raw signed values, not a claim of equivalence to canonical cashflow.
+
+#### `GET /api/v1/transactions/{transaction_id}`
+
+- Auth: none
+- Response: one `TransactionResponse`, or `404` when the id does not exist.
+- Reads the stored row by id independently of list filters; deleted/merged state is visible in the response. Useful for opening a referenced transaction without changing the table's current page.
 
 #### `GET /api/v1/transactions/filter-options`
 
@@ -438,6 +492,8 @@
     - `amount`
 
 ### Transactions Write
+
+Single and bulk PATCH share field-presence semantics: omitted fields preserve stored values; explicit `spend_necessity:null` clears necessity and takes precedence over `fixed_cost_necessity` even when null. The compatibility fixed field is synchronized only for fixed costs. Explicit `cost_kind:null` is a historical no-op, whereas `recurring_payment_kind:null` clears classification. Only an actual change to the cost-kind/necessity tuple marks `cost_classification_source='manual'`; unchanged values and memo-only edits preserve the source. Creation/category-rule normalization retains the default of discretionary for variable expenses with missing necessity.
 
 #### `POST /api/v1/transactions`
 
@@ -742,7 +798,7 @@
 - Response model: `InstallmentTransactionMappingListResponse`
 - Behavior:
   - only returns visible `type="지출"` rows
-  - candidate scope is `recurring_payment_kind='installment'` or rows that already have an installment link
+  - candidate scope includes `recurring_payment_kind='installment'`, existing links and read-only active-plan matching suggestions
   - excludes deleted and merged transactions through `vw_transactions_effective` semantics
   - ordered by `date desc, time desc, id desc`
 
@@ -768,14 +824,17 @@
     - `amount_delta`, `billing_day_delta`, `score`
     - `confidence: "high" | "medium" | "low"`
     - `reason_labels`
-    - `conflict_reason: "installment_number_already_linked" | null`
+    - `conflict_reason`: `installment_number_already_linked`, `inactive_installment_link`, `ambiguous_plan_match`, `competing_transactions`, or null
+    - nullable `conflicting_transaction_id`, `conflicting_transaction_state` (`deleted` or `merged`)
     - `is_usable: bool`
 - Behavior:
   - only active installment plans are considered
-  - `installment_plan_id`가 지정되면 해당 plan만 대상으로 제안한다
+  - all active plans participate in conflict detection before `installment_plan_id` filters returned suggestions
   - suggests only expense (`지출`) rows with `amount < 0`, not deleted, and not already linked
   - ordering is deterministic: `expected_billing_date`, `plan.display_name`, `transaction.date`, `transaction.id`
   - amount/날짜 일치성은 허용 오차(`amount tolerance`, `billing day tolerance`)를 적용한 뒤 점수(score)와 confidence를 산정한다
+  - KRW and a configured plan payment method must match. Exact merchant matching is preferred; confirmed alias continuity can propose an alternate merchant only with exact amount/payment evidence, at most medium confidence. A similar amount alone is insufficient.
+  - ambiguous plans, competing transactions and occupied installments are unusable suggestions; no GET creates or changes links
   - 제안은 advisory only이며, 제안된 회차를 UI가 수동 링크 payload(`installment_number`)로 전달할 수 있다
 
 #### `GET /api/v1/transactions/{transaction_id}/installment-link`
@@ -814,7 +873,8 @@
 - Purpose: remove one transaction's installment mapping.
 - Auth: API key required
 - Response: `204 No Content`
-- Behavior: deleting a missing link is idempotent and still returns `204`.
+- Behavior: for an existing transaction, deleting a missing link returns `204` after any `require_inactive` guard. A missing transaction returns `404`.
+- Optional query `require_inactive` defaults false. With true, the linked transaction must still be deleted/merged; a restored/active row returns `409`. Inactive links remain stored for audit/restore until explicitly removed, and continue to block reuse of their installment slot. Suggestions identify the conflict and transaction; plan linked counts and forecast observations exclude inactive transactions.
 
 #### `GET /api/v1/installments/forecast`
 
@@ -825,13 +885,14 @@
   - `months`: default `12`, range `1..120`
 - Response model: `InstallmentForecastResponse`
 - Response shape:
-  - `items[]`: plan id/display name, installment number, due date, `period`, `amount`, `status`, optional linked `transaction_id`
-  - `monthly_summary[]`: `observed_total`, `projected_total`, `missed_total` per `period`
+  - `items[]`: plan id/display name, installment number, due date, `period`, `amount`, `status`, `status_label`, `is_future_obligation`, optional linked `transaction_id`
+  - `monthly_summary[]`: `observed_total`, `projected_total`, `past_unconfirmed_total`, compatibility `missed_total` per `period`
 - Status behavior:
   - linked schedule entries are `observed`
   - unlinked entries before `as_of_date` are `missed`
   - unlinked entries on or after `as_of_date` are `projected`
   - projected totals are a separate planning surface and should not be double-counted with observed transactions
+  - `missed`/`past_unconfirmed_total` means a past schedule entry without a confirmed link, not proven unpaid debt. `missed_total` is an alias for that value; only projected entries are future obligations.
 
 ### Assets / Snapshots
 
@@ -857,9 +918,10 @@
     - `is_cash_equivalent`
 - Calculation:
   - groups `asset_snapshots` by `snapshot_date`
-  - sums `side="asset"` and `side="liability"` separately
+  - sums nonnegative `side="asset"` rows and all `side="liability"` rows separately
   - `net_worth = asset_total - liability_total`
   - `asset_items` is the editable asset-row surface for liquidity and cash-equivalent review; it is limited to latest `side="asset"` rows and does not replace the date-level `items` totals.
+  - each totals row exposes `negative_asset_excluded_total` (signed sum of preserved negative asset rows) and `aggregation_basis='nonnegative_asset_rows_minus_liability_rows'`
 
 #### `GET /api/v1/assets/net-worth-history`
 
@@ -870,6 +932,8 @@
   - `items[]`
     - `snapshot_date`
     - `net_worth`
+    - `negative_asset_excluded_total`, `aggregation_basis`
+- Uses the same nonnegative-asset-minus-liability basis as snapshot totals, comparison, breakdown and liquidity health; raw negative asset evidence is not deleted.
 
 #### `GET /api/v1/assets/snapshot-compare`
 
@@ -907,6 +971,7 @@
   - selected mode compares explicit dates
   - `is_partial=true` when current snapshot is not month-end and mode is not closed-month mode
   - `is_stale=true` when current snapshot is older than 35 days from today
+  - `current` and `baseline` expose the same aggregation basis and negative-asset exclusion metadata as snapshot totals; delta compares those consistently aggregated values
 
 #### `GET /api/v1/analytics/net-worth-breakdown`
 
@@ -927,6 +992,7 @@
     - `ratio`
 - Notes:
   - excludes `side='asset' AND amount < 0` rows from `asset_total` and exposes the excluded sum as `negative_asset_excluded_total`
+  - `aggregation_basis='nonnegative_asset_rows_minus_liability_rows'` also applies to snapshot/history/comparison/health totals
   - groups non-excluded `asset_snapshots` by side/category
   - investment details remain summary-only until brokerage API support
 
@@ -963,11 +1029,13 @@
   - cash equivalents use `asset_snapshots.is_cash_equivalent=true` first
   - when `is_cash_equivalent` is null, `liquidity_tier='immediate'` counts as cash-equivalent; `near_liquid` and `illiquid` do not count in the base emergency-fund months
   - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption; `자유입출금`, `전자금융`, and `통장` count only when locked markers such as `청약`, `저금통`, `보험`, `연금`, or `부동산` are absent
-  - if `monthly_income` or `monthly_required_spend` is omitted, defaults are derived from closed-month transaction data; explicit query params override derived values and are listed in `manual_input_overrides`
+  - omitted income/required-spend defaults are bounded by the selected snapshot (`input_as_of_date`), not today's date; explicit query params override defaults and appear in `manual_input_overrides`
+  - required spend uses that snapshot's latest closed calendar month (the same month if the snapshot is month-end): `max(0, required_spend_essential_total + required_spend_additional_debt_total)`. Essential expenses use signed `-amount`; linked debt expense is added only if it is not already essential. Monthly estimated debt payment is not added again.
+  - `required_spend_period` names the observation month. Income uses the median of observed income-month totals through that closed month; missing income months are not synthesized as zero.
   - negative asset rows are excluded from cash-equivalent totals and add `negative_asset_rows_excluded` to assumptions
   - `emergency_fund_target_months` comes from effective `settings/analytics.financial_targets`; `target_progress_ratio = emergency_fund_months / emergency_fund_target_months` when required spend is available
-  - same-date snapshot re-import preserves user-confirmed `liquidity_tier` / `is_cash_equivalent` and loan repayment metadata by stable snapshot row identity
-  - monthly debt payment uses `loans.monthly_payment` when available; `monthly_payment_source` says whether that value is user-confirmed `manual` or `estimated_from_linked_transactions`
+  - same-date snapshot re-import preserves metadata by stable identity. Asset overrides also carry forward from the nearest prior unambiguous `side/category/product_name` identity, including explicit null/false; duplicated/generated-suffix names do not receive cross-date guesses.
+  - monthly debt payment uses `loans.monthly_payment` from the selected loan snapshot once, not the sum of historical snapshots; `debt_payment_snapshot_date` identifies it. Sources distinguish `manual` and `estimated_from_linked_transactions`.
   - `estimated_from_linked_transactions` monthly payments are based on completed linked-transaction months. Overdraft accounts use a recent completed-month average; other loan kinds use completed-month median.
   - if required spend or income is omitted, emergency/debt ratios can be `null`
 
@@ -979,6 +1047,7 @@
   - `liquidity_tier`: `immediate`, `near_liquid`, `illiquid`, or `null`
   - `is_cash_equivalent`: boolean or `null`
 - Response model: `AssetSnapshotItemResponse`
+- PATCH omission preserves a field. Explicit null restores automatic/heuristic behavior; `false` remains an explicit cash-equivalent override.
 
 #### `PATCH /api/v1/loans/{loan_id}/repayment-metadata`
 
@@ -987,14 +1056,32 @@
 - Request:
   - `monthly_payment`: decimal `>= 0` or `null`
   - `repayment_method`: `principal_interest`, `principal_equal`, `interest_only`, `unknown`, or `null`
+  - `monthly_payment_mode`, `repayment_method_mode`: optional `automatic`; supplied null or a simultaneous corresponding value is invalid (`422`)
 - Response model: `LoanRepaymentMetadataResponse`
 - Response/source fields:
   - `monthly_payment_source`: `manual`, `estimated_from_linked_transactions`, or `null`
   - `repayment_method_source`: `manual`, `estimated_from_linked_transactions`, or `null`
 - Behavior:
   - supplied `monthly_payment` and `repayment_method` fields are marked `manual`
+  - omission preserves the field; explicit null remains a manual missing value, and zero is a valid manual payment
+  - automatic mode clears only the selected override and recomputes from linked transactions; only latest snapshots allow it (`409` for historical snapshots)
   - automatic linked-transaction estimation does not overwrite `monthly_payment_source='manual'`
   - non-manual estimated monthly payments can be cleared when loan-link deletion or replacement leaves too few completed-month observations; non-manual estimated repayment methods can be cleared when no linked observations still support the inferred method
+  - single/bulk transaction delete/restore refresh affected linked-loan estimates while preserving the link itself and manual metadata; account kind, automatic link changes and imports also refresh affected accounts
+
+Estimate metadata on repayment metadata, loan summary and recalculation items:
+
+- `monthly_payment_missing_reason`: null or `manual_value_missing`, `recalculation_required`, `insufficient_observations`, `no_linked_transactions`, `current_month_excluded`, `no_observations_in_window`.
+- `monthly_payment_estimate_basis`: `mean_recent_three_closed_month_linked_repayments` for overdraft accounts, otherwise `median_closed_month_linked_repayments`.
+- `monthly_payment_observation_months`, `monthly_payment_estimate_window_start`, `monthly_payment_estimate_window_end`, `monthly_payment_min_observations` explain the effective observation window. Missing payment is not zero.
+
+#### `POST /api/v1/loan-accounts/recalculate-estimates`
+
+- Auth: API key required.
+- Request: `loan_account_ids` (1–100, deduplicated), `reset_invalid_manual_null` (default false).
+- Recalculates selected accounts' latest snapshots only. Opt-in reset clears only a null `monthly_payment` with manual source; non-null manual amounts and manual repayment methods are preserved.
+- Unknown account: `404`; any selected account without a snapshot: `409`, before mutation.
+- Response: `items[]` containing `loan_account_id`, `loan_id`, `snapshot_date`, `monthly_payment`, `monthly_payment_source` and the estimate metadata above.
 
 #### `GET /api/v1/investments/summary`
 
@@ -1115,6 +1202,7 @@
   - `level` default `major`
   - `type` default `지출`
 - Response model: `CategoryMoMResponse`
+- Metadata: `reference_date`, `is_partial_period`, `comparison_basis` (`same_day_previous_month` or `full_previous_month`). An explicit partial `end_date` selects that month even with no rows and compares only the same day range in the previous month.
 - Response shape:
   - `items[]`
     - `period`
@@ -1146,6 +1234,8 @@
   - `unclassified_total`
   - `unclassified_count`
 
+`necessity_unclassified_total` and `necessity_unclassified_count` separately expose expenses lacking a usable necessity classification. They are not aliases for missing `cost_kind`; axes can overlap. Amount buckets use signed net expense including refunds.
+
 #### `GET /api/v1/analytics/fixed-cost-trend`
 
 - Purpose: expose monthly fixed/variable and essential/discretionary fixed-cost trend for the selected period
@@ -1153,6 +1243,7 @@
   - `start_date`
   - `end_date`
 - Response model: `FixedCostTrendResponse`
+- Each month also exposes `necessity_unclassified_total`/`necessity_unclassified_count` with the same signed semantics as fixed-cost summary.
 - Response shape:
   - `items[]`
     - `period`
@@ -1223,6 +1314,7 @@
 - Behavior:
   - if `end_date` omitted, service uses last closed month end as reference
   - if `end_date` is not month-end, previous months are also truncated at same day cutoff
+  - calculations use observed income months only; absent months are not zero-income months and observation coverage is not proven complete
 
 #### `GET /api/v1/analytics/recurring-payments`
 
@@ -1231,6 +1323,8 @@
   - `start_date`
   - `end_date`
   - `min_occurrences` default `2`
+  - `activity`: `all` (default), `active`, or `history`
+  - `recent_days`: default `90`, range `1..730`
   - `page` default `1`
   - `per_page` default `10`, max `100`
 - Response model: `RecurringPaymentsResponse`
@@ -1253,10 +1347,15 @@
     - `not_recurring_count`
     - `unclassified_count`
     - `transaction_ids`
+    - `net_amount`, `last_charge_date`, `activity_status`
+  - `reference_date`, `activity`, `recent_days`
   - `assumptions`
 - Notes:
   - `recurring_payment_kind` is the resolved group value when all transactions in the group share one saved value; otherwise it can be `null`.
   - `transaction_ids` are the row ids used by `/operations/recurring-classification` for group-level bulk updates.
+  - charge/refund rows are netted by date; positive net-charge dates determine cadence. `avg_amount` is signed net expense divided by the count of net-charge dates (at least one). `occurrences`/ids still describe all observed rows.
+  - `activity_status` is `active_candidate`, `historical`, `irregular`, `non_positive`, or `not_recurring`. `activity=active` includes only active candidates; `history` includes the other statuses. Reference is `end_date` or today; recentness uses the smaller of `recent_days` and a cadence-aware window. Explicit installment/not-recurring classifications are not active subscription candidates.
+  - an active candidate is an observation signal, not confirmation of a subscription contract
 
 #### `GET /api/v1/analytics/spending-anomalies`
 
@@ -1284,6 +1383,7 @@
     - `delta_display_capped`
     - `baseline_quality`
     - `anomaly_mode`
+    - `direction`: `increase` or `decrease`
     - `anomaly_score`
     - `reason`
   - `comparison_mode`
@@ -1295,6 +1395,7 @@
   - if partial date provided, baseline months use same day cutoff
   - setting precedence is explicit query param, then persisted analytics setting, then code default
   - sparse baseline spikes keep raw `delta_pct`/`delta_pct_raw` for machines but cap or null `delta_pct_display` and use a stable user-facing `reason`
+  - refunds remain signed. Direction comes from the signed delta; sparse drops use a drop mode instead of an increase label, and negative net expense identifies refund/cancellation effect.
 
 #### `GET /api/v1/analytics/discretionary-velocity`
 
@@ -1303,6 +1404,7 @@
   - `as_of_date` optional; omitted uses server date
 - Response includes `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_monthly_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level`, `confidence`, `classification_coverage_ratio`, `unclassified_spend`, `reasons[]`, and `assumptions[]`.
 - Calculation excludes loan-linked repayments and uses `spend_necessity='discretionary'`; classification coverage below the configured minimum lowers confidence instead of producing a strong warning.
+- Current/baseline/unclassified spend use signed net expense. Coverage uses positive charge amounts only, so refunds do not make coverage ratios misleading. A nonpositive prorated baseline yields a null velocity ratio.
 
 #### `GET /api/v1/analytics/purchase-gate-candidates`
 
@@ -1323,8 +1425,9 @@ Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/an
   - amount meets the effective minimum candidate amount
 - Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing='post_transaction'`, `candidate_purpose='future_friction_rule_candidate'`, and `future_friction_suggestion`.
 - `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
-- Positive `type='지출'` cancellation/refund rows are matched to nearby same merchant/payment/currency purchase rows before scoring. Fully refunded purchases are excluded; partial refunds are scored by net spend and expose `refund_netting_refund_total`.
+- Confirmed settlement refunds are netted before scoring. Fully refunded purchases are excluded; partial refunds are scored by net spend and expose `refund_netting_refund_total`.
 - Candidate scoring uses shared settlement netting metadata from analytics service, so confirmed refunds are not double-netted by a separate pass.
+- Response `start_date`/`end_date` identify the evaluated window. An unconfirmed unique one-charge/one-refund pair with the same date, merchant, payment method and amount can expose `possible_cancellation=true` and `cancellation_evidence_transaction_ids`. It remains a low-confidence review hint (`risk_level='unknown'`, normal priority, no future-friction suggestion), not a confirmed settlement or GET-side write.
 
 #### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
@@ -1340,6 +1443,9 @@ Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/an
 - Auth: API key required
 - Purpose: read backend-tunable analytics settings for diagnostics
 - Response model: `AnalyticsSettingsResponse`
+
+Recurring `default_apply_scope` supports only `all_matching|reviewed_only`. Monthly/weekly interval minimums must not exceed their maximums. `recurring_dry_run.upload_auto_apply` is the canonical recurring upload switch; when it has no saved value the legacy upload toggle supplies compatibility fallback. Both settings APIs read the same effective value and writes synchronize it.
+Historical unsupported default scopes remain visible in `saved`; `effective.default_apply_scope` safely resolves to `reviewed_only` until corrected. This does not silently turn a legacy preference into full-scope approval.
 - Response shape:
   - `defaults`, `saved`, and `effective`
   - sections: `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets`
@@ -1381,6 +1487,7 @@ Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/an
 - Rule fields also accept optional `spend_necessity`. `fixed_cost_necessity` is only valid for `cost_kind='fixed'`; `spend_necessity` is valid for fixed and variable costs.
 - When `cost_kind='variable'`, omitted or null `spend_necessity` is normalized to `discretionary`. Variable expense is `essential` only when explicitly selected.
 - Apply behavior: matches effective category values and updates only rows whose `cost_classification_source` is not `manual`
+- New/upserted category and recurring-category rules validate against effective categories in currently valid expense transactions (`422` for unknown categories). Historical invalid rules remain readable with `category_valid=false` and `validation_message`; reads do not remove them.
 
 #### Loan Merchant Auto-Link Rules
 
@@ -1417,7 +1524,13 @@ Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/an
   - `POST /api/v1/auto-classification/apply/recurring-category-rules`
 - Rule fields: `category_major`, optional `category_minor`, `recurring_payment_kind`
 - Supported recurring values: `installment`, `monthly_recurring`, `not_recurring`
-- Apply behavior: matches effective category values and updates only rows whose `recurring_payment_kind` is currently empty. A transaction is eligible only when its merchant has at least 2 active months, at least 2 active dates, and amount coefficient of variation `<= 0.5`, or when the transaction already has `cost_kind='fixed'`.
+- Apply behavior: automatic apply, upload apply, dry-run and approval share one candidate calculation using effective `recurring_dry_run` settings: occurrence/month/date minimums, amount coefficient of variation, cadence intervals and confidence. Fixed costs do not bypass evidence requirements. Only valid negative expenses supply evidence; explicit contrary recurring values are excluded. Already-matching classifications can support evidence, but only null classifications are changed.
+
+#### Recurring Dry-run Approval
+
+- `GET /api/v1/auto-classification/recurring-category-rules/dry-run` is authenticated/read-only. Proposals include matched transactions, confidence/reason/category hint, `apply_scope_options`, `default_apply_scope`, and a 64-hex `preview_token` bound to settings, rules and transaction evidence.
+- `POST /api/v1/auto-classification/apply/recurring-dry-run` requires `merchant`, `proposed_kind`, and that token. It accepts `apply_scope=all_matching|reviewed_only`; omission uses effective settings. `future_only` is unsupported (`422`).
+- Apply rechecks locked evidence. Missing/changed proposal or token returns `409`. `reviewed_only` requires nonempty eligible `transaction_ids` (`422` otherwise). For `all_matching`, omitted ids mean the exact eligible set; supplied ids must equal that set (`409` on mismatch). Merchant scope never expands past the preview's category/evidence gate.
 
 ## Canonical Views
 
@@ -1528,7 +1641,7 @@ Common rules:
 - Convert expense rows with `-amount`; positive `지출` refund/cancellation rows reduce monthly expense.
 - Separate loan-linked transactions before fixed/variable breakdown to avoid double counting repayment burden as ordinary spending.
 - Treat fixed/variable and essential/discretionary as independent axes. `cost_kind` is the repeatability/predictability axis; `spend_necessity` is the essential/discretionary axis for both fixed and variable expenses. Existing `fixed_cost_necessity` remains a fixed-cost compatibility field.
-- Variable expense defaults to `spend_necessity='discretionary'` unless a user or rule explicitly chooses `essential`.
+- Creation/category-rule normalization defaults variable expense necessity to `discretionary`; single/bulk PATCH preserve omitted necessity and honor an explicit null instead of silently refilling it.
 - Keep `transfer_activity_total` separate from `net_cashflow`.
 - Keep `as_of_date`, threshold, and baseline settings in API/settings contracts when a calculation depends on runtime context.
 
@@ -1648,9 +1761,9 @@ Source: `app.services.analytics_service.get_monthly_cashflow`
 Source: `app.services.analytics_service.get_category_mom`
 
 - loads rows in requested date window
-- derives `current_period = max(month in rows)`
+- an explicit `end_date` selects the current period even if it has no rows; otherwise derives it from the latest observed month
 - derives `previous_period = previous calendar month`
-- only compares those two months
+- compares those two months; partial explicit dates truncate the prior month to the same day-of-month and expose `same_day_previous_month` rather than `full_previous_month`
 - amount sign is normalized with `_amount_for_analytics`
   - income positive
   - expense positive via `-amount`
@@ -1667,8 +1780,8 @@ Source: `app.services.analytics_service.get_fixed_cost_summary`
 - `spend_necessity` splits fixed and variable spend into essential/discretionary totals
 - `required_spend_total = essential_fixed_total + essential_variable_total`
 - `discretionary_spend_total = discretionary_fixed_total + discretionary_variable_total`
-- missing classification goes to unclassified bucket
-- Category auto-classification can fill `cost_kind`, fixed-cost compatibility necessity, and general `spend_necessity`; user edits mark the row manual.
+- missing cost kind goes to `unclassified_*`; missing usable necessity separately goes to `necessity_unclassified_*`. These axes can overlap, so their totals are not additive.
+- Amounts use signed net expense, including refunds. Category auto-classification can fill classification values; only actual user changes to the cost/necessity tuple mark the row manual.
 
 ### Merchant Spend
 
@@ -1702,7 +1815,7 @@ Source: `app.services.analytics_service.get_income_stability`
   - reference date becomes last closed month end
 - if `end_date` is partial:
   - previous months are also truncated at same day cutoff
-- groups monthly income totals
+- groups observed monthly income totals; absent months are not synthesized as zero and complete collection is not inferred
 - metrics:
   - `avg = mean(monthly incomes)`
   - `stdev = population standard deviation`
@@ -1728,15 +1841,19 @@ Source: `app.services.analytics_service.get_recurring_payments`
 
 - expense-only rows
 - group by `merchant` fallback `description` fallback `"미분류"`
-- compute sorted transaction dates and gaps
+- net signed expense by date, then compute gaps only between positive net-charge dates; same-day charge/refund is not a repeated charge
 - classify interval:
   - `25-35` days -> `monthly`
   - `6-8` days -> `weekly`
   - else -> `irregular`
 - confidence:
   - based on gap variance when more than one gap exists
-  - defaults to `0.5` for single-gap cases
-- paginated after in-memory sort
+  - defaults to `0.5` for single-gap cases, zero for no gaps
+- `net_amount` includes refunds; `avg_amount = round(net_amount / max(net-charge-date count, 1))`
+- `last_date` is the latest observed row and `last_charge_date` is the latest positive net-charge date
+- active window is `min(recent_days, max(14, ceil((avg_gap if gaps else 30) * 1.5)))`
+- status precedence is non-positive net, explicit non-recurring/installment, historical, irregular/insufficient charge dates, then active candidate. The activity filter applies before pagination and totals.
+- paginated after in-memory sort; saved classification and active pattern evidence do not establish a subscription contract
 
 ### Spending Anomalies
 

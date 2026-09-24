@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SignalsPage } from '../../features/signals/SignalsPage'
+import * as analyticsHooks from '../../hooks/useAnalytics'
+import * as canonicalHooks from '../../hooks/useCanonicalViews'
+
+afterEach(() => vi.restoreAllMocks())
 
 function query<T>(data: T) {
   return { data, isLoading: false, error: null, refetch: vi.fn() }
@@ -156,4 +160,81 @@ describe('SignalsPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '부분 기간' }))
     expect(screen.getByLabelText('기준일')).toBeInTheDocument()
   })
+
+  it('확인된 마감월 종료일을 모든 신호와 비교 요청에 일관되게 전달한다', () => {
+    const cashflow = vi.spyOn(analyticsHooks, 'useMonthlyCashflow')
+    const stability = vi.spyOn(analyticsHooks, 'useIncomeStability')
+    const anomalies = vi.spyOn(analyticsHooks, 'useSpendingAnomalies')
+    const velocity = vi.spyOn(analyticsHooks, 'useDiscretionaryVelocity')
+    const purchase = vi.spyOn(analyticsHooks, 'usePurchaseGateCandidates')
+    const recurring = vi.spyOn(analyticsHooks, 'useRecurringPayments')
+    const mom = vi.spyOn(analyticsHooks, 'useCategoryMoM')
+    const merchants = vi.spyOn(analyticsHooks, 'useMerchantSpend')
+    renderPage()
+    expect(cashflow).toHaveBeenLastCalledWith({ start_date: '2026-05-01', end_date: '2026-05-31' })
+    expect(stability).toHaveBeenLastCalledWith({ end_date: '2026-05-31' })
+    expect(anomalies).toHaveBeenLastCalledWith(expect.objectContaining({ end_date: '2026-05-31' }))
+    expect(velocity).toHaveBeenLastCalledWith({ as_of_date: '2026-05-31' })
+    expect(purchase).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: '2026-05-01', end_date: '2026-05-31' }))
+    expect(recurring).toHaveBeenLastCalledWith(1, 8, { activity: 'active', recent_days: 90, end_date: '2026-05-31' })
+    expect(mom).toHaveBeenLastCalledWith({ end_date: '2026-05-31' })
+    fireEvent.click(screen.getByRole('tab', { name: '거래처 Top' }))
+    expect(merchants).toHaveBeenLastCalledWith({ start_date: '2026-03-01', end_date: '2026-05-31', limit: 5 })
+    fireEvent.click(screen.getByRole('tab', { name: '부분 기간' }))
+    fireEvent.change(screen.getByLabelText('기준일'), { target: { value: '2026-06-12' } })
+    expect(cashflow).toHaveBeenLastCalledWith({ start_date: '2026-06-01', end_date: '2026-06-12' })
+    expect(stability).toHaveBeenLastCalledWith({ end_date: '2026-06-12' })
+    expect(anomalies).toHaveBeenLastCalledWith(expect.objectContaining({ end_date: '2026-06-12' }))
+    expect(velocity).toHaveBeenLastCalledWith({ as_of_date: '2026-06-12' })
+    expect(purchase).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: '2026-06-01', end_date: '2026-06-12' }))
+    expect(mom).toHaveBeenLastCalledWith({ end_date: '2026-06-12' })
+    expect(merchants).toHaveBeenLastCalledWith({ start_date: '2026-04-01', end_date: '2026-06-12', limit: 5 })
+    fireEvent.click(screen.getByRole('tab', { name: '과거·기타' }))
+    expect(recurring).toHaveBeenLastCalledWith(1, 8, { activity: 'history', recent_days: 90, end_date: '2026-06-12' })
+    expect(screen.getByText('2026-06-01')).toBeInTheDocument()
+  })
+
+  it('순환급은 음수와 감소 표기로 표시하고 얇은 기준선 퍼센트를 되살리지 않는다', () => {
+    const original = analyticsHooks.useSpendingAnomalies()
+    vi.spyOn(analyticsHooks, 'useSpendingAnomalies').mockReturnValue({ ...original, data: {
+      ...original.data!, items: [{ period: '2026-06', category: '보험', amount: -1200, baseline_avg: 100,
+        delta_pct: -1300, delta_pct_display: null, direction: 'decrease', anomaly_score: 3, reason: '순환급으로 지출 감소' }],
+    } } as ReturnType<typeof analyticsHooks.useSpendingAnomalies>)
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: '부분 기간' }))
+    fireEvent.change(screen.getByLabelText('기준일'), { target: { value: '2026-06-12' } })
+    expect(screen.getByText('순환급')).toBeInTheDocument()
+    expect(screen.getByText(/-₩1,200 .*비교 기준 부족/)).toBeInTheDocument()
+    expect(screen.queryByText(/-1300/)).not.toBeInTheDocument()
+    const href = screen.getByRole('link', { name: '지출에서 보험 보기' }).getAttribute('href')!
+    const params = new URL(href, 'http://localhost').searchParams
+    expect(params.get('category')).toBe('보험')
+    expect(params.get('from')).toBe('2026-06')
+    expect(params.get('start_date')).toBe('2026-06-01')
+    expect(params.get('end_date')).toBe('2026-06-12')
+  })
+
+  it('상쇄 거래가 있는 검토 후보는 취소 가능성으로만 안내한다', () => {
+    const original = analyticsHooks.usePurchaseGateCandidates()
+    vi.spyOn(analyticsHooks, 'usePurchaseGateCandidates').mockReturnValue({ ...original, data: {
+      ...original.data!, items: [{ ...original.data!.items[0], possible_cancellation: true, risk_level: 'unknown' }],
+    } } as ReturnType<typeof analyticsHooks.usePurchaseGateCandidates>)
+    renderPage()
+    expect(screen.getByText('취소 가능성 · 확인 필요')).toBeInTheDocument()
+  })
+
+
+  it('확인된 마감월이 없으면 현재월을 마감월로 표시하지 않고 부분기간 전환을 유지한다', () => {
+    const original = canonicalHooks.useCanonicalViewsDashboard()
+    vi.spyOn(canonicalHooks, 'useCanonicalViewsDashboard').mockReturnValue({ ...original, data: {
+      ...original.data!, monthly_cashflow: [],
+    } } as ReturnType<typeof canonicalHooks.useCanonicalViewsDashboard>)
+    renderPage()
+    expect(screen.getByText(/거래 관측 범위로 확인된 마감월이 없습니다/)).toBeInTheDocument()
+    expect(screen.queryByText('1.31x')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: '부분 기간' }))
+    expect(screen.getByLabelText('기준일')).toBeInTheDocument()
+    expect(screen.getByText('1.31x')).toBeInTheDocument()
+  })
+
 })

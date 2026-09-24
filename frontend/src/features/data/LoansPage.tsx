@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
@@ -30,7 +30,8 @@ import type {
   LoanMerchantRuleMatchField,
   LoanRepaymentType,
 } from '../../types/transaction'
-import type { LoanRepaymentMethod } from '../../types/asset'
+import type { LoanItem, LoanRepaymentMethod, LoanRepaymentMetadataPatchRequest } from '../../types/asset'
+import { monthlyPaymentEvidence, monthlyPaymentMissingLabel, monthlyPaymentSourceLabel } from '../networth/loanPresentation'
 
 type Tab = 'accounts' | 'links' | 'rules'
 const PAGE_SIZE = 40
@@ -51,6 +52,41 @@ function accountIdFromValue(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+type LoanDraft = { display_name_user: string; loan_kind: LoanKind; monthly_payment: string; monthly_payment_mode: 'automatic' | 'manual'; repayment_method: LoanRepaymentMethod | 'automatic' }
+
+function storedLoanDraft(account: LoanAccountCandidate, loan: LoanItem | undefined): LoanDraft {
+  return {
+    display_name_user: account.display_name_user ?? '',
+    loan_kind: account.loan_kind,
+    monthly_payment: loan?.monthly_payment_source === 'manual' ? loan.monthly_payment ?? '' : '',
+    monthly_payment_mode: loan?.monthly_payment_source === 'manual' ? 'manual' : 'automatic',
+    repayment_method: loan?.repayment_method_source === 'manual' ? loan.repayment_method ?? 'unknown' : 'automatic',
+  }
+}
+
+function changedLoanDraft(stored: LoanDraft, edits: Partial<LoanDraft> = {}): Partial<LoanDraft> {
+  const changed = { ...edits }
+  if (changed.display_name_user?.trim() === stored.display_name_user.trim()) delete changed.display_name_user
+  if (changed.loan_kind === stored.loan_kind) delete changed.loan_kind
+  if (changed.monthly_payment_mode === stored.monthly_payment_mode) delete changed.monthly_payment_mode
+  if (changed.repayment_method === stored.repayment_method) delete changed.repayment_method
+  const amount = changed.monthly_payment?.trim()
+  const storedAmount = stored.monthly_payment.trim()
+  if ((changed.monthly_payment_mode ?? stored.monthly_payment_mode) === 'automatic'
+      || amount === storedAmount
+      || (amount && storedAmount && Number.isFinite(Number(amount)) && Number(amount) === Number(storedAmount))) {
+    delete changed.monthly_payment
+  }
+  return changed
+}
+
+function hasInvalidPaymentEdit(stored: LoanDraft, edits: Partial<LoanDraft>): boolean {
+  if (!('monthly_payment' in edits || 'monthly_payment_mode' in edits)) return false
+  if ((edits.monthly_payment_mode ?? stored.monthly_payment_mode) === 'automatic') return false
+  const amount = (edits.monthly_payment ?? stored.monthly_payment).trim()
+  return !amount || !Number.isFinite(Number(amount)) || Number(amount) < 0
+}
+
 function AccountsTab() {
   const hasWrite = useWriteAccess()
   const [includeHidden, setIncludeHidden] = useState(false)
@@ -58,47 +94,51 @@ function AccountsTab() {
   const loans = useLoanSummary()
   const updateMeta = useUpdateLoanAccountMetadata()
   const patchRepayment = usePatchLoanRepaymentMetadata()
-  const [drafts, setDrafts] = useState<Record<string, { display_name_user: string; loan_kind: LoanKind; monthly_payment: string; repayment_method: LoanRepaymentMethod }>>({})
+  const [drafts, setDrafts] = useState<Record<string, Partial<LoanDraft>>>({})
 
-  useEffect(() => {
-    const items = accounts.data?.items
-    if (!items) return
+  function editDraft(account: LoanAccountCandidate, loan: LoanItem | undefined, values: Partial<LoanDraft>) {
+    const key = accountValue(account)
     setDrafts((current) => {
+      const changed = changedLoanDraft(storedLoanDraft(account, loan), { ...current[key], ...values })
       const next = { ...current }
-      let changed = false
-      for (const account of items) {
-        const key = accountValue(account)
-        if (!next[key]) {
-          const loan = loans.data?.items.find((l) => l.lender === account.lender && l.product_name === account.product_name)
-          next[key] = {
-            display_name_user: account.display_name_user ?? '',
-            loan_kind: account.loan_kind,
-            monthly_payment: loan?.monthly_payment_source === 'manual' ? (loan.monthly_payment ?? '') : '',
-            repayment_method: loan?.repayment_method ?? 'unknown',
-          }
-          changed = true
-        }
-      }
-      return changed ? next : current
+      if (Object.keys(changed).length > 0) next[key] = changed
+      else delete next[key]
+      return next
     })
-  }, [accounts.data, loans.data])
+  }
 
   async function save(account: LoanAccountCandidate) {
     const key = accountValue(account)
-    const draft = drafts[key]
-    if (!draft) return
-    try {
-      await updateMeta.mutateAsync({
-        loan_account_id: account.loan_account_id,
-        lender: account.loan_account_id === null ? account.lender : null,
-        product_name: account.loan_account_id === null ? account.product_name : null,
-        display_name_user: draft.display_name_user.trim() || null,
-        loan_kind: draft.loan_kind,
-      })
-      const loan = loans.data?.items.find((l) => l.lender === account.lender && l.product_name === account.product_name)
-      if (loan?.id != null && (draft.monthly_payment.trim() || draft.repayment_method !== 'unknown')) {
-        await patchRepayment.mutateAsync({ id: loan.id, data: { monthly_payment: draft.monthly_payment.trim() || null, repayment_method: draft.repayment_method } })
+    const loan = loans.data?.items.find((item) => item.lender === account.lender && item.product_name === account.product_name)
+    const stored = storedLoanDraft(account, loan)
+    const draft = changedLoanDraft(stored, drafts[key])
+    if (Object.keys(draft).length === 0) return
+    const repaymentData: LoanRepaymentMetadataPatchRequest = {}
+    if (draft.monthly_payment_mode === 'automatic') repaymentData.monthly_payment_mode = 'automatic'
+    else if ('monthly_payment' in draft || draft.monthly_payment_mode === 'manual') {
+      const amount = (draft.monthly_payment ?? stored.monthly_payment).trim()
+      if (!amount || !Number.isFinite(Number(amount)) || Number(amount) < 0) {
+        toast.error('수동 월상환액을 입력하세요', { description: '자동 계산으로 되돌리려면 자동 추정을 선택하세요' })
+        return
       }
+      repaymentData.monthly_payment = amount
+    }
+    if (draft.repayment_method === 'automatic') repaymentData.repayment_method_mode = 'automatic'
+    else if (draft.repayment_method) repaymentData.repayment_method = draft.repayment_method
+    try {
+      if ('display_name_user' in draft || 'loan_kind' in draft) {
+        await updateMeta.mutateAsync({
+          loan_account_id: account.loan_account_id,
+          lender: account.loan_account_id === null ? account.lender : null,
+          product_name: account.loan_account_id === null ? account.product_name : null,
+          ...('display_name_user' in draft ? { display_name_user: draft.display_name_user?.trim() || null } : {}),
+          ...('loan_kind' in draft ? { loan_kind: draft.loan_kind } : {}),
+        })
+      }
+      if (loan?.id != null && Object.keys(repaymentData).length > 0) {
+        await patchRepayment.mutateAsync({ id: loan.id, data: repaymentData })
+      }
+      setDrafts((current) => { const next = { ...current }; delete next[key]; return next })
       toast.success('대출 계좌 정보 저장 완료')
     } catch (error) {
       toast.error('저장 실패', { description: String(error) })
@@ -111,7 +151,6 @@ function AccountsTab() {
         loan_account_id: account.loan_account_id,
         lender: account.loan_account_id === null ? account.lender : null,
         product_name: account.loan_account_id === null ? account.product_name : null,
-        loan_kind: account.loan_kind,
         is_hidden: isHidden,
       })
       toast.success(isHidden ? '대출 계좌를 숨겼습니다' : '대출 계좌를 다시 표시합니다')
@@ -132,13 +171,17 @@ function AccountsTab() {
         <div className="divide-y divide-border-subtle">
           {accounts.data.items.map((account) => {
             const key = accountValue(account)
-            const draft = drafts[key] ?? { display_name_user: '', loan_kind: account.loan_kind, monthly_payment: '', repayment_method: 'unknown' as LoanRepaymentMethod }
             const loan = loans.data?.items.find((l) => l.lender === account.lender && l.product_name === account.product_name)
-            const estimated = loan?.monthly_payment_source === 'estimated_from_linked_transactions' ? loan.monthly_payment : null
+            const stored = storedLoanDraft(account, loan)
+            const changes = changedLoanDraft(stored, drafts[key])
+            const draft: LoanDraft = { ...stored, ...changes }
+            const invalidPayment = hasInvalidPaymentEdit(stored, changes)
+            const isSaving = updateMeta.isPending || patchRepayment.isPending
+            const missingLabel = loan ? monthlyPaymentMissingLabel(loan) : null
             const meta = [
               account.latest_snapshot_date ? `스냅샷 ${account.latest_snapshot_date}` : '스냅샷 없음',
               account.loan_maturity_date ? `만기 ${account.loan_maturity_date}` : null,
-              account.latest_balance ? `잔액 ₩${formatWon(Number(account.latest_balance))}` : null,
+              account.latest_balance ? `${account.included_in_active_summary ? '잔액' : '마지막 관측 잔액'} ${formatWon(Number(account.latest_balance))}` : null,
               account.latest_interest_rate ? `${account.latest_interest_rate}%` : null,
             ].filter(Boolean).join(' · ')
             return (
@@ -148,20 +191,26 @@ function AccountsTab() {
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="text-label font-semibold text-text-primary">{account.lender} {account.product_name}</div>
                       {account.is_hidden && <Badge variant="neutral">숨김</Badge>}
+                      {!account.included_in_active_summary && <Badge variant="neutral">현재 합계 제외</Badge>}
+                      {account.is_stale && <Badge variant="warn">오래된 관측</Badge>}
+                      {account.is_matured && <Badge variant="neutral">만기 경과</Badge>}
                     </div>
                     <div className="tnum text-caption text-text-muted">{meta}</div>
                   </div>
-                  <Field label="대출 계좌명"><TextInput className="w-44" disabled={!hasWrite} placeholder={account.display_name} value={draft.display_name_user} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, display_name_user: e.target.value } }))} /></Field>
-                  <Field label="대출 성격"><Select disabled={!hasWrite} value={draft.loan_kind} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, loan_kind: e.target.value as LoanKind } }))}>{(Object.entries(LOAN_KIND_LABEL) as [LoanKind, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
+                  <Field label="대출 계좌명"><TextInput className="w-44" disabled={!hasWrite || isSaving} placeholder={account.display_name} value={draft.display_name_user} onChange={(e) => editDraft(account, loan, { display_name_user: e.target.value })} /></Field>
+                  <Field label="대출 성격"><Select disabled={!hasWrite || isSaving} value={draft.loan_kind} onChange={(e) => editDraft(account, loan, { loan_kind: e.target.value as LoanKind })}>{(Object.entries(LOAN_KIND_LABEL) as [LoanKind, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-end gap-3 border-t border-border-subtle pt-2.5">
-                  <div className="min-w-44 rounded-md border border-border-subtle bg-bg-inset px-3 py-2">
-                    <div className="text-micro text-text-faint">연결 거래 추정 월상환액</div>
-                    <div className="tnum mt-1 text-caption font-semibold text-text-primary">{estimated ? `₩${formatWon(Number(estimated))}` : '추정값 없음'}</div>
+                  <div className="min-w-44 flex-1 rounded-md border border-border-subtle bg-bg-inset px-3 py-2">
+                    <div className="text-micro text-text-faint">{loan ? monthlyPaymentSourceLabel(loan) : '현재 상환 정보 없음'}</div>
+                    <div className="tnum mt-1 text-caption font-semibold text-text-primary">{loan?.monthly_payment != null ? formatWon(Number(loan.monthly_payment)) : '추정값 없음'}</div>
+                    {missingLabel && <div className="mt-1 text-caption text-warn">{missingLabel}</div>}
+                    {loan && monthlyPaymentEvidence(loan).map((line) => <div key={line} className="mt-1 text-micro text-text-muted">{line}</div>)}
                   </div>
-                  <Field label="수동 월상환액"><TextInput type="number" min={0} className="w-32" disabled={!hasWrite} value={draft.monthly_payment} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, monthly_payment: e.target.value } }))} /></Field>
-                  <Field label="상환 방식"><Select disabled={!hasWrite} value={draft.repayment_method} onChange={(e) => setDrafts((c) => ({ ...c, [key]: { ...draft, repayment_method: e.target.value as LoanRepaymentMethod } }))}>{(Object.entries(REPAYMENT_METHOD_LABEL) as [LoanRepaymentMethod, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
-                  <Button variant="primary" disabled={!hasWrite || updateMeta.isPending || patchRepayment.isPending} onClick={() => void save(account)}>저장</Button>
+                  <Field label="월상환액 산정"><Select disabled={!hasWrite || isSaving || loan?.id == null} value={draft.monthly_payment_mode} onChange={(e) => editDraft(account, loan, { monthly_payment_mode: e.target.value as 'automatic' | 'manual', ...(e.target.value === 'manual' ? { monthly_payment: draft.monthly_payment } : {}) })}><option value="automatic">자동 추정</option><option value="manual">수동 입력</option></Select></Field>
+                  <Field label="수동 월상환액" hint={invalidPayment ? '수동 월상환액을 0원 이상 입력하세요' : undefined}><TextInput aria-invalid={invalidPayment || undefined} type="number" min={0} className="w-32" disabled={!hasWrite || isSaving || loan?.id == null || draft.monthly_payment_mode === 'automatic'} value={draft.monthly_payment} onChange={(e) => editDraft(account, loan, { monthly_payment: e.target.value, monthly_payment_mode: 'manual' })} /></Field>
+                  <Field label="상환 방식"><Select disabled={!hasWrite || isSaving || loan?.id == null} value={draft.repayment_method} onChange={(e) => editDraft(account, loan, { repayment_method: e.target.value as LoanRepaymentMethod | 'automatic' })}><option value="automatic">자동 · 대출 성격 기준</option>{(Object.entries(REPAYMENT_METHOD_LABEL) as [LoanRepaymentMethod, string][]).map(([v, l]) => <option key={v} value={v}>수동 · {l}</option>)}</Select></Field>
+                  <Button variant="primary" disabled={!hasWrite || isSaving || invalidPayment || Object.keys(changes).length === 0} onClick={() => void save(account)}>저장</Button>
                   <Button variant={account.is_hidden ? 'secondary' : 'ghost'} disabled={!hasWrite || updateMeta.isPending} onClick={() => void setHidden(account, !account.is_hidden)}>
                     {account.is_hidden ? '다시 표시' : '숨김'}
                   </Button>

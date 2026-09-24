@@ -148,7 +148,9 @@ async def put_installment_link_for_transaction(
     payload: InstallmentTransactionLinkUpsertRequest,
     db_session: AsyncSession = Depends(get_db_session),
 ) -> InstallmentTransactionLinkItem:
-    return await upsert_transaction_installment_link(db_session, transaction_id, payload)
+    return await upsert_transaction_installment_link(
+        db_session, transaction_id, payload
+    )
 
 
 @router.delete(
@@ -158,9 +160,12 @@ async def put_installment_link_for_transaction(
 )
 async def delete_installment_link_for_transaction(
     transaction_id: int,
+    require_inactive: bool = Query(default=False),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> Response:
-    await delete_transaction_installment_link(db_session, transaction_id)
+    await delete_transaction_installment_link(
+        db_session, transaction_id, require_inactive=require_inactive
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

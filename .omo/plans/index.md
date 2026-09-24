@@ -22,6 +22,7 @@ Purpose: track agent-executable OMO plans. This is not the user-facing roadmap; 
 
 | Plan | Status | Purpose | Draft |
 |---|---|---|---|
+| [`live-audit-remediation.md`](live-audit-remediation.md) | `completed` | T042/T043, audit fixes and recurring low-confidence forecast follow-up verified on Live; PR #22 awaits merge authorization. | — |
 | [`frontend-build-trace.md`](frontend-build-trace.md) | `completed` | Trace frontend Docker builds to a committed source archive and expose read-only build metadata. | — |
 | [`loan-installment-candidate-review-workflows.md`](loan-installment-candidate-review-workflows.md) | `completed` | Inbox loan-candidate dismissal, installment transaction suggestions with proposed 회차, and MoM regression guard. | [`../drafts/loan-installment-candidate-review-workflows.md`](../drafts/loan-installment-candidate-review-workflows.md) |
 | [`settings-analytics-frontend.md`](settings-analytics-frontend.md) | `completed` | `T013`: analytics parameter editing in `/data/settings`; PR #20 is ready for review. | [`../drafts/settings-analytics-frontend.md`](../drafts/settings-analytics-frontend.md) |

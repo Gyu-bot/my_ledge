@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.income_projection import MonthlyProjection
+
 
 class CanonicalMonthlyCashflowItem(BaseModel):
     period: str
@@ -104,6 +106,10 @@ class CanonicalUnclassifiedWorkQueueItem(BaseModel):
     effective_category_minor: str | None
     amount: int
     amount_abs: int
+    cost_kind: str | None = None
+    fixed_cost_necessity: str | None = None
+    spend_necessity: str | None = None
+    recurring_payment_kind: str | None = None
     needs_cost_kind: bool
     needs_fixed_cost_necessity: bool
     needs_spend_necessity: bool = False
@@ -124,6 +130,13 @@ class CanonicalDataCoverage(BaseModel):
 
 class CanonicalViewsDashboardResponse(BaseModel):
     data_coverage: CanonicalDataCoverage
+    month_projection: MonthlyProjection | None = None
+    merchant_monthly_baseline_total: int = 0
+    recurring_merchant_monthly_total: int = 0
+    unclassified_work_queue_total: int = 0
+    unclassified_work_queue_page: int = 1
+    unclassified_work_queue_per_page: int = 10
+    unclassified_work_queue_total_pages: int = 0
     monthly_cashflow: list[CanonicalMonthlyCashflowItem]
     true_spendable_monthly: list[CanonicalTrueSpendableMonthlyItem]
     loan_repayment_monthly: list[CanonicalLoanRepaymentMonthlyItem]

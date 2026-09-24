@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
@@ -195,9 +196,9 @@ async def replace_snapshots(
     existing_assets = (
         (
             await db_session.execute(
-                select(AssetSnapshot).where(
-                    AssetSnapshot.snapshot_date == snapshot_date
-                )
+                select(AssetSnapshot)
+                .where(AssetSnapshot.snapshot_date <= snapshot_date)
+                .order_by(AssetSnapshot.snapshot_date.desc())
             )
         )
         .scalars()
@@ -212,14 +213,9 @@ async def replace_snapshots(
         .scalars()
         .all()
     )
-    asset_metadata = {
-        (row.side, row.category, row.product_name): {
-            "liquidity_tier": row.liquidity_tier,
-            "is_cash_equivalent": row.is_cash_equivalent,
-        }
-        for row in existing_assets
-        if row.liquidity_tier is not None or row.is_cash_equivalent is not None
-    }
+    asset_metadata = _asset_metadata_for_import(
+        existing_assets, snapshot_date, parsed_snapshots.asset_snapshots
+    )
     loan_metadata = {
         (row.lender, row.product_name): {
             "monthly_payment": row.monthly_payment,
@@ -294,6 +290,56 @@ async def replace_snapshots(
             )
         )
     return normalized_snapshots
+
+
+def _asset_metadata_for_import(
+    existing_assets: list[AssetSnapshot],
+    snapshot_date: date,
+    incoming_rows: list[dict[str, object]],
+) -> dict[tuple[str, str, str], dict[str, object]]:
+    """Carry exact identities forward; generated duplicate names are not identities.
+
+    The nearest matching prior snapshot wins, including explicit null/false values.
+    Never skip a newer automatic/null selection to resurrect older user metadata.
+    Same-date replacement preserves exact stored keys as before.
+    """
+
+    def base_key(side: str, category: str, name: str) -> tuple[str, str, str]:
+        return side, category, re.sub(r" \([1-9][0-9]*\)$", "", name)
+
+    existing_assets = sorted(
+        (row for row in existing_assets if row.snapshot_date <= snapshot_date),
+        key=lambda row: row.snapshot_date,
+        reverse=True,
+    )
+    incoming_counts = Counter(
+        base_key(str(row["side"]), str(row["category"]), str(row["product_name"]))
+        for row in incoming_rows
+    )
+    prior_groups: dict[tuple[date, tuple[str, str, str]], list[AssetSnapshot]] = {}
+    for row in existing_assets:
+        key = base_key(row.side, row.category, row.product_name)
+        prior_groups.setdefault((row.snapshot_date, key), []).append(row)
+
+    metadata = {}
+    seen = set()
+    for row in existing_assets:
+        exact_key = (row.side, row.category, row.product_name)
+        if exact_key in seen:
+            continue
+        seen.add(exact_key)
+        key = base_key(*exact_key)
+        if row.snapshot_date != snapshot_date and (
+            incoming_counts[key] != 1
+            or len(prior_groups[(row.snapshot_date, key)]) != 1
+            or key != exact_key
+        ):
+            continue
+        metadata[exact_key] = {
+            "liquidity_tier": row.liquidity_tier,
+            "is_cash_equivalent": row.is_cash_equivalent,
+        }
+    return metadata
 
 
 def _resolve_status(*, tx_success: bool, snapshot_success: bool) -> str:

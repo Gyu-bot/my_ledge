@@ -8,6 +8,8 @@ export interface AssetSnapshotTotals {
   category?: string | null
   product_name?: string | null
   amount?: string | null
+  negative_asset_excluded_total?: string
+  aggregation_basis?: string
   asset_total: string    // Decimal as string
   liability_total: string
   net_worth: string
@@ -23,8 +25,8 @@ export interface AssetSnapshotsResponse {
 export type LiquidityTier = 'immediate' | 'near_liquid' | 'illiquid'
 
 export interface AssetLiquidityPatchRequest {
-  liquidity_tier: LiquidityTier | null
-  is_cash_equivalent: boolean | null
+  liquidity_tier?: LiquidityTier | null
+  is_cash_equivalent?: boolean | null
 }
 
 export interface AssetSnapshotItemResponse {
@@ -116,7 +118,16 @@ export interface InsuranceSummaryResponse {
   monthly_premium_estimate: InsurancePremiumEstimate
 }
 
-export interface LoanItem {
+export interface LoanRepaymentEstimateMetadata {
+  monthly_payment_missing_reason?: string | null
+  monthly_payment_estimate_basis?: string | null
+  monthly_payment_observation_months?: string[]
+  monthly_payment_estimate_window_start?: string | null
+  monthly_payment_estimate_window_end?: string | null
+  monthly_payment_min_observations?: number | null
+}
+
+export interface LoanItem extends LoanRepaymentEstimateMetadata {
   id?: number | null
   loan_type: string | null
   lender: string
@@ -145,11 +156,13 @@ export type LoanRepaymentMethod =
   | 'unknown'
 
 export interface LoanRepaymentMetadataPatchRequest {
+  monthly_payment_mode?: 'automatic'
+  repayment_method_mode?: 'automatic'
   monthly_payment?: string | null
   repayment_method?: LoanRepaymentMethod | null
 }
 
-export interface LoanRepaymentMetadataResponse {
+export interface LoanRepaymentMetadataResponse extends LoanRepaymentEstimateMetadata {
   id: number
   snapshot_date: string
   lender: string
@@ -201,6 +214,11 @@ export interface AssetLiabilityHealthResponse {
   monthly_income: string
   monthly_income_source: string
   derived_from_periods: string[]
+  input_as_of_date?: string | null
+  required_spend_period?: string | null
+  required_spend_essential_total?: string
+  required_spend_additional_debt_total?: string
+  debt_payment_snapshot_date?: string | null
   manual_input_overrides: string[]
   debt_payment_ratio: number | null
   debt_to_asset_ratio: number | null

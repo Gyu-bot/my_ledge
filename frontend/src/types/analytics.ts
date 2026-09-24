@@ -22,6 +22,9 @@ export interface CategoryMoMItem {
 }
 
 export interface CategoryMoMResponse {
+  reference_date?: string | null
+  is_partial_period?: boolean
+  comparison_basis?: 'same_day_previous_month' | 'full_previous_month'
   items: CategoryMoMItem[]
 }
 
@@ -30,6 +33,9 @@ export interface CategoryMoMQuery {
   start_month?: string
   end_month?: string
   base_month?: string
+  start_date?: string
+  end_date?: string
+  include_income?: boolean
 }
 
 export interface FixedCostSummaryResponse {
@@ -45,6 +51,8 @@ export interface FixedCostSummaryResponse {
   discretionary_spend_total: number
   unclassified_total: number
   unclassified_count: number
+  necessity_unclassified_total?: number
+  necessity_unclassified_count?: number
 }
 
 export interface FixedCostTrendItem {
@@ -60,6 +68,8 @@ export interface FixedCostTrendItem {
   discretionary_spend_total: number
   unclassified_total: number
   unclassified_count: number
+  necessity_unclassified_total?: number
+  necessity_unclassified_count?: number
   fixed_ratio: number | null
 }
 
@@ -99,6 +109,9 @@ export interface RecurringPaymentItem {
   occurrences: number
   confidence: number
   last_date: string
+  last_charge_date?: string | null
+  net_amount?: number
+  activity_status?: 'active_candidate' | 'historical' | 'irregular' | 'non_positive' | 'not_recurring'
   recurring_payment_kind: 'installment' | 'monthly_recurring' | 'not_recurring' | null
   installment_count: number
   monthly_recurring_count: number
@@ -107,7 +120,35 @@ export interface RecurringPaymentItem {
   transaction_ids: number[]
 }
 
+export interface AnalyticsDateRange {
+  start_month?: string
+  end_month?: string
+  start_date?: string
+  end_date?: string
+}
+
+export interface MerchantSpendQuery extends AnalyticsDateRange {
+  months?: number
+  limit?: number
+  include_income?: boolean
+}
+
+export interface RecurringPaymentsQuery {
+  page?: number
+  per_page?: number
+  end_date?: string
+  activity?: 'all' | 'active' | 'history'
+  recent_days?: number
+}
+
+export interface MonthlyCashflowQuery extends AnalyticsDateRange {
+  months?: number
+}
+
 export interface RecurringPaymentsResponse {
+  reference_date?: string
+  activity?: 'all' | 'active' | 'history'
+  recent_days?: number
   total: number
   page: number
   per_page: number
@@ -126,6 +167,7 @@ export interface SpendingAnomalyItem {
   delta_display_capped?: boolean
   baseline_quality?: string
   anomaly_mode?: string
+  direction?: 'increase' | 'decrease'
   anomaly_score: number
   reason: string
 }
@@ -199,6 +241,8 @@ export type PurchaseGateCandidateStatus =
 export interface PurchaseGateCandidateItem {
   candidate_type: PurchaseGateCandidateType
   candidate_types: string[]
+  possible_cancellation?: boolean
+  cancellation_evidence_transaction_ids?: number[]
   transaction_id: number
   candidate_key: string
   date: string
@@ -241,6 +285,8 @@ export interface PurchaseGateReviewResponse {
 }
 
 export interface PurchaseGateCandidatesResponse {
+  start_date?: string
+  end_date?: string
   total: number
   page: number
   per_page: number
@@ -249,6 +295,8 @@ export interface PurchaseGateCandidatesResponse {
 }
 
 export interface PurchaseGateCandidatesQuery {
+  start_date?: string
+  end_date?: string
   status?: PurchaseGateCandidateStatus
   limit?: number
 }

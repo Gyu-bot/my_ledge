@@ -10,7 +10,12 @@ InstallmentPlanStatus = Literal["active", "completed", "cancelled"]
 InstallmentForecastStatus = Literal["observed", "projected", "missed"]
 InstallmentLinkStateFilter = Literal["all", "linked", "unlinked"]
 InstallmentSuggestionConfidence = Literal["high", "medium", "low"]
-InstallmentSuggestionConflictReason = Literal["installment_number_already_linked"]
+InstallmentSuggestionConflictReason = Literal[
+    "installment_number_already_linked",
+    "inactive_installment_link",
+    "ambiguous_plan_match",
+    "competing_transactions",
+]
 
 
 class InstallmentPlanCreateRequest(BaseModel):
@@ -145,6 +150,8 @@ class InstallmentTransactionSuggestionItem(BaseModel):
     reason_labels: list[str]
     conflict_reason: InstallmentSuggestionConflictReason | None
     is_usable: bool
+    conflicting_transaction_id: int | None = None
+    conflicting_transaction_state: Literal["deleted", "merged"] | None = None
 
 
 class InstallmentTransactionSuggestionListResponse(PaginatedResponse):
@@ -164,6 +171,8 @@ class InstallmentForecastItem(BaseModel):
     period: str
     amount: int
     status: InstallmentForecastStatus
+    status_label: str
+    is_future_obligation: bool
     transaction_id: int | None
 
 
@@ -171,7 +180,10 @@ class InstallmentForecastMonthlySummaryItem(BaseModel):
     period: str
     observed_total: int
     projected_total: int
-    missed_total: int
+    missed_total: int = Field(
+        description="Legacy alias for past_unconfirmed_total; not confirmed unpaid debt."
+    )
+    past_unconfirmed_total: int
 
 
 class InstallmentForecastResponse(BaseModel):

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
-import { Field, TextInput } from '../../ds/Field'
+import { Field, Select, TextInput } from '../../ds/Field'
 import { SegmentedControl } from '../../ds/SegmentedControl'
 import { Stat } from '../../ds/Stat'
 import { ListSkeleton } from '../../ds/Skeleton'
@@ -32,7 +32,7 @@ const PLAN_STATUS_LABEL: Record<InstallmentPlanStatus, string> = { active: '진�
 const FORECAST_STATUS: Record<InstallmentForecastStatus, { label: string; variant: 'accent' | 'warn' | 'expense' }> = {
   observed: { label: '관측됨', variant: 'accent' },
   projected: { label: '예정', variant: 'warn' },
-  missed: { label: '누락', variant: 'expense' },
+  missed: { label: '과거 연결 미확인', variant: 'warn' },
 }
 
 function localDate() {
@@ -47,7 +47,7 @@ function PlansTab() {
   const patch = usePatchInstallmentPlan()
   const [searchParams] = useSearchParams()
   const [draft, setDraft] = useState({ display_name: '', merchant: searchParams.get('prefill_merchant') ?? '', payment_method: '', total_installments: '3', monthly_amount: searchParams.get('prefill_amount') ?? '', first_payment_date: localDate(), memo: '' })
-  const [edits, setEdits] = useState<Record<number, { display_name: string; memo: string }>>({})
+  const [edits, setEdits] = useState<Record<number, { display_name: string; memo: string; status: InstallmentPlanStatus }>>({})
 
   useEffect(() => {
     const items = plans.data?.items
@@ -56,7 +56,7 @@ function PlansTab() {
       const next = { ...current }
       let changed = false
       for (const plan of items) {
-        if (!next[plan.id]) { next[plan.id] = { display_name: plan.display_name, memo: plan.memo ?? '' }; changed = true }
+        if (!next[plan.id]) { next[plan.id] = { display_name: plan.display_name, memo: plan.memo ?? '', status: plan.status }; changed = true }
       }
       return changed ? next : current
     })
@@ -82,7 +82,7 @@ function PlansTab() {
     const edit = edits[plan.id]
     if (!edit?.display_name.trim()) { toast.error('계획명을 입력하세요'); return }
     try {
-      await patch.mutateAsync({ id: plan.id, data: { display_name: edit.display_name.trim(), memo: edit.memo.trim() || null } })
+      await patch.mutateAsync({ id: plan.id, data: { display_name: edit.display_name.trim(), memo: edit.memo.trim() || null, ...(edit.status !== plan.status ? { status: edit.status } : {}) } })
       toast.success(`${edit.display_name} 저장 완료`)
     } catch (error) {
       toast.error('저장 실패', { description: String(error) })
@@ -91,7 +91,7 @@ function PlansTab() {
 
   return (
     <>
-      <Card title="새 할부 항목 등록" meta="forecast와 거래 연결의 기준 계획">
+      <Card title="새 할부 항목 등록" meta="예정 일정과 거래 연결의 기준 계획">
         <div className="grid gap-3 md:grid-cols-3">
           <Field label="할부명"><TextInput placeholder="예: 맥북 3개월 할부" disabled={!hasWrite} value={draft.display_name} onChange={(e) => setDraft((d) => ({ ...d, display_name: e.target.value }))} /></Field>
           <Field label="거래처"><TextInput disabled={!hasWrite} value={draft.merchant} onChange={(e) => setDraft((d) => ({ ...d, merchant: e.target.value }))} /></Field>
@@ -110,10 +110,11 @@ function PlansTab() {
        plans.data && plans.data.items.length > 0 ? (
         <div className="grid gap-3 xl:grid-cols-2">
           {plans.data.items.map((plan) => {
-            const edit = edits[plan.id] ?? { display_name: plan.display_name, memo: plan.memo ?? '' }
+            const edit = edits[plan.id] ?? { display_name: plan.display_name, memo: plan.memo ?? '', status: plan.status }
             return (
-              <Card key={plan.id} title={<span className="flex items-center gap-2">{plan.display_name}<Badge variant={plan.status === 'completed' ? 'transfer' : plan.status === 'cancelled' ? 'neutral' : 'accent'}>{PLAN_STATUS_LABEL[plan.status]}</Badge></span>} meta={`${plan.merchant} · ${plan.payment_method ?? '결제수단 미지정'} · 총 ${plan.total_installments}회 · 월 ₩${formatWon(plan.monthly_amount)}`} action={<Button variant="primary" disabled={!hasWrite || patch.isPending} onClick={() => void savePlan(plan)}>저장</Button>}>
+              <Card key={plan.id} title={<span className="flex items-center gap-2">{plan.display_name}<Badge variant={plan.status === 'completed' ? 'transfer' : plan.status === 'cancelled' ? 'neutral' : 'accent'}>{PLAN_STATUS_LABEL[plan.status]}</Badge></span>} meta={`${plan.merchant} · ${plan.payment_method ?? '결제수단 미지정'} · 총 ${plan.total_installments}회 · 월 ${formatWon(plan.monthly_amount)}`} action={<Button variant="primary" disabled={!hasWrite || patch.isPending} onClick={() => void savePlan(plan)}>저장</Button>}>
                 <div className="grid gap-2">
+                  <Field label="진행 상태" hint="완료·중단한 계획은 향후 예정 금액에서 제외합니다"><Select aria-label={`${plan.display_name} 진행 상태`} disabled={!hasWrite || patch.isPending} value={edit.status} onChange={(e) => setEdits((current) => ({ ...current, [plan.id]: { ...edit, status: e.target.value as InstallmentPlanStatus } }))}>{(Object.entries(PLAN_STATUS_LABEL) as [InstallmentPlanStatus, string][]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
                   <Field label="표시명"><TextInput disabled={!hasWrite} value={edit.display_name} onChange={(e) => setEdits((c) => ({ ...c, [plan.id]: { ...edit, display_name: e.target.value } }))} /></Field>
                   <Field label="메모"><TextInput disabled={!hasWrite} value={edit.memo} onChange={(e) => setEdits((c) => ({ ...c, [plan.id]: { ...edit, memo: e.target.value } }))} /></Field>
                 </div>
@@ -144,17 +145,17 @@ function ForecastTab() {
       {forecast.isLoading ? <div className="p-4"><ListSkeleton rows={5} /></div> :
        summary.length > 0 ? (
         <>
+          <p className="px-4 py-3 text-caption text-text-muted">과거 연결 미확인은 결제 거래가 아직 연결되지 않은 회차입니다. 실제 미납이나 앞으로 다시 출금될 금액을 뜻하지 않습니다.</p>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-label">
-              <thead className="bg-bg-inset"><tr>{['Month', 'Observed', 'Projected', 'Missed', 'Remaining'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr></thead>
+              <thead className="bg-bg-inset"><tr>{['월', '연결된 결제', '미래 예정', '과거 연결 미확인'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr></thead>
               <tbody className="divide-y divide-border-subtle">
                 {summary.map((item) => (
                   <tr key={item.period}>
                     <td className="tnum px-4 py-2 font-semibold text-text-primary">{item.period}</td>
                     <td className="tnum px-4 py-2 text-text-secondary">{formatWonCompact(item.observed_total)}</td>
                     <td className="tnum px-4 py-2 text-text-muted">{formatWonCompact(item.projected_total)}</td>
-                    <td className="tnum px-4 py-2 text-expense">{formatWonCompact(item.missed_total)}</td>
-                    <td className="tnum px-4 py-2 text-text-secondary">{formatWonCompact(item.projected_total + item.missed_total)}</td>
+                    <td className="tnum px-4 py-2 text-warn">{formatWonCompact(item.past_unconfirmed_total ?? item.missed_total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -162,7 +163,7 @@ function ForecastTab() {
           </div>
           {forecast.data && forecast.data.items.length > 0 ? (
             <div className="grid gap-2 p-4 xl:grid-cols-2">
-              {forecast.data.items.slice(0, 8).map((item) => (
+              {forecast.data.items.map((item) => (
                 <div key={`${item.installment_plan_id}-${item.installment_number}`} className="rounded-md border border-border-subtle bg-bg-inset px-3 py-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -188,8 +189,8 @@ export function InstallmentsPage() {
   const forecast = useInstallmentForecast({ months: 6 })
 
   const activePlans = (plans.data?.items ?? []).filter((p) => p.status === 'active').length
-  const totalRemaining = (forecast.data?.monthly_summary ?? []).reduce((sum, i) => sum + i.projected_total + i.missed_total, 0)
-  const totalMissed = (forecast.data?.monthly_summary ?? []).reduce((sum, i) => sum + i.missed_total, 0)
+  const totalRemaining = (forecast.data?.monthly_summary ?? []).reduce((sum, i) => sum + i.projected_total, 0)
+  const totalMissed = (forecast.data?.monthly_summary ?? []).reduce((sum, i) => sum + (i.past_unconfirmed_total ?? i.missed_total), 0)
 
   return (
     <>
@@ -208,8 +209,8 @@ export function InstallmentsPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="진행 중 계획" value={String(activePlans)} sub={`전체 ${plans.data?.items.length ?? 0}개`} />
           <Stat label="연결 후보" value={String(mappings.data?.total ?? 0)} sub="현재 필터" />
-          <Stat label="잔여 예정" value={totalRemaining > 0 ? formatWonCompact(totalRemaining) : EM_DASH} subTone={totalRemaining > 0 ? 'bad' : 'neutral'} />
-          <Stat label="누락" value={totalMissed > 0 ? formatWonCompact(totalMissed) : '없음'} subTone={totalMissed > 0 ? 'bad' : 'good'} />
+          <Stat label="미래 예정" value={forecast.data ? formatWonCompact(totalRemaining) : EM_DASH} sub="향후 6개월" subTone={totalRemaining > 0 ? 'bad' : 'neutral'} />
+          <Stat label="과거 연결 미확인" value={totalMissed > 0 ? formatWonCompact(totalMissed) : '없음'} sub="미납 여부는 별도 확인" />
         </div>
         {tab === 'plans' ? <PlansTab /> : tab === 'links' ? <InstallmentLinksTab /> : <ForecastTab />}
       </div>

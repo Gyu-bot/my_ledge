@@ -9,6 +9,7 @@ import { useAnalyticsSettings, usePatchAnalyticsSettings } from '../../hooks/use
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import { PageHeader } from '../../shell/PageHeader'
 import type { DebtStrategyPreference } from '../../types/settings'
+import { IncomeExpectationsEditor } from '../settings/IncomeExpectationsEditor'
 import { AnalyticsSettingsEditor } from './AnalyticsSettingsEditor'
 
 type TargetsDraft = {
@@ -103,12 +104,14 @@ export function SettingsPage() {
                   onChange={(event) => setDraft((current) => current && { ...current, debt_strategy_preference: parseDebtStrategy(event.target.value) })}
                 >
                   <option value="">미설정 (잔액순)</option>
-                  <option value="avalanche">고금리 우선 (avalanche)</option>
-                  <option value="snowball">소액 우선 (snowball)</option>
+                  <option value="avalanche">고금리 우선</option>
+                  <option value="snowball">소액 우선</option>
                 </Select>
               </Field>
             </div>
           </Card>
+
+          <IncomeExpectationsEditor />
 
           <AnalyticsSettingsEditor
             analytics={settings.data}

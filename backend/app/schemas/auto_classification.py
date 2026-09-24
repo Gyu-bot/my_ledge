@@ -34,11 +34,15 @@ class CategoryClassificationRuleRequest(BaseModel):
     @model_validator(mode="after")
     def validate_necessity(self) -> "CategoryClassificationRuleRequest":
         if self.cost_kind == "variable" and self.fixed_cost_necessity is not None:
-            raise ValueError("fixed_cost_necessity is only allowed for fixed cost rules")
+            raise ValueError(
+                "fixed_cost_necessity is only allowed for fixed cost rules"
+            )
         return self
 
 
 class CategoryClassificationRuleResponse(BaseModel):
+    category_valid: bool = True
+    validation_message: str | None = None
     id: int
     category_major: str
     category_minor: str | None
@@ -103,6 +107,8 @@ class RecurringCategoryRuleRequest(BaseModel):
 
 
 class RecurringCategoryRuleResponse(BaseModel):
+    category_valid: bool = True
+    validation_message: str | None = None
     id: int
     category_major: str
     category_minor: str | None
@@ -128,7 +134,9 @@ class RecurringDryRunItem(BaseModel):
     matched_transactions: list[RecurringDryRunMatchedTransaction]
     reason: str
     category_hint: str
-    apply_scope_options: list[str]
+    apply_scope_options: list[Literal["all_matching", "reviewed_only"]]
+    default_apply_scope: Literal["all_matching", "reviewed_only"]
+    preview_token: str
 
 
 class RecurringDryRunResponse(BaseModel):
@@ -138,7 +146,9 @@ class RecurringDryRunResponse(BaseModel):
 class RecurringDryRunApplyRequest(BaseModel):
     merchant: str = Field(min_length=1, max_length=500)
     proposed_kind: RecurringPaymentKind
-    apply_scope: Literal["all_matching", "future_only"] = "all_matching"
+    apply_scope: Literal["all_matching", "reviewed_only"] | None = None
+    preview_token: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    transaction_ids: list[int] | None = Field(default=None, min_length=1)
 
 
 class AutoClassificationApplyResponse(BaseModel):

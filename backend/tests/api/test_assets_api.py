@@ -1,11 +1,13 @@
 from datetime import date, time
 
 from httpx import AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.loan import Loan
+from app.models.loan_account import LoanAccount
+from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.services import assets_service
 from app.services.upload_service import import_transactions_from_workbook
@@ -24,9 +26,11 @@ async def test_asset_snapshots_returns_daily_totals(
     assert payload["items"] == [
         {
             "snapshot_date": "2026-03-24",
-            "asset_total": "344207571.54",
+            "asset_total": "346813119.54",
             "liability_total": "222317572.00",
-            "net_worth": "121889999.54",
+            "net_worth": "124495547.54",
+            "negative_asset_excluded_total": "-2605548.00",
+            "aggregation_basis": "nonnegative_asset_rows_minus_liability_rows",
         }
     ]
     assert payload["asset_items"]
@@ -55,7 +59,9 @@ async def test_net_worth_history_returns_series(
         "items": [
             {
                 "snapshot_date": "2026-03-24",
-                "net_worth": "121889999.54",
+                "net_worth": "124495547.54",
+                "negative_asset_excluded_total": "-2605548.00",
+                "aggregation_basis": "nonnegative_asset_rows_minus_liability_rows",
             }
         ]
     }
@@ -211,12 +217,16 @@ async def test_asset_snapshot_compare_returns_default_latest_available_compariso
             "asset_total": "1300.00",
             "liability_total": "250.00",
             "net_worth": "1050.00",
+            "negative_asset_excluded_total": "0",
+            "aggregation_basis": "nonnegative_asset_rows_minus_liability_rows",
         },
         "baseline": {
             "snapshot_date": "2026-03-31",
             "asset_total": "1000.00",
             "liability_total": "200.00",
             "net_worth": "800.00",
+            "negative_asset_excluded_total": "0",
+            "aggregation_basis": "nonnegative_asset_rows_minus_liability_rows",
         },
         "delta": {
             "asset_total": "300.00",
@@ -515,6 +525,19 @@ async def test_liquidity_health_derives_closed_month_defaults_and_source_metadat
                 source="import",
             ),
         ]
+    )
+    await db_session.commit()
+
+    debt_transaction = await db_session.scalar(
+        select(Transaction).where(Transaction.description == "대출상환")
+    )
+    account = LoanAccount(lender="국민은행", product_name="신용대출")
+    db_session.add(account)
+    await db_session.flush()
+    db_session.add(
+        LoanTransactionLink(
+            transaction_id=debt_transaction.id, loan_account_id=account.id
+        )
     )
     await db_session.commit()
 

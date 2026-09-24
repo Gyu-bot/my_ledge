@@ -107,8 +107,7 @@ async def test_installment_plan_crud_linking_and_forecast(
     assert mappings.status_code == 200
     assert mappings.json()["total"] == 2
     assert {
-        item["link"]["installment_number"]
-        for item in mappings.json()["items"]
+        item["link"]["installment_number"] for item in mappings.json()["items"]
     } == {1, 2}
 
     forecast = await async_client.get(
@@ -129,18 +128,21 @@ async def test_installment_plan_crud_linking_and_forecast(
             "observed_total": 100000,
             "projected_total": 0,
             "missed_total": 0,
+            "past_unconfirmed_total": 0,
         },
         {
             "period": "2026-06",
             "observed_total": 100000,
             "projected_total": 0,
             "missed_total": 0,
+            "past_unconfirmed_total": 0,
         },
         {
             "period": "2026-07",
             "observed_total": 0,
             "projected_total": 100000,
             "missed_total": 0,
+            "past_unconfirmed_total": 0,
         },
     ]
 

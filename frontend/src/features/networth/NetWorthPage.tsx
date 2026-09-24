@@ -12,7 +12,7 @@ import { ChartSkeleton, ListSkeleton, StatSkeleton } from '../../ds/Skeleton'
 import { EmptyState, ErrorState } from '../../ds/States'
 import { HBarList } from '../../ds/charts/HBarList'
 import { LineArea } from '../../ds/charts/LineArea'
-import { EM_DASH, formatDay, formatPct, formatWon, formatWonCompact } from '../../ds/format'
+import { EM_DASH, formatDay, formatNetWon, formatPct, formatSignedWon, formatWon, formatWonCompact } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import {
   useAssetSnapshotCompare,
@@ -27,6 +27,7 @@ import {
 import { useProfile } from '../../hooks/useProfile'
 import { useAnalyticsSettings } from '../../hooks/useSettings'
 import { useInstallmentForecast } from '../../hooks/useTransactions'
+import { monthlyPaymentEvidence, monthlyPaymentMissingLabel, monthlyPaymentSourceLabel } from './loanPresentation'
 import type { LiquidityTier, LoanItem, LoanKind, LoanRepaymentMethod, SnapshotComparisonMode } from '../../types/asset'
 
 const LIQUIDITY_LABEL: Record<LiquidityTier, string> = {
@@ -62,13 +63,16 @@ function decimal(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function monthlyPaymentSourceLabel(loan: LoanItem): string {
-  if (loan.monthly_payment_source === 'manual') return '수동 확정'
-  if (loan.monthly_payment_source === 'estimated_from_linked_transactions') {
-    return loan.loan_kind === 'overdraft' ? '연결 거래 추정 · 최근 완료월 평균' : '연결 거래 추정 · 완료월 중앙값'
-  }
-  return loan.monthly_payment ? '출처 미확인' : '연결 거래 부족'
+function runwayLabel(months: number | null): string {
+  if (months == null) return EM_DASH
+  if (months === 0 || months >= 1) return `${months.toFixed(1)}개월`
+  const days = months * 30
+  if (days >= 7) return `약 ${(days / 7).toFixed(1)}주`
+  if (days >= 0.1) return `약 ${days.toFixed(1)}일`
+  return '1일 미만'
 }
+
+const CONFIDENCE_LABEL: Record<string, string> = { high: '높음', medium: '보통', low: '낮음' }
 
 /** 월 이자 단리 추정 — vw_loan_account_canonical과 같은 식 (balance × rate / 100 / 12) */
 function estimatedMonthlyInterest(loan: LoanItem): number | null {
@@ -97,10 +101,11 @@ export function NetWorthPage() {
   const latest = [...(snapshots.data?.items ?? [])]
     .reverse()
     .find((item) => item.asset_total && item.liability_total && item.net_worth)
-  const netWorth = latest ? decimal(latest.net_worth) : null
-  const assetTotal = latest ? decimal(latest.asset_total) : null
-  const liabilityTotal = latest ? decimal(latest.liability_total) : null
-  const negativeExcluded = decimal(breakdown.data?.negative_asset_excluded_total) ?? 0
+  const currentSnapshot = compare.data?.current ?? latest
+  const netWorth = currentSnapshot ? decimal(currentSnapshot.net_worth) : null
+  const assetTotal = currentSnapshot ? decimal(currentSnapshot.asset_total) : null
+  const liabilityTotal = currentSnapshot ? decimal(currentSnapshot.liability_total) : null
+  const negativeExcluded = decimal(currentSnapshot?.negative_asset_excluded_total) ?? (currentSnapshot?.snapshot_date === breakdown.data?.snapshot_date ? decimal(breakdown.data?.negative_asset_excluded_total) : null) ?? 0
   const cashEquivalent = decimal(liquidity.data?.cash_equivalent_total)
   const emergencyMonths = liquidity.data?.emergency_fund_months ?? null
   const emergencyTarget = liquidity.data?.emergency_fund_target_months ?? null
@@ -127,18 +132,18 @@ export function NetWorthPage() {
     const totals = new Map<string, number>()
     let unassigned = 0
     for (const asset of snapshots.data?.asset_items ?? []) {
-      if (asset.side !== 'asset') continue
+      if (asset.side !== 'asset' || asset.snapshot_date !== latest?.snapshot_date || (decimal(asset.amount) ?? 0) < 0) continue
       const amount = decimal(asset.amount) ?? 0
       if (asset.liquidity_tier) totals.set(asset.liquidity_tier, (totals.get(asset.liquidity_tier) ?? 0) + amount)
       else unassigned += 1
     }
     return { totals, unassigned }
-  }, [snapshots.data?.asset_items])
+  }, [snapshots.data?.asset_items, latest?.snapshot_date])
 
   const remainingForecast = (forecast.data?.monthly_summary ?? []).reduce(
-    (sum, item) => sum + item.projected_total + item.missed_total, 0,
+    (sum, item) => sum + item.projected_total, 0,
   )
-  const missedForecast = (forecast.data?.monthly_summary ?? []).reduce((sum, item) => sum + item.missed_total, 0)
+  const missedForecast = (forecast.data?.monthly_summary ?? []).reduce((sum, item) => sum + (item.past_unconfirmed_total ?? item.missed_total), 0)
 
   const creditHistory = (profile.data?.credit_score_history ?? [])
     .map((item) => item.credit_score_kcb)
@@ -159,10 +164,10 @@ export function NetWorthPage() {
           />
         }
         meta={
-          latest ? (
+          currentSnapshot ? (
             <span className="flex items-center gap-2">
               <span className="tnum rounded-sm border border-border bg-bg-inset px-2 py-0.5">
-                스냅샷 {latest.snapshot_date}
+                스냅샷 {currentSnapshot.snapshot_date}
               </span>
               {compareMeta ? (
                 <span
@@ -193,11 +198,17 @@ export function NetWorthPage() {
               <Stat
                 label="순자산"
                 className="border-t-2 border-t-accent"
-                value={netWorth != null ? formatWonCompact(netWorth) : EM_DASH}
+                value={netWorth != null ? formatNetWon(netWorth, { compact: true }) : EM_DASH}
+                badge={<Provenance title="순자산 비교 기준" rows={[
+                  { label: '현재 기준', value: currentSnapshot?.snapshot_date ?? EM_DASH },
+                  { label: '현재 순자산', value: netWorth != null ? formatNetWon(netWorth) : EM_DASH },
+                  { label: '비교 기준', value: compareData?.baseline?.snapshot_date ?? '비교 스냅샷 없음' },
+                  { label: '비교 순자산', value: compareData?.baseline ? formatNetWon(decimal(compareData.baseline.net_worth) ?? 0) : EM_DASH },
+                ]} note={compareData?.can_compare ? '두 스냅샷 모두 음수 자산 행을 제외한 동일 기준입니다.' : '선택한 기간에 비교 가능한 스냅샷이 없습니다. 마감월 비교에는 각 월말의 저장 스냅샷이 필요합니다.'} />}
                 sub={
                   compareData?.delta
-                    ? `대비 ${formatPct(compareData.delta.net_worth_pct != null ? compareData.delta.net_worth_pct * 100 : null)}`
-                    : undefined
+                    ? `대비 ${formatSignedWon(decimal(compareData.delta.net_worth) ?? 0, { compact: true })} (${formatPct(compareData.delta.net_worth_pct != null ? compareData.delta.net_worth_pct * 100 : null)})`
+                    : '비교 가능한 기준 스냅샷이 없습니다'
                 }
                 subTone={(decimal(compareData?.delta?.net_worth) ?? 0) >= 0 ? 'good' : 'bad'}
               />
@@ -205,10 +216,10 @@ export function NetWorthPage() {
                 label="총자산"
                 value={assetTotal != null ? formatWonCompact(assetTotal) : EM_DASH}
                 badge={
-                  negativeExcluded > 0 ? (
+                  negativeExcluded < 0 ? (
                     <Provenance
                       title="총자산 계산 기준"
-                      rows={[{ label: '음수 자산 제외', value: formatWon(negativeExcluded) }]}
+                      rows={[{ label: '원본 음수 자산 합계', value: formatSignedWon(negativeExcluded) }, { label: '합산 기준', value: '0원 이상 자산 − 부채' }]}
                       note="마이너스 통장처럼 음수로 잡힌 자산 행은 부채 행과 이중 계산되지 않도록 총자산에서 제외합니다."
                     />
                   ) : undefined
@@ -222,7 +233,7 @@ export function NetWorthPage() {
               <Stat
                 label="현금성 자산"
                 value={cashEquivalent != null ? formatWonCompact(cashEquivalent) : EM_DASH}
-                sub={emergencyMonths != null ? `비상금 ${emergencyMonths.toFixed(1)}개월` : liquidity.data?.confidence}
+                sub={emergencyMonths != null ? `비상금 ${runwayLabel(emergencyMonths)}` : '월 필수지출 근거 부족'}
                 subTone={targetProgress != null && targetProgress >= 1 ? 'good' : 'neutral'}
               />
             </>
@@ -320,16 +331,22 @@ export function NetWorthPage() {
                  <div className="flex items-center gap-2">
                    <CoverageGauge
                      className="flex-1"
-                     label={`비상금 목표 ${emergencyMonths != null ? emergencyMonths.toFixed(1) : EM_DASH} / ${emergencyTarget}개월`}
+                     label={`비상금 확보 ${runwayLabel(emergencyMonths)} · 목표 ${emergencyTarget}개월`}
                      ratio={targetProgress}
                    />
                    <Provenance
                      title="비상금 목표"
                      rows={[
                        { label: '목표', value: `${emergencyTarget}개월 (설정에서 변경)` },
-                       { label: '신뢰도', value: liquidity.data.confidence },
+                       { label: '월 필수지출', value: formatWon(decimal(liquidity.data.monthly_required_spend) ?? 0) },
+                       { label: '지출 기준 월', value: liquidity.data.required_spend_period ?? EM_DASH },
+                       { label: '필수로 분류한 순지출', value: formatWon(decimal(liquidity.data.required_spend_essential_total) ?? 0) },
+                       { label: '중복 제외 후 추가 상환', value: formatWon(decimal(liquidity.data.required_spend_additional_debt_total) ?? 0) },
+                       { label: '입력 기준일', value: liquidity.data.input_as_of_date ?? liquidity.data.snapshot_date ?? EM_DASH },
+                       { label: '대출 스냅샷', value: liquidity.data.debt_payment_snapshot_date ?? EM_DASH },
+                       { label: '신뢰도', value: CONFIDENCE_LABEL[liquidity.data.confidence] ?? '판단 근거 부족' },
                      ]}
-                     note={liquidity.data.assumptions.join(' · ') || undefined}
+                     note={liquidity.data.manual_input_overrides?.includes('monthly_required_spend') ? '월 필수지출을 수동 입력한 기준입니다. 현금성 미지정 자산은 종류와 이름으로 추정합니다.' : '해당 마감월의 필수 순지출에, 이미 포함되지 않은 연결 상환 거래만 더합니다. 추정 월상환액을 다시 더하지 않습니다. 현금성 미지정 자산은 종류와 이름으로 추정하며, 일·주 환산은 30일 기준입니다.'}
                    />
                  </div>
                )}
@@ -383,8 +400,8 @@ export function NetWorthPage() {
                      </div>
                      <div className="tnum mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-caption text-text-muted">
                        <span className="flex items-center gap-1">
-                         월상환 {loan.monthly_payment ? formatWonCompact(decimal(loan.monthly_payment) ?? 0) : EM_DASH}
-                         <Provenance title="월상환액 출처" rows={[{ label: '출처', value: monthlyPaymentSourceLabel(loan) }]} />
+                         월상환 {loan.monthly_payment != null ? formatWonCompact(decimal(loan.monthly_payment) ?? 0) : EM_DASH}
+                         <Provenance title="월상환액 출처" rows={[{ label: '출처', value: monthlyPaymentSourceLabel(loan) }]} note={[monthlyPaymentMissingLabel(loan), ...monthlyPaymentEvidence(loan)].filter(Boolean).join(' · ')} />
                        </span>
                        <span className="flex items-center gap-1">
                          월 이자 추정 {monthlyInterest != null ? formatWonCompact(monthlyInterest) : EM_DASH}
@@ -462,12 +479,12 @@ export function NetWorthPage() {
                     rows={insurance.data.monthly_premium_estimate.period
                       ? [{ label: '기준 월', value: insurance.data.monthly_premium_estimate.period }]
                       : []}
-                    note={insurance.data.monthly_premium_estimate.assumptions.join(' · ') || '최근 마감월 보험 카테고리 지출 기반'}
+                    note="최근 마감월의 보험 카테고리 순지출입니다. 사용자가 변경한 카테고리를 우선하며, 환급·취소는 차감합니다."
                   />
                 </span>
                 <span className="tnum text-label font-semibold text-text-primary">
                   {insurance.data.monthly_premium_estimate.amount != null
-                    ? formatWon(decimal(insurance.data.monthly_premium_estimate.amount) ?? 0)
+                    ? formatNetWon(decimal(insurance.data.monthly_premium_estimate.amount) ?? 0)
                     : EM_DASH}
                 </span>
               </div>
@@ -485,9 +502,9 @@ export function NetWorthPage() {
            forecast.data && forecast.data.monthly_summary.length > 0 ? (
              <div className="flex flex-wrap items-center justify-between gap-3">
                <div className="tnum flex items-center gap-4 text-label text-text-secondary">
-                 <span>잔여 예정 <strong className="text-text-primary">{formatWonCompact(remainingForecast)}</strong></span>
+                 <span>미래 예정 <strong className="text-text-primary">{formatWonCompact(remainingForecast)}</strong></span>
                  {missedForecast > 0 && (
-                   <Badge variant="warn">누락 {formatWonCompact(missedForecast)}</Badge>
+                   <Badge variant="warn">과거 연결 미확인 {formatWonCompact(missedForecast)}</Badge>
                  )}
                </div>
                <Link to="/data/installments" className="flex items-center gap-1 text-caption font-medium text-transfer hover:underline">

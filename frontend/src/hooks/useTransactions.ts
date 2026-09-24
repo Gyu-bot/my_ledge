@@ -48,27 +48,32 @@ export const txKeys = {
   loanMerchantRules: () => ['transactions', 'loanMerchantRules'] as const,
   recurringCategoryRules: () => ['transactions', 'recurringCategoryRules'] as const,
   recurringCategoryRulesDryRun: () => ['transactions', 'recurringCategoryRulesDryRun'] as const,
-  categoryTimeline: (params: { start_month?: string; end_month?: string }) => ['transactions', 'categoryTimeline', params] as const,
+  categoryTimeline: (params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean }) => ['transactions', 'categoryTimeline', params] as const,
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
-  dailySpend: (params: { month?: string; include_income?: boolean }) => ['transactions', 'dailySpend', params] as const,
-  merchantTreemap: (params: { start_month?: string; end_month?: string; include_income?: boolean } | null) =>
+  dailySpend: (params: { month?: string; start_date?: string; end_date?: string; include_income?: boolean }) => ['transactions', 'dailySpend', params] as const,
+  merchantTreemap: (params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean } | null) =>
     ['transactions', 'merchantTreemap', params] as const,
 }
 
-function invalidateLoanCandidateInboxQueries(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['transactions', 'loanTransactionMappings'] })
-  void queryClient.invalidateQueries({ queryKey: ['canonical-views'] })
-}
-
-function invalidateInstallmentSuggestionQueries(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionSuggestions'] })
+function invalidateTransactionDependents(queryClient: QueryClient) {
+  return Promise.all(['transactions', 'canonical-views', 'analytics', 'assets'].map((key) =>
+    queryClient.invalidateQueries({ queryKey: [key] }),
+  ))
 }
 
 export function useTransactionList(params: TransactionListParams = {}) {
   return useQuery({
     queryKey: txKeys.list(params),
     queryFn: () => transactionApi.list(params),
+  })
+}
+
+export function useTransactionDetail(id: number | null) {
+  return useQuery({
+    queryKey: ['transactions', 'detail', id],
+    queryFn: () => transactionApi.detail(id!),
+    enabled: id !== null,
   })
 }
 
@@ -164,21 +169,21 @@ export function useRecurringCategoryRulesDryRun() {
   })
 }
 
-export function useCategoryTimeline(params: { start_month?: string; end_month?: string } = {}) {
+export function useCategoryTimeline(params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean } = {}) {
   return useQuery({
     queryKey: txKeys.categoryTimeline(params),
     queryFn: () => transactionApi.categoryTimeline(params),
   })
 }
 
-export function useIncomeCategoryTimeline(params: { start_month?: string; end_month?: string } = {}) {
+export function useIncomeCategoryTimeline(params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean } = {}) {
   return useQuery({
     queryKey: ['transactions', 'incomeCategoryTimeline', params],
     queryFn: () => transactionApi.incomeCategoryTimeline(params),
   })
 }
 
-export function useIncomeCategoryBreakdown(params: { start_month?: string; end_month?: string } = {}) {
+export function useIncomeCategoryBreakdown(params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean } = {}) {
   return useQuery({
     queryKey: ['transactions', 'incomeCategoryBreakdown', params],
     queryFn: () => transactionApi.incomeCategoryBreakdown(params),
@@ -200,7 +205,7 @@ export function useSubcategoryBreakdown(params: SubcategoryBreakdownParams | nul
   })
 }
 
-export function useDailySpend(params: { month: string; include_income?: boolean } | null) {
+export function useDailySpend(params: { month: string; start_date?: string; end_date?: string; include_income?: boolean } | null) {
   return useQuery({
     queryKey: txKeys.dailySpend(params ?? {}),
     queryFn: () => transactionApi.dailySpend(params!),
@@ -210,7 +215,7 @@ export function useDailySpend(params: { month: string; include_income?: boolean 
 }
 
 export function useMerchantTreemap(
-  params: { start_month?: string; end_month?: string; include_income?: boolean } | null,
+  params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean } | null,
 ) {
   return useQuery<{ items: MerchantTreemapNode[] }>({
     queryKey: txKeys.merchantTreemap(params),
@@ -224,7 +229,7 @@ export function useUpdateTransaction() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: TransactionUpdateRequest }) =>
       transactionApi.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -232,7 +237,7 @@ export function useDeleteTransaction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => transactionApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -240,7 +245,7 @@ export function useRestoreTransaction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => transactionApi.restore(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -248,10 +253,7 @@ export function useBulkUpdateTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TransactionBulkUpdateRequest) => transactionApi.bulkUpdate(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['analytics'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -266,10 +268,7 @@ export function useBulkDeleteTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TransactionBulkMutationRequest) => transactionApi.bulkDelete(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['analytics'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -284,10 +283,7 @@ export function useBulkRestoreTransactions() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TransactionBulkMutationRequest) => transactionApi.bulkRestore(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['analytics'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -295,7 +291,7 @@ export function useBulkLinkTransactionsToLoan() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: LoanTransactionLinkBulkRequest) => transactionApi.bulkLoanLink(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -309,9 +305,7 @@ export function useReviewLoanTransactionCandidate() {
       transactionId: number
       data: LoanCandidateReviewPatchRequest
     }) => transactionApi.reviewLoanTransactionCandidate(transactionId, data),
-    onSuccess: () => {
-      invalidateLoanCandidateInboxQueries(qc)
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -320,11 +314,7 @@ export function useUpdateLoanAccountMetadata() {
   return useMutation({
     mutationFn: (data: LoanAccountMetadataUpdateRequest) =>
       transactionApi.updateLoanAccountMetadata(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions', 'loanAccounts'] })
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['assets'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -333,11 +323,7 @@ export function useCreateInstallmentPlan() {
   return useMutation({
     mutationFn: (data: InstallmentPlanCreateRequest) =>
       transactionApi.createInstallmentPlan(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: txKeys.installmentPlans() })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
-      invalidateInstallmentSuggestionQueries(qc)
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -346,11 +332,7 @@ export function usePatchInstallmentPlan() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: InstallmentPlanPatchRequest }) =>
       transactionApi.patchInstallmentPlan(id, data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: txKeys.installmentPlans() })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
-      invalidateInstallmentSuggestionQueries(qc)
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -359,12 +341,7 @@ export function useLinkTransactionToInstallment() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: InstallmentTransactionLinkRequest }) =>
       transactionApi.linkTransactionToInstallment(id, data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
-      invalidateInstallmentSuggestionQueries(qc)
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -372,12 +349,7 @@ export function useUnlinkTransactionFromInstallment() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => transactionApi.unlinkTransactionFromInstallment(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
-      invalidateInstallmentSuggestionQueries(qc)
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -386,12 +358,7 @@ export function useBulkLinkTransactionsToInstallment() {
   return useMutation({
     mutationFn: (data: InstallmentTransactionLinkBulkRequest) =>
       transactionApi.bulkLinkTransactionsToInstallment(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentTransactionMappings'] })
-      void qc.invalidateQueries({ queryKey: ['transactions', 'installmentForecast'] })
-      invalidateInstallmentSuggestionQueries(qc)
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -400,7 +367,7 @@ export function usePatchAutoClassificationSettings() {
   return useMutation({
     mutationFn: (data: AutoClassificationSettingsPatchRequest) =>
       transactionApi.patchAutoClassificationSettings(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.autoClassificationSettings() }),
+    onSuccess: () => Promise.all([invalidateTransactionDependents(qc), qc.invalidateQueries({ queryKey: ['settings'] })]),
   })
 }
 
@@ -409,7 +376,7 @@ export function useUpsertCategoryClassificationRule() {
   return useMutation({
     mutationFn: (data: CategoryClassificationRuleRequest) =>
       transactionApi.upsertCategoryClassificationRule(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.categoryClassificationRules() }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -417,10 +384,7 @@ export function useApplyCategoryClassificationRules() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => transactionApi.applyCategoryClassificationRules(),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['analytics'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -429,7 +393,7 @@ export function useUpsertMerchantAliasRule() {
   return useMutation({
     mutationFn: (data: MerchantAliasRuleRequest) =>
       transactionApi.upsertMerchantAliasRule(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.merchantAliasRules() }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -437,10 +401,7 @@ export function useApplyMerchantAliasRules() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => transactionApi.applyMerchantAliasRules(),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['canonicalViews'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -449,7 +410,7 @@ export function useUpsertLoanMerchantRule() {
   return useMutation({
     mutationFn: (data: LoanMerchantRuleRequest) =>
       transactionApi.upsertLoanMerchantRule(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.loanMerchantRules() }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -457,7 +418,7 @@ export function useApplyLoanMerchantRules() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => transactionApi.applyLoanMerchantRules(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -466,7 +427,7 @@ export function useUpsertRecurringCategoryRule() {
   return useMutation({
     mutationFn: (data: RecurringCategoryRuleRequest) =>
       transactionApi.upsertRecurringCategoryRule(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: txKeys.recurringCategoryRules() }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -474,10 +435,7 @@ export function useApplyRecurringCategoryRules() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => transactionApi.applyRecurringCategoryRules(),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['analytics'] })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }
 
@@ -485,10 +443,30 @@ export function useApplyRecurringDryRun() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: RecurringDryRunApplyRequest) => transactionApi.applyRecurringDryRun(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['transactions'] })
-      void qc.invalidateQueries({ queryKey: ['analytics'] })
-      void qc.invalidateQueries({ queryKey: txKeys.recurringCategoryRulesDryRun() })
-    },
+    onSuccess: () => invalidateTransactionDependents(qc),
+  })
+}
+
+export function useDeleteCategoryClassificationRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => transactionApi.deleteCategoryClassificationRule(id),
+    onSuccess: () => invalidateTransactionDependents(qc),
+  })
+}
+
+export function useDeleteRecurringCategoryRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => transactionApi.deleteRecurringCategoryRule(id),
+    onSuccess: () => invalidateTransactionDependents(qc),
+  })
+}
+
+export function useUnlinkInactiveTransactionFromInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => transactionApi.unlinkTransactionFromInstallment(id, { require_inactive: true }),
+    onSuccess: () => invalidateTransactionDependents(qc),
   })
 }

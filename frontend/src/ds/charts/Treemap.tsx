@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { formatWon, formatWonCompact } from '../format'
+import { formatNetWon } from '../format'
 import { cn } from '../../lib/utils'
 
 export interface TreemapItem {
@@ -31,14 +31,14 @@ function squarify(items: TreemapItem[], x: number, y: number, w: number, h: numb
   if (items.length === 0) return []
   if (items.length === 1) return [{ x, y, w, h, item: items[0] }]
 
-  const total = items.reduce((sum, item) => sum + item.value, 0)
+  const total = items.reduce((sum, item) => sum + Math.abs(item.value), 0)
   if (total <= 0) return []
 
   // 단순 분할: 절반 가치 기준 이분할 재귀 (가독성 우선, 프로토타입 수준)
   let acc = 0
   let splitIndex = 0
   for (let index = 0; index < items.length; index += 1) {
-    acc += items[index].value
+    acc += Math.abs(items[index].value)
     if (acc >= total / 2) {
       splitIndex = index + 1
       break
@@ -47,7 +47,7 @@ function squarify(items: TreemapItem[], x: number, y: number, w: number, h: numb
   splitIndex = Math.max(1, Math.min(items.length - 1, splitIndex))
   const first = items.slice(0, splitIndex)
   const rest = items.slice(splitIndex)
-  const firstRatio = first.reduce((sum, item) => sum + item.value, 0) / total
+  const firstRatio = first.reduce((sum, item) => sum + Math.abs(item.value), 0) / total
 
   if (w >= h) {
     const firstWidth = w * firstRatio
@@ -65,7 +65,7 @@ function squarify(items: TreemapItem[], x: number, y: number, w: number, h: numb
 
 export function Treemap({ items, height = 360, onSelect }: TreemapProps) {
   const rects = useMemo(() => {
-    const sorted = [...items].filter((item) => item.value > 0).sort((a, b) => b.value - a.value)
+    const sorted = [...items].filter((item) => item.value !== 0).sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
     return squarify(sorted, 0, 0, WIDTH, height)
   }, [items, height])
 
@@ -87,7 +87,7 @@ export function Treemap({ items, height = 360, onSelect }: TreemapProps) {
             className={cn(onSelect && 'cursor-pointer')}
             onClick={onSelect ? () => onSelect(item) : undefined}
           >
-            <title>{`${item.group} · ${item.name} ${formatWon(item.value)}`}</title>
+            <title>{`${item.group} · ${item.name} ${formatNetWon(item.value)}`}</title>
             <rect
               x={x + 1} y={y + 1} width={Math.max(0, w - 2)} height={Math.max(0, h - 2)}
               rx={3}
@@ -100,13 +100,14 @@ export function Treemap({ items, height = 360, onSelect }: TreemapProps) {
                   {item.name.length > Math.floor(w / 8) ? `${item.name.slice(0, Math.floor(w / 8))}…` : item.name}
                 </text>
                 <text x={x + 8} y={y + 31} fontSize={10} fill="rgba(255,255,255,0.7)" className="tnum">
-                  {formatWonCompact(item.value)}
+                  {formatNetWon(item.value, { compact: true })}
                 </text>
               </>
             )}
           </g>
         ))}
       </svg>
+      <p className="mt-1 text-micro text-text-muted">면적은 순액의 절댓값 · 음수는 순환급이며 지출 합계에서 차감됩니다.</p>
       <figcaption className="mt-2 flex flex-wrap gap-3 text-micro text-text-muted">
         {groups.map((group) => (
           <span key={group} className="flex items-center gap-1.5">
