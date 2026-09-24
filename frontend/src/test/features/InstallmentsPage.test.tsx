@@ -54,7 +54,7 @@ function buildSuggestion(
   suggestedInstallmentNumber: number,
   options: {
     transactionId: number
-    conflictReason?: 'installment_number_already_linked' | null
+    conflictReason?: 'installment_number_already_linked' | 'ambiguous_plan_match' | 'competing_transactions' | 'inactive_installment_link' | null
     isUsable?: boolean
     confidence?: 'high' | 'medium' | 'low'
     installmentPlanId?: number
@@ -226,7 +226,7 @@ describe('InstallmentsPage', () => {
     expect(screen.getAllByText('제안 회차').length).toBeGreaterThan(0)
     expect(screen.getByText('1회차')).toBeInTheDocument()
     expect(screen.getByLabelText('애플 스토어 제안 회차')).toHaveValue(1)
-    expect(screen.getAllByText('same_merchant').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('거래처 일치').length).toBeGreaterThan(0)
     expect(linkSpy).not.toHaveBeenCalled()
   })
 
@@ -283,9 +283,9 @@ describe('InstallmentsPage', () => {
     expect(invalidatedKeys).toEqual(
       expect.arrayContaining([
         ['transactions'],
-        ['transactions', 'installmentTransactionMappings'],
-        ['transactions', 'installmentForecast'],
-        ['transactions', 'installmentTransactionSuggestions'],
+        ['canonical-views'],
+        ['analytics'],
+        ['assets'],
       ]),
     )
   })
@@ -341,4 +341,54 @@ describe('InstallmentsPage', () => {
       memo: null,
     })
   })
+  it('미래 예정 합계에 과거 연결 미확인을 더하지 않고 8회차 이후도 표시한다', async () => {
+    const queryClient = createQueryClient()
+    const { forecastSpy } = installApiMocks()
+    forecastSpy.mockResolvedValue({ monthly_summary: [{ period: '2026-06', observed_total: 0, projected_total: 300000, missed_total: 100000, past_unconfirmed_total: 100000 }], items: Array.from({ length: 10 }, (_, index) => ({ installment_plan_id: 3, installment_plan_display_name: '10개월 계획', installment_number: index + 1, total_installments: 10, due_date: `2026-${String(index + 1).padStart(2, '0')}-05`, amount: 300000, status: index < 6 ? 'missed' as const : 'projected' as const, period: `2026-${String(index + 1).padStart(2, '0')}`, transaction_id: null })) })
+    renderPage(queryClient)
+    await screen.findByText('₩30만')
+    expect(screen.queryByText('₩40만')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: '예측' }))
+    expect(await screen.findByText('10 / 10회차 · 예정 2026-10-05')).toBeInTheDocument()
+    expect(screen.getAllByText('과거 연결 미확인').length).toBeGreaterThan(0)
+    expect(screen.getByText(/실제 미납이나 앞으로 다시 출금될 금액/)).toBeInTheDocument()
+  })
+
+  it('계획을 완료 처리하고 예측을 갱신한다', async () => {
+    const queryClient = createQueryClient()
+    const { forecastSpy } = installApiMocks()
+    const patchSpy = vi.spyOn(transactionApi, 'patchInstallmentPlan').mockResolvedValue({ ...buildPlan(3, '맥북 3개월'), status: 'completed' })
+    renderPage(queryClient)
+    const select = await screen.findByLabelText('맥북 3개월 진행 상태')
+    fireEvent.change(select, { target: { value: 'completed' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledWith(3, { display_name: '맥북 3개월', memo: null, status: 'completed' }))
+    await waitFor(() => expect(forecastSpy.mock.calls.length).toBeGreaterThan(1))
+    expect(document.body.textContent).not.toContain('₩₩')
+  })
+
+  it('서로 경쟁하는 추천을 한국어로 설명하고 자동 연결하지 않는다', async () => {
+    const queryClient = createQueryClient()
+    const { linkSpy } = installApiMocks({ suggestions: [buildSuggestion('모호한 거래처', 1, { transactionId: 99, conflictReason: 'competing_transactions', isUsable: false })] })
+    renderPage(queryClient)
+    await openLinksTab()
+    expect(await screen.findByText('같은 회차의 다른 후보 거래 확인 필요')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '모호한 거래처 추천 연결' })).toBeDisabled()
+    expect(linkSpy).not.toHaveBeenCalled()
+  })
+
+  it('삭제·병합 연결은 명시적으로 해제하며 추천 거래는 자동 연결하지 않는다', async () => {
+    const queryClient = createQueryClient()
+    const { linkSpy } = installApiMocks({ suggestions: [{ ...buildSuggestion('연결 보류 거래처', 1, { transactionId: 99, conflictReason: 'inactive_installment_link', isUsable: false }), conflicting_transaction_id: 80, conflicting_transaction_state: 'deleted' }] })
+    const unlinkSpy = vi.spyOn(transactionApi, 'unlinkTransactionFromInstallment').mockResolvedValue(undefined)
+    renderPage(queryClient)
+    await openLinksTab()
+    const button = await screen.findByRole('button', { name: '연결 보류 거래처 삭제·병합 거래의 연결 해제' })
+    expect(screen.getByRole('button', { name: '연결 보류 거래처 추천 연결' })).toBeDisabled()
+    expect(screen.getByText(/삭제된 원거래 #80의 연결만 해제/)).toBeInTheDocument()
+    fireEvent.click(button)
+    await waitFor(() => expect(unlinkSpy).toHaveBeenCalledWith(80, { require_inactive: true }))
+    expect(linkSpy).not.toHaveBeenCalled()
+  })
+
 })

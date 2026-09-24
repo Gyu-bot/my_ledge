@@ -2,10 +2,13 @@ from collections.abc import Mapping
 import json
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.app_setting import AppSetting
+from app.models.auto_classification import AutoClassificationSettings
+from app.services.recurring_configuration_lock import lock_recurring_configuration
 from app.schemas.settings import (
     AssetLiabilityHealthSavedSettings,
     AssetLiabilityHealthSettings,
@@ -142,7 +145,17 @@ async def get_analytics_settings(db_session: AsyncSession) -> AnalyticsSettingsR
         section_name: await _load_saved_settings(db_session, section_name)
         for section_name in _SECTION_CONFIGS
     }
-    return _build_full_analytics_settings_response(saved_sections)
+    response = _build_full_analytics_settings_response(saved_sections)
+    # Retain legacy installations until a canonical upload preference is saved.
+    if response.saved.recurring_dry_run.upload_auto_apply is None:
+        legacy = await db_session.get(
+            AutoClassificationSettings, 1, populate_existing=True
+        )
+        if legacy is not None:
+            response.effective.recurring_dry_run.upload_auto_apply = (
+                legacy.apply_recurring_rules_on_upload
+            )
+    return response
 
 
 async def patch_analytics_settings(
@@ -156,6 +169,37 @@ async def patch_analytics_settings(
     bulk_operations: Mapping[str, Any] | None = None,
     financial_targets: Mapping[str, Any] | None = None,
 ) -> AnalyticsSettingsResponse:
+    if recurring_dry_run:
+        await lock_recurring_configuration(db_session)
+        current = (await get_analytics_settings(db_session)).effective.recurring_dry_run
+        values = current.model_dump()
+        defaults = DEFAULT_RECURRING_DRY_RUN_SETTINGS.model_dump()
+        values.update(
+            {
+                key: defaults[key] if value is None else value
+                for key, value in recurring_dry_run.items()
+                if key in defaults
+            }
+        )
+        for cadence in ("monthly", "weekly"):
+            if (
+                values[f"{cadence}_interval_days_min"]
+                > values[f"{cadence}_interval_days_max"]
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="반복 결제 간격의 최솟값은 최댓값 이하여야 합니다.",
+                )
+        if values["default_apply_scope"] not in {"all_matching", "reviewed_only"}:
+            raise HTTPException(
+                status_code=422, detail="지원하지 않는 반복 승인 범위입니다."
+            )
+        if "upload_auto_apply" in recurring_dry_run:
+            legacy = await db_session.get(
+                AutoClassificationSettings, 1, populate_existing=True
+            )
+            if legacy is not None:
+                legacy.apply_recurring_rules_on_upload = values["upload_auto_apply"]
     await _patch_settings_section(db_session, "spending_anomalies", spending_anomalies)
     await _patch_settings_section(
         db_session,
@@ -241,7 +285,9 @@ async def _patch_settings_section(
 async def _load_saved_settings(db_session: AsyncSession, section_name: str):
     scope, defaults, saved_model = _SECTION_CONFIGS[section_name]
     result = await db_session.execute(
-        select(AppSetting).where(AppSetting.scope == scope)
+        select(AppSetting)
+        .where(AppSetting.scope == scope)
+        .execution_options(populate_existing=True)
     )
     raw_values = {row.key: row.value for row in result.scalars().all()}
     parsed_values: dict[str, Any] = {}
@@ -331,6 +377,12 @@ def _effective_settings(defaults, saved):
     for key, value in saved.model_dump().items():
         if value is not None:
             values[key] = value
+    if isinstance(defaults, RecurringDryRunSettings) and values[
+        "default_apply_scope"
+    ] not in {"all_matching", "reviewed_only"}:
+        # Preserve the unsupported stored value for inspection and correction,
+        # but never turn an old future-only preference into a bulk approval.
+        values["default_apply_scope"] = "reviewed_only"
     return defaults.__class__(**values)
 
 

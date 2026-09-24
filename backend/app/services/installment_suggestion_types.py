@@ -22,6 +22,8 @@ class InstallmentSuggestionCandidate:
     confidence: InstallmentSuggestionConfidence
     reason_labels: list[str]
     conflict_reason: str | None
+    conflicting_transaction_id: int | None = None
+    conflicting_transaction_state: str | None = None
 
 
 def serialize_installment_suggestion(
@@ -63,4 +65,6 @@ def serialize_installment_suggestion(
         reason_labels=suggestion.reason_labels,
         conflict_reason=suggestion.conflict_reason,
         is_usable=suggestion.conflict_reason is None,
+        conflicting_transaction_id=suggestion.conflicting_transaction_id,
+        conflicting_transaction_state=suggestion.conflicting_transaction_state,
     )

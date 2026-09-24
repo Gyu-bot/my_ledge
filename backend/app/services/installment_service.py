@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,14 +34,20 @@ from app.services.canonical_views import build_transactions_effective_select
 async def list_installment_plans(
     db_session: AsyncSession,
 ) -> InstallmentPlanListResponse:
-    link_count = func.count(InstallmentTransactionLink.id).label(
-        "linked_installment_count"
-    )
+    link_count = func.count(Transaction.id).label("linked_installment_count")
     result = await db_session.execute(
         select(InstallmentPlan, link_count)
         .outerjoin(
             InstallmentTransactionLink,
             InstallmentTransactionLink.installment_plan_id == InstallmentPlan.id,
+        )
+        .outerjoin(
+            Transaction,
+            and_(
+                Transaction.id == InstallmentTransactionLink.transaction_id,
+                Transaction.is_deleted.is_(False),
+                Transaction.merged_into_id.is_(None),
+            ),
         )
         .group_by(InstallmentPlan.id)
         .order_by(
@@ -85,7 +91,9 @@ async def update_installment_plan(
     plan = await _get_plan_or_404(db_session, plan_id)
     update_fields = payload.model_dump(exclude_unset=True)
     if "total_installments" in update_fields:
-        max_linked_number = await _load_max_linked_installment_number(db_session, plan.id)
+        max_linked_number = await _load_max_linked_installment_number(
+            db_session, plan.id
+        )
         if update_fields["total_installments"] < max_linked_number:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -112,12 +120,25 @@ async def list_installment_transaction_mappings(
     page: int,
     per_page: int,
 ) -> InstallmentTransactionMappingListResponse:
+    # Reuse the same evidence as the review suggestions, so unclassified next
+    # installments are visible without turning every expense into a candidate.
+    from app.services.installment_suggestion_service import (
+        load_installment_suggestion_candidates,
+    )
+
+    suggestions = await load_installment_suggestion_candidates(db_session)
+    candidate_ids = {
+        item.transaction.id
+        for item in suggestions
+        if installment_plan_id is None or item.plan.id == installment_plan_id
+    }
     base_query = _build_mapping_query(
         start_date=start_date,
         end_date=end_date,
         search=search,
         linked=linked,
         installment_plan_id=installment_plan_id,
+        candidate_ids=candidate_ids,
     )
     total = (
         await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
@@ -125,8 +146,7 @@ async def list_installment_transaction_mappings(
     )
     tx = base_query.selected_columns
     result = await db_session.execute(
-        base_query
-        .order_by(tx.date.desc(), tx.time.desc(), tx.id.desc())
+        base_query.order_by(tx.date.desc(), tx.time.desc(), tx.id.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -153,7 +173,10 @@ async def upsert_transaction_installment_link(
     transaction_id: int,
     payload: InstallmentTransactionLinkUpsertRequest,
 ) -> InstallmentTransactionLinkItem:
-    await _get_transaction_or_404(db_session, transaction_id)
+    transaction = await _get_transaction_or_404(
+        db_session, transaction_id, for_update=True
+    )
+    _validate_active_link_target(transaction)
     plan = await _get_plan_or_404(db_session, payload.installment_plan_id)
     _validate_installment_number(plan, payload.installment_number)
     await _ensure_plan_number_available(
@@ -252,8 +275,17 @@ async def bulk_upsert_transaction_installment_links(
 async def delete_transaction_installment_link(
     db_session: AsyncSession,
     transaction_id: int,
+    *,
+    require_inactive: bool = False,
 ) -> bool:
-    await _get_transaction_or_404(db_session, transaction_id)
+    transaction = await _get_transaction_or_404(
+        db_session, transaction_id, for_update=True
+    )
+    if require_inactive and _inactive_transaction_state(transaction) is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The linked transaction is active again. Refresh before removing its link.",
+        )
     link = await db_session.scalar(
         select(InstallmentTransactionLink).where(
             InstallmentTransactionLink.transaction_id == transaction_id,
@@ -280,7 +312,11 @@ async def get_installment_forecast(
         return InstallmentForecastResponse(items=[], monthly_summary=[])
 
     link_result = await db_session.execute(
-        select(InstallmentTransactionLink).where(
+        select(InstallmentTransactionLink)
+        .join(Transaction, Transaction.id == InstallmentTransactionLink.transaction_id)
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
+        .where(
             InstallmentTransactionLink.installment_plan_id.in_(
                 [plan.id for plan in plans]
             )
@@ -317,6 +353,12 @@ async def get_installment_forecast(
                     period=due_date.strftime("%Y-%m"),
                     amount=plan.monthly_amount,
                     status=forecast_status,
+                    status_label={
+                        "observed": "연결 확인",
+                        "projected": "향후 예정",
+                        "missed": "과거 연결 미확인",
+                    }[forecast_status],
+                    is_future_obligation=forecast_status == "projected",
                     transaction_id=transaction_id,
                 )
             )
@@ -340,6 +382,7 @@ def _build_mapping_query(
     search: str | None,
     linked: InstallmentLinkStateFilter,
     installment_plan_id: int | None,
+    candidate_ids: set[int],
 ) -> Select:
     canonical = build_transactions_effective_select().subquery("tx")
     query = (
@@ -370,6 +413,7 @@ def _build_mapping_query(
             or_(
                 canonical.c.recurring_payment_kind == "installment",
                 InstallmentTransactionLink.id.is_not(None),
+                canonical.c.id.in_(candidate_ids),
             )
         )
     )
@@ -383,7 +427,10 @@ def _build_mapping_query(
         query = query.where(InstallmentTransactionLink.id.is_(None))
     if installment_plan_id is not None:
         query = query.where(
-            InstallmentTransactionLink.installment_plan_id == installment_plan_id
+            or_(
+                InstallmentTransactionLink.installment_plan_id == installment_plan_id,
+                canonical.c.id.in_(candidate_ids),
+            )
         )
     if search:
         pattern = f"%{search}%"
@@ -415,8 +462,18 @@ async def _get_plan_or_404(
 async def _get_transaction_or_404(
     db_session: AsyncSession,
     transaction_id: int,
+    *,
+    for_update: bool = False,
 ) -> Transaction:
-    transaction = await db_session.get(Transaction, transaction_id)
+    if for_update:
+        transaction = await db_session.scalar(
+            select(Transaction)
+            .where(Transaction.id == transaction_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    else:
+        transaction = await db_session.get(Transaction, transaction_id)
     if transaction is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -430,7 +487,10 @@ async def _load_transactions_by_ids_or_404(
     transaction_ids: list[int],
 ) -> list[Transaction]:
     result = await db_session.execute(
-        select(Transaction).where(Transaction.id.in_(transaction_ids))
+        select(Transaction)
+        .where(Transaction.id.in_(transaction_ids))
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     transactions = list(result.scalars().all())
     transaction_by_id = {transaction.id: transaction for transaction in transactions}
@@ -440,6 +500,8 @@ async def _load_transactions_by_ids_or_404(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transactions not found: {missing_ids}",
         )
+    for transaction in transactions:
+        _validate_active_link_target(transaction)
     return sorted(
         transaction_by_id.values(),
         key=lambda transaction: (
@@ -465,9 +527,37 @@ async def _ensure_plan_number_available(
         )
     )
     if existing is not None:
+        transaction = await _get_transaction_or_404(db_session, existing.transaction_id)
+        inactive_state = _inactive_transaction_state(transaction)
+        if inactive_state is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "inactive_installment_link",
+                    "message": "An inactive transaction retains this link. Explicitly unlink it before connecting a replacement.",
+                    "conflicting_transaction_id": transaction.id,
+                    "conflicting_transaction_state": inactive_state,
+                },
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Installment number is already linked for this plan.",
+        )
+
+
+def _inactive_transaction_state(transaction: Transaction) -> str | None:
+    if transaction.is_deleted:
+        return "deleted"
+    if transaction.merged_into_id is not None:
+        return "merged"
+    return None
+
+
+def _validate_active_link_target(transaction: Transaction) -> None:
+    if _inactive_transaction_state(transaction) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Deleted or merged transactions cannot receive installment links.",
         )
 
 
@@ -518,14 +608,20 @@ async def _load_plan_or_500(
     db_session: AsyncSession,
     plan_id: int,
 ) -> InstallmentPlanResponse:
-    link_count = func.count(InstallmentTransactionLink.id).label(
-        "linked_installment_count"
-    )
+    link_count = func.count(Transaction.id).label("linked_installment_count")
     result = await db_session.execute(
         select(InstallmentPlan, link_count)
         .outerjoin(
             InstallmentTransactionLink,
             InstallmentTransactionLink.installment_plan_id == InstallmentPlan.id,
+        )
+        .outerjoin(
+            Transaction,
+            and_(
+                Transaction.id == InstallmentTransactionLink.transaction_id,
+                Transaction.is_deleted.is_(False),
+                Transaction.merged_into_id.is_(None),
+            ),
         )
         .where(InstallmentPlan.id == plan_id)
         .group_by(InstallmentPlan.id)
@@ -642,6 +738,7 @@ def _build_monthly_summary(
             observed_total=values["observed"],
             projected_total=values["projected"],
             missed_total=values["missed"],
+            past_unconfirmed_total=values["missed"],
         )
         for period, values in sorted(grouped.items())
     ]

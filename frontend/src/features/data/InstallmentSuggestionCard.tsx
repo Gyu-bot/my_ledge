@@ -2,6 +2,7 @@ import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
 import { Card } from '../../ds/Card'
 import { formatWon } from '../../ds/format'
+import { Pagination } from '../../ds/Pagination'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { EmptyState } from '../../ds/States'
 import type {
@@ -21,6 +22,15 @@ const CONFIDENCE_META: Record<
 
 const CONFLICT_META: Record<InstallmentSuggestionConflictReason, string> = {
   installment_number_already_linked: '이미 연결된 회차',
+  ambiguous_plan_match: '여러 계획에 일치해 계획 확인 필요',
+  competing_transactions: '같은 회차의 다른 후보 거래 확인 필요',
+  inactive_installment_link: '삭제·병합된 원거래의 연결이 남아 있습니다',
+}
+
+const REASON_LABELS: Record<string, string> = {
+  same_merchant: '거래처 일치', same_amount: '금액 일치', similar_amount: '유사한 금액',
+  same_billing_day: '청구일 일치', near_billing_day: '청구일 인접', same_payment_method: '결제수단 일치',
+  same_linked_description: '기존 연결의 원본 설명 일치', confirmed_merchant_alias: '기존 연결로 확인한 거래처 별칭', merchant_alias_rule: '거래처 별칭 규칙 일치',
 }
 
 function formatBillingDayDelta(delta: number) {
@@ -41,9 +51,14 @@ interface InstallmentSuggestionCardProps {
   readonly inputClassName: string
   readonly isLoading: boolean
   readonly isSaving: boolean
+  readonly isUnlinking: boolean
+  readonly onUnlinkInactiveLink: (transactionId: number) => Promise<void>
   readonly items: readonly InstallmentTransactionSuggestionItem[]
   readonly rowDrafts: Readonly<Record<string, InstallmentSuggestionDraft>>
   readonly total: number
+  readonly page: number
+  readonly perPage: number
+  readonly onPageChange: (page: number) => void
   readonly onDraftChange: (
     suggestionKey: string,
     draft: InstallmentSuggestionDraft,
@@ -60,9 +75,14 @@ export function InstallmentSuggestionCard({
   inputClassName,
   isLoading,
   isSaving,
+  isUnlinking,
+  onUnlinkInactiveLink,
   items,
   rowDrafts,
   total,
+  page,
+  perPage,
+  onPageChange,
   onDraftChange,
   onSaveRow,
 }: InstallmentSuggestionCardProps) {
@@ -103,7 +123,7 @@ export function InstallmentSuggestionCard({
                     </td>
                     <td className="px-3 py-2 align-top">
                       <div className="font-semibold text-text-primary">{item.transaction.merchant}</div>
-                      <div className="tnum text-micro text-text-faint">{item.transaction.date}</div>
+                      <div className="tnum text-micro text-text-faint">{[item.transaction.date, item.transaction.time, item.transaction.payment_method].filter(Boolean).join(' · ')}</div>
                     </td>
                     <td className="px-3 py-2 align-top">
                       <div className="tnum text-text-secondary">금액 차이 {formatWon(item.amount_delta)}</div>
@@ -114,7 +134,7 @@ export function InstallmentSuggestionCard({
                         <Badge variant={confidenceMeta.variant}>{confidenceMeta.label}</Badge>
                         {item.reason_labels.map((label) => (
                           <Badge key={`${suggestionKey}-${label}`} variant="neutral">
-                            {label}
+                            {REASON_LABELS[label] ?? '추가 일치 근거'}
                           </Badge>
                         ))}
                       </div>
@@ -127,9 +147,15 @@ export function InstallmentSuggestionCard({
                     </td>
                     <td className="px-3 py-2 align-top">
                       <Badge variant={isConflict ? 'warn' : 'accent'}>
-                        {isConflict ? '회차 충돌' : '연결 가능'}
+                        {isConflict ? (item.conflict_reason === 'installment_number_already_linked' ? '회차 충돌' : '확인 필요') : '연결 가능'}
                       </Badge>
                       <div className="mt-1 text-micro text-text-faint">{conflictLabel}</div>
+                      {item.conflict_reason === 'inactive_installment_link' && item.conflicting_transaction_id != null && (
+                        <div className="mt-2 space-y-1">
+                          <div className="text-micro text-text-muted">{item.conflicting_transaction_state === 'deleted' ? '삭제된' : item.conflicting_transaction_state === 'merged' ? '병합된' : '비활성'} 원거래 #{item.conflicting_transaction_id}의 연결만 해제합니다. 후보를 연결하려면 해제 후 다시 확인하세요.</div>
+                          <Button size="sm" aria-label={`${item.transaction.merchant} 삭제·병합 거래의 연결 해제`} disabled={!hasWrite || isUnlinking || isSaving} onClick={() => void onUnlinkInactiveLink(item.conflicting_transaction_id!)}>삭제·병합 거래의 연결 해제</Button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 align-top">
                       <div className="flex flex-wrap items-end gap-1.5">
@@ -165,6 +191,7 @@ export function InstallmentSuggestionCard({
               })}
             </tbody>
           </table>
+          <Pagination page={page} perPage={perPage} total={total} onPageChange={onPageChange} />
         </div>
       ) : (
         <EmptyState className="py-10" message="조건에 맞는 연결 제안이 없습니다" />

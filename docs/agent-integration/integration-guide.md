@@ -54,7 +54,9 @@ readonly DB role 요구사항:
 - `GET /api/v1/upload/logs`
 - `GET /api/v1/profile`
 - `GET /api/v1/settings/analytics`
+- `GET /api/v1/settings/income-expectations`
 - `GET /api/v1/transactions`
+- `GET /api/v1/transactions/{id}`
 - `GET /api/v1/transactions/filter-options`
 - `GET /api/v1/transactions/summary`
 - `GET /api/v1/transactions/by-category`
@@ -94,6 +96,7 @@ readonly DB role 요구사항:
 - `POST /api/v1/upload/preview`
 - `POST /api/v1/upload/apply`
 - `PATCH /api/v1/settings/analytics`
+- `PATCH /api/v1/settings/income-expectations`
 - `POST /api/v1/transactions`
 - `PATCH /api/v1/transactions/{id}`
 - `PATCH /api/v1/transactions/bulk-update`
@@ -103,6 +106,7 @@ readonly DB role 요구사항:
 - `DELETE /api/v1/transactions/{id}/loan-link`
 - `PUT /api/v1/transactions/loan-links/bulk`
 - `PATCH /api/v1/loan-accounts`
+- `POST /api/v1/loan-accounts/recalculate-estimates`
 - `POST /api/v1/installment-plans`
 - `PATCH /api/v1/installment-plans/{id}`
 - `PUT /api/v1/transactions/{id}/installment-link`
@@ -127,7 +131,7 @@ readonly DB role 요구사항:
 
 | 질문 | 우선 조회 | 부족할 때 | 주의 |
 |---|---|---|---|
-| 이번 달 현금흐름/가용액 | `GET /api/v1/canonical-views/dashboard` | `vw_monthly_cashflow`, `vw_true_spendable_monthly` | `income_basis='estimated'`면 관측/예상 수입을 분리하고, `is_complete_month=false` 월은 부분월로 표시한다. |
+| 이번 달 현금흐름/가용액 | `GET /api/v1/canonical-views/dashboard` | `vw_monthly_cashflow`, `vw_true_spendable_monthly` | canonical은 관측값, `month_projection`은 별도 전망이다. 미확정 지출의 null과 알려진 부분합을 구분하고 `is_complete_month`를 완전한 수집 증명으로 쓰지 않는다. |
 | 특정 거래 설명/수정 | `GET /api/v1/transactions` | `vw_transactions_effective`, raw `transactions` | raw table은 감사용으로만 쓰고 수정은 API로 한다. |
 | 대출 상환 부담 | `GET /api/v1/analytics/liquidity-health` | `vw_loan_repayment_monthly`, `GET /api/v1/loan-transaction-links` | 연결 부족/추정값이면 confidence와 assumptions를 같이 말한다. |
 | 대출 구조/금리/만기 | `GET /api/v1/loans/summary` | `vw_loan_account_canonical` | 금리와 잔액은 snapshot 값이고, 상환 우선순위는 에이전트 해석이다. |
@@ -141,7 +145,7 @@ readonly DB role 요구사항:
 
 | 값/표현 | 해석 규칙 |
 |---|---|
-| `true_spendable`, `estimated_*` | 계산상 가용액과 예상 보정이다. "써도 된다"는 구매 판단으로 단정하지 않는다. |
+| `true_spendable`, `month_projection` | 관측 기반 계산과 별도의 월간 시나리오다. `net_after_known_remaining_expense`는 미확정 비용이 빠진 부분합이며 실제 현금 잔액이나 구매 허용 금액이 아니다. |
 | `liquidity-health` | endpoint 이름은 계산 묶음 이름이다. 비상금 개월 수, 부채상환비율, confidence, assumptions를 근거로 에이전트가 해석한다. |
 | `anomaly_score`, anomaly `reason` | baseline 대비 변화 후보다. 낭비/문제 지출 확정이 아니다. |
 | `confidence` | 패턴 탐지 또는 데이터 완성도 신호다. 조언의 확실성 자체가 아니다. |
@@ -172,8 +176,8 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 ### 월별 가용 현금 설명
 
 1. `GET /api/v1/canonical-views/dashboard?months=12`
-2. `true_spendable_monthly[]`에서 `income_basis` 확인
-3. `income_basis='estimated'`면 관측 수입과 예상 수입을 분리해 설명
+2. 관측값은 `true_spendable_monthly[]`/`monthly_cashflow[]`, 전망은 `month_projection`에서 읽는다.
+3. `observed_income`, `expected_remaining_income`, 예상 순수입을 분리하고 coverage·출처 상태·missing reasons를 확인한다. 전체 전망이 null이면 알려진 부분 계산을 월말 전망으로 바꾸지 않는다.
 4. `loan_repayment_total`, `fixed_commitment_total`, `variable_total`을 각각 분리해서 원인 설명
 5. `true_spendable`을 "남은 계산값"으로 설명하고, 구매/지출 가능 여부는 사용자의 예정 지출과 목표를 확인한 뒤 조언
 
@@ -187,11 +191,11 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 
 ### 분류 품질 개선
 
-1. `vw_unclassified_work_queue` 또는 dashboard queue 조회
+1. `vw_unclassified_work_queue` 또는 dashboard queue 조회. Dashboard는 필터 후 `_total`과 `_page/_per_page/_total_pages`를 사용하고 배열 길이를 전체 건수로 보고하지 않는다.
 2. `priority_reason` 기준으로 정렬된 상위 거래를 확인
 3. 비용 성격은 transaction update/bulk-update API로 수정
 4. 대출 연결은 loan-link API로 수정
-5. 반복 결제 분류는 recurring classification API/화면 흐름을 사용
+5. 반복 결제 분류는 dry-run의 `preview_token`과 명시한 `all_matching|reviewed_only` 범위로 승인한다. `409`면 증거가 바뀌었으므로 재조회·재검토한다.
 6. `priority_score`는 데이터 정리 우선순위로만 설명하고 재무 위험 점수처럼 말하지 않는다
 
 ### 재량 지출/구매 후보 점검
@@ -205,7 +209,7 @@ backend가 제공하지 않은 안정/위험/구매 가능 label을 에이전트
 ### 할부 잔여 지출 설명
 
 1. `GET /api/v1/installment-plans`로 활성 할부 원장을 확인한다.
-2. `GET /api/v1/installments/forecast`에서 `observed`, `projected`, `missed` 회차를 분리한다.
+2. `GET /api/v1/installments/forecast`에서 `observed`, `projected`, `missed` 회차를 분리한다. `missed`/`past_unconfirmed_total`은 과거 연결 미확정이며 미납 확정이 아니다. 삭제/병합 거래 링크는 관측으로 세지 않는다.
 3. 미래 월 계획에는 `monthly_summary.projected_total`을 참고하되, 이미 관측된 거래와 합산하지 않는다.
 4. 거래 연결이 필요하면 `GET /api/v1/installment-transaction-links` 후보를 확인하고 단건/bulk installment-link API를 사용한다.
 

@@ -67,6 +67,8 @@ export interface TransactionListParams {
 }
 
 export interface CategoryBreakdownParams {
+  start_date?: string
+  end_date?: string
   start_month?: string
   end_month?: string
   include_income?: boolean
@@ -74,6 +76,8 @@ export interface CategoryBreakdownParams {
 }
 
 export interface SubcategoryBreakdownParams {
+  start_date?: string
+  end_date?: string
   start_month?: string
   end_month?: string
   include_income?: boolean
@@ -175,7 +179,7 @@ export interface LoanAccountMetadataUpdateRequest {
   lender?: string | null
   product_name?: string | null
   display_name_user?: string | null
-  loan_kind: LoanKind
+  loan_kind?: LoanKind
   is_hidden?: boolean | null
 }
 
@@ -259,7 +263,7 @@ export type InstallmentPlanStatus = 'active' | 'completed' | 'cancelled'
 export type InstallmentLinkStateFilter = 'all' | 'linked' | 'unlinked'
 export type InstallmentForecastStatus = 'observed' | 'projected' | 'missed'
 export type InstallmentSuggestionConfidence = 'high' | 'medium' | 'low'
-export type InstallmentSuggestionConflictReason = 'installment_number_already_linked'
+export type InstallmentSuggestionConflictReason = 'installment_number_already_linked' | 'ambiguous_plan_match' | 'competing_transactions' | 'inactive_installment_link'
 
 export interface InstallmentPlanResponse {
   id: number
@@ -381,6 +385,8 @@ export interface InstallmentTransactionSuggestionItem {
   confidence: InstallmentSuggestionConfidence
   reason_labels: string[]
   conflict_reason: InstallmentSuggestionConflictReason | null
+  conflicting_transaction_id?: number | null
+  conflicting_transaction_state?: 'deleted' | 'merged' | null
   is_usable: boolean
 }
 
@@ -423,6 +429,8 @@ export interface InstallmentForecastItem {
   period: string
   amount: number
   status: InstallmentForecastStatus
+  status_label?: string
+  is_future_obligation?: boolean
   transaction_id: number | null
 }
 
@@ -431,6 +439,7 @@ export interface InstallmentForecastMonthlySummaryItem {
   observed_total: number
   projected_total: number
   missed_total: number
+  past_unconfirmed_total?: number
 }
 
 export interface InstallmentForecastResponse {
@@ -486,6 +495,8 @@ export interface CategoryClassificationRuleRequest {
 }
 
 export interface CategoryClassificationRuleResponse extends CategoryClassificationRuleRequest {
+  category_valid?: boolean
+  validation_message?: string | null
   id: number
   category_major: string
   category_minor: string | null
@@ -546,6 +557,8 @@ export interface RecurringCategoryRuleRequest {
 }
 
 export interface RecurringCategoryRuleResponse extends RecurringCategoryRuleRequest {
+  category_valid?: boolean
+  validation_message?: string | null
   id: number
   category_major: string
   category_minor: string | null
@@ -558,7 +571,7 @@ export interface RecurringCategoryRuleListResponse {
   items: RecurringCategoryRuleResponse[]
 }
 
-export type RecurringDryRunApplyScope = 'future_only' | 'all_matching'
+export type RecurringDryRunApplyScope = 'all_matching' | 'reviewed_only'
 
 export interface RecurringDryRunMatchedTransaction {
   id: number
@@ -567,6 +580,8 @@ export interface RecurringDryRunMatchedTransaction {
 }
 
 export interface RecurringDryRunItem {
+  preview_token: string
+  default_apply_scope: RecurringDryRunApplyScope
   merchant: string
   proposed_kind: RecurringPaymentKind
   confidence: number
@@ -583,7 +598,9 @@ export interface RecurringDryRunResponse {
 export interface RecurringDryRunApplyRequest {
   merchant: string
   proposed_kind: RecurringPaymentKind
-  apply_scope: RecurringDryRunApplyScope
+  apply_scope?: RecurringDryRunApplyScope
+  preview_token: string
+  transaction_ids?: number[]
 }
 
 export interface AutoClassificationApplyResponse {

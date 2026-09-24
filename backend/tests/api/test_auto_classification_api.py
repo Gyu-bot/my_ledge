@@ -171,7 +171,9 @@ async def test_loan_merchant_rule_crud_and_apply_endpoint(
     assert applied.json() == {"updated": 1}
 
     mappings = await async_client.get("/api/v1/loan-transaction-links")
-    assert mappings.json()["items"][0]["link"]["display_name"] == "국민은행 주택담보대출"
+    assert (
+        mappings.json()["items"][0]["link"]["display_name"] == "국민은행 주택담보대출"
+    )
     assert mappings.json()["items"][0]["link"]["source"] == "auto"
 
 
@@ -300,7 +302,8 @@ async def test_recurring_dry_run_returns_group_proposals_and_approval_applies_sc
     assert proposal["proposed_kind"] == "monthly_recurring"
     assert proposal["confidence"] == 1.0
     assert proposal["category_hint"] == "구독"
-    assert proposal["apply_scope_options"] == ["all_matching", "future_only"]
+    assert proposal["apply_scope_options"] == ["all_matching", "reviewed_only"]
+    assert proposal["default_apply_scope"] == "all_matching"
     assert len(proposal["matched_transactions"]) == 2
 
     applied = await async_client.post(
@@ -310,6 +313,7 @@ async def test_recurring_dry_run_returns_group_proposals_and_approval_applies_sc
             "merchant": "왓챠",
             "proposed_kind": "monthly_recurring",
             "apply_scope": "all_matching",
+            "preview_token": proposal["preview_token"],
         },
     )
 
@@ -321,7 +325,7 @@ async def test_recurring_dry_run_returns_group_proposals_and_approval_applies_sc
     }
 
 
-async def test_recurring_dry_run_future_only_does_not_backfill_existing_rows(
+async def test_recurring_dry_run_future_only_is_explicitly_unavailable(
     async_client: AsyncClient,
     api_headers: dict[str, str],
     db_session: AsyncSession,
@@ -374,11 +378,11 @@ async def test_recurring_dry_run_future_only_does_not_backfill_existing_rows(
             "merchant": "티빙",
             "proposed_kind": "monthly_recurring",
             "apply_scope": "future_only",
+            "preview_token": "0" * 64,
         },
     )
 
-    assert applied.status_code == 200
-    assert applied.json() == {"updated": 0}
+    assert applied.status_code == 422
     transactions = (await async_client.get("/api/v1/transactions")).json()["items"]
     assert {item["recurring_payment_kind"] for item in transactions} == {None}
 

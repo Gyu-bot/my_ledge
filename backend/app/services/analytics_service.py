@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, date, datetime, time, timedelta
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -145,10 +145,19 @@ async def get_category_mom(
         end_date=end_date,
         tx_type=tx_type,
     )
-    if not rows:
-        return CategoryMoMResponse(items=[])
+    ref_date = end_date or (max(row["date"] for row in rows) if rows else None)
+    is_partial_period = end_date is not None and not _is_month_end(end_date)
+    response_basis = {
+        "reference_date": ref_date,
+        "is_partial_period": is_partial_period,
+        "comparison_basis": (
+            "same_day_previous_month" if is_partial_period else "full_previous_month"
+        ),
+    }
+    if ref_date is None:
+        return CategoryMoMResponse(items=[], **response_basis)
 
-    current_period = max(_month_key(row["date"]) for row in rows)
+    current_period = _month_key(ref_date)
     previous_period = _previous_period(current_period)
     grouped: dict[tuple[str, str], int] = defaultdict(int)
     categories: set[str] = set()
@@ -156,6 +165,12 @@ async def get_category_mom(
     for row in rows:
         period = _month_key(row["date"])
         if period not in {current_period, previous_period}:
+            continue
+        if (
+            is_partial_period
+            and period == previous_period
+            and row["date"].day > ref_date.day
+        ):
             continue
         category = _category_value(row, level)
         grouped[(period, category)] += _amount_for_analytics(row["type"], row["amount"])
@@ -179,7 +194,7 @@ async def get_category_mom(
         )
 
     items.sort(key=lambda item: (-item.delta_amount, item.category))
-    return CategoryMoMResponse(items=items)
+    return CategoryMoMResponse(items=items, **response_basis)
 
 
 async def get_fixed_cost_summary(
@@ -204,11 +219,16 @@ async def get_fixed_cost_summary(
     discretionary_variable_total = 0
     unclassified_total = 0
     unclassified_count = 0
+    necessity_unclassified_total = 0
+    necessity_unclassified_count = 0
 
     for row in rows:
         amount = -row["amount"]
         expense_total += amount
         cost_kind = row["cost_kind"]
+        if _necessity_is_missing(row):
+            necessity_unclassified_total += amount
+            necessity_unclassified_count += 1
         if cost_kind == "fixed":
             fixed_total += amount
             if row["fixed_cost_necessity"] == "essential":
@@ -240,6 +260,8 @@ async def get_fixed_cost_summary(
         ),
         unclassified_total=unclassified_total,
         unclassified_count=unclassified_count,
+        necessity_unclassified_total=necessity_unclassified_total,
+        necessity_unclassified_count=necessity_unclassified_count,
     )
 
 
@@ -267,12 +289,17 @@ async def get_fixed_cost_trend(
             "discretionary_variable_total": 0,
             "unclassified_total": 0,
             "unclassified_count": 0,
+            "necessity_unclassified_total": 0,
+            "necessity_unclassified_count": 0,
         }
     )
     for row in rows:
         period = _month_key(row["date"])
         amount = -row["amount"]
         grouped[period]["expense_total"] += amount
+        if _necessity_is_missing(row):
+            grouped[period]["necessity_unclassified_total"] += amount
+            grouped[period]["necessity_unclassified_count"] += 1
         cost_kind = row["cost_kind"]
         if cost_kind == "fixed":
             grouped[period]["fixed_total"] += amount
@@ -310,6 +337,8 @@ async def get_fixed_cost_trend(
                 ),
                 unclassified_total=values["unclassified_total"],
                 unclassified_count=values["unclassified_count"],
+                necessity_unclassified_total=values["necessity_unclassified_total"],
+                necessity_unclassified_count=values["necessity_unclassified_count"],
                 fixed_ratio=_safe_ratio(values["fixed_total"], values["expense_total"]),
             )
             for period, values in sorted(grouped.items())
@@ -476,43 +505,39 @@ async def get_recurring_payments(
     min_occurrences: int,
     page: int = 1,
     per_page: int = 10,
+    activity: Literal["all", "active", "history"] = "all",
+    recent_days: int = 90,
 ) -> RecurringPaymentsResponse:
+    reference_date = end_date or date.today()
     rows = await _load_analytics_transactions(
         db_session,
         start_date=start_date,
-        end_date=end_date,
+        end_date=reference_date,
         tx_type="지출",
     )
 
-    merchant_data: dict[str, dict] = defaultdict(
-        lambda: {
-            "dates": [],
-            "amounts": [],
-            "category": "미분류",
-            "transaction_ids": [],
-            "kind_counts": defaultdict(int),
-        }
-    )
+    merchant_data: dict[str, list[AnalyticsRow]] = defaultdict(list)
     for row in rows:
         merchant = row["merchant"] or row["description"] or "미분류"
-        merchant_data[merchant]["dates"].append(row["date"])
-        merchant_data[merchant]["amounts"].append(-row["amount"])
-        merchant_data[merchant]["category"] = (
-            row["effective_category_major"] or "미분류"
-        )
-        merchant_data[merchant]["transaction_ids"].append(row["id"])
-        kind = row["recurring_payment_kind"] or "unclassified"
-        merchant_data[merchant]["kind_counts"][kind] += 1
+        merchant_data[merchant].append(row)
 
     items = []
-    for merchant, data in merchant_data.items():
-        dates = sorted(data["dates"])
-        if len(dates) < min_occurrences:
+    for merchant, merchant_rows in merchant_data.items():
+        if len(merchant_rows) < min_occurrences:
             continue
-
-        gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
-        avg_gap = sum(gaps) / len(gaps)
-
+        daily_net: dict[date, int] = defaultdict(int)
+        kind_counts: dict[str, int] = defaultdict(int)
+        for row in merchant_rows:
+            daily_net[row["date"]] += -row["amount"]
+            kind_counts[row["recurring_payment_kind"] or "unclassified"] += 1
+        # Same-day preauthorization/refund evidence is not a repeat charge.
+        # This is only observation grouping and does not create settlement links.
+        charge_dates = sorted(day for day, amount in daily_net.items() if amount > 0)
+        gaps = [
+            (charge_dates[i + 1] - charge_dates[i]).days
+            for i in range(len(charge_dates) - 1)
+        ]
+        avg_gap = sum(gaps) / len(gaps) if gaps else 0.0
         if 25 <= avg_gap <= 35:
             interval_type = "monthly"
         elif 6 <= avg_gap <= 8:
@@ -523,30 +548,59 @@ async def get_recurring_payments(
         if len(gaps) > 1:
             gap_variance = sum((g - avg_gap) ** 2 for g in gaps) / len(gaps)
             gap_stdev = math.sqrt(gap_variance)
-            confidence = (
-                round(max(0.0, 1.0 - gap_stdev / avg_gap), 4) if avg_gap > 0 else 0.0
-            )
+            confidence = round(max(0.0, 1.0 - gap_stdev / avg_gap), 4)
         else:
-            confidence = 0.5
+            confidence = 0.5 if gaps else 0.0
 
-        avg_amount = round(sum(data["amounts"]) / len(data["amounts"]))
-        kind_counts = data["kind_counts"]
+        net_amount = sum(daily_net.values())
+        avg_amount = round(net_amount / max(len(charge_dates), 1))
+        last_charge_date = charge_dates[-1] if charge_dates else None
+        kind = _resolved_recurring_payment_kind(kind_counts)
+        active_window = min(
+            recent_days, max(14, math.ceil((avg_gap if gaps else 30) * 1.5))
+        )
+        if net_amount <= 0:
+            activity_status = "non_positive"
+        elif kind in {"not_recurring", "installment"}:
+            activity_status = "not_recurring"
+        elif (
+            last_charge_date is None
+            or (reference_date - last_charge_date).days > active_window
+        ):
+            activity_status = "historical"
+        elif len(charge_dates) < min_occurrences or (
+            interval_type == "irregular" and kind != "monthly_recurring"
+        ):
+            activity_status = "irregular"
+        else:
+            activity_status = "active_candidate"
+
+        if activity == "active" and activity_status != "active_candidate":
+            continue
+        if activity == "history" and activity_status == "active_candidate":
+            continue
+        latest_row = max(
+            merchant_rows, key=lambda row: (row["date"], row["time"], row["id"])
+        )
         items.append(
             RecurringPaymentItem(
                 merchant=merchant,
-                category=data["category"],
+                category=latest_row["effective_category_major"] or "미분류",
                 avg_amount=avg_amount,
                 interval_type=interval_type,
                 avg_interval_days=round(avg_gap, 2),
-                occurrences=len(dates),
+                occurrences=len(merchant_rows),
                 confidence=confidence,
-                last_date=dates[-1],
-                recurring_payment_kind=_resolved_recurring_payment_kind(kind_counts),
+                last_date=latest_row["date"],
+                last_charge_date=last_charge_date,
+                net_amount=net_amount,
+                activity_status=activity_status,
+                recurring_payment_kind=kind,
                 installment_count=kind_counts["installment"],
                 monthly_recurring_count=kind_counts["monthly_recurring"],
                 not_recurring_count=kind_counts["not_recurring"],
                 unclassified_count=kind_counts["unclassified"],
-                transaction_ids=data["transaction_ids"],
+                transaction_ids=[row["id"] for row in merchant_rows],
             )
         )
 
@@ -559,9 +613,16 @@ async def get_recurring_payments(
         page=resolved_page,
         per_page=per_page,
         items=paged_items,
+        reference_date=reference_date,
+        activity=activity,
+        recent_days=recent_days,
         assumptions=(
-            "지출 거래 기준, 동일 거래처의 반복 간격으로 판단. "
+            "동일 거래처의 반복 간격을 일별 순지출이 양수인 날짜로 추정합니다. "
             "25-35일=monthly, 6-8일=weekly. "
+            "active는 최근 관측된 반복 후보이며 현재 구독/다음 청구 확정이 아닙니다. "
+            "최근 기준은 recent_days 이내이면서 평균 간격의 1.5배(최소 14일) 이내입니다. "
+            "0원·순환급 및 비반복/할부 분류는 활성 구독 후보에서 제외합니다. "
+            "avg_amount는 전체 순지출을 양수 순지출 관측일 수로 나눈 값입니다. "
             "recurring_payment_kind는 사용자가 수동 분류한 거래값을 집계한다."
         ),
     )
@@ -653,7 +714,9 @@ async def get_spending_anomalies(
         anomaly_mode = "standard"
         if baseline_avg < min_delta_amount:
             baseline_quality = "sparse_baseline"
-            anomaly_mode = "sparse_baseline_spike"
+            anomaly_mode = (
+                "sparse_baseline_spike" if delta > 0 else "sparse_baseline_drop"
+            )
             delta_pct_display = None
             delta_display_capped = True
         abs_delta = abs(delta)
@@ -670,12 +733,16 @@ async def get_spending_anomalies(
         if anomaly_score < anomaly_threshold:
             continue
 
-        if anomaly_mode == "sparse_baseline_spike":
-            reason = "지출 급증 (baseline이 작아 비율 표시는 생략)"
+        if baseline_quality == "sparse_baseline":
+            direction_text = "급증" if delta > 0 else "급감"
+            reason = f"지출 {direction_text} (비교 기준액이 작거나 순환급이어서 비율 표시는 생략)"
         elif delta > 0:
             reason = f"지출 급증 (+{round(delta_pct_display or 0):.0f}%)"
         else:
             reason = f"지출 급감 ({round(delta_pct_display or 0):.0f}%)"
+
+        if target_amount < 0:
+            reason += " · 환급이 결제보다 많아 순환급 상태입니다."
 
         items.append(
             SpendingAnomalyItem(
@@ -689,6 +756,7 @@ async def get_spending_anomalies(
                 delta_display_capped=delta_display_capped,
                 baseline_quality=baseline_quality,
                 anomaly_mode=anomaly_mode,
+                direction="increase" if delta > 0 else "decrease",
                 anomaly_score=anomaly_score,
                 reason=reason,
             )
@@ -753,7 +821,7 @@ async def get_discretionary_velocity(
         category = row["effective_category_major"] or "미분류"
         if merchant in excluded_merchants or category in excluded_categories:
             continue
-        amount = max(0, -row["amount"])
+        amount = -row["amount"]
         if amount == 0:
             continue
 
@@ -762,9 +830,12 @@ async def get_discretionary_velocity(
         is_classified = row["spend_necessity"] in {"essential", "discretionary"}
 
         if row_period == period:
-            current_total_classifiable_spend += amount
+            # Coverage describes classified charge volume; refunds must not make
+            # the ratio negative or exceed one. Spend itself remains signed/net.
+            charge_amount = max(0, amount)
+            current_total_classifiable_spend += charge_amount
             if is_classified:
-                current_classified_spend += amount
+                current_classified_spend += charge_amount
             else:
                 current_unclassified_spend += amount
             if is_discretionary:
@@ -779,9 +850,10 @@ async def get_discretionary_velocity(
     baseline_spend_at_same_progress = round(
         baseline_monthly_spend * month_progress_ratio
     )
-    velocity_ratio = _safe_ratio(
-        current_discretionary_spend,
-        baseline_spend_at_same_progress,
+    velocity_ratio = (
+        _safe_ratio(current_discretionary_spend, baseline_spend_at_same_progress)
+        if baseline_spend_at_same_progress > 0
+        else None
     )
     classification_coverage_ratio = _safe_ratio(
         current_classified_spend,
@@ -828,6 +900,8 @@ async def get_discretionary_velocity(
         assumptions=[
             f"최근 {settings.baseline_months}개 마감월 중 데이터가 있는 월의 재량 지출을 사용합니다.",
             "baseline_spend_at_same_progress는 마감월 월평균에 월 진행률을 곱한 값입니다.",
+            "현재 지출과 기준월 모두 환급을 차감한 순지출이며, 확정 정산은 원거래에 반영합니다.",
+            "분류 커버리지는 환급을 제외한 결제액 중 필요도가 분류된 금액의 비율입니다.",
         ],
     )
 
@@ -852,6 +926,7 @@ async def get_purchase_gate_candidates(
         tx_type="지출",
     )
 
+    possible_cancellations = _possible_cancellation_evidence(rows)
     eligible_rows = [row for row in rows if _is_purchase_gate_base_row(row)]
     purchase_rows = [
         row
@@ -994,6 +1069,22 @@ async def get_purchase_gate_candidates(
         )
         for candidate in candidate_map.values()
     ]
+    for item in items:
+        evidence = possible_cancellations.get(item.transaction_id)
+        if evidence is not None:
+            item.possible_cancellation = True
+            item.cancellation_evidence_transaction_ids = evidence
+            item.confidence = "low"
+            item.risk_level = "unknown"
+            item.review_priority = "normal"
+            item.reasons = [
+                "같은 날·거래처·결제수단에 동일 금액의 반대 부호 거래가 있어 취소 가능성을 먼저 확인해야 합니다."
+            ]
+            item.assumptions.append(
+                "취소 연결은 확정되지 않았으며 표시 금액은 개별 결제액입니다. 확인 전 반복 구매 제한을 제안하지 않습니다."
+            )
+            item.future_friction_suggestion = None
+
     legacy_candidate_keys_by_canonical = {
         item.candidate_key: [
             _legacy_candidate_key(candidate_type, item.transaction_id)
@@ -1027,6 +1118,8 @@ async def get_purchase_gate_candidates(
         page=resolved_page,
         per_page=per_page,
         items=paged_items,
+        start_date=ref_start,
+        end_date=ref_end,
         assumptions=[
             "후보는 구매 금지/허용 판단이 아니라 사용자 검토 queue입니다.",
             f"기본 cooldown은 {settings.review_cooldown_days}일입니다.",
@@ -1109,7 +1202,9 @@ async def _load_analytics_transactions(
         query = query.where(canonical.c.date >= start_date)
     if end_date is not None:
         query = query.where(canonical.c.date <= end_date)
-    if tx_type != "all":
+    if tx_type == "income_expense":
+        query = query.where(canonical.c.type.in_(["수입", "지출"]))
+    elif tx_type != "all":
         query = query.where(canonical.c.type == tx_type)
     result = await db_session.execute(
         query.order_by(
@@ -1195,6 +1290,14 @@ def _apply_settlement_netting(
     return adjusted
 
 
+def _necessity_is_missing(row: AnalyticsRow) -> bool:
+    if row["cost_kind"] == "fixed":
+        return row["fixed_cost_necessity"] not in {"essential", "discretionary"}
+    if row["cost_kind"] == "variable":
+        return row["spend_necessity"] not in {"essential", "discretionary"}
+    return True
+
+
 def _amount_for_analytics(tx_type: str, amount: int) -> int:
     if tx_type == "지출":
         return -amount
@@ -1263,7 +1366,11 @@ def _build_income_stability_assumptions(
     partial_cutoff_day: int | None,
     ref_date: date,
 ) -> str:
-    parts = ["월별 수입 기준, 이체 제외"]
+    parts = [
+        "월별 수입 기준, 이체 제외",
+        "수입이 관측된 월만 평균과 변동성에 포함하며 수입 미관측 월을 0원으로 추정하지 않습니다",
+        "조회 시작월 및 원본 업로드의 월별 수집 완전성은 검증하지 않은 관측값입니다",
+    ]
     if used_last_closed_month:
         parts.append(f"직전 마감월 기준(as_of={ref_date.isoformat()})")
     elif partial_cutoff_day is not None:
@@ -1357,6 +1464,23 @@ def _parse_candidate_key(candidate_key: str) -> tuple[str, int, str]:
             detail="candidate_key transaction id must be an integer",
         ) from exc
     return candidate_type, transaction_id, _canonical_candidate_key(transaction_id)
+
+
+def _possible_cancellation_evidence(rows: list[AnalyticsRow]) -> dict[int, list[int]]:
+    groups: dict[tuple[date, str, str, int], list[AnalyticsRow]] = defaultdict(list)
+    for row in rows:
+        merchant = row["merchant"] or row["description"]
+        payment_method = row["payment_method"]
+        if not merchant or not payment_method or row.get("settlement_refund_total", 0):
+            continue
+        groups[(row["date"], merchant, payment_method, abs(row["amount"]))].append(row)
+    evidence = {}
+    for group in groups.values():
+        charges = [row for row in group if row["amount"] < 0]
+        refunds = [row for row in group if row["amount"] > 0]
+        if len(charges) == 1 and len(refunds) == 1:
+            evidence[charges[0]["id"]] = [charges[0]["id"], refunds[0]["id"]]
+    return evidence
 
 
 def _is_purchase_gate_base_row(row: AnalyticsRow) -> bool:

@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import type { LoanItem } from '../../types/asset'
 import { LoansPage } from '../../features/data/LoansPage'
 
 const mutationMocks = vi.hoisted(() => ({
   updateLoanAccount: vi.fn(),
+  patchRepayment: vi.fn(),
 }))
 
 const state = vi.hoisted(() => ({
   includeHidden: false,
+  loans: [] as LoanItem[],
+  loansLoading: false,
 }))
 
 const activeAccount = {
@@ -73,8 +77,8 @@ vi.mock('../../hooks/useTransactions', () => ({
 }))
 
 vi.mock('../../hooks/useAssets', () => ({
-  useLoanSummary: () => query({ items: [] }),
-  usePatchLoanRepaymentMetadata: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useLoanSummary: () => ({ ...query({ items: state.loans }), isLoading: state.loansLoading }),
+  usePatchLoanRepaymentMetadata: () => ({ mutateAsync: mutationMocks.patchRepayment.mockResolvedValue({}), isPending: false }),
 }))
 
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => true }))
@@ -86,6 +90,9 @@ function renderPage() {
 describe('LoansPage', () => {
   beforeEach(() => {
     mutationMocks.updateLoanAccount.mockClear()
+    mutationMocks.patchRepayment.mockClear()
+    state.loansLoading = false
+    state.loans = [{ id: 9, lender: activeAccount.lender, product_name: activeAccount.product_name, loan_type: null, principal: null, balance: '10000000', interest_rate: null, monthly_payment: '90000', monthly_payment_source: 'estimated_from_linked_transactions', repayment_method: 'principal_interest', repayment_method_source: 'derived_from_loan_account', start_date: null, maturity_date: null }]
     state.includeHidden = false
   })
 
@@ -99,7 +106,6 @@ describe('LoansPage', () => {
         loan_account_id: 1,
         lender: null,
         product_name: null,
-        loan_kind: 'unknown',
         is_hidden: true,
       })
     })
@@ -114,9 +120,101 @@ describe('LoansPage', () => {
         loan_account_id: 2,
         lender: null,
         product_name: null,
-        loan_kind: 'unknown',
         is_hidden: false,
       })
     })
   })
+  it('계좌명만 저장하면 상환 메타와 대출 성격을 보내지 않는다', async () => {
+    renderPage()
+    fireEvent.change(screen.getByLabelText('대출 계좌명'), { target: { value: '새 이름' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.updateLoanAccount).toHaveBeenCalledWith({ loan_account_id: 1, lender: null, product_name: null, display_name_user: '새 이름' }))
+    expect(mutationMocks.patchRepayment).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('₩₩')
+  })
+
+  it('대출 성격만 저장해도 빈 수동 금액을 전송하지 않는다', async () => {
+    renderPage()
+    fireEvent.change(screen.getByLabelText('대출 성격'), { target: { value: 'overdraft' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.updateLoanAccount).toHaveBeenCalledWith({ loan_account_id: 1, lender: null, product_name: null, loan_kind: 'overdraft' }))
+    expect(mutationMocks.patchRepayment).not.toHaveBeenCalled()
+  })
+
+  it('상환 방식만 수정하면 수동 월상환액을 보존한다', async () => {
+    state.loans[0] = { ...state.loans[0], monthly_payment_source: 'manual', monthly_payment: '123456' }
+    renderPage()
+    fireEvent.change(screen.getByLabelText('상환 방식'), { target: { value: 'interest_only' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.patchRepayment).toHaveBeenCalledWith({ id: 9, data: { repayment_method: 'interest_only' } }))
+    expect(mutationMocks.updateLoanAccount).not.toHaveBeenCalled()
+  })
+
+  it('빈 수동 입력 저장을 차단하고 자동 복귀는 명시적 모드로 전송한다', async () => {
+    state.loans[0] = { ...state.loans[0], monthly_payment_source: 'manual', monthly_payment: null, repayment_method_source: 'manual' }
+    renderPage()
+    fireEvent.change(screen.getByLabelText('수동 월상환액'), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('수동 월상환액'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    expect(mutationMocks.patchRepayment).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('월상환액 산정'), { target: { value: 'automatic' } })
+    fireEvent.change(screen.getByLabelText('상환 방식'), { target: { value: 'automatic' } })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.patchRepayment).toHaveBeenCalledWith({ id: 9, data: { monthly_payment_mode: 'automatic', repayment_method_mode: 'automatic' } }))
+  })
+
+  it('상환 응답이 늦게 와도 편집 중 계좌명과 기존 수동 금액을 함께 보존한다', async () => {
+    const loan = { ...state.loans[0], monthly_payment_source: 'manual' as const, monthly_payment: '123456' }
+    state.loans = []
+    state.loansLoading = true
+    const view = renderPage()
+    fireEvent.change(screen.getByLabelText('대출 계좌명'), { target: { value: '편집 중' } })
+    state.loans = [loan]
+    state.loansLoading = false
+    view.rerender(<MemoryRouter><LoansPage /></MemoryRouter>)
+    expect(screen.getByLabelText('대출 계좌명')).toHaveValue('편집 중')
+    expect(screen.getByLabelText('수동 월상환액')).toHaveValue(123456)
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.updateLoanAccount).toHaveBeenCalled())
+    expect(mutationMocks.patchRepayment).not.toHaveBeenCalled()
+  })
+
+  it('추정값 없음의 원인과 관측 월 근거를 표시한다', () => {
+    state.loans[0] = { ...state.loans[0], monthly_payment: null, monthly_payment_missing_reason: 'insufficient_observations', monthly_payment_estimate_basis: 'median_closed_month_linked_repayments', monthly_payment_observation_months: ['2026-05'], monthly_payment_min_observations: 2, monthly_payment_estimate_window_start: '2026-01-01', monthly_payment_estimate_window_end: '2026-05-31' }
+    renderPage()
+    expect(screen.getByText('완료월 관측이 부족합니다')).toBeInTheDocument()
+    expect(screen.getByText('관측 1개월 / 최소 2개월 (2026-05)')).toBeInTheDocument()
+    expect(screen.getByText('완료월별 상환액 중앙값')).toBeInTheDocument()
+  })
+
+  it('자동 설정으로 원복하면 저장을 끄고 되돌린 필드는 다른 메타 저장에서도 제외한다', async () => {
+    renderPage()
+    const save = screen.getByRole('button', { name: '저장' })
+    expect(save).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('월상환액 산정'), { target: { value: 'manual' } })
+    expect(save).toBeDisabled()
+    expect(screen.getByText('수동 월상환액을 0원 이상 입력하세요')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('수동 월상환액'), { target: { value: '150000' } })
+    expect(save).toBeEnabled()
+    fireEvent.change(screen.getByLabelText('월상환액 산정'), { target: { value: 'automatic' } })
+    expect(save).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('상환 방식'), { target: { value: 'interest_only' } })
+    fireEvent.change(screen.getByLabelText('상환 방식'), { target: { value: 'automatic' } })
+    expect(save).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('대출 계좌명'), { target: { value: '이름만 변경' } })
+    fireEvent.click(save)
+    await waitFor(() => expect(mutationMocks.updateLoanAccount).toHaveBeenCalledWith({ loan_account_id: 1, lender: null, product_name: null, display_name_user: '이름만 변경' }))
+    expect(mutationMocks.patchRepayment).not.toHaveBeenCalled()
+  })
+
+  it('저장된 수동 금액이 비어 있어도 다른 메타만 바꾸는 저장은 허용한다', async () => {
+    state.loans[0] = { ...state.loans[0], monthly_payment_source: 'manual', monthly_payment: null }
+    renderPage()
+    fireEvent.change(screen.getByLabelText('대출 계좌명'), { target: { value: '새 계좌명' } })
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(mutationMocks.updateLoanAccount).toHaveBeenCalledWith({ loan_account_id: 1, lender: null, product_name: null, display_name_user: '새 계좌명' }))
+    expect(mutationMocks.patchRepayment).not.toHaveBeenCalled()
+  })
+
 })

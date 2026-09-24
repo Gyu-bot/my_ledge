@@ -1,6 +1,8 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
+import hashlib
+import json
 import math
 
 from fastapi import HTTPException, status
@@ -17,6 +19,13 @@ from app.models.auto_classification import (
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
+from app.schemas.settings import RecurringDryRunSettings
+from app.services.canonical_views import build_transactions_effective_select
+from app.services.recurring_configuration_lock import lock_recurring_configuration
+from app.services.settings_service import (
+    get_analytics_settings,
+    patch_analytics_settings,
+)
 from app.schemas.auto_classification import (
     AutoClassificationSettingsPatchRequest,
     CategoryClassificationRuleListResponse,
@@ -46,14 +55,17 @@ class ApplyResult:
 async def get_auto_classification_settings(
     db_session: AsyncSession,
 ) -> AutoClassificationSettings:
-    settings = await db_session.get(AutoClassificationSettings, 1)
-    if settings is not None:
-        return settings
+    stored = await db_session.get(AutoClassificationSettings, 1, populate_existing=True)
+    analytics = await get_analytics_settings(db_session)
     return AutoClassificationSettings(
         id=1,
-        apply_cost_rules_on_upload=False,
-        apply_loan_rules_on_upload=False,
-        apply_recurring_rules_on_upload=False,
+        apply_cost_rules_on_upload=stored.apply_cost_rules_on_upload
+        if stored
+        else False,
+        apply_loan_rules_on_upload=stored.apply_loan_rules_on_upload
+        if stored
+        else False,
+        apply_recurring_rules_on_upload=analytics.effective.recurring_dry_run.upload_auto_apply,
     )
 
 
@@ -61,7 +73,11 @@ async def patch_auto_classification_settings(
     db_session: AsyncSession,
     payload: AutoClassificationSettingsPatchRequest,
 ) -> AutoClassificationSettings:
-    settings = await db_session.get(AutoClassificationSettings, 1)
+    if payload.apply_recurring_rules_on_upload is not None:
+        await lock_recurring_configuration(db_session)
+    settings = await db_session.get(
+        AutoClassificationSettings, 1, populate_existing=True
+    )
     if settings is None:
         settings = AutoClassificationSettings(id=1)
         db_session.add(settings)
@@ -71,9 +87,17 @@ async def patch_auto_classification_settings(
         if value is not None:
             setattr(settings, field, value)
 
-    await db_session.commit()
-    await db_session.refresh(settings)
-    return settings
+    if update_fields.get("apply_recurring_rules_on_upload") is not None:
+        await patch_analytics_settings(
+            db_session,
+            spending_anomalies={},
+            recurring_dry_run={
+                "upload_auto_apply": update_fields["apply_recurring_rules_on_upload"]
+            },
+        )
+    else:
+        await db_session.commit()
+    return await get_auto_classification_settings(db_session)
 
 
 async def list_category_classification_rules(
@@ -85,9 +109,12 @@ async def list_category_classification_rules(
             CategoryClassificationRule.category_minor,
         )
     )
+    valid_categories = await _valid_category_keys(db_session)
     return CategoryClassificationRuleListResponse(
         items=[
-            _serialize_category_rule(rule)
+            _serialize_category_rule(
+                rule, category_valid=_category_is_valid(rule, valid_categories)
+            )
             for rule in result.scalars().all()
         ]
     )
@@ -99,6 +126,7 @@ async def upsert_category_classification_rule(
 ) -> CategoryClassificationRuleResponse:
     category_major = payload.category_major.strip()
     category_minor = _normalize_optional_text(payload.category_minor)
+    await _validate_category(db_session, category_major, category_minor)
     rule = await _load_category_rule(
         db_session,
         category_major=category_major,
@@ -182,10 +210,7 @@ async def list_merchant_alias_rules(
         select(MerchantAliasRule).order_by(MerchantAliasRule.alias_pattern)
     )
     return MerchantAliasRuleListResponse(
-        items=[
-            _serialize_merchant_alias_rule(rule)
-            for rule in result.scalars().all()
-        ]
+        items=[_serialize_merchant_alias_rule(rule) for rule in result.scalars().all()]
     )
 
 
@@ -314,8 +339,9 @@ async def apply_loan_merchant_rules(
     db_session: AsyncSession,
 ) -> ApplyResult:
     result = await db_session.execute(
-        select(LoanMerchantRule, LoanAccount)
-        .join(LoanAccount, LoanMerchantRule.loan_account_id == LoanAccount.id)
+        select(LoanMerchantRule, LoanAccount).join(
+            LoanAccount, LoanMerchantRule.loan_account_id == LoanAccount.id
+        )
     )
     rules_by_merchant: dict[str, LoanMerchantRule] = {}
     rules_by_description: dict[str, LoanMerchantRule] = {}
@@ -347,6 +373,7 @@ async def apply_loan_merchant_rules(
     )
 
     updated = 0
+    affected_account_ids: set[int] = set()
     for transaction, link in rows.all():
         if link is not None and link.source == "manual":
             continue
@@ -368,12 +395,21 @@ async def apply_loan_merchant_rules(
             and link.source == "auto"
         ):
             continue
+        affected_account_ids.update({link.loan_account_id, rule.loan_account_id})
         link.loan_account_id = rule.loan_account_id
         link.repayment_type = rule.repayment_type
         link.memo = rule.memo
         link.source = "auto"
         updated += 1
 
+    if affected_account_ids:
+        from app.services.loan_mapping_service import (
+            apply_loan_repayment_estimates_for_accounts,
+        )
+
+        await apply_loan_repayment_estimates_for_accounts(
+            db_session, account_ids=affected_account_ids
+        )
     await db_session.commit()
     return ApplyResult(updated=updated)
 
@@ -387,9 +423,12 @@ async def list_recurring_category_rules(
             RecurringCategoryRule.category_minor,
         )
     )
+    valid_categories = await _valid_category_keys(db_session)
     return RecurringCategoryRuleListResponse(
         items=[
-            _serialize_recurring_category_rule(rule)
+            _serialize_recurring_category_rule(
+                rule, category_valid=_category_is_valid(rule, valid_categories)
+            )
             for rule in result.scalars().all()
         ]
     )
@@ -399,8 +438,10 @@ async def upsert_recurring_category_rule(
     db_session: AsyncSession,
     payload: RecurringCategoryRuleRequest,
 ) -> RecurringCategoryRuleResponse:
+    await lock_recurring_configuration(db_session)
     category_major = payload.category_major.strip()
     category_minor = _normalize_optional_text(payload.category_minor)
+    await _validate_category(db_session, category_major, category_minor)
     rule = await _load_recurring_category_rule(
         db_session,
         category_major=category_major,
@@ -423,7 +464,8 @@ async def delete_recurring_category_rule(
     db_session: AsyncSession,
     rule_id: int,
 ) -> bool:
-    rule = await db_session.get(RecurringCategoryRule, rule_id)
+    await lock_recurring_configuration(db_session)
+    rule = await db_session.get(RecurringCategoryRule, rule_id, populate_existing=True)
     if rule is None:
         return False
     await db_session.delete(rule)
@@ -433,30 +475,20 @@ async def delete_recurring_category_rule(
 
 async def apply_recurring_category_rules(
     db_session: AsyncSession,
+    *,
+    require_upload_enabled: bool = False,
 ) -> ApplyResult:
-    rules = await _load_recurring_category_rules(db_session)
-    if not rules:
-        return ApplyResult(updated=0)
-
-    result = await db_session.execute(
-        select(Transaction)
-        .where(Transaction.type == "지출")
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
-        .where(Transaction.recurring_payment_kind.is_(None))
+    candidates, settings = await _recurring_proposals(
+        db_session, lock=True, require_upload_enabled=require_upload_enabled
     )
-    transactions = result.scalars().all()
-    recurring_candidates = _recurring_candidate_merchants(transactions)
+    if require_upload_enabled and not settings.upload_auto_apply:
+        await db_session.commit()
+        return ApplyResult(updated=0)
     updated = 0
-    for transaction in transactions:
-        rule = _match_recurring_category_rule(transaction, rules)
-        if rule is None:
-            continue
-        if transaction.merchant not in recurring_candidates and transaction.cost_kind != "fixed":
-            continue
-        transaction.recurring_payment_kind = rule.recurring_payment_kind
-        updated += 1
-
+    for item, rows in candidates:
+        for transaction in rows:
+            transaction.recurring_payment_kind = item.proposed_kind
+            updated += 1
     await db_session.commit()
     return ApplyResult(updated=updated)
 
@@ -464,67 +496,184 @@ async def apply_recurring_category_rules(
 async def dry_run_recurring_category_rules(
     db_session: AsyncSession,
 ) -> RecurringDryRunResponse:
-    rules = await _load_recurring_category_rules(db_session)
-    if not rules:
-        return RecurringDryRunResponse(items=[])
-    transactions = await _load_unclassified_recurring_transactions(db_session)
-    recurring_candidates = _recurring_candidate_merchants(transactions)
-    grouped: dict[str, list[Transaction]] = defaultdict(list)
-    for transaction in transactions:
-        rule = _match_recurring_category_rule(transaction, rules)
-        if rule is None:
-            continue
-        if transaction.merchant not in recurring_candidates and transaction.cost_kind != "fixed":
-            continue
-        grouped[transaction.merchant].append(transaction)
-
-    items: list[RecurringDryRunItem] = []
-    for merchant, rows in grouped.items():
-        rows.sort(key=lambda row: (row.date, row.time, row.id))
-        first_rule = _match_recurring_category_rule(rows[0], rules)
-        if first_rule is None:
-            continue
-        category_hint = rows[0].category_major_user or rows[0].category_major
-        amounts = [abs(row.amount) for row in rows]
-        confidence = round(max(0.5, 1.0 - _coefficient_of_variation(amounts)), 4)
-        items.append(
-            RecurringDryRunItem(
-                merchant=merchant,
-                proposed_kind=first_rule.recurring_payment_kind,
-                confidence=confidence,
-                matched_transactions=[
-                    RecurringDryRunMatchedTransaction(
-                        id=row.id,
-                        date=row.date.isoformat(),
-                        amount=row.amount,
-                    )
-                    for row in rows
-                ],
-                reason="반복 후보 조건과 카테고리 힌트가 일치합니다.",
-                category_hint=category_hint,
-                apply_scope_options=["all_matching", "future_only"],
-            )
-        )
-    items.sort(key=lambda item: (-item.confidence, item.merchant))
-    return RecurringDryRunResponse(items=items)
+    candidates, _settings = await _recurring_proposals(db_session)
+    return RecurringDryRunResponse(items=[item for item, _rows in candidates])
 
 
 async def apply_recurring_dry_run(
     db_session: AsyncSession,
     payload: RecurringDryRunApplyRequest,
 ) -> ApplyResult:
-    if payload.apply_scope == "future_only":
-        return ApplyResult(updated=0)
-
-    transactions = await _load_unclassified_recurring_transactions(db_session)
-    updated = 0
-    for transaction in transactions:
-        if transaction.merchant != payload.merchant:
-            continue
-        transaction.recurring_payment_kind = payload.proposed_kind
-        updated += 1
+    candidates, settings = await _recurring_proposals(db_session, lock=True)
+    matching = next(
+        (
+            (item, rows)
+            for item, rows in candidates
+            if item.merchant == payload.merchant
+            and item.proposed_kind == payload.proposed_kind
+            and item.preview_token == payload.preview_token
+        ),
+        None,
+    )
+    if matching is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="반복 후보나 설정이 변경되었습니다. 미리보기를 다시 확인해 주세요.",
+        )
+    _item, rows = matching
+    eligible_ids = {row.id for row in rows}
+    scope = payload.apply_scope or settings.default_apply_scope
+    selected_ids = set(payload.transaction_ids or [])
+    if scope == "reviewed_only":
+        if not selected_ids or not selected_ids <= eligible_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="확인한 미리보기 거래 ID를 선택해 주세요.",
+            )
+    else:
+        if payload.transaction_ids is not None and selected_ids != eligible_ids:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="전체 적용 대상이 미리보기와 다릅니다. 다시 확인해 주세요.",
+            )
+        selected_ids = eligible_ids
+    for row in rows:
+        if row.id in selected_ids:
+            row.recurring_payment_kind = payload.proposed_kind
     await db_session.commit()
-    return ApplyResult(updated=updated)
+    return ApplyResult(updated=len(selected_ids))
+
+
+async def _recurring_proposals(
+    db_session: AsyncSession,
+    *,
+    lock: bool = False,
+    require_upload_enabled: bool = False,
+) -> tuple[
+    list[tuple[RecurringDryRunItem, list[Transaction]]], RecurringDryRunSettings
+]:
+    if lock:
+        await lock_recurring_configuration(db_session)
+    analytics_settings = await get_analytics_settings(db_session)
+    settings = analytics_settings.effective.recurring_dry_run
+    if require_upload_enabled and not settings.upload_auto_apply:
+        return [], settings
+    saved_scope = analytics_settings.saved.recurring_dry_run.default_apply_scope
+    unsupported_saved_scope = saved_scope is not None and saved_scope not in {
+        "all_matching",
+        "reviewed_only",
+    }
+    rules = await _load_recurring_category_rules(db_session)
+    transactions = await _load_recurring_evidence_transactions(db_session, lock=lock)
+    # Separate proposed kinds before detecting cadence. Unrelated categories,
+    # refunds, and explicit contrary classifications cannot establish evidence.
+    grouped: dict[tuple[str, str], list[Transaction]] = defaultdict(list)
+    for transaction in transactions:
+        rule = _match_recurring_category_rule(transaction, rules)
+        if rule is None or transaction.recurring_payment_kind not in {
+            None,
+            rule.recurring_payment_kind,
+        }:
+            continue
+        grouped[(transaction.merchant, rule.recurring_payment_kind)].append(transaction)
+
+    candidates: list[tuple[RecurringDryRunItem, list[Transaction]]] = []
+    for (merchant, kind), evidence in grouped.items():
+        confidence = _recurring_confidence(evidence, settings)
+        pending = [row for row in evidence if row.recurring_payment_kind is None]
+        if confidence is None or not pending:
+            continue
+        matched_rules = [_match_recurring_category_rule(row, rules) for row in evidence]
+        token_state = {
+            "settings": settings.model_dump(),
+            "saved_settings": analytics_settings.saved.recurring_dry_run.model_dump(),
+            "merchant": merchant,
+            "kind": kind,
+            "evidence": [
+                [
+                    row.id,
+                    row.date.isoformat(),
+                    row.time.isoformat(),
+                    row.amount,
+                    row.category_major_user or row.category_major,
+                    row.category_minor_user or row.category_minor,
+                    row.recurring_payment_kind,
+                    row.cost_kind,
+                    rule.id,
+                    str(rule.updated_at),
+                ]
+                for row, rule in zip(evidence, matched_rules, strict=True)
+            ],
+        }
+        token = hashlib.sha256(
+            json.dumps(token_state, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+        item = RecurringDryRunItem(
+            merchant=merchant,
+            proposed_kind=kind,
+            confidence=round(confidence, 4),
+            matched_transactions=[
+                RecurringDryRunMatchedTransaction(
+                    id=row.id, date=row.date.isoformat(), amount=row.amount
+                )
+                for row in pending
+            ],
+            reason=(
+                "카테고리, 관측 횟수, 결제 간격과 금액 변동 기준이 일치합니다."
+                + (
+                    " 저장된 기본 적용 범위는 지원되지 않아 확인한 거래만 적용합니다. 설정을 수정해 주세요."
+                    if unsupported_saved_scope
+                    else ""
+                )
+            ),
+            category_hint=", ".join(
+                sorted(
+                    {row.category_major_user or row.category_major for row in pending}
+                )
+            ),
+            apply_scope_options=["all_matching", "reviewed_only"],
+            default_apply_scope=settings.default_apply_scope,
+            preview_token=token,
+        )
+        candidates.append((item, pending))
+    candidates.sort(
+        key=lambda candidate: (
+            -candidate[0].confidence,
+            candidate[0].merchant,
+            candidate[0].proposed_kind,
+        )
+    )
+    return candidates, settings
+
+
+def _recurring_confidence(
+    rows: list[Transaction], settings: RecurringDryRunSettings
+) -> float | None:
+    dates = sorted({row.date for row in rows})
+    months = {_month_start(value) for value in dates}
+    cv = _coefficient_of_variation([abs(row.amount) for row in rows])
+    if (
+        len(rows) < settings.min_occurrences
+        or len(dates) < settings.min_distinct_days
+        or len(months) < settings.min_distinct_months
+        or cv > settings.max_amount_cv
+    ):
+        return None
+    intervals = [(later - earlier).days for earlier, later in zip(dates, dates[1:])]
+    if not intervals:
+        return None
+    monthly = all(
+        settings.monthly_interval_days_min <= days <= settings.monthly_interval_days_max
+        for days in intervals
+    )
+    weekly = all(
+        settings.weekly_interval_days_min <= days <= settings.weekly_interval_days_max
+        for days in intervals
+    )
+    confidence = max(0.0, 1.0 - cv)
+    if not (monthly or weekly) or confidence < settings.minimum_confidence:
+        return None
+    return confidence
 
 
 async def apply_enabled_auto_classification_after_upload(
@@ -535,22 +684,62 @@ async def apply_enabled_auto_classification_after_upload(
         await apply_category_classification_rules(db_session)
     if settings.apply_loan_rules_on_upload:
         await apply_loan_merchant_rules(db_session)
-    if settings.apply_recurring_rules_on_upload:
-        await apply_recurring_category_rules(db_session)
+    # Recheck the upload preference under the same configuration lock used by
+    # approvals; earlier cost/loan operations may have committed in the meantime.
+    await apply_recurring_category_rules(db_session, require_upload_enabled=True)
 
 
-async def _load_unclassified_recurring_transactions(
+async def _load_recurring_evidence_transactions(
     db_session: AsyncSession,
+    *,
+    lock: bool = False,
 ) -> list[Transaction]:
-    result = await db_session.execute(
+    query = (
         select(Transaction)
-        .where(Transaction.type == "지출")
+        .where(Transaction.type == "지출", Transaction.amount < 0)
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
-        .where(Transaction.recurring_payment_kind.is_(None))
         .order_by(Transaction.date.asc(), Transaction.time.asc(), Transaction.id.asc())
     )
-    return list(result.scalars().all())
+    if lock:
+        # Match ORM bulk flush primary-key order to avoid locking the same two
+        # rows in opposite orders when import order differs from transaction date.
+        query = (
+            query.order_by(None)
+            .order_by(Transaction.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    result = await db_session.execute(query)
+    # Evidence, display and preview tokens retain their chronological order.
+    return sorted(result.scalars().all(), key=lambda row: (row.date, row.time, row.id))
+
+
+async def _valid_category_keys(db_session: AsyncSession) -> set[tuple[str, str | None]]:
+    canonical = build_transactions_effective_select().subquery()
+    result = await db_session.execute(
+        select(
+            canonical.c.effective_category_major, canonical.c.effective_category_minor
+        )
+        .where(canonical.c.type == "지출")
+        .distinct()
+    )
+    keys = {(major, minor) for major, minor in result.all() if major and major.strip()}
+    return keys | {(major, None) for major, _minor in keys}
+
+
+def _category_is_valid(rule, keys: set[tuple[str, str | None]]) -> bool:
+    return (rule.category_major, rule.category_minor) in keys
+
+
+async def _validate_category(
+    db_session: AsyncSession, major: str, minor: str | None
+) -> None:
+    if (major, minor) not in await _valid_category_keys(db_session):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="현재 지출 거래에 있는 대분류·소분류 조합을 선택해 주세요.",
+        )
 
 
 async def _load_category_rule(
@@ -582,7 +771,7 @@ async def _load_recurring_category_rule(
         query = query.where(RecurringCategoryRule.category_minor.is_(None))
     else:
         query = query.where(RecurringCategoryRule.category_minor == category_minor)
-    return await db_session.scalar(query)
+    return await db_session.scalar(query.execution_options(populate_existing=True))
 
 
 async def _load_category_rules(
@@ -601,9 +790,8 @@ def _match_category_rule(
 ) -> CategoryClassificationRule | None:
     category_major = transaction.category_major_user or transaction.category_major
     category_minor = transaction.category_minor_user or transaction.category_minor
-    return (
-        rules.get((category_major, category_minor))
-        or rules.get((category_major, None))
+    return rules.get((category_major, category_minor)) or rules.get(
+        (category_major, None)
     )
 
 
@@ -622,7 +810,7 @@ def _normalized_necessity_pair(
         else None
     )
     if cost_kind == "fixed":
-        normalized = explicit_fixed_necessity or explicit_spend_necessity
+        normalized = explicit_spend_necessity or explicit_fixed_necessity
         return normalized, normalized
     return None, explicit_spend_necessity or "discretionary"
 
@@ -630,7 +818,9 @@ def _normalized_necessity_pair(
 async def _load_recurring_category_rules(
     db_session: AsyncSession,
 ) -> dict[tuple[str, str | None], RecurringCategoryRule]:
-    result = await db_session.execute(select(RecurringCategoryRule))
+    result = await db_session.execute(
+        select(RecurringCategoryRule).execution_options(populate_existing=True)
+    )
     return {
         (rule.category_major, rule.category_minor): rule
         for rule in result.scalars().all()
@@ -643,29 +833,9 @@ def _match_recurring_category_rule(
 ) -> RecurringCategoryRule | None:
     category_major = transaction.category_major_user or transaction.category_major
     category_minor = transaction.category_minor_user or transaction.category_minor
-    return (
-        rules.get((category_major, category_minor))
-        or rules.get((category_major, None))
+    return rules.get((category_major, category_minor)) or rules.get(
+        (category_major, None)
     )
-
-
-def _recurring_candidate_merchants(transactions: list[Transaction]) -> set[str]:
-    merchant_rows: dict[str, list[Transaction]] = defaultdict(list)
-    for transaction in transactions:
-        merchant_rows[transaction.merchant].append(transaction)
-
-    candidates: set[str] = set()
-    for merchant, rows in merchant_rows.items():
-        active_dates = {row.date for row in rows}
-        active_months = {_month_start(row.date) for row in rows}
-        amounts = [abs(row.amount) for row in rows]
-        if (
-            len(active_months) >= 2
-            and len(active_dates) >= 2
-            and _coefficient_of_variation(amounts) <= 0.5
-        ):
-            candidates.add(merchant)
-    return candidates
 
 
 def _month_start(value: date) -> date:
@@ -684,8 +854,14 @@ def _coefficient_of_variation(values: list[int]) -> float:
 
 def _serialize_category_rule(
     rule: CategoryClassificationRule,
+    *,
+    category_valid: bool = True,
 ) -> CategoryClassificationRuleResponse:
     return CategoryClassificationRuleResponse(
+        category_valid=category_valid,
+        validation_message=None
+        if category_valid
+        else "현재 지출 분류에 없는 규칙입니다.",
         id=rule.id,
         category_major=rule.category_major,
         category_minor=rule.category_minor,
@@ -720,7 +896,8 @@ def _serialize_loan_merchant_rule(
         loan_account_id=account.id,
         lender=account.lender,
         product_name=account.product_name,
-        display_name=account.display_name_user or f"{account.lender} {account.product_name}",
+        display_name=account.display_name_user
+        or f"{account.lender} {account.product_name}",
         repayment_type=rule.repayment_type,
         memo=rule.memo,
         created_at=rule.created_at,
@@ -730,8 +907,14 @@ def _serialize_loan_merchant_rule(
 
 def _serialize_recurring_category_rule(
     rule: RecurringCategoryRule,
+    *,
+    category_valid: bool = True,
 ) -> RecurringCategoryRuleResponse:
     return RecurringCategoryRuleResponse(
+        category_valid=category_valid,
+        validation_message=None
+        if category_valid
+        else "현재 지출 분류에 없는 규칙입니다.",
         id=rule.id,
         category_major=rule.category_major,
         category_minor=rule.category_minor,

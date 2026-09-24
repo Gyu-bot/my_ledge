@@ -36,6 +36,7 @@ from app.services.transactions_service import (
     bulk_restore_transactions,
     bulk_update_transactions,
     create_transaction,
+    get_transaction,
     list_transaction_filter_options,
     list_transactions,
     preview_bulk_transaction_mutation,
@@ -62,7 +63,9 @@ async def get_transactions(
     cost_kind: TransactionCostKindFilter = Query(default="all"),
     fixed_cost_necessity: TransactionFixedCostNecessityFilter = Query(default="all"),
     spend_necessity: TransactionSpendNecessityFilter = Query(default="all"),
-    recurring_payment_kind: TransactionRecurringPaymentKindFilter = Query(default="all"),
+    recurring_payment_kind: TransactionRecurringPaymentKindFilter = Query(
+        default="all"
+    ),
     is_edited: TransactionEditedFilter = Query(default="all"),
     include_deleted: bool = Query(default=False),
     include_merged: bool = Query(default=False),
@@ -92,7 +95,9 @@ async def get_transactions(
     )
 
 
-@router.get("/transactions/filter-options", response_model=TransactionFilterOptionsResponse)
+@router.get(
+    "/transactions/filter-options", response_model=TransactionFilterOptionsResponse
+)
 async def get_transaction_filter_options(
     include_deleted: bool = Query(default=False),
     include_merged: bool = Query(default=False),
@@ -139,7 +144,9 @@ async def get_transactions_by_category(
     )
 
 
-@router.get("/transactions/by-category/timeline", response_model=CategoryTimelineResponse)
+@router.get(
+    "/transactions/by-category/timeline", response_model=CategoryTimelineResponse
+)
 async def get_transactions_by_category_timeline(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
@@ -156,7 +163,9 @@ async def get_transactions_by_category_timeline(
     )
 
 
-@router.get("/transactions/payment-methods", response_model=PaymentMethodSummaryResponse)
+@router.get(
+    "/transactions/payment-methods", response_model=PaymentMethodSummaryResponse
+)
 async def get_transaction_payment_methods(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
@@ -248,6 +257,14 @@ async def post_bulk_restore_transactions(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> TransactionBulkMutationResponse:
     return await bulk_restore_transactions(db_session, payload)
+
+
+@router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
+async def get_transaction_detail(
+    transaction_id: int,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> TransactionResponse:
+    return await get_transaction(db_session, transaction_id)
 
 
 @router.patch(

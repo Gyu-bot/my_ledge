@@ -10,7 +10,20 @@ function buildQuery(params: object): string {
   return query ? `?${query}` : ''
 }
 
+export interface CanonicalDashboardParams {
+  months?: number
+  merchant_limit?: number
+  queue_limit?: number
+  queue_page?: number
+  issue_types?: string
+  period_from?: string
+  period_to?: string
+  current_only?: boolean
+  reference_date?: string
+  search?: string
+}
+
 export const canonicalViewsApi = {
-  dashboard: (params: { months?: number; merchant_limit?: number; queue_limit?: number } = {}) =>
+  dashboard: (params: CanonicalDashboardParams = {}) =>
     apiFetch<CanonicalViewsDashboardResponse>(`/canonical-views/dashboard${buildQuery(params)}`),
 }

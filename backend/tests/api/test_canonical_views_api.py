@@ -267,7 +267,9 @@ async def test_canonical_dashboard_returns_view_rows(
     assert body["monthly_cashflow"][-1]["loan_repayment_total"] == 500000
     assert body["monthly_cashflow"][-1]["discretionary_variable_total"] == 1000000
     assert body["monthly_cashflow"][-1]["income_total"] == 1521
-    assert body["monthly_cashflow"][-1]["savings_rate_basis"] == "insufficient_partial_month_income"
+    assert (
+        body["monthly_cashflow"][-1]["savings_rate_basis"] == "observed_partial_month"
+    )
     assert (
         body["true_spendable_monthly"][0]["remaining_after_variable_spend"] == -3498479
     )
@@ -303,7 +305,11 @@ async def test_canonical_dashboard_filters_unclassified_queue_by_issue_and_perio
     loan_link_response = await async_client.get(
         "/api/v1/canonical-views/dashboard",
         headers=api_headers,
-        params={"issue_types": "loan_link", "period_from": "2026-05", "period_to": "2026-05"},
+        params={
+            "issue_types": "loan_link",
+            "period_from": "2026-05",
+            "period_to": "2026-05",
+        },
     )
     cost_kind_response = await async_client.get(
         "/api/v1/canonical-views/dashboard",
@@ -317,7 +323,7 @@ async def test_canonical_dashboard_filters_unclassified_queue_by_issue_and_perio
     assert cost_kind_response.json()["unclassified_work_queue"] == []
 
 
-async def test_canonical_dashboard_estimates_income_for_partial_current_month(
+async def test_canonical_dashboard_does_not_substitute_monthly_total_average_for_salary(
     async_client: AsyncClient,
     api_headers: dict[str, str],
     db_session: AsyncSession,
@@ -334,11 +340,178 @@ async def test_canonical_dashboard_estimates_income_for_partial_current_month(
     assert current_month["period"] == "2026-05"
     assert current_month["income_total"] == 1521
     assert current_month["observed_income_total"] == 1521
-    assert current_month["estimated_income_total"] == 6881301
-    assert current_month["income_basis"] == "estimated"
-    assert current_month["is_income_estimated"] is True
-    assert current_month["income_estimate_month_count"] == 5
-    assert current_month["income_estimate_source"] == "trailing_6_outlier_adjusted_avg"
-    assert current_month["excluded_income_periods"] == ["2026-02"]
-    assert current_month["estimated_spendable_before_variable_spend"] == 4681301
-    assert current_month["estimated_remaining_after_variable_spend"] == 3381301
+    assert current_month["estimated_income_total"] is None
+    assert current_month["income_basis"] == "observed"
+    assert current_month["is_income_estimated"] is False
+    assert current_month["income_estimate_source"] is None
+    assert current_month["estimated_remaining_after_variable_spend"] is None
+    projection = response.json()["month_projection"]
+    assert projection["income_sources"] == []
+    assert projection["expected_remaining_income"] == 0
+    assert projection["projected_month_end_net"] is None
+    assert projection["coverage"]["adequately_covered_periods"] == []
+
+
+async def test_queue_filters_before_pagination_with_true_total_and_stable_pages(
+    async_client, api_headers, db_session
+):
+    await _create_sample_canonical_views(db_session)
+    await db_session.execute(
+        text(
+            "CREATE TABLE queue_fixture AS SELECT * FROM vw_unclassified_work_queue WHERE 1 = 0"
+        )
+    )
+    await db_session.execute(text("DROP VIEW vw_unclassified_work_queue"))
+    for number in range(1, 7):
+        await db_session.execute(
+            text("""
+            INSERT INTO queue_fixture VALUES
+            (:id, :date, '지출', :merchant, '예시분류', NULL, -100, 100,
+             :needs_cost, false, false, false, :needs_loan, 1, :priority, '예시 검토')
+        """),
+            {
+                "id": number,
+                "date": "2031-07-10" if number > 2 else "2031-06-10",
+                "merchant": "Example % literal" if number == 6 else "Example Merchant",
+                "needs_cost": number > 2,
+                "needs_loan": number <= 2,
+                "priority": 100 - number,
+            },
+        )
+    await db_session.execute(
+        text("CREATE VIEW vw_unclassified_work_queue AS SELECT * FROM queue_fixture")
+    )
+    await db_session.commit()
+    first = (
+        await async_client.get(
+            "/api/v1/canonical-views/dashboard",
+            headers=api_headers,
+            params={
+                "queue_limit": 2,
+                "queue_page": 1,
+                "issue_types": "cost_kind",
+                "current_only": True,
+                "reference_date": "2031-07-20",
+            },
+        )
+    ).json()
+    second = (
+        await async_client.get(
+            "/api/v1/canonical-views/dashboard",
+            headers=api_headers,
+            params={
+                "queue_limit": 2,
+                "queue_page": 2,
+                "issue_types": "cost_kind",
+                "period_from": "2031-07",
+                "period_to": "2031-07",
+            },
+        )
+    ).json()
+    assert [item["transaction_id"] for item in first["unclassified_work_queue"]] == [
+        3,
+        4,
+    ]
+    assert [item["transaction_id"] for item in second["unclassified_work_queue"]] == [
+        5,
+        6,
+    ]
+    assert (
+        first["unclassified_work_queue_total"]
+        == second["unclassified_work_queue_total"]
+        == 4
+    )
+    assert second["unclassified_work_queue_page"] == 2
+    assert second["unclassified_work_queue_per_page"] == 2
+    assert second["unclassified_work_queue_total_pages"] == 2
+    literal = (
+        await async_client.get(
+            "/api/v1/canonical-views/dashboard",
+            headers=api_headers,
+            params={"search": "%"},
+        )
+    ).json()
+    assert literal["unclassified_work_queue_total"] == 1
+    assert literal["unclassified_work_queue"][0]["transaction_id"] == 6
+    assert literal["unclassified_work_queue"][0]["cost_kind"] is None
+
+
+async def test_income_expectations_authenticated_validation_roundtrip_and_reset(
+    async_client, api_headers
+):
+    endpoint = "/api/v1/settings/income-expectations"
+    assert (await async_client.get(endpoint)).status_code == 401
+    payload = {
+        "items": [
+            {
+                "source_key": "income:example payer",
+                "merchant": "Example Payer",
+                "expected_amount": 100_000,
+                "expected_day": 31,
+                "stopped": False,
+            }
+        ]
+    }
+    assert (await async_client.patch(endpoint, json=payload)).status_code == 401
+    response = await async_client.patch(endpoint, headers=api_headers, json=payload)
+    assert response.status_code == 200
+    assert (await async_client.get(endpoint, headers=api_headers)).json() == payload
+    invalid = {"items": [{**payload["items"][0], "expected_day": 32}]}
+    assert (
+        await async_client.patch(endpoint, headers=api_headers, json=invalid)
+    ).status_code == 422
+    assert (
+        await async_client.patch(
+            endpoint, headers=api_headers, json={"items": payload["items"] * 2}
+        )
+    ).status_code == 422
+    invalid["items"][0]["expected_day"] = 30
+    invalid["items"][0]["source_key"] = "income:unrelated"
+    assert (
+        await async_client.patch(endpoint, headers=api_headers, json=invalid)
+    ).status_code == 422
+    assert (
+        await async_client.patch(endpoint, headers=api_headers, json={"items": []})
+    ).json() == {"items": []}
+    assert (await async_client.get(endpoint, headers=api_headers)).json() == {
+        "items": []
+    }
+
+
+async def test_historical_month_coverage_is_independent_of_projection_lookback(
+    async_client, api_headers, db_session
+):
+    from datetime import date, time
+    from app.models import Transaction
+
+    await _create_sample_canonical_views(db_session)
+    for month in (11, 12):
+        for day in (2, 5, 9, 13, 17, 21, 25, 28):
+            db_session.add(
+                Transaction(
+                    date=date(2025, month, day),
+                    time=time(12),
+                    type="지출",
+                    category_major="예시",
+                    merchant="Example Activity",
+                    description="Example Activity",
+                    amount=-100,
+                )
+            )
+    await db_session.commit()
+    responses = []
+    for reference in ("2026-06-20", "2026-09-20"):
+        response = await async_client.get(
+            "/api/v1/canonical-views/dashboard",
+            headers=api_headers,
+            params={"reference_date": reference},
+        )
+        assert response.status_code == 200
+        responses.append(response.json())
+    for body in responses:
+        months = {item["period"]: item for item in body["monthly_cashflow"]}
+        assert months["2025-11"]["is_complete_month"] is True
+        assert months["2025-12"]["is_complete_month"] is True
+        assert months["2026-01"]["is_complete_month"] is False
+        assert months["2025-11"]["savings_rate_basis"] == "observed_closed_month"
+    assert "2025-11" not in responses[-1]["month_projection"]["included_periods"]

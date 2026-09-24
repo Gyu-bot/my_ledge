@@ -9,6 +9,8 @@ from app.schemas.loan_mapping import (
     LoanAccountCandidateResponse,
     LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
+    LoanEstimateRecalculateRequest,
+    LoanEstimateRecalculateResponse,
     LoanCandidateReviewFilter,
     LoanCandidateReviewPatchRequest,
     LoanCandidateReviewResponse,
@@ -26,6 +28,7 @@ from app.services.loan_mapping_service import (
     delete_transaction_loan_link,
     get_transaction_loan_link,
     list_loan_accounts,
+    recalculate_loan_repayment_estimates,
     list_loan_transaction_mappings,
     update_loan_candidate_review,
     update_loan_account_metadata,
@@ -145,3 +148,15 @@ async def delete_loan_link_for_transaction(
 ) -> Response:
     await delete_transaction_loan_link(db_session, transaction_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/loan-accounts/recalculate-estimates",
+    response_model=LoanEstimateRecalculateResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def post_recalculate_loan_estimates(
+    payload: LoanEstimateRecalculateRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LoanEstimateRecalculateResponse:
+    return await recalculate_loan_repayment_estimates(db_session, payload)

@@ -16,7 +16,7 @@ export const SETTING_HELP = {
     description: '너무 작은 거래를 후보에서 제외하는 하한입니다. 낮출수록 더 많은 거래가 검토 대상에 들어옵니다.',
   },
   purchaseNewMerchantLookback: {
-    title: '신규 가맹점 lookback',
+    title: '신규 가맹점 조회 기간',
     description: '최근 몇 개월 동안 보이지 않았던 거래처를 신규 가맹점으로 볼지 정하는 기간입니다.',
   },
   purchaseMerchantSpike: {
@@ -28,7 +28,7 @@ export const SETTING_HELP = {
     description: '비필수 소비 흐름이 평소보다 크게 늘어난 달을 purchase gate 후보로 올리는 기준입니다.',
   },
   purchaseReviewCooldown: {
-    title: '리뷰 cooldown',
+    title: '리뷰 재검토 간격',
     description: '이미 검토한 후보를 다시 띄우기 전 기다리는 기간입니다. 짧을수록 같은 후보가 자주 보일 수 있습니다.',
   },
   purchaseRiskThreshold: {
@@ -53,22 +53,22 @@ export const SETTING_HELP = {
   },
   velocityWarningRatio: {
     title: '재량 속도 경고',
-    description: '현재 재량 지출 속도가 기준 대비 이 비율을 넘으면 warning으로 판단합니다.',
+    description: '현재 재량 지출 속도가 기준 대비 이 비율을 넘으면 주의로 판단합니다.',
   },
   velocityHighRatio: {
     title: '재량 속도 높음',
-    description: '현재 재량 지출 속도가 기준 대비 이 비율을 넘으면 high로 판단합니다.',
+    description: '현재 재량 지출 속도가 기준 대비 이 비율을 넘으면 높음으로 판단합니다.',
   },
   velocityCoverage: {
     title: '분류 커버리지 최소',
     description: '카테고리 분류가 충분하지 않은 기간을 재량 속도 판단에서 낮은 신뢰도로 다루는 기준입니다.',
   },
   velocityOutlierPolicy: {
-    title: 'outlier policy',
+    title: '이상값 처리 방식',
     description: '기준 기간을 만들 때 튀는 월을 어떻게 제외하거나 완화할지 정하는 정책명입니다.',
   },
   velocityBaselineMode: {
-    title: 'baseline mode',
+    title: '비교 기준 방식',
     description: '마감월, 진행월 보정 등 기준선을 계산하는 방식을 정합니다.',
   },
   velocityExcludedCategories: {
@@ -117,22 +117,22 @@ export const SETTING_HELP = {
   },
   recurringApplyScope: {
     title: '반복 작업 기본 범위',
-    description: '반복 결제 후보를 적용할 때 기본으로 전체 매칭을 볼지, 검토된 항목만 볼지 정합니다.',
+    description: '미리보기의 모든 거래를 적용하거나, 직접 체크한 거래만 적용하도록 기본 범위를 정합니다. 미래 거래 자동 적용은 지원하지 않습니다.',
   },
   recurringUploadAutoApply: {
     title: '업로드 후 자동 적용',
     description: '업로드 직후 반복 결제 후보를 자동 적용할지 정합니다. 안전상 기본은 꺼짐입니다.',
   },
   assetEmergencyTiers: {
-    title: '비상금 포함 tier',
-    description: '비상금 계산에 포함할 자산 유동성 tier 목록입니다.',
+    title: '비상금 포함 유동성 등급',
+    description: '비상금 계산에 포함할 자산 유동성 등급 목록입니다.',
   },
   assetNearLiquidSecondary: {
-    title: 'near-liquid 보조 표시',
+    title: '단기 현금화 자산 보조 표시',
     description: '즉시 현금화 자산 외 near-liquid 자산을 보조 지표로 함께 보여줄지 정합니다.',
   },
   assetPaymentLookback: {
-    title: '월상환 추정 lookback',
+    title: '월상환 추정 조회 기간',
     description: '부채 월상환 추정에 사용할 최근 개월 수입니다.',
   },
   assetPaymentObservations: {

@@ -4,10 +4,15 @@ from decimal import Decimal
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
-class AssetSnapshotTotalsResponse(BaseModel):
+class NetWorthAggregationBasis(BaseModel):
+    negative_asset_excluded_total: Decimal = Decimal("0")
+    aggregation_basis: str = "nonnegative_asset_rows_minus_liability_rows"
+
+
+class AssetSnapshotTotalsResponse(NetWorthAggregationBasis):
     snapshot_date: date
     asset_total: Decimal
     liability_total: Decimal
@@ -21,7 +26,7 @@ class NetWorthBreakdownItemResponse(BaseModel):
     ratio: float | None
 
 
-class NetWorthBreakdownResponse(BaseModel):
+class NetWorthBreakdownResponse(NetWorthAggregationBasis):
     snapshot_date: date | None
     asset_total: Decimal
     negative_asset_excluded_total: Decimal = Decimal("0")
@@ -30,7 +35,7 @@ class NetWorthBreakdownResponse(BaseModel):
     items: list[NetWorthBreakdownItemResponse]
 
 
-class AssetLiabilityHealthResponse(BaseModel):
+class AssetLiabilityHealthResponse(NetWorthAggregationBasis):
     snapshot_date: date | None
     cash_equivalent_total: Decimal
     asset_total: Decimal
@@ -46,6 +51,11 @@ class AssetLiabilityHealthResponse(BaseModel):
     monthly_income: Decimal
     monthly_income_source: str = "manual_query_param"
     derived_from_periods: list[str] = Field(default_factory=list)
+    input_as_of_date: date | None = None
+    required_spend_period: str | None = None
+    required_spend_essential_total: Decimal = Decimal("0")
+    required_spend_additional_debt_total: Decimal = Decimal("0")
+    debt_payment_snapshot_date: date | None = None
     manual_input_overrides: list[str] = Field(default_factory=list)
     debt_payment_ratio: float | None
     debt_to_asset_ratio: float | None
@@ -103,7 +113,7 @@ class AssetSnapshotComparisonResponse(BaseModel):
     comparison_label: str
 
 
-class NetWorthPointResponse(BaseModel):
+class NetWorthPointResponse(NetWorthAggregationBasis):
     snapshot_date: date
     net_worth: Decimal
 
@@ -160,7 +170,16 @@ class InsuranceSummaryResponse(BaseModel):
     monthly_premium_estimate: InsurancePremiumEstimateResponse
 
 
-class LoanItemResponse(BaseModel):
+class LoanRepaymentEstimateMetadata(BaseModel):
+    monthly_payment_missing_reason: str | None = None
+    monthly_payment_estimate_basis: str | None = None
+    monthly_payment_observation_months: list[str] = Field(default_factory=list)
+    monthly_payment_estimate_window_start: date | None = None
+    monthly_payment_estimate_window_end: date | None = None
+    monthly_payment_min_observations: int | None = None
+
+
+class LoanItemResponse(LoanRepaymentEstimateMetadata):
     id: int | None = None
     loan_type: str | None
     lender: str
@@ -178,6 +197,8 @@ class LoanItemResponse(BaseModel):
 
 
 class LoanRepaymentMetadataPatchRequest(BaseModel):
+    monthly_payment_mode: Literal["automatic"] | None = None
+    repayment_method_mode: Literal["automatic"] | None = None
     monthly_payment: Decimal | None = Field(default=None, ge=0)
     repayment_method: (
         Literal[
@@ -189,8 +210,20 @@ class LoanRepaymentMetadataPatchRequest(BaseModel):
         | None
     ) = None
 
+    @model_validator(mode="after")
+    def validate_automatic_reset(self) -> "LoanRepaymentMetadataPatchRequest":
+        for field in ("monthly_payment", "repayment_method"):
+            mode_field = f"{field}_mode"
+            if mode_field not in self.model_fields_set:
+                continue
+            if getattr(self, mode_field) is None:
+                raise ValueError(f"{mode_field} must be automatic when supplied")
+            if field in self.model_fields_set:
+                raise ValueError(f"{field} and {mode_field} are mutually exclusive")
+        return self
 
-class LoanRepaymentMetadataResponse(BaseModel):
+
+class LoanRepaymentMetadataResponse(LoanRepaymentEstimateMetadata):
     id: int
     snapshot_date: date
     lender: str

@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.asset import LoanRepaymentEstimateMetadata
+
 
 RepaymentType = Literal["principal", "interest", "mixed", "unknown"]
 LoanCandidateReviewStatus = Literal["pending", "not_candidate"]
@@ -149,3 +151,20 @@ class LoanTransactionMappingListResponse(BaseModel):
     page: int
     per_page: int
     items: list[LoanTransactionMappingItem]
+
+
+class LoanEstimateRecalculateRequest(BaseModel):
+    loan_account_ids: list[int] = Field(min_length=1, max_length=100)
+    reset_invalid_manual_null: bool = False
+
+
+class LoanEstimateRecalculationItem(LoanRepaymentEstimateMetadata):
+    loan_account_id: int
+    loan_id: int
+    snapshot_date: date
+    monthly_payment: Decimal | None
+    monthly_payment_source: str | None
+
+
+class LoanEstimateRecalculateResponse(BaseModel):
+    items: list[LoanEstimateRecalculationItem]

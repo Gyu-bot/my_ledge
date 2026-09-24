@@ -117,10 +117,10 @@ export function toAnalyticsDraft(effective: AnalyticsSettingsSection): Analytics
 export function buildAnalyticsPatch(draft: AnalyticsDraft, effective: AnalyticsSettingsSection, errors: string[]): AnalyticsSettingsPatchRequest {
   const largeThreshold = parseDraftNumber(draft.purchase_gate.large_purchase_threshold, { label: '대형 구매 기준', min: 0, integer: true, unit: 'won' }, errors)
   const minCandidate = parseDraftNumber(draft.purchase_gate.min_candidate_amount, { label: '최소 후보 금액', min: 0, integer: true, unit: 'won' }, errors)
-  const lookback = parseDraftNumber(draft.purchase_gate.new_merchant_lookback_months, { label: '신규 가맹점 lookback', min: 1, max: 24, integer: true }, errors)
+  const lookback = parseDraftNumber(draft.purchase_gate.new_merchant_lookback_months, { label: '신규 가맹점 조회 기간', min: 1, max: 24, integer: true }, errors)
   const merchantSpike = parseDraftNumber(draft.purchase_gate.merchant_spike_ratio, { label: '가맹점 급증 기준', min: 0, unit: 'percent' }, errors)
   const discretionarySpike = parseDraftNumber(draft.purchase_gate.discretionary_spike_ratio, { label: '재량 지출 급증 기준', min: 0, unit: 'percent' }, errors)
-  const cooldown = parseDraftNumber(draft.purchase_gate.review_cooldown_days, { label: '리뷰 cooldown', min: 0, max: 365, integer: true }, errors)
+  const cooldown = parseDraftNumber(draft.purchase_gate.review_cooldown_days, { label: '리뷰 재검토 간격', min: 0, max: 365, integer: true }, errors)
   const velocityMonths = parseDraftNumber(draft.discretionary_velocity.baseline_months, { label: '재량 기준 기간', min: 1, max: 12, integer: true }, errors)
   const warningVelocity = parseDraftNumber(draft.discretionary_velocity.warning_velocity_ratio, { label: '재량 속도 경고', min: 0, unit: 'percent' }, errors)
   const highVelocity = parseDraftNumber(draft.discretionary_velocity.high_velocity_ratio, { label: '재량 속도 높음', min: 0, unit: 'percent' }, errors)
@@ -134,7 +134,7 @@ export function buildAnalyticsPatch(draft: AnalyticsDraft, effective: AnalyticsS
   const weeklyMin = parseDraftNumber(draft.recurring_dry_run.weekly_interval_days_min, { label: '주간 간격 최소', min: 1, integer: true }, errors)
   const weeklyMax = parseDraftNumber(draft.recurring_dry_run.weekly_interval_days_max, { label: '주간 간격 최대', min: 1, integer: true }, errors)
   const confidence = parseDraftNumber(draft.recurring_dry_run.minimum_confidence, { label: '반복 신뢰도 최소', min: 0, max: 100, unit: 'percent' }, errors)
-  const paymentLookback = parseDraftNumber(draft.asset_liability_health.monthly_payment_estimate_lookback_months, { label: '월상환 추정 lookback', min: 1, max: 24, integer: true }, errors)
+  const paymentLookback = parseDraftNumber(draft.asset_liability_health.monthly_payment_estimate_lookback_months, { label: '월상환 추정 조회 기간', min: 1, max: 24, integer: true }, errors)
   const paymentObservations = parseDraftNumber(draft.asset_liability_health.monthly_payment_min_observations, { label: '월상환 최소 관측', min: 1, integer: true }, errors)
   if (errors.length > 0) return {}
 
@@ -209,7 +209,14 @@ export function formatRatio(value: number): string {
 }
 
 export function formatText(value: string): string {
-  return value || '미설정'
+  const labels: Record<string, string> = {
+    all_matching: '미리보기 전체', reviewed_only: '직접 검토한 거래만',
+    watch: '관찰', warning: '주의', high: '높음',
+    median_30pct_exclusion: '중앙값에서 크게 벗어난 월 제외', none: '제외하지 않음',
+    prorated_closed_month_baseline: '마감월 기준을 진행일수로 보정', closed_month: '마감월 기준',
+    immediate: '즉시 현금화', near_liquid: '단기 현금화', illiquid: '현금화 어려움', restricted: '사용 제한',
+  }
+  return labels[value] ?? (value || '미설정')
 }
 
 export function formatList(values: readonly string[]): string {
@@ -217,7 +224,7 @@ export function formatList(values: readonly string[]): string {
 }
 
 export function formatListDisplay(values: readonly string[]): string {
-  return values.length === 0 ? '없음' : formatList(values)
+  return values.length === 0 ? '없음' : values.map(formatText).join(', ')
 }
 
 type TripleValue<T> = { readonly defaults: T; readonly saved: T | null; readonly effective: T; readonly format: (value: T) => string }

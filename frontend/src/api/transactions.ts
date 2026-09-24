@@ -2,6 +2,7 @@ import { apiFetch } from '../lib/apiClient'
 import { monthSpanToDateRange, monthToDateRange } from '../lib/dateRange'
 import type {
   TransactionListResponse,
+  TransactionResponse,
   TransactionListParams,
   TransactionFilterOptionsResponse,
   TransactionUpdateRequest,
@@ -71,7 +72,7 @@ async function loadTransactionsForDateRange(params: {
   end_date?: string
   include_income?: boolean
 }) {
-  const type = params.include_income ? 'all' : '지출'
+  const type = params.include_income ? 'income_expense' : '지출'
   const perPage = 200
   const firstPage = await apiFetch<TransactionListResponse>(`/transactions${buildQuery({
     start_date: params.start_date,
@@ -100,12 +101,16 @@ async function loadTransactionsForDateRange(params: {
 
 export const transactionApi = {
   list: (params: TransactionListParams = {}) => {
-    const { start_month, end_month, ...rest } = params
+    const { start_month, end_month, start_date, end_date, ...rest } = params
     return apiFetch<TransactionListResponse>(`/transactions${buildQuery({
-      ...rest,
       ...monthSpanToDateRange(start_month, end_month),
+      ...(start_date ? { start_date } : {}),
+      ...(end_date ? { end_date } : {}),
+      ...rest,
     })}`)
   },
+
+  detail: (id: number) => apiFetch<TransactionResponse>(`/transactions/${id}`),
 
   filterOptions: () =>
     apiFetch<TransactionFilterOptionsResponse>('/transactions/filter-options'),
@@ -219,8 +224,8 @@ export const transactionApi = {
       body: JSON.stringify(data),
     }),
 
-  unlinkTransactionFromInstallment: (id: number) =>
-    apiFetch<void>(`/transactions/${id}/installment-link`, {
+  unlinkTransactionFromInstallment: (id: number, options?: { require_inactive?: boolean }) =>
+    apiFetch<void>(`/transactions/${id}/installment-link${buildQuery(options ?? {})}`, {
       method: 'DELETE',
     }),
 
@@ -246,6 +251,9 @@ export const transactionApi = {
 
   categoryClassificationRules: () =>
     apiFetch<CategoryClassificationRuleListResponse>('/auto-classification/category-rules'),
+
+  deleteCategoryClassificationRule: (id: number) =>
+    apiFetch<void>(`/auto-classification/category-rules/${id}`, { method: 'DELETE' }),
 
   upsertCategoryClassificationRule: (data: CategoryClassificationRuleRequest) =>
     apiFetch<CategoryClassificationRuleResponse>('/auto-classification/category-rules', {
@@ -292,6 +300,9 @@ export const transactionApi = {
   recurringCategoryRules: () =>
     apiFetch<RecurringCategoryRuleListResponse>('/auto-classification/recurring-category-rules'),
 
+  deleteRecurringCategoryRule: (id: number) =>
+    apiFetch<void>(`/auto-classification/recurring-category-rules/${id}`, { method: 'DELETE' }),
+
   upsertRecurringCategoryRule: (data: RecurringCategoryRuleRequest) =>
     apiFetch<RecurringCategoryRuleResponse>('/auto-classification/recurring-category-rules', {
       method: 'POST',
@@ -314,34 +325,64 @@ export const transactionApi = {
       body: JSON.stringify(data),
     }),
 
-  incomeCategoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
+  incomeCategoryTimeline: (params: CategoryBreakdownParams = {}) =>
     apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery({
       ...monthSpanToDateRange(params.start_month, params.end_month),
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
       type: '수입',
     })}`),
 
-  incomeCategoryBreakdown: (params: { start_month?: string; end_month?: string } = {}) =>
+  incomeCategoryBreakdown: (params: CategoryBreakdownParams = {}) =>
     apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery({
       ...monthSpanToDateRange(params.start_month, params.end_month),
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
       type: '수입',
       level: 'major',
     })}`),
 
-  categoryTimeline: (params: { start_month?: string; end_month?: string } = {}) =>
-    apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery(
-      monthSpanToDateRange(params.start_month, params.end_month),
-    )}`),
-
-  categoryBreakdown: (params: CategoryBreakdownParams = {}) =>
-    apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery({
+  categoryTimeline: async (params: CategoryBreakdownParams = {}) => {
+    const range = {
       ...monthSpanToDateRange(params.start_month, params.end_month),
-      type: params.include_income ? 'all' : '지출',
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
+    }
+    const [expense, income] = await Promise.all([
+      apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery({ ...range, type: '지출' })}`),
+      params.include_income ? apiFetch<{ items: CategoryTimelineItem[] }>(`/transactions/by-category/timeline${buildQuery({ ...range, type: '수입' })}`) : Promise.resolve({ items: [] }),
+    ])
+    const totals = new Map<string, CategoryTimelineItem>()
+    for (const item of [...expense.items.map((item) => ({ ...item, amount: -item.amount })), ...income.items]) {
+      const key = JSON.stringify([item.period, item.category])
+      totals.set(key, { ...item, amount: (totals.get(key)?.amount ?? 0) + item.amount })
+    }
+    return { items: [...totals.values()] }
+  },
+
+  categoryBreakdown: async (params: CategoryBreakdownParams = {}) => {
+    const range = {
+      ...monthSpanToDateRange(params.start_month, params.end_month),
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
       level: params.level,
-    })}`),
+    }
+    const [expense, income] = await Promise.all([
+      apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery({ ...range, type: '지출' })}`),
+      params.include_income ? apiFetch<{ items: CategoryBreakdownItem[] }>(`/transactions/by-category${buildQuery({ ...range, type: '수입' })}`) : Promise.resolve({ items: [] }),
+    ])
+    const totals = new Map<string, number>()
+    for (const item of [...expense.items.map((item) => ({ ...item, amount: -item.amount })), ...income.items]) {
+      totals.set(item.category, (totals.get(item.category) ?? 0) + item.amount)
+    }
+    return { items: [...totals].map(([category, amount]) => ({ category, amount })) }
+  },
 
   subcategoryBreakdown: async (params: SubcategoryBreakdownParams) => {
     const items = await loadTransactionsForDateRange({
       ...monthSpanToDateRange(params.start_month, params.end_month),
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
       include_income: params.include_income,
     })
     const grouped = new Map<string, number>()
@@ -349,7 +390,7 @@ export const transactionApi = {
     for (const item of items) {
       if (item.effective_category_major !== params.category_major) continue
       const category = item.effective_category_minor ?? '미분류'
-      grouped.set(category, (grouped.get(category) ?? 0) + item.amount)
+      grouped.set(category, (grouped.get(category) ?? 0) + (item.type === '지출' ? -item.amount : item.amount))
     }
 
     return {
@@ -361,9 +402,11 @@ export const transactionApi = {
     }
   },
 
-  dailySpend: async (params: { month: string; include_income?: boolean }) => {
+  dailySpend: async (params: { month: string; start_date?: string; end_date?: string; include_income?: boolean }) => {
     const items = await loadTransactionsForDateRange({
       ...monthToDateRange(params.month),
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
       include_income: params.include_income,
     })
 
@@ -382,10 +425,14 @@ export const transactionApi = {
   merchantTreemap: async (params: {
     start_month?: string
     end_month?: string
+    start_date?: string
+    end_date?: string
     include_income?: boolean
   }) => {
     const items = await loadTransactionsForDateRange({
       ...monthSpanToDateRange(params.start_month, params.end_month),
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
       include_income: params.include_income,
     })
 
@@ -394,7 +441,7 @@ export const transactionApi = {
       const category = item.effective_category_major || '기타'
       const merchant = item.merchant || item.description || '기타'
       const merchants = grouped.get(category) ?? new Map<string, number>()
-      merchants.set(merchant, (merchants.get(merchant) ?? 0) + item.amount)
+      merchants.set(merchant, (merchants.get(merchant) ?? 0) + (item.type === '지출' ? -item.amount : item.amount))
       grouped.set(category, merchants)
     }
 
@@ -403,10 +450,10 @@ export const transactionApi = {
         const children = Array.from(merchants.entries())
           .map(([merchant, amount]) => ({
             name: merchant,
-            value: Math.abs(amount),
+            value: amount,
           }))
-          .filter((node) => node.value > 0)
-          .sort((left, right) => right.value - left.value)
+          .filter((node) => node.value !== 0)
+          .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
 
         return {
           name: category,
@@ -414,8 +461,8 @@ export const transactionApi = {
           children,
         }
       })
-      .filter((node) => node.value > 0)
-      .sort((left, right) => right.value - left.value)
+      .filter((node) => node.children.length > 0)
+      .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
 
     return { items: tree }
   },

@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Card } from '../../ds/Card'
 import { Button } from '../../ds/Button'
-import { Field, Select, Toggle } from '../../ds/Field'
+import { Field, Select } from '../../ds/Field'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { EmptyState, ErrorState } from '../../ds/States'
 import { toast } from '../../ds/toastStore'
-import { EM_DASH, formatWon } from '../../ds/format'
+import { EM_DASH, formatNetWon } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import { useAssetSnapshots, usePatchAssetLiquidity } from '../../hooks/useAssets'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
-import type { AssetSnapshotItemResponse, LiquidityTier } from '../../types/asset'
+import type { AssetLiquidityPatchRequest, AssetSnapshotItemResponse, LiquidityTier } from '../../types/asset'
 
 const LIQUIDITY_LABEL: Record<LiquidityTier, string> = {
   immediate: '즉시 사용',
@@ -19,14 +19,26 @@ const LIQUIDITY_LABEL: Record<LiquidityTier, string> = {
 
 interface AssetDraft {
   liquidity_tier: LiquidityTier | ''
-  is_cash_equivalent: boolean
+  is_cash_equivalent: 'automatic' | 'include' | 'exclude'
+}
+
+function storedAssetDraft(asset: AssetSnapshotItemResponse): AssetDraft {
+  return { liquidity_tier: asset.liquidity_tier ?? '', is_cash_equivalent: asset.is_cash_equivalent == null ? 'automatic' : asset.is_cash_equivalent ? 'include' : 'exclude' }
+}
+
+function changedAssetDraft(asset: AssetSnapshotItemResponse, edits: Partial<AssetDraft> = {}): Partial<AssetDraft> {
+  const stored = storedAssetDraft(asset)
+  const changed = { ...edits }
+  if (changed.liquidity_tier === stored.liquidity_tier) delete changed.liquidity_tier
+  if (changed.is_cash_equivalent === stored.is_cash_equivalent) delete changed.is_cash_equivalent
+  return changed
 }
 
 export function AssetMetaPage() {
   const hasWrite = useWriteAccess()
   const snapshots = useAssetSnapshots()
   const patch = usePatchAssetLiquidity()
-  const [drafts, setDrafts] = useState<Record<number, AssetDraft>>({})
+  const [drafts, setDrafts] = useState<Record<number, Partial<AssetDraft>>>({})
 
   const latest = [...(snapshots.data?.items ?? [])]
     .reverse()
@@ -37,29 +49,28 @@ export function AssetMetaPage() {
     // 미지정 자산 우선 정렬
     .sort((a, b) => Number(!!a.liquidity_tier) - Number(!!b.liquidity_tier))
 
-  useEffect(() => {
-    if (assetRows.length === 0) return
+  function editDraft(asset: AssetSnapshotItemResponse, values: Partial<AssetDraft>) {
     setDrafts((current) => {
+      const changed = changedAssetDraft(asset, { ...current[asset.id], ...values })
       const next = { ...current }
-      let changed = false
-      for (const asset of assetRows) {
-        if (!next[asset.id]) {
-          next[asset.id] = { liquidity_tier: asset.liquidity_tier ?? '', is_cash_equivalent: !!asset.is_cash_equivalent }
-          changed = true
-        }
-      }
-      return changed ? next : current
+      if (Object.keys(changed).length > 0) next[asset.id] = changed
+      else delete next[asset.id]
+      return next
     })
-  }, [assetRows])
+  }
 
   async function save(asset: AssetSnapshotItemResponse) {
-    const draft = drafts[asset.id]
-    if (!draft) return
+    const draft = changedAssetDraft(asset, drafts[asset.id])
+    if (Object.keys(draft).length === 0) return
+    const data: AssetLiquidityPatchRequest = {}
+    if ('liquidity_tier' in draft) data.liquidity_tier = draft.liquidity_tier || null
+    if ('is_cash_equivalent' in draft) data.is_cash_equivalent = draft.is_cash_equivalent === 'automatic' ? null : draft.is_cash_equivalent === 'include'
     try {
       await patch.mutateAsync({
         id: asset.id,
-        data: { liquidity_tier: draft.liquidity_tier || null, is_cash_equivalent: draft.is_cash_equivalent },
+        data,
       })
+      setDrafts((current) => { const next = { ...current }; delete next[asset.id]; return next })
       toast.success('자산 유동성 저장 완료', { description: asset.product_name || asset.category })
     } catch (error) {
       toast.error('저장 실패', { description: String(error) })
@@ -79,7 +90,8 @@ export function AssetMetaPage() {
          assetRows.length > 0 ? (
           <div className="divide-y divide-border-subtle">
             {assetRows.map((asset) => {
-              const draft = drafts[asset.id] ?? { liquidity_tier: '', is_cash_equivalent: false }
+              const changes = changedAssetDraft(asset, drafts[asset.id])
+              const draft = { ...storedAssetDraft(asset), ...changes }
               return (
                 <div key={asset.id} className="flex flex-wrap items-end gap-3 py-3 first:pt-0">
                   <div className="min-w-44 flex-1">
@@ -88,7 +100,7 @@ export function AssetMetaPage() {
                       {!asset.liquidity_tier ? <span className="text-micro text-warn">미지정 ⚠</span> : null}
                     </div>
                     <div className="tnum text-caption text-text-muted">
-                      {[asset.category, asset.amount ? `₩${formatWon(parseFloat(asset.amount))}` : null].filter(Boolean).join(' · ') || EM_DASH}
+                      {[asset.category, asset.amount ? formatNetWon(parseFloat(asset.amount)) : null].filter(Boolean).join(' · ') || EM_DASH}
                     </div>
                   </div>
                   <Field label="유동성 등급">
@@ -96,7 +108,7 @@ export function AssetMetaPage() {
                       aria-label={`${asset.product_name} 유동성 등급`}
                       disabled={!hasWrite || patch.isPending}
                       value={draft.liquidity_tier}
-                      onChange={(event) => setDrafts((current) => ({ ...current, [asset.id]: { ...draft, liquidity_tier: event.target.value as LiquidityTier | '' } }))}
+                      onChange={(event) => editDraft(asset, { liquidity_tier: event.target.value as LiquidityTier | '' })}
                     >
                       <option value="">미지정</option>
                       {(Object.entries(LIQUIDITY_LABEL) as [LiquidityTier, string][]).map(([value, label]) => (
@@ -104,14 +116,15 @@ export function AssetMetaPage() {
                       ))}
                     </Select>
                   </Field>
-                  <Toggle
-                    className="pb-1.5"
-                    label="현금성"
-                    disabled={!hasWrite || patch.isPending}
-                    checked={draft.is_cash_equivalent}
-                    onChange={(checked) => setDrafts((current) => ({ ...current, [asset.id]: { ...draft, is_cash_equivalent: checked } }))}
-                  />
-                  <Button variant="primary" disabled={!hasWrite || patch.isPending} onClick={() => void save(asset)}>저장</Button>
+                  <Field label="현금성" hint="자동은 자산 종류와 이름으로 추정합니다">
+                    <Select aria-label={`${asset.product_name} 현금성`} disabled={!hasWrite || patch.isPending} value={draft.is_cash_equivalent}
+                      onChange={(event) => editDraft(asset, { is_cash_equivalent: event.target.value as AssetDraft['is_cash_equivalent'] })}>
+                      <option value="automatic">자동 추정</option>
+                      <option value="include">포함</option>
+                      <option value="exclude">제외</option>
+                    </Select>
+                  </Field>
+                  <Button variant="primary" disabled={!hasWrite || patch.isPending || Object.keys(changes).length === 0} onClick={() => void save(asset)}>저장</Button>
                 </div>
               )
             })}

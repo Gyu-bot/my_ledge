@@ -1,7 +1,17 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomePage } from '../../features/home/HomePage'
+import { projectionFixture } from './projectionFixtures'
+
+let monthProjection = projectionFixture()
+let emptyDatabase = false
+
+vi.mock('../../ds/charts/CashflowChart', () => ({
+  CashflowChart: ({ items }: { items: { income: number }[] }) => <div data-testid="observed-chart">{JSON.stringify(items)}</div>,
+}))
+
+beforeEach(() => { monthProjection = projectionFixture(); emptyDatabase = false })
 
 function query<T>(data: T) {
   return { data, isLoading: false, error: null, refetch: vi.fn() }
@@ -25,12 +35,14 @@ vi.mock('../../hooks/useSettings', () => ({
 vi.mock('../../hooks/useCanonicalViews', () => ({
   useCanonicalViewsDashboard: () =>
     query({
+      month_projection: monthProjection,
+      unclassified_work_queue_total: emptyDatabase ? 0 : 127,
       data_coverage: { first_transaction_date: '2025-03-12', last_transaction_date: '2026-06-10' },
-      monthly_cashflow: [
+      monthly_cashflow: emptyDatabase ? [] : [
         { period: '2026-05', is_complete_month: true },
         { period: '2026-06', is_complete_month: false },
       ],
-      true_spendable_monthly: [
+      true_spendable_monthly: emptyDatabase ? [] : [
         {
           period: '2026-05',
           income_total: 5_000_000,
@@ -75,16 +87,16 @@ vi.mock('../../hooks/useCanonicalViews', () => ({
       loan_repayment_monthly: [],
       merchant_monthly_baseline: [],
       recurring_merchant_monthly: [],
-      unclassified_work_queue: [{ transaction_id: 1 }, { transaction_id: 2 }, { transaction_id: 3 }],
+      unclassified_work_queue: emptyDatabase ? [] : [{ transaction_id: 1 }, { transaction_id: 2 }, { transaction_id: 3 }],
     }),
 }))
 
 vi.mock('../../hooks/useAnalytics', () => ({
   useMonthlyCashflow: () =>
     query({
-      items: [
-        { period: '2026-05', income: 5_000_000, expense: -3_000_000, transfer: 0, net_cashflow: 2_000_000, savings_rate: 0.4 },
-        { period: '2026-06', income: 5_000_000, expense: -3_400_000, transfer: 0, net_cashflow: 1_600_000, savings_rate: 0.32 },
+      items: emptyDatabase ? [] : [
+        { period: '2026-05', income: 5_000_000, expense: 3_000_000, transfer: 0, net_cashflow: 2_000_000, savings_rate: 0.4 },
+        { period: '2026-06', income: 100_000, expense: 800_000, transfer: 0, net_cashflow: -700_000, savings_rate: null },
       ],
     }),
   useSpendingAnomalies: () => query({ total: 2, items: [], assumptions: '' }),
@@ -147,22 +159,80 @@ function renderHome() {
 }
 
 describe('HomePage', () => {
-  it('히어로: 실질 가용액을 예상 값으로 보여주고 예상 배지를 단다', () => {
+  it('빈 DB가 기본 projection 객체를 반환해도 시작하기를 표시한다', () => {
+    emptyDatabase = true
+    monthProjection = {
+      ...monthProjection,
+      observed_income: 0,
+      observed_net_expense: 0,
+      observed_net_cashflow: 0,
+      expected_remaining_income: 0,
+      projected_month_income: 0,
+      income_sources: [],
+      coverage: { ...monthProjection.coverage, first_observed_date: null, last_observed_date: null },
+    }
     renderHome()
-    expect(screen.getByText('이번 달 쓸 수 있는 돈')).toBeInTheDocument()
-    expect(screen.getByText('₩124만')).toBeInTheDocument() // estimated_remaining 우선
-    expect(screen.getByText('예상')).toBeInTheDocument()
+    expect(screen.getByText('시작하기')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '가져오기에서 업로드 시작' })).toHaveAttribute('href', '/data/import')
+    expect(screen.queryByText('월말 예상 순현금흐름')).not.toBeInTheDocument()
   })
 
-  it('보조 KPI: 순자산/수입/지출/저축률', () => {
+  it('거래가 아직 없어도 설정한 수입 예상이 있으면 전망을 표시한다', () => {
+    emptyDatabase = true
+    monthProjection = { ...monthProjection, coverage: { ...monthProjection.coverage, first_observed_date: null, last_observed_date: null } }
     renderHome()
-    expect(screen.getByText('순자산')).toBeInTheDocument()
-    expect(screen.getByText('₩4.21억')).toBeInTheDocument()
-    expect(screen.getByText('이번 달 지출')).toBeInTheDocument()
-    // 진행월(2026-06)은 수입 추정 중 → 저축률은 마감월(2026-05) 기준
+    expect(screen.queryByText('시작하기')).not.toBeInTheDocument()
+    expect(screen.getByText('월말 예상 순현금흐름')).toBeInTheDocument()
+    expect(screen.getByText('샘플 회사')).toBeInTheDocument()
+  })
+
+  it('대표 예정일이 있어도 분할 입금 범위를 함께 표시한다', () => {
+    monthProjection.income_sources[0].expected_date = '2026-06-25'
+    renderHome()
+    expect(screen.getByText(/예정일 2026-06-25 · 입금 범위 2026-06-24 ~ 2026-06-26/)).toBeInTheDocument()
+  })
+
+  it('관측 순현금흐름과 남은 지출을 포함한 월말 전망을 분리하고 음수 부호를 보존한다', () => {
+    renderHome()
+    expect(screen.getByText('월말 예상 순현금흐름')).toBeInTheDocument()
+    expect(screen.getAllByText('+₩140만').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('-₩70만').length).toBeGreaterThan(0)
+    expect(screen.queryByText('이번 달 쓸 수 있는 돈')).not.toBeInTheDocument()
+    expect(screen.queryByText('₩124만')).not.toBeInTheDocument()
+    expect(screen.getByText('이번 달 관측 수입')).toBeInTheDocument()
+    expect(screen.getByText('월 예상 수입 +₩310만')).toBeInTheDocument()
+  })
+
+  it('잔여 지출 부족은 0원이나 월말 예상액으로 표시하지 않는다', () => {
+    monthProjection = { ...monthProjection, expected_remaining_expense: null, projected_month_expense: null, projected_month_end_net: null, confidence: 'unavailable', missing_reasons: ['변동 지출 이력 부족'] }
+    renderHome()
+    expect(screen.getByText('입력 부족')).toBeInTheDocument()
+    expect(screen.getByText('산출 제한: 변동 지출 이력 부족')).toBeInTheDocument()
+    expect(screen.getByText('확인된 입력만 반영한 차액 +₩140만')).toBeInTheDocument()
+    expect(screen.getByText('월말 전망 아님 · 미확정 지출은 차감되지 않았습니다.')).toBeInTheDocument()
+  })
+
+  it('같은 달 실적과 전망을 함께 비교하고 차트 데이터는 실적 그대로 보존한다', () => {
+    renderHome()
+    const table = screen.getByRole('table', { name: '2026-06 관측과 전망 비교' })
+    expect(within(table).getByText('관측 실적')).toBeInTheDocument()
+    expect(within(table).getByText('월말 전망')).toBeInTheDocument()
+    expect(screen.getByTestId('observed-chart')).toHaveTextContent('100000')
+    expect(screen.getByTestId('observed-chart')).not.toHaveTextContent('3100000')
+    expect(screen.getByText('이번 달 누적 / 전월 전체 -73.3%')).toBeInTheDocument()
     expect(screen.getByText('40.0%')).toBeInTheDocument()
     expect(screen.getByText('2026-05 마감 기준 · 목표 50%')).toBeInTheDocument()
-    expect(screen.getByText('전월 대비 +13.3%')).toBeInTheDocument()
+  })
+
+  it('입금 일정 범위와 근거, 지출별 잔여액, 누락 월을 노출한다', () => {
+    renderHome()
+    expect(screen.getByText('샘플 회사')).toBeInTheDocument()
+    expect(screen.getByText(/입금 범위 2026-06-24 ~ 2026-06-26/)).toBeInTheDocument()
+    expect(screen.getByText(/최신 업로드 2026-06-10/)).toBeInTheDocument()
+    expect(screen.getByText('완료월의 같은 입금처와 예정일 범위를 대조')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: '남은 예상 지출' })).getByText('대출')).toBeInTheDocument()
+    expect(screen.getByText('2026-01')).toBeInTheDocument()
+    expect(screen.getByText(/현재 계좌 잔액과는 별개이며/)).toBeInTheDocument()
   })
 
   it('주의 신호: 이상 지출·반복 결제·수입 안정성·재량 속도', () => {
@@ -177,8 +247,8 @@ describe('HomePage', () => {
 
   it('해야 할 일: 인박스 카운트 + 분류 커버리지', () => {
     renderHome()
-    expect(screen.getByText('미분류 거래')).toBeInTheDocument()
-    expect(screen.getByText('3건')).toBeInTheDocument()
+    expect(screen.getByText('분류 품질 검토')).toBeInTheDocument()
+    expect(screen.getByText('127건')).toBeInTheDocument()
     expect(screen.getByText('4건')).toBeInTheDocument()
     expect(screen.getByText('5건')).toBeInTheDocument()
     expect(screen.getByText('76%')).toBeInTheDocument()

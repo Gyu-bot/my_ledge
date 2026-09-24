@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
 import type {
+  AnalyticsDateRange, MerchantSpendQuery, MonthlyCashflowQuery, RecurringPaymentsQuery,
   CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
   DiscretionaryVelocityQuery, PurchaseGateCandidatesQuery,
   PurchaseGateReviewPatchRequest,
 } from '../types/analytics'
 
-export function useMonthlyCashflow(months = 6) {
+export function useMonthlyCashflow(monthsOrParams: number | MonthlyCashflowQuery = 6) {
+  const params = typeof monthsOrParams === 'number' ? { months: monthsOrParams } : monthsOrParams
   return useQuery({
-    queryKey: ['analytics', 'cashflow', months],
-    queryFn: () => analyticsApi.monthlyCashflow({ months }),
+    queryKey: ['analytics', 'cashflow', params],
+    queryFn: () => analyticsApi.monthlyCashflow(params),
   })
 }
 
@@ -20,14 +22,14 @@ export function useCategoryMoM(params: CategoryMoMQuery = { months: 2 }) {
   })
 }
 
-export function useFixedCostSummary(params: { start_month?: string; end_month?: string } = {}) {
+export function useFixedCostSummary(params: AnalyticsDateRange = {}) {
   return useQuery({
     queryKey: ['analytics', 'fixedCost', params],
     queryFn: () => analyticsApi.fixedCostSummary(params),
   })
 }
 
-export function useFixedCostTrend(params: { start_month?: string; end_month?: string } = {}) {
+export function useFixedCostTrend(params: AnalyticsDateRange = {}) {
   return useQuery({
     queryKey: ['analytics', 'fixedCostTrend', params],
     queryFn: () => analyticsApi.fixedCostTrend(params),
@@ -35,7 +37,7 @@ export function useFixedCostTrend(params: { start_month?: string; end_month?: st
 }
 
 export function useMerchantSpend(
-  params: { start_month?: string; end_month?: string; months?: number; limit?: number } = {},
+  params: MerchantSpendQuery = {},
 ) {
   return useQuery({
     queryKey: ['analytics', 'merchantSpend', params],
@@ -50,10 +52,10 @@ export function useIncomeStability(params: IncomeStabilityQuery = {}) {
   })
 }
 
-export function useRecurringPayments(page = 1, perPage = 10) {
+export function useRecurringPayments(page = 1, perPage = 10, params: Omit<RecurringPaymentsQuery, 'page' | 'per_page'> = {}) {
   return useQuery({
-    queryKey: ['analytics', 'recurringPayments', page, perPage],
-    queryFn: () => analyticsApi.recurringPayments({ page, per_page: perPage }),
+    queryKey: ['analytics', 'recurringPayments', page, perPage, params],
+    queryFn: () => analyticsApi.recurringPayments({ ...params, page, per_page: perPage }),
   })
 }
 

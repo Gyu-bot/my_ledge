@@ -18,6 +18,9 @@ from app.schemas.loan_mapping import (
     LoanAccountCandidateResponse,
     LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
+    LoanEstimateRecalculateRequest,
+    LoanEstimateRecalculateResponse,
+    LoanEstimateRecalculationItem,
     LoanCandidateReviewFilter,
     LoanCandidateReviewPatchRequest,
     LoanCandidateReviewResponse,
@@ -47,6 +50,7 @@ class LoanSnapshotRecord(TypedDict):
 class LinkedRepaymentObservations(TypedDict):
     monthly_totals: list[Decimal]
     monthly_types: list[set[str]]
+    observation_months: list[str]
 
 
 async def list_loan_accounts(
@@ -106,6 +110,11 @@ async def update_loan_account_metadata(
         )
     if payload.is_hidden is not None:
         account.is_hidden = payload.is_hidden
+    if "loan_kind" in payload.model_fields_set:
+        await db_session.flush()
+        await apply_loan_repayment_estimates_for_latest_snapshots(
+            db_session, loan_keys=[_account_key(account.lender, account.product_name)]
+        )
     await db_session.commit()
     await db_session.refresh(account)
     snapshot = await _load_latest_loan_snapshot_for_key(
@@ -402,7 +411,9 @@ async def apply_loan_repayment_estimates_for_latest_snapshots(
             latest_loan.monthly_payment_source = None
 
         repayment_method = _infer_repayment_method(observations["monthly_types"])
-        if repayment_method is not None:
+        if repayment_method is not None and _is_estimate_overwritable(
+            latest_loan.repayment_method_source
+        ):
             latest_loan.repayment_method = repayment_method
             latest_loan.repayment_method_source = "estimated_from_linked_transactions"
         elif (
@@ -410,10 +421,151 @@ async def apply_loan_repayment_estimates_for_latest_snapshots(
         ):
             latest_loan.repayment_method = None
             latest_loan.repayment_method_source = None
-        elif latest_loan.repayment_method is None:
+        elif latest_loan.repayment_method is None and _is_estimate_overwritable(
+            latest_loan.repayment_method_source
+        ):
             latest_loan.repayment_method = "unknown"
 
     await db_session.flush()
+
+
+async def apply_loan_repayment_estimates_for_accounts(
+    db_session: AsyncSession,
+    *,
+    account_ids: set[int],
+) -> None:
+    """Refresh both previous and new link targets within the caller's transaction."""
+    await db_session.flush()
+    await apply_loan_repayment_estimates_for_latest_snapshots(
+        db_session,
+        loan_keys=await _load_account_keys_for_ids(db_session, account_ids=account_ids),
+    )
+
+
+async def get_loan_repayment_estimate_metadata(
+    db_session: AsyncSession,
+    loan: Loan,
+) -> dict[str, object]:
+    settings = (
+        await get_analytics_settings(db_session)
+    ).effective.asset_liability_health
+    observations = await _load_linked_repayment_observations(
+        db_session,
+        lender=loan.lender,
+        product_name=loan.product_name,
+        reference_date=loan.snapshot_date,
+        lookback_months=settings.monthly_payment_estimate_lookback_months,
+    )
+    kind = await _load_loan_kind_for_key(
+        db_session, lender=loan.lender, product_name=loan.product_name
+    )
+    window_start = _month_window_start(
+        loan.snapshot_date, settings.monthly_payment_estimate_lookback_months
+    )
+    window_end = _complete_month_window_end(loan.snapshot_date)
+    missing_reason = None
+    if loan.monthly_payment is None:
+        if loan.monthly_payment_source == "manual":
+            missing_reason = "manual_value_missing"
+        elif (
+            len(observations["monthly_totals"])
+            >= settings.monthly_payment_min_observations
+        ):
+            missing_reason = "recalculation_required"
+        elif observations["monthly_totals"]:
+            missing_reason = "insufficient_observations"
+        else:
+            dates = list(
+                (
+                    await db_session.scalars(
+                        select(Transaction.date)
+                        .join(
+                            LoanTransactionLink,
+                            LoanTransactionLink.transaction_id == Transaction.id,
+                        )
+                        .join(
+                            LoanAccount,
+                            LoanAccount.id == LoanTransactionLink.loan_account_id,
+                        )
+                        .where(LoanAccount.lender == loan.lender)
+                        .where(LoanAccount.product_name == loan.product_name)
+                        .where(Transaction.is_deleted.is_(False))
+                        .where(Transaction.merged_into_id.is_(None))
+                    )
+                ).all()
+            )
+            if not dates:
+                missing_reason = "no_linked_transactions"
+            elif any(window_end < value <= loan.snapshot_date for value in dates):
+                missing_reason = "current_month_excluded"
+            else:
+                missing_reason = "no_observations_in_window"
+    return {
+        "monthly_payment_missing_reason": missing_reason,
+        "monthly_payment_estimate_basis": (
+            "mean_recent_three_closed_month_linked_repayments"
+            if kind == "overdraft"
+            else "median_closed_month_linked_repayments"
+        ),
+        "monthly_payment_observation_months": observations["observation_months"],
+        "monthly_payment_estimate_window_start": window_start,
+        "monthly_payment_estimate_window_end": window_end,
+        "monthly_payment_min_observations": settings.monthly_payment_min_observations,
+    }
+
+
+async def recalculate_loan_repayment_estimates(
+    db_session: AsyncSession,
+    payload: LoanEstimateRecalculateRequest,
+) -> LoanEstimateRecalculateResponse:
+    account_ids = list(dict.fromkeys(payload.loan_account_ids))
+    accounts = list(
+        (
+            await db_session.scalars(
+                select(LoanAccount).where(LoanAccount.id.in_(account_ids))
+            )
+        ).all()
+    )
+    if len(accounts) != len(account_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Loan account not found."
+        )
+    targets: list[tuple[LoanAccount, Loan]] = []
+    for account in accounts:
+        loan = await _load_latest_loan_model_for_key(
+            db_session, lender=account.lender, product_name=account.product_name
+        )
+        if loan is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Loan account has no snapshot to recalculate.",
+            )
+        targets.append((account, loan))
+    # Validate the complete request before clearing any selected manual-null state.
+    for _account, loan in targets:
+        if (
+            payload.reset_invalid_manual_null
+            and loan.monthly_payment_source == "manual"
+            and loan.monthly_payment is None
+        ):
+            loan.monthly_payment_source = None
+    await apply_loan_repayment_estimates_for_accounts(
+        db_session, account_ids=set(account_ids)
+    )
+    await db_session.commit()
+    return LoanEstimateRecalculateResponse(
+        items=[
+            LoanEstimateRecalculationItem(
+                loan_account_id=account.id,
+                loan_id=loan.id,
+                snapshot_date=loan.snapshot_date,
+                monthly_payment=loan.monthly_payment,
+                monthly_payment_source=loan.monthly_payment_source,
+                **await get_loan_repayment_estimate_metadata(db_session, loan),
+            )
+            for account, loan in targets
+        ]
+    )
 
 
 async def _load_persisted_accounts(db_session: AsyncSession) -> list[LoanAccount]:
@@ -886,6 +1038,7 @@ async def _load_linked_repayment_observations(
         return {
             "monthly_totals": [],
             "monthly_types": [],
+            "observation_months": [],
         }
 
     result = await db_session.execute(
@@ -928,6 +1081,9 @@ async def _load_linked_repayment_observations(
     return {
         "monthly_totals": monthly_totals,
         "monthly_types": monthly_type_sets,
+        "observation_months": [
+            f"{year:04d}-{month:02d}" for year, month in sorted(monthly_amounts)
+        ],
     }
 
 

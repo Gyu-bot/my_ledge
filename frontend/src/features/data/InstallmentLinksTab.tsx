@@ -11,6 +11,7 @@ import {
   useInstallmentTransactionSuggestions,
   useLinkTransactionToInstallment,
   useUnlinkTransactionFromInstallment,
+  useUnlinkInactiveTransactionFromInstallment,
 } from '../../hooks/useTransactions'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type { InstallmentLinkStateFilter } from '../../types/transaction'
@@ -34,6 +35,7 @@ export function InstallmentLinksTab() {
   })
   const [applied, setApplied] = useState(filter)
   const [page, setPage] = useState(1)
+  const [suggestionPage, setSuggestionPage] = useState(1)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkPlan, setBulkPlan] = useState('')
   const [bulkStart, setBulkStart] = useState('1')
@@ -42,6 +44,7 @@ export function InstallmentLinksTab() {
 
   const link = useLinkTransactionToInstallment()
   const unlink = useUnlinkTransactionFromInstallment()
+  const unlinkInactive = useUnlinkInactiveTransactionFromInstallment()
   const bulkLink = useBulkLinkTransactionsToInstallment()
   const mappings = useInstallmentTransactionMappings({
     page,
@@ -51,7 +54,7 @@ export function InstallmentLinksTab() {
     installment_plan_id: applied.plan ? Number(applied.plan) : undefined,
   })
   const suggestions = useInstallmentTransactionSuggestions({
-    page: 1,
+    page: suggestionPage,
     per_page: PAGE_SIZE,
     installment_plan_id: applied.plan ? Number(applied.plan) : undefined,
   })
@@ -108,6 +111,15 @@ export function InstallmentLinksTab() {
     }
   }
 
+  async function unlinkInactiveRow(transactionId: number) {
+    try {
+      await unlinkInactive.mutateAsync(transactionId)
+      toast.success('삭제·병합 거래의 연결을 해제했습니다', { description: '갱신된 추천을 확인한 뒤 연결할 수 있습니다' })
+    } catch (error) {
+      toast.error('연결 해제 실패', { description: String(error) })
+    }
+  }
+
   async function applyBulk() {
     const planId = Number(bulkPlan)
     const start = Number(bulkStart)
@@ -138,6 +150,8 @@ export function InstallmentLinksTab() {
               onClick={() => {
                 setApplied(filter)
                 setPage(1)
+                setSuggestionPage(1)
+                setSelected(new Set())
               }}
             >
               적용
@@ -149,6 +163,8 @@ export function InstallmentLinksTab() {
                 setFilter(reset)
                 setApplied(reset)
                 setPage(1)
+                setSuggestionPage(1)
+                setSelected(new Set())
               }}
             >
               초기화
@@ -199,9 +215,14 @@ export function InstallmentLinksTab() {
         inputClassName={inputCls}
         isLoading={suggestions.isLoading}
         isSaving={link.isPending}
+        isUnlinking={unlinkInactive.isPending}
+        onUnlinkInactiveLink={unlinkInactiveRow}
         items={suggestions.data?.items ?? []}
         rowDrafts={suggestionRowDrafts}
         total={suggestions.data?.total ?? 0}
+        page={suggestionPage}
+        perPage={PAGE_SIZE}
+        onPageChange={setSuggestionPage}
         onDraftChange={(suggestionKey, draft) =>
           setSuggestionRowDrafts((current) => ({ ...current, [suggestionKey]: draft }))
         }

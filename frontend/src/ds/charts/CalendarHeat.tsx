@@ -69,7 +69,7 @@ export function CalendarHeat({ month, items, onSelectDay, selectedDate }: Calend
               <span className={cn('tnum', level >= 4 ? 'text-white' : 'text-text-muted')}>{day}</span>
               {amount != null && amount < 0 && (
                 <span className={cn('tnum text-[9px] leading-tight', level >= 4 ? 'text-white/85' : 'text-text-faint')}>
-                  {formatWonCompact(amount).replace('₩', '')}
+                  -{formatWonCompact(amount).replace('₩', '')}
                 </span>
               )}
               {amount != null && amount > 0 && (

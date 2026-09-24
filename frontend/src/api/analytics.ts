@@ -1,6 +1,7 @@
 import { apiFetch } from '../lib/apiClient'
 import { monthSpanToDateRange, recentMonthsToDateRange } from '../lib/dateRange'
 import type {
+  AnalyticsDateRange, MerchantSpendQuery, MonthlyCashflowQuery, RecurringPaymentsQuery,
   MonthlyCashflowResponse, CategoryMoMResponse, FixedCostSummaryResponse, FixedCostTrendResponse,
   MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse,
   SpendingAnomaliesResponse, CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
@@ -19,9 +20,13 @@ function buildQuery(params: object): string {
 }
 
 export const analyticsApi = {
-  monthlyCashflow: (params: { months?: number } = {}) =>
+  monthlyCashflow: (params: MonthlyCashflowQuery = {}) =>
     apiFetch<MonthlyCashflowResponse>(`/analytics/monthly-cashflow${buildQuery(
-      params.months ? recentMonthsToDateRange(params.months) : {},
+      {
+        ...(params.months ? recentMonthsToDateRange(params.months) : monthSpanToDateRange(params.start_month, params.end_month)),
+        ...(params.start_date ? { start_date: params.start_date } : {}),
+        ...(params.end_date ? { end_date: params.end_date } : {}),
+      },
     )}`),
 
   categoryMoM: (params: CategoryMoMQuery = {}) =>
@@ -32,7 +37,11 @@ export const analyticsApi = {
               const [year, month] = params.base_month!.split('-').map(Number)
               const previous = new Date(year, month - 2, 1)
               const startMonth = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`
-              return monthSpanToDateRange(startMonth, params.base_month)
+              const range = monthSpanToDateRange(startMonth, params.base_month)
+              const now = new Date()
+              const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+              if (range.end_date && range.end_date > today) range.end_date = today
+              return range
             })()
           : params.start_month || params.end_month
           ? monthSpanToDateRange(params.start_month, params.end_month)
@@ -40,21 +49,29 @@ export const analyticsApi = {
             ? recentMonthsToDateRange(params.months)
             : {}
       ),
-      type: '지출',
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
+      type: params.include_income ? 'income_expense' : '지출',
     })}`),
 
-  fixedCostSummary: (params: { start_month?: string; end_month?: string } = {}) =>
+  fixedCostSummary: (params: AnalyticsDateRange = {}) =>
     apiFetch<FixedCostSummaryResponse>(`/analytics/fixed-cost-summary${buildQuery(
-      monthSpanToDateRange(params.start_month, params.end_month),
+      { ...monthSpanToDateRange(params.start_month, params.end_month),
+        ...(params.start_date ? { start_date: params.start_date } : {}),
+        ...(params.end_date ? { end_date: params.end_date } : {}),
+      },
     )}`),
 
-  fixedCostTrend: (params: { start_month?: string; end_month?: string } = {}) =>
+  fixedCostTrend: (params: AnalyticsDateRange = {}) =>
     apiFetch<FixedCostTrendResponse>(`/analytics/fixed-cost-trend${buildQuery(
-      monthSpanToDateRange(params.start_month, params.end_month),
+      { ...monthSpanToDateRange(params.start_month, params.end_month),
+        ...(params.start_date ? { start_date: params.start_date } : {}),
+        ...(params.end_date ? { end_date: params.end_date } : {}),
+      },
     )}`),
 
   merchantSpend: (
-    params: { start_month?: string; end_month?: string; months?: number; limit?: number } = {},
+    params: MerchantSpendQuery = {},
   ) =>
     apiFetch<MerchantSpendResponse>(`/analytics/merchant-spend${buildQuery({
       ...(
@@ -65,13 +82,15 @@ export const analyticsApi = {
             : {}
       ),
       limit: params.limit,
-      type: '지출',
+      ...(params.start_date ? { start_date: params.start_date } : {}),
+      ...(params.end_date ? { end_date: params.end_date } : {}),
+      type: params.include_income ? 'income_expense' : '지출',
     })}`),
 
   incomeStability: (params: IncomeStabilityQuery = {}) =>
     apiFetch<IncomeStabilityResponse>(`/analytics/income-stability${buildQuery(params)}`),
 
-  recurringPayments: (params: { page?: number; per_page?: number } = {}) =>
+  recurringPayments: (params: RecurringPaymentsQuery = {}) =>
     apiFetch<RecurringPaymentsResponse>(`/analytics/recurring-payments${buildQuery(params)}`),
 
   spendingAnomalies: (params: SpendingAnomaliesQuery = {}) =>

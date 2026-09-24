@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MonthlyCashflowItem(BaseModel):
@@ -29,6 +29,11 @@ class CategoryMoMItem(BaseModel):
 
 class CategoryMoMResponse(BaseModel):
     items: list[CategoryMoMItem]
+    reference_date: date | None = None
+    is_partial_period: bool = False
+    comparison_basis: Literal["same_day_previous_month", "full_previous_month"] = (
+        "full_previous_month"
+    )
 
 
 class FixedCostSummaryResponse(BaseModel):
@@ -44,6 +49,8 @@ class FixedCostSummaryResponse(BaseModel):
     discretionary_spend_total: int
     unclassified_total: int
     unclassified_count: int
+    necessity_unclassified_total: int = 0
+    necessity_unclassified_count: int = 0
 
 
 class FixedCostTrendItem(BaseModel):
@@ -59,6 +66,8 @@ class FixedCostTrendItem(BaseModel):
     discretionary_spend_total: int
     unclassified_total: int
     unclassified_count: int
+    necessity_unclassified_total: int = 0
+    necessity_unclassified_count: int = 0
     fixed_ratio: float | None
 
 
@@ -124,6 +133,11 @@ class RecurringPaymentItem(BaseModel):
     not_recurring_count: int
     unclassified_count: int
     transaction_ids: list[int]
+    last_charge_date: date | None = None
+    net_amount: int = 0
+    activity_status: Literal[
+        "active_candidate", "historical", "irregular", "non_positive", "not_recurring"
+    ] = "historical"
 
 
 class RecurringPaymentsResponse(BaseModel):
@@ -131,6 +145,9 @@ class RecurringPaymentsResponse(BaseModel):
     page: int
     per_page: int
     items: list[RecurringPaymentItem]
+    reference_date: date | None = None
+    activity: Literal["all", "active", "history"] = "all"
+    recent_days: int = 90
     assumptions: str
 
 
@@ -146,6 +163,7 @@ class SpendingAnomalyItem(BaseModel):
     delta_display_capped: bool = False
     baseline_quality: str = "sufficient"
     anomaly_mode: str = "standard"
+    direction: Literal["increase", "decrease"] = "increase"
     anomaly_score: float
     reason: str
 
@@ -195,6 +213,8 @@ class PurchaseGateCandidateItem(BaseModel):
     reasons: list[str]
     assumptions: list[str]
     review_status: str
+    possible_cancellation: bool = False
+    cancellation_evidence_transaction_ids: list[int] = Field(default_factory=list)
     review_memo: str | None = None
     reviewed_at: datetime | None = None
     cooldown_until: datetime | None = None
@@ -210,6 +230,8 @@ class PurchaseGateCandidatesResponse(BaseModel):
     page: int
     per_page: int
     items: list[PurchaseGateCandidateItem]
+    start_date: date | None = None
+    end_date: date | None = None
     assumptions: list[str]
 
 

@@ -13,7 +13,7 @@ import { HBarList } from '../../ds/charts/HBarList'
 import { MoMList } from '../../ds/charts/MoMList'
 import { StackedBars } from '../../ds/charts/StackedBars'
 import { Treemap, type TreemapItem } from '../../ds/charts/Treemap'
-import { EM_DASH, formatSignedWon, formatWonCompact } from '../../ds/format'
+import { EM_DASH, formatNetWon, formatSignedWon } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import {
   useCategoryBreakdown,
@@ -67,7 +67,9 @@ export function SpendingPage() {
     start: searchParams.get('from') || allMonths[Math.max(0, allMonths.length - 6)],
     end: searchParams.get('to') || endMonth,
   }
-  const includeIncome = searchParams.get('income') === '1'
+  const includeIncome = searchParams.get('income') === '1' && lens !== 'income' && lens !== 'fixed'
+  const cutoffStart = searchParams.get('start_date') || undefined
+  const cutoffEnd = searchParams.get('end_date') || undefined
 
   function patchParams(patch: Record<string, string | null>) {
     setSearchParams((current) => {
@@ -81,19 +83,21 @@ export function SpendingPage() {
   }
 
   // 렌즈 로컬 상태
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const selectedCategory = searchParams.get('category')
+  const setSelectedCategory = (category: string | null) => patchParams({ category })
   const [fixedMode, setFixedMode] = useState<FixedMode>('cost-kind')
   const [momBaseMonth, setMomBaseMonth] = useState<string | null>(null)
   const [calendarMonth, setCalendarMonth] = useState<string | null>(null)
-  const [panelFilter, setPanelFilter] = useState<PanelFilter>({})
+  const [localPanelFilter, setPanelFilter] = useState<PanelFilter>({})
   const [txPage, setTxPage] = useState(1)
 
+  const panelFilter = { ...localPanelFilter, category: selectedCategory || undefined }
   const effectiveMomMonth = momBaseMonth ?? range.end
   const effectiveCalendarMonth = calendarMonth ?? range.end
-  const rangeParams = { start_month: range.start, end_month: range.end }
+  const rangeParams = { start_month: range.start, end_month: range.end, start_date: cutoffStart, end_date: cutoffEnd }
 
   // 데이터
-  const timeline = useCategoryTimeline(rangeParams)
+  const timeline = useCategoryTimeline({ ...rangeParams, include_income: includeIncome })
   const breakdown = useCategoryBreakdown({ ...rangeParams, include_income: includeIncome, level: 'major' })
   const subBreakdown = useSubcategoryBreakdown(
     selectedCategory ? { ...rangeParams, include_income: includeIncome, category_major: selectedCategory } : null,
@@ -101,9 +105,9 @@ export function SpendingPage() {
   const fixedSummary = useFixedCostSummary(rangeParams)
   const fixedTrend = useFixedCostTrend(rangeParams)
   const treemap = useMerchantTreemap(lens === 'merchants' ? { ...rangeParams, include_income: includeIncome } : null)
-  const merchantTop = useMerchantSpend({ ...rangeParams, limit: 8 })
-  const dailySpend = useDailySpend(lens === 'calendar' ? { month: effectiveCalendarMonth, include_income: includeIncome } : null)
-  const categoryMoM = useCategoryMoM({ base_month: effectiveMomMonth })
+  const merchantTop = useMerchantSpend({ ...rangeParams, include_income: includeIncome, limit: 8 })
+  const dailySpend = useDailySpend(lens === 'calendar' ? { month: effectiveCalendarMonth, include_income: includeIncome, start_date: cutoffStart, end_date: cutoffEnd } : null)
+  const categoryMoM = useCategoryMoM({ base_month: effectiveMomMonth, end_date: effectiveMomMonth === range.end ? cutoffEnd : undefined, include_income: includeIncome })
   const incomeTimeline = useIncomeCategoryTimeline(lens === 'income' ? rangeParams : {})
   const incomeBreakdown = useIncomeCategoryBreakdown(lens === 'income' ? rangeParams : {})
 
@@ -112,19 +116,21 @@ export function SpendingPage() {
     per_page: 20,
     start_month: panelFilter.date ? undefined : range.start,
     end_month: panelFilter.date ? undefined : range.end,
-    start_date: panelFilter.date,
-    end_date: panelFilter.date,
-    type: lens === 'income' ? '수입' : includeIncome ? 'all' : '지출',
+    start_date: panelFilter.date ?? cutoffStart,
+    end_date: panelFilter.date ?? cutoffEnd,
+    type: lens === 'income' ? '수입' : includeIncome ? 'income_expense' : '지출',
     category_major: panelFilter.category,
     search: panelFilter.search,
   })
 
   function setPanel(patch: PanelFilter) {
+    if ('category' in patch) setSelectedCategory(patch.category || null)
     setPanelFilter((current) => ({ ...current, ...patch }))
     setTxPage(1)
   }
 
   function clearPanelKey(key: keyof PanelFilter) {
+    if (key === 'category') setSelectedCategory(null)
     setPanelFilter((current) => {
       const next = { ...current }
       delete next[key]
@@ -138,7 +144,7 @@ export function SpendingPage() {
       (treemap.data?.items ?? []).flatMap((node) =>
         (node.children ?? []).map((child) => ({
           name: child.name,
-          value: Math.abs(child.value),
+          value: child.value,
           group: node.name,
         })),
       ),
@@ -163,7 +169,7 @@ export function SpendingPage() {
     return items.flatMap((item) => [
       { period: item.period, category: '필수', amount: item.required_spend_total },
       { period: item.period, category: '재량', amount: item.discretionary_spend_total },
-      { period: item.period, category: '미분류', amount: item.unclassified_total },
+      { period: item.period, category: '미분류', amount: item.necessity_unclassified_total ?? item.expense_total - item.required_spend_total - item.discretionary_spend_total },
     ])
   }, [fixedTrend.data?.items, fixedMode])
 
@@ -177,7 +183,10 @@ export function SpendingPage() {
               months={allMonths}
               value={range}
               onChange={(next) => {
-                patchParams({ from: next.start, to: next.end })
+                patchParams({ from: next.start, to: next.end, start_date: null, end_date: null })
+                setMomBaseMonth(null)
+                setCalendarMonth(null)
+                setPanelFilter({})
                 setTxPage(1)
               }}
             />
@@ -185,13 +194,15 @@ export function SpendingPage() {
               <input
                 type="checkbox"
                 checked={includeIncome}
-                onChange={(event) => patchParams({ income: event.target.checked ? '1' : null })}
+                disabled={lens === 'income' || lens === 'fixed'}
+                onChange={(event) => { patchParams({ income: event.target.checked ? '1' : null }); setTxPage(1) }}
                 className="h-3 w-3 accent-[var(--ds-accent-fg)]"
               />
               수입 포함
             </label>
           </>
         }
+        meta={cutoffEnd ? `${cutoffStart ?? `${range.start}-01`} ~ ${cutoffEnd} 누적` : undefined}
       />
 
       <div className="flex flex-col gap-4">
@@ -199,12 +210,23 @@ export function SpendingPage() {
           ariaLabel="지출 렌즈"
           options={LENS_OPTIONS}
           value={lens}
-          onChange={(next) => patchParams({ lens: next === 'trend' ? null : next })}
+          onChange={(next) => {
+            patchParams({ lens: next === 'trend' ? null : next, category: null })
+            setPanelFilter({})
+            setTxPage(1)
+          }}
         />
 
+        <p className="text-caption text-text-muted">
+          {lens === 'fixed' ? '고정비·필수/재량 분석과 거래 내역은 지출만 포함합니다.'
+            : lens === 'income' ? '수입만 표시합니다. 다른 렌즈의 거래처·카테고리·일자 선택은 해제됩니다.'
+            : lens === 'calendar' ? `달력과 거래 내역은 원장 부호를 사용합니다. 음수는 지출, 양수는 ${includeIncome ? '수입 또는 환급' : '환급'}입니다. 이체는 제외합니다.`
+            : includeIncome ? '차트는 지출과 수입을 함께 표시하며 이체는 제외합니다. 양수는 순지출 또는 수입, 음수 지출은 순환급입니다. 거래 내역은 원장 부호를 사용합니다.'
+            : '차트는 환급을 차감한 순지출이며 음수는 순환급입니다. 거래 내역은 원장 부호를 사용합니다.'}
+        </p>
         {lens === 'trend' && (
           <>
-            <Card title="월별 카테고리 추이" meta={`${range.start} ~ ${range.end} · Top 5 + 기타`}>
+            <Card title={includeIncome ? '월별 지출·수입 카테고리 추이' : '월별 카테고리 추이'} meta={`${range.start} ~ ${range.end} · Top 5 + 기타`}>
               {timeline.isLoading ? <ChartSkeleton height={240} /> :
                timeline.error ? <ErrorState onRetry={() => void timeline.refetch()} /> :
                timeline.data && timeline.data.items.length > 0 ? (
@@ -216,7 +238,7 @@ export function SpendingPage() {
             </Card>
             <Card
               title="카테고리 전월 대비"
-              meta={effectiveMomMonth !== range.end ? '전역 기간과 다름 ●' : undefined}
+              meta={`${effectiveMomMonth !== range.end ? '전역 기간과 다름 · ' : ''}${categoryMoM.data?.is_partial_period ? '부분기간 · 전월 같은 일자 누적과 비교' : '마감월 전체 비교'}`}
               action={
                 <>
                   <label className="sr-only" htmlFor="mom-base-month">기준월</label>
@@ -248,7 +270,6 @@ export function SpendingPage() {
                    items={breakdown.data.items.map((item) => ({ label: item.category, amount: item.amount }))}
                    selectedLabel={selectedCategory}
                    onSelect={(label) => {
-                     setSelectedCategory((current) => (current === label ? null : label))
                      setPanel({ category: selectedCategory === label ? undefined : label })
                    }}
                  />
@@ -303,7 +324,7 @@ export function SpendingPage() {
                          : [
                              { label: '필수', value: fixedSummary.data.required_spend_total, color: 'var(--ds-accent-fg)' },
                              { label: '재량', value: fixedSummary.data.discretionary_spend_total, color: 'var(--ds-warn-fg)' },
-                             { label: '미분류', value: fixedSummary.data.unclassified_total, color: 'var(--ds-chart-other)' },
+                             { label: '미분류', value: fixedSummary.data.necessity_unclassified_total ?? fixedSummary.data.expense_total - fixedSummary.data.required_spend_total - fixedSummary.data.discretionary_spend_total, color: 'var(--ds-chart-other)' },
                            ]
                      }
                    />
@@ -315,10 +336,10 @@ export function SpendingPage() {
                    <div className="flex items-center justify-between gap-3">
                      <div>
                        <div className="tnum text-kpi text-text-primary">
-                         {formatWonCompact(fixedSummary.data.unclassified_total)}
+                         {formatNetWon(fixedMode === 'cost-kind' ? fixedSummary.data.unclassified_total : fixedSummary.data.necessity_unclassified_total ?? fixedSummary.data.expense_total - fixedSummary.data.required_spend_total - fixedSummary.data.discretionary_spend_total, { compact: true })}
                        </div>
                        <div className="mt-0.5 text-caption text-text-muted">
-                         미분류 지출 · {fixedSummary.data.unclassified_count}건
+                         {fixedMode === 'cost-kind' ? '미분류 지출' : '필요도 미분류'} · {fixedMode === 'cost-kind' ? fixedSummary.data.unclassified_count : fixedSummary.data.necessity_unclassified_count ?? EM_DASH}건
                        </div>
                      </div>
                      <Link
@@ -337,7 +358,7 @@ export function SpendingPage() {
 
         {lens === 'merchants' && (
           <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-            <Card title="거래처별 지출 비중" meta={`${range.start} ~ ${range.end} · 클릭하면 거래 내역이 필터됩니다`}>
+            <Card title={includeIncome ? '거래처별 지출·수입 규모' : '거래처별 순지출 규모'} meta={`${range.start} ~ ${range.end} · 클릭하면 거래 내역이 필터됩니다`}>
               {treemap.isLoading ? <ChartSkeleton height={320} /> :
                treemapItems.length > 0 ? (
                  <Treemap items={treemapItems} onSelect={(item) => setPanel({ search: item.name })} />
@@ -373,6 +394,7 @@ export function SpendingPage() {
                   value={effectiveCalendarMonth}
                   onChange={(event) => {
                     setCalendarMonth(event.target.value)
+                    patchParams({ start_date: null, end_date: null })
                     clearPanelKey('date')
                   }}
                 >

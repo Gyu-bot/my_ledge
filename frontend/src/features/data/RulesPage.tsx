@@ -15,6 +15,8 @@ import {
   useApplyRecurringCategoryRules,
   useAutoClassificationSettings,
   useCategoryClassificationRules,
+  useDeleteCategoryClassificationRule,
+  useDeleteRecurringCategoryRule,
   useMerchantAliasRules,
   usePatchAutoClassificationSettings,
   useRecurringCategoryRules,
@@ -51,6 +53,18 @@ export function RulesPage() {
   const applyAlias = useApplyMerchantAliasRules()
   const upsertRecurring = useUpsertRecurringCategoryRule()
   const applyRecurring = useApplyRecurringCategoryRules()
+  const deleteCategory = useDeleteCategoryClassificationRule()
+  const deleteRecurring = useDeleteRecurringCategoryRule()
+
+  async function removeRule(kind: 'category' | 'recurring', id: number, label: string) {
+    if (!window.confirm(`“${label}” 규칙을 삭제할까요? 기존 거래의 분류는 유지됩니다.`)) return
+    try {
+      await (kind === 'category' ? deleteCategory : deleteRecurring).mutateAsync(id)
+      toast.success('규칙 삭제 완료')
+    } catch (error) {
+      toast.error('규칙 삭제 실패', { description: String(error) })
+    }
+  }
 
   // 카테고리 규칙 폼
   const [catMajor, setCatMajor] = useState('')
@@ -136,6 +150,7 @@ export function RulesPage() {
       <PageHeader title="데이터 · 규칙" meta={<span>{totalRules}개 규칙</span>} />
 
       <div className="flex flex-col gap-4">
+        {[...(categoryRules.data?.items ?? []), ...(recurringRules.data?.items ?? [])].some((rule) => rule.category_valid === false) && <div role="alert" className="rounded-md border border-warn-border bg-warn-bg p-3 text-caption text-warn">현재 지출 카테고리와 일치하지 않는 규칙이 있습니다. 각 행의 상태를 확인하고 불필요한 규칙을 삭제하세요.</div>}
         <Card title="업로드 후 자동 적용">
           {settings.isLoading ? <ListSkeleton rows={1} /> : (
             <div className="flex flex-wrap gap-4">
@@ -195,7 +210,7 @@ export function RulesPage() {
             {categoryRules.data && categoryRules.data.items.length > 0 ? (
               <table className="w-full border-collapse text-label">
                 <thead className="bg-bg-inset">
-                  <tr>{['카테고리', '분류', '필수/재량'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr>
+                  <tr>{['카테고리', '분류', '필수/재량', '상태 · 관리'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
                   {categoryRules.data.items.map((rule) => (
@@ -203,6 +218,10 @@ export function RulesPage() {
                       <td className="px-4 py-2 text-text-secondary">{rule.category_major}{rule.category_minor ? ` / ${rule.category_minor}` : ''}</td>
                       <td className="px-4 py-2 text-text-muted">{rule.cost_kind === 'fixed' ? '고정비' : '변동비'}</td>
                       <td className="px-4 py-2 text-text-muted">{rule.spend_necessity === 'essential' ? '필수' : rule.spend_necessity === 'discretionary' ? '재량' : '-'}</td>
+                      <td className="px-4 py-2 text-caption">
+                        {rule.category_valid === false && <p className="mb-1 text-warn">{rule.validation_message || '현재 지출 카테고리에 없는 규칙입니다. 삭제 후 올바른 카테고리로 등록하세요.'}</p>}
+                        <Button variant="danger" disabled={!hasWrite || deleteCategory.isPending} onClick={() => void removeRule('category', rule.id, rule.category_major)}>삭제</Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -267,10 +286,12 @@ export function RulesPage() {
             </div>
             {recurringRules.data && recurringRules.data.items.length > 0 ? (
               <table className="w-full border-collapse text-label">
-                <thead className="bg-bg-inset"><tr>{['카테고리', '반복결제 성격'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr></thead>
+                <thead className="bg-bg-inset"><tr>{['카테고리', '반복결제 성격', '상태 · 관리'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-border-subtle">
                   {recurringRules.data.items.map((rule) => (
-                    <tr key={rule.id}><td className="px-4 py-2 text-text-secondary">{rule.category_major}{rule.category_minor ? ` / ${rule.category_minor}` : ''}</td><td className="px-4 py-2 text-text-muted">{RECURRING_LABEL[rule.recurring_payment_kind]}</td></tr>
+                    <tr key={rule.id}><td className="px-4 py-2 text-text-secondary">{rule.category_major}{rule.category_minor ? ` / ${rule.category_minor}` : ''}</td><td className="px-4 py-2 text-text-muted">{RECURRING_LABEL[rule.recurring_payment_kind]}</td><td className="px-4 py-2 text-caption">
+                      {rule.category_valid === false && <p className="mb-1 text-warn">{rule.validation_message || '현재 지출 카테고리에 없는 규칙입니다. 삭제 후 올바른 카테고리로 등록하세요.'}</p>}
+                      <Button variant="danger" disabled={!hasWrite || deleteRecurring.isPending} onClick={() => void removeRule('recurring', rule.id, rule.category_major)}>삭제</Button></td></tr>
                   ))}
                 </tbody>
               </table>

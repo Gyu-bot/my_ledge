@@ -109,11 +109,14 @@ class TransactionCreateRequest(BaseModel):
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
     spend_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: Literal[
-        "installment",
-        "monthly_recurring",
-        "not_recurring",
-    ] | None = None
+    recurring_payment_kind: (
+        Literal[
+            "installment",
+            "monthly_recurring",
+            "not_recurring",
+        ]
+        | None
+    ) = None
     memo: str | None = None
 
 
@@ -124,11 +127,14 @@ class TransactionUpdateRequest(BaseModel):
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
     spend_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: Literal[
-        "installment",
-        "monthly_recurring",
-        "not_recurring",
-    ] | None = None
+    recurring_payment_kind: (
+        Literal[
+            "installment",
+            "monthly_recurring",
+            "not_recurring",
+        ]
+        | None
+    ) = None
     memo: str | None = None
 
 
@@ -140,11 +146,14 @@ class TransactionBulkUpdateRequest(BaseModel):
     cost_kind: Literal["fixed", "variable"] | None = None
     fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
     spend_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: Literal[
-        "installment",
-        "monthly_recurring",
-        "not_recurring",
-    ] | None = None
+    recurring_payment_kind: (
+        Literal[
+            "installment",
+            "monthly_recurring",
+            "not_recurring",
+        ]
+        | None
+    ) = None
     memo: str | None = None
 
 
@@ -186,7 +195,7 @@ class TransactionMergeRequest(BaseModel):
 
 
 TransactionGroupBy = Literal["month", "week", "day"]
-TransactionTypeFilter = Literal["지출", "수입", "이체", "all"]
+TransactionTypeFilter = Literal["지출", "수입", "이체", "income_expense", "all"]
 TransactionSourceFilter = Literal["import", "manual", "all"]
 TransactionCategoryLevel = Literal["major", "minor"]
 TransactionEditedFilter = Literal["true", "false", "all"]

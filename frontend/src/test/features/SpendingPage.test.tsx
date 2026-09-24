@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SpendingPage } from '../../features/spending/SpendingPage'
+import * as transactionHooks from '../../hooks/useTransactions'
+import * as analyticsHooks from '../../hooks/useAnalytics'
+
+afterEach(() => vi.restoreAllMocks())
 
 function query<T>(data: T) {
   return { data, isLoading: false, error: null, refetch: vi.fn() }
@@ -114,4 +118,57 @@ describe('SpendingPage', () => {
     expect(screen.getByText('미분류 지출 · 12건')).toBeInTheDocument()
     expect(screen.getByText('인박스에서 분류')).toBeInTheDocument()
   })
+
+  it('신호 딥링크의 카테고리와 부분기간을 차트 및 거래 요청에 전달한다', () => {
+    const transactions = vi.spyOn(transactionHooks, 'useTransactionList')
+    const breakdown = vi.spyOn(transactionHooks, 'useCategoryBreakdown')
+    const subcategory = vi.spyOn(transactionHooks, 'useSubcategoryBreakdown')
+    renderPage('/spending?lens=composition&category=보험&from=2026-06&to=2026-06&start_date=2026-06-01&end_date=2026-06-12')
+    expect(transactions).toHaveBeenLastCalledWith(expect.objectContaining({ category_major: '보험', start_date: '2026-06-01', end_date: '2026-06-12', type: '지출' }))
+    expect(breakdown).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: '2026-06-01', end_date: '2026-06-12' }))
+    expect(subcategory).toHaveBeenLastCalledWith(expect.objectContaining({ category_major: '보험', end_date: '2026-06-12' }))
+    expect(screen.getByText('카테고리: 보험')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: '수입' }))
+    expect(transactions).toHaveBeenLastCalledWith(expect.objectContaining({ type: '수입', category_major: undefined, search: undefined }))
+    expect(screen.queryByText('카테고리: 보험')).not.toBeInTheDocument()
+  })
+
+  it('수입 포함은 추이·구성·거래처·전월비·거래 목록에 적용하며 이체를 요청하지 않는다', () => {
+    const timeline = vi.spyOn(transactionHooks, 'useCategoryTimeline')
+    const breakdown = vi.spyOn(transactionHooks, 'useCategoryBreakdown')
+    const transactions = vi.spyOn(transactionHooks, 'useTransactionList')
+    const merchants = vi.spyOn(analyticsHooks, 'useMerchantSpend')
+    const mom = vi.spyOn(analyticsHooks, 'useCategoryMoM')
+    renderPage()
+    fireEvent.click(screen.getByLabelText('수입 포함'))
+    expect(timeline).toHaveBeenLastCalledWith(expect.objectContaining({ include_income: true }))
+    expect(breakdown).toHaveBeenLastCalledWith(expect.objectContaining({ include_income: true }))
+    expect(merchants).toHaveBeenLastCalledWith(expect.objectContaining({ include_income: true }))
+    expect(mom).toHaveBeenLastCalledWith(expect.objectContaining({ include_income: true }))
+    expect(transactions).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'income_expense' }))
+    fireEvent.click(screen.getByRole('tab', { name: '고정비' }))
+    expect(screen.getByLabelText('수입 포함')).toBeDisabled()
+    expect(transactions).toHaveBeenLastCalledWith(expect.objectContaining({ type: '지출' }))
+  })
+
+  it('필수·재량은 고정/변동 미분류와 다른 필요도 미분류를 사용한다', () => {
+    const original = analyticsHooks.useFixedCostSummary()
+    vi.spyOn(analyticsHooks, 'useFixedCostSummary').mockReturnValue({ ...original, data: {
+      ...original.data!, necessity_unclassified_total: 450_000, necessity_unclassified_count: 15,
+    } } as ReturnType<typeof analyticsHooks.useFixedCostSummary>)
+    renderPage('/spending?lens=fixed')
+    fireEvent.click(screen.getByRole('tab', { name: '필수/재량' }))
+    expect(screen.getByText('필요도 미분류 · 15건')).toBeInTheDocument()
+    expect(screen.getByText('₩45만')).toBeInTheDocument()
+  })
+
+
+  it('부분기간 딥링크에서 다른 달력을 고르면 기존 종료일 제한을 해제한다', () => {
+    const daily = vi.spyOn(transactionHooks, 'useDailySpend')
+    renderPage('/spending?lens=calendar&from=2026-06&to=2026-06&start_date=2026-06-01&end_date=2026-06-12')
+    expect(daily).toHaveBeenLastCalledWith(expect.objectContaining({ month: '2026-06', end_date: '2026-06-12' }))
+    fireEvent.change(screen.getByLabelText('달력 월'), { target: { value: '2026-05' } })
+    expect(daily).toHaveBeenLastCalledWith(expect.objectContaining({ month: '2026-05', start_date: undefined, end_date: undefined }))
+  })
+
 })

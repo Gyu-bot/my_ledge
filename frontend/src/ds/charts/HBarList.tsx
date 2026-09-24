@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { formatWonCompact } from '../format'
+import { formatNetWon } from '../format'
 import { cn } from '../../lib/utils'
 
 export interface HBarItem {
@@ -25,9 +25,10 @@ export function HBarList({
   maxAmount,
   selectedLabel,
   onSelect,
-  valueFormatter = (amount) => formatWonCompact(Math.abs(amount)),
+  valueFormatter = (amount) => formatNetWon(amount, { compact: true }),
   className,
 }: HBarListProps) {
+  const diverging = items.some((item) => item.amount < 0)
   const max = maxAmount ?? Math.max(...items.map((item) => Math.abs(item.amount)), 1)
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
@@ -50,11 +51,13 @@ export function HBarList({
                 {valueFormatter(item.amount)}
               </span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-sm bg-bg-inset">
+            <div className="relative mt-1 h-1.5 overflow-hidden rounded-sm bg-bg-inset">
+              {diverging && <span className="absolute inset-y-0 left-1/2 border-l border-border-strong" aria-hidden />}
               <div
-                className="h-full rounded-sm"
+                className="absolute h-full rounded-sm"
                 style={{
-                  width: `${ratio * 100}%`,
+                  width: `${ratio * (diverging ? 50 : 100)}%`,
+                  left: diverging ? (item.amount < 0 ? `${50 - ratio * 50}%` : '50%') : 0,
                   background: item.color ?? 'var(--ds-accent-fg)',
                   opacity: selectedLabel != null && !selected ? 0.4 : 1,
                 }}

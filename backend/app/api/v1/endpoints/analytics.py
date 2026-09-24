@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,6 +152,8 @@ async def get_analytics_recurring_payments(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     min_occurrences: int = Query(default=2, ge=2),
+    activity: Literal["all", "active", "history"] = Query(default="all"),
+    recent_days: int = Query(default=90, ge=1, le=730),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=10, ge=1, le=100),
     db_session: AsyncSession = Depends(get_db_session),
@@ -160,6 +163,8 @@ async def get_analytics_recurring_payments(
         start_date=start_date,
         end_date=end_date,
         min_occurrences=min_occurrences,
+        activity=activity,
+        recent_days=recent_days,
         page=page,
         per_page=per_page,
     )

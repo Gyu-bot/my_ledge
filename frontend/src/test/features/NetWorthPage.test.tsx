@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { NetWorthPage } from '../../features/networth/NetWorthPage'
+
+const state = vi.hoisted(() => ({ emergencyMonths: 3.4 }))
 
 function query<T>(data: T) {
   return { data, isLoading: false, error: null, refetch: vi.fn() }
@@ -37,7 +39,7 @@ vi.mock('../../hooks/useAssets', () => ({
     query({
       snapshot_date: '2026-06-07',
       asset_total: '684000000',
-      negative_asset_excluded_total: '1200000',
+      negative_asset_excluded_total: '-1200000',
       liability_total: '263000000',
       net_worth: '421000000',
       items: [
@@ -50,11 +52,11 @@ vi.mock('../../hooks/useAssets', () => ({
       snapshot_date: '2026-06-07',
       cash_equivalent_total: '18200000',
       asset_total: '684000000',
-      negative_asset_excluded_total: '1200000',
+      negative_asset_excluded_total: '-1200000',
       liability_total: '263000000',
       net_worth: '421000000',
       monthly_required_spend: '5300000',
-      emergency_fund_months: 3.4,
+      emergency_fund_months: state.emergencyMonths,
       emergency_fund_target_months: 4,
       target_progress_ratio: 0.85,
       monthly_debt_payment: '1420000',
@@ -141,6 +143,7 @@ function renderPage() {
 }
 
 describe('NetWorthPage', () => {
+  beforeEach(() => { state.emergencyMonths = 3.4 })
   it('KPI: 순자산/총자산(음수 자산 제외 ⓘ)/총부채/현금성', () => {
     renderPage()
     expect(screen.getAllByText('₩4.21억').length).toBeGreaterThan(0) // KPI + 추이 차트 축 라벨
@@ -164,7 +167,7 @@ describe('NetWorthPage', () => {
 
   it('유동성: 비상금 목표 게이지 (3.4 / 4개월, 85%)', () => {
     renderPage()
-    expect(screen.getByText('비상금 목표 3.4 / 4개월')).toBeInTheDocument()
+    expect(screen.getByText('비상금 확보 3.4개월 · 목표 4개월')).toBeInTheDocument()
     expect(screen.getByText('85%')).toBeInTheDocument()
   })
 
@@ -182,10 +185,24 @@ describe('NetWorthPage', () => {
     expect(screen.getByText('₩214,000')).toBeInTheDocument()
   })
 
-  it('할부 잔여 요약 (잔여 + 누락 배지)', () => {
+  it('할부 미래 예정과 과거 연결 미확인을 분리한다', () => {
     renderPage()
     expect(screen.getByText('할부 잔여')).toBeInTheDocument()
-    expect(screen.getByText('₩77만')).toBeInTheDocument()
-    expect(screen.getByText('누락 ₩11만')).toBeInTheDocument()
+    expect(screen.getByText('₩66만')).toBeInTheDocument()
+    expect(screen.getByText('과거 연결 미확인 ₩11만')).toBeInTheDocument()
   })
+  it('음수 제외 합계를 부호와 계산 기준으로 설명한다', () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('총자산 계산 기준 근거 보기'))
+    expect(screen.getByText('-₩1,200,000')).toBeInTheDocument()
+    expect(screen.getByText('0원 이상 자산 − 부채')).toBeInTheDocument()
+  })
+
+  it('작지만 0이 아닌 비상금은 일 단위로 표시한다', () => {
+    state.emergencyMonths = 0.0386
+    renderPage()
+    expect(screen.getByText('비상금 약 1.2일')).toBeInTheDocument()
+    expect(screen.queryByText(/0.0개월/)).not.toBeInTheDocument()
+  })
+
 })

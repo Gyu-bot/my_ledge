@@ -65,7 +65,7 @@ MY_LEDGE_UPLOAD_LOGS_ENDPOINT=/upload/logs
 - 삭제/병합 거래는 기본 제외다.
 - 삭제/병합 상태까지 봐야 하면 raw `transactions` 또는 `GET /api/v1/transactions?include_deleted=true&include_merged=true`를 사용한다.
 - 대출 상환은 원본 거래 타입/카테고리를 바꾸지 않고 nullable loan fields로 해석한다.
-- `income_basis='estimated'`인 dashboard row는 관측값과 예상값을 분리해 답한다.
+- Dashboard canonical 월별 값은 관측값으로, 별도 `month_projection`은 월간 시나리오로 답한다. 기존 `estimated_*`는 null 호환 필드다. 전체 전망이 null이면 `net_after_known_remaining_expense` 같은 알려진 부분 계산을 월말 전망/현금 잔액으로 말하지 않는다.
 - `monthly-cashflow.transfer`는 `abs(amount)` 기준 activity volume이며 `net_cashflow` 계산에는 포함하지 않는다.
 - `spending-anomalies` 설정 해석 순서는 `명시적 query param > persisted setting > code default`다.
 - `true_spendable`은 계산상 가용액이며 구매 가능/허용 판정이 아니다.

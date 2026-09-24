@@ -12,6 +12,7 @@ from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
+from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.asset import (
     AssetSnapshotTotalsResponse,
@@ -39,6 +40,7 @@ from app.schemas.asset import (
     SnapshotComparisonMode,
 )
 from app.services.settings_service import get_analytics_settings
+from app.services import loan_mapping_service
 
 
 async def list_asset_snapshots(db_session: AsyncSession) -> AssetSnapshotsResponse:
@@ -127,7 +129,20 @@ async def get_asset_snapshot_comparison(
 async def _load_asset_snapshot_totals(
     db_session: AsyncSession,
 ) -> list[AssetSnapshotTotalsResponse]:
-    asset_case = case((AssetSnapshot.side == "asset", AssetSnapshot.amount), else_=0)
+    asset_case = case(
+        (
+            and_(AssetSnapshot.side == "asset", AssetSnapshot.amount >= 0),
+            AssetSnapshot.amount,
+        ),
+        else_=0,
+    )
+    excluded_asset_case = case(
+        (
+            and_(AssetSnapshot.side == "asset", AssetSnapshot.amount < 0),
+            AssetSnapshot.amount,
+        ),
+        else_=0,
+    )
     liability_case = case(
         (AssetSnapshot.side == "liability", AssetSnapshot.amount), else_=0
     )
@@ -136,13 +151,14 @@ async def _load_asset_snapshot_totals(
             AssetSnapshot.snapshot_date,
             func.sum(asset_case).label("asset_total"),
             func.sum(liability_case).label("liability_total"),
+            func.sum(excluded_asset_case).label("negative_asset_excluded_total"),
         )
         .group_by(AssetSnapshot.snapshot_date)
         .order_by(AssetSnapshot.snapshot_date)
     )
 
     items = []
-    for snapshot_date, asset_total, liability_total in result.all():
+    for snapshot_date, asset_total, liability_total, excluded_total in result.all():
         asset_value = Decimal(asset_total or 0)
         liability_value = Decimal(liability_total or 0)
         items.append(
@@ -151,6 +167,7 @@ async def _load_asset_snapshot_totals(
                 asset_total=asset_value,
                 liability_total=liability_value,
                 net_worth=asset_value - liability_value,
+                negative_asset_excluded_total=Decimal(excluded_total or 0),
             )
         )
     return items
@@ -189,6 +206,7 @@ async def get_net_worth_history(db_session: AsyncSession) -> NetWorthHistoryResp
             NetWorthPointResponse(
                 snapshot_date=item.snapshot_date,
                 net_worth=item.net_worth,
+                negative_asset_excluded_total=item.negative_asset_excluded_total,
             )
             for item in snapshots.items
         ]
@@ -288,7 +306,18 @@ async def get_asset_liability_health(
         manual_input_overrides.append("monthly_required_spend")
     if monthly_income is not None:
         manual_input_overrides.append("monthly_income")
-    derived_defaults = await _derive_liquidity_health_defaults(db_session)
+    derived_defaults = await _derive_liquidity_health_defaults(
+        db_session, as_of_date=breakdown.snapshot_date or _today()
+    )
+    input_provenance = {
+        field: derived_defaults[field]
+        for field in (
+            "input_as_of_date",
+            "required_spend_period",
+            "required_spend_essential_total",
+            "required_spend_additional_debt_total",
+        )
+    }
     required_spend = (
         monthly_required_spend
         if monthly_required_spend is not None
@@ -334,6 +363,7 @@ async def get_asset_liability_health(
             debt_to_asset_ratio=None,
             confidence="low",
             assumptions=["asset snapshot is missing"],
+            **input_provenance,
         )
 
     cash_result = await db_session.execute(
@@ -351,20 +381,22 @@ async def get_asset_liability_health(
         Decimal("0"),
     )
 
-    loan_result = await db_session.execute(
-        select(func.sum(Loan.monthly_payment)).where(
-            Loan.snapshot_date == breakdown.snapshot_date
-        )
+    loan_summary = await get_loan_summary(db_session, breakdown.snapshot_date)
+    monthly_debt_payment = sum(
+        (item.monthly_payment or Decimal("0") for item in loan_summary.items),
+        Decimal("0"),
     )
-    monthly_debt_payment = Decimal(loan_result.scalar_one_or_none() or 0)
     assumptions = [
         "cash equivalents use user-confirmed flags first and conservative category/name heuristics when missing",
         "debt burden uses loan monthly_payment when available",
+        "required spend uses closed-month essential spending plus linked loan repayments not already included; estimated payments are not added",
     ]
     if breakdown.negative_asset_excluded_total < 0:
         assumptions.append("negative_asset_rows_excluded")
     confidence = "medium" if required_spend > 0 and monthly_debt_payment > 0 else "low"
-    emergency_fund_months = _safe_ratio(cash_equivalent_total, required_spend)
+    emergency_fund_months = (
+        float(cash_equivalent_total / required_spend) if required_spend > 0 else None
+    )
     return AssetLiabilityHealthResponse(
         snapshot_date=breakdown.snapshot_date,
         cash_equivalent_total=cash_equivalent_total,
@@ -376,10 +408,7 @@ async def get_asset_liability_health(
         monthly_required_spend_source=monthly_required_spend_source,
         emergency_fund_months=emergency_fund_months,
         emergency_fund_target_months=emergency_fund_target_months,
-        target_progress_ratio=_safe_ratio(
-            Decimal(str(emergency_fund_months or 0)),
-            Decimal(emergency_fund_target_months),
-        )
+        target_progress_ratio=emergency_fund_months / emergency_fund_target_months
         if emergency_fund_months is not None
         else None,
         monthly_debt_payment=monthly_debt_payment,
@@ -393,6 +422,8 @@ async def get_asset_liability_health(
         ),
         confidence=confidence,
         assumptions=assumptions,
+        debt_payment_snapshot_date=breakdown.snapshot_date,
+        **input_provenance,
     )
 
 
@@ -443,6 +474,7 @@ async def get_insurance_summary(
         items=items,
         monthly_premium_estimate=await _estimate_monthly_insurance_premium(
             db_session,
+            as_of_date=resolved_snapshot_date,
         ),
     )
 
@@ -478,15 +510,44 @@ async def patch_loan_repayment_metadata(
             detail="Loan snapshot not found.",
         )
     update_fields = payload.model_dump(exclude_unset=True)
+    reset_fields = [
+        field
+        for field in ("monthly_payment", "repayment_method")
+        if update_fields.pop(f"{field}_mode", None) == "automatic"
+    ]
+    if reset_fields:
+        latest_date = await db_session.scalar(
+            select(func.max(Loan.snapshot_date)).where(
+                Loan.lender == loan.lender, Loan.product_name == loan.product_name
+            )
+        )
+        if loan.snapshot_date != latest_date:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Automatic estimates can only be reset on the latest loan snapshot.",
+            )
     for field, value in update_fields.items():
         setattr(loan, field, value)
     if "monthly_payment" in update_fields:
         loan.monthly_payment_source = "manual"
     if "repayment_method" in update_fields:
         loan.repayment_method_source = "manual"
+    for field in reset_fields:
+        setattr(loan, field, None)
+        setattr(loan, f"{field}_source", None)
+    if reset_fields:
+        await db_session.flush()
+        await loan_mapping_service.apply_loan_repayment_estimates_for_latest_snapshots(
+            db_session, loan_keys=[(loan.lender, loan.product_name)]
+        )
     await db_session.commit()
     await db_session.refresh(loan)
-    return LoanRepaymentMetadataResponse.model_validate(loan, from_attributes=True)
+    response = LoanRepaymentMetadataResponse.model_validate(loan, from_attributes=True)
+    return response.model_copy(
+        update=await loan_mapping_service.get_loan_repayment_estimate_metadata(
+            db_session, loan
+        )
+    )
 
 
 async def get_investment_summary(
@@ -571,11 +632,18 @@ async def get_loan_summary(
         .order_by(Loan.lender, Loan.product_name)
     )
     rows = result.all()
-    items = [
-        _loan_item_response_with_account_kind(loan, loan_kind)
-        for loan, loan_kind, is_hidden in rows
-        if not is_hidden
-    ]
+    items = []
+    for loan, loan_kind, is_hidden in rows:
+        if is_hidden:
+            continue
+        item = _loan_item_response_with_account_kind(loan, loan_kind)
+        items.append(
+            item.model_copy(
+                update=await loan_mapping_service.get_loan_repayment_estimate_metadata(
+                    db_session, loan
+                )
+            )
+        )
     return LoanSummaryResponse(
         snapshot_date=resolved_snapshot_date,
         as_of_date=resolved_snapshot_date,
@@ -619,9 +687,14 @@ def _repayment_method_from_loan_kind(loan_kind: str | None) -> str | None:
 
 async def _estimate_monthly_insurance_premium(
     db_session: AsyncSession,
+    *,
+    as_of_date: date,
 ) -> InsurancePremiumEstimateResponse:
     latest_transaction_date = await db_session.scalar(
         select(func.max(Transaction.date))
+        .where(Transaction.date <= as_of_date)
+        .where(Transaction.is_deleted.is_(False))
+        .where(Transaction.merged_into_id.is_(None))
     )
     if latest_transaction_date is None:
         return InsurancePremiumEstimateResponse(
@@ -630,7 +703,7 @@ async def _estimate_monthly_insurance_premium(
             assumptions=["no transaction history is available"],
         )
 
-    period_start, period_end = _recent_closed_month_bounds(latest_transaction_date)
+    period_start, period_end = _recent_closed_month_bounds(as_of_date)
     result = await db_session.execute(
         select(Transaction.amount)
         .where(Transaction.date >= period_start)
@@ -661,18 +734,33 @@ async def _estimate_monthly_insurance_premium(
             "is_estimated": True,
             "source": "latest_closed_month_insurance_spend",
             "expected_source": "transactions effective category 보험",
+            "input_as_of_date": as_of_date.isoformat(),
         },
     )
 
 
 async def _derive_liquidity_health_defaults(
     db_session: AsyncSession,
+    *,
+    as_of_date: date,
 ) -> dict[str, object]:
-    latest_transaction_date = await db_session.scalar(
-        select(func.max(Transaction.date))
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
+    # The requested snapshot bounds every transaction input, including income.
+    closed_month_start, closed_month_end = _recent_closed_month_bounds(as_of_date)
+    closed_period = closed_month_end.strftime("%Y-%m")
+    valid_transactions = (
+        Transaction.is_deleted.is_(False),
+        Transaction.merged_into_id.is_(None),
+        Transaction.date <= as_of_date,
     )
+    latest_transaction_date = await db_session.scalar(
+        select(func.max(Transaction.date)).where(*valid_transactions)
+    )
+    provenance = {
+        "input_as_of_date": as_of_date,
+        "required_spend_period": closed_period if latest_transaction_date else None,
+        "required_spend_essential_total": Decimal("0.00"),
+        "required_spend_additional_debt_total": Decimal("0.00"),
+    }
     if latest_transaction_date is None:
         return {
             "monthly_income": Decimal("0"),
@@ -680,20 +768,17 @@ async def _derive_liquidity_health_defaults(
             "monthly_required_spend": Decimal("0"),
             "monthly_required_spend_source": "missing_transaction_history",
             "derived_from_periods": [],
+            **provenance,
         }
 
-    current_period = latest_transaction_date.strftime("%Y-%m")
     income_rows = await db_session.execute(
         select(Transaction.date, Transaction.amount)
-        .where(Transaction.type == "수입")
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
+        .where(Transaction.type == "수입", *valid_transactions)
+        .where(Transaction.date <= closed_month_end)
     )
     income_by_period: dict[str, Decimal] = {}
     for tx_date, amount in income_rows.all():
         period = tx_date.strftime("%Y-%m")
-        if period >= current_period:
-            continue
         income_by_period[period] = income_by_period.get(period, Decimal("0")) + Decimal(
             amount or 0
         )
@@ -702,35 +787,40 @@ async def _derive_liquidity_health_defaults(
         if income_by_period
         else Decimal("0")
     )
-    _, closed_month_end = _recent_closed_month_bounds(latest_transaction_date)
-    closed_period = closed_month_end.strftime("%Y-%m")
-    required_spend_result = await db_session.execute(
-        select(func.sum(-Transaction.amount))
-        .where(Transaction.type == "지출")
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
-        .where(
-            Transaction.date >= date(closed_month_end.year, closed_month_end.month, 1)
-        )
+    is_linked_debt = (
+        select(LoanTransactionLink.id)
+        .where(LoanTransactionLink.transaction_id == Transaction.id)
+        .exists()
+    )
+    spending_rows = await db_session.execute(
+        select(Transaction.amount, Transaction.spend_necessity, is_linked_debt)
+        .where(Transaction.type == "지출", *valid_transactions)
+        .where(Transaction.date >= closed_month_start)
         .where(Transaction.date <= closed_month_end)
-        .where(Transaction.spend_necessity == "essential")
     )
-    essential_spend = Decimal(required_spend_result.scalar_one_or_none() or 0)
-    monthly_debt_payment = Decimal(
-        await db_session.scalar(select(func.sum(Loan.monthly_payment))) or 0
-    )
-    derived_periods = sorted(set(income_by_period) | {closed_period})
+    essential_spend = Decimal("0")
+    additional_debt_spend = Decimal("0")
+    for amount, necessity, linked_debt in spending_rows:
+        if necessity == "essential":
+            essential_spend -= Decimal(amount)
+        elif linked_debt:
+            additional_debt_spend -= Decimal(amount)
     money_scale = Decimal("0.01")
+    provenance["required_spend_essential_total"] = essential_spend.quantize(money_scale)
+    provenance["required_spend_additional_debt_total"] = additional_debt_spend.quantize(
+        money_scale
+    )
     return {
         "monthly_income": monthly_income.quantize(money_scale),
         "monthly_income_source": "closed_month_income_median"
         if income_by_period
         else "missing_closed_month_income",
-        "monthly_required_spend": (essential_spend + monthly_debt_payment).quantize(
-            money_scale
-        ),
+        "monthly_required_spend": max(
+            Decimal("0"), essential_spend + additional_debt_spend
+        ).quantize(money_scale),
         "monthly_required_spend_source": "closed_month_required_spend",
-        "derived_from_periods": derived_periods,
+        "derived_from_periods": sorted(set(income_by_period) | {closed_period}),
+        **provenance,
     }
 
 

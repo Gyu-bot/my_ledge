@@ -306,7 +306,7 @@ async def test_net_worth_and_liquidity_exclude_negative_asset_rows(
     assert breakdown.net_worth == Decimal("-3689901.00")
     assert health.asset_total == breakdown.asset_total
     assert health.cash_equivalent_total == Decimal("310099.00")
-    assert health.emergency_fund_months == 0.3101
+    assert health.emergency_fund_months == 0.310099
     assert "negative_asset_rows_excluded" in health.assumptions
 
 
