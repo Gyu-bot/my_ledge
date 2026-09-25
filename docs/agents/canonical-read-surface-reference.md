@@ -39,7 +39,7 @@
 | `is_cash_equivalent` | 명시값이 있으면 `liquidity_tier`보다 우선해 현금성 포함 여부를 결정한다. 값이 없으면 `liquidity_tier='immediate'` 또는 보수적 category/name heuristic을 사용한다. |
 | 만기/소멸/중복 자산 | 자산 snapshot은 아직 삭제/숨김/병합 API가 없으므로 latest snapshot/API에 남을 수 있다. 에이전트는 이를 live 값으로 단정하지 말고, snapshot 날짜와 raw source 한계를 함께 말한다. |
 | 사용자 숨김 대출 계좌 | `loan_accounts.is_hidden=true`인 stable loan account는 기본 `/loan-accounts`와 `/loans/summary` active summary에서 제외된다. 감사/복구 목적이면 `/loan-accounts?include_hidden=true`를 사용하고 `lifecycle_status='user_hidden'`를 확인한다. |
-| 원천 우선순위 | 현재는 사용자 보강값(`liquidity_tier`, `is_cash_equivalent`, 대출 `monthly_payment`/`repayment_method`)이 raw import metadata보다 우선한다. multi-source 우선순위와 source confidence는 planned work다. |
+| 원천 우선순위 | 현재는 사용자 보강값(`liquidity_tier`, `is_cash_equivalent`, 대출 `monthly_payment`/`repayment_method`)이 raw import metadata보다 우선한다. 투자 소스 선택은 `/assets/source-policy`와 `/investments/selected`에서 별도로 조회한다. 기존 snapshot canonical view는 뱅샐 기준을 유지한다. |
 
 ## My Ledge / Agent 판단 책임 경계
 
@@ -422,3 +422,22 @@ DB queue의 `needs_recurring_payment_kind`는 검토 필요 신호다. 실제 �
 - 자산 유동성 PATCH는 생략을 보존하고 null은 자동 판정으로 돌린다. `is_cash_equivalent=false`는 자동 판정과 다른 명시적 제외다. 가장 가까운 과거의 확실한 동일 자산만 override를 이어받는다.
 - 삭제/병합 거래의 할부 링크는 감사/복원을 위해 남지만 관측 회차·연결 건수에서 제외한다. `inactive_installment_link`, `conflicting_transaction_id/state`가 나타나면 해당 거래를 확인한다. 명시적 해제 `DELETE .../installment-link?require_inactive=true`는 여전히 비활성일 때만 실행되고 이미 복원됐으면 `409`다.
 - 반복 분류 dry-run 승인에는 `preview_token`이 필요하다. `all_matching`과 `reviewed_only` 범위를 구분하고 stale preview의 `409`는 재조회 후 다시 검토한다. 카테고리/고정비만으로 관측 근거를 우회하지 않는다. `category_valid=false`인 기존 규칙은 표시용 경고이며 조회가 규칙을 삭제하지 않는다.
+
+
+## 투자 소스 선택과 서로 다른 기준시각
+
+- 기존 `vw_asset_snapshot_canonical`, 순자산 history/compare, `/investments/summary`는 뱅샐 스냅샷 근거다. 현재 소스 정책과 선택된 투자 항목은 `/assets/source-policy`, `/investments/selected`, `/assets/source-coverage`를 사용한다.
+- `configured_source`는 사용자 설정이고 `effective_source`는 실제 선택 결과다. 토스를 설정했다는 사실만으로 API 연동이나 최신 토스 평가액이 존재한다고 말하지 않는다. fallback 이유, 선택 run, 평가 기준시각, 마지막 조회 성공/시도와 stale 상태를 함께 확인한다.
+- `confirmed_net_worth`는 뱅샐 동일 스냅샷 기준, `estimated_net_worth`는 확인된 계좌 범위를 교체한 별도 추정값이다. `null`은 0이 아니라 계좌 매핑/예수금 범위 등 필요한 근거가 부족한 상태다.
+- `mixed_dates`일 때 소스별 기준일을 사용자에게 설명한다. 소스 시점 사이에 은행→증권 이체가 있었다면 오래된 은행 잔액과 최신 증권 잔액에 동일 자금이 잡힐 수 있다. 이것은 투자 수익이나 같은 날 확정 순자산이 아니며 가용 현금 판단에 그대로 사용하지 않는다.
+- 뱅샐 증권사 그룹은 실제 계좌번호를 의미하지 않는다. 매핑이 불명확하면 에이전트가 이름만으로 임의 연결하거나 원천 금액을 수정하지 않는다. 정책 저장과 계좌 매핑은 인증된 API를 사용하고 직접 DB 쓰기는 금지한다.
+- 실제 토스 API 수집기는 별도 연동 작업이다. 소스 선택 기반의 테스트 성공을 실계좌 연결 또는 운영 배포 증거로 설명하지 않는다.
+
+- `/investments/selected?as_of_date=...`는 현재 정책·매핑으로 해당 날짜 이하의 평가값을 선택한다. 나중에 업로드된 과거 평가값도 포함할 수 있어 “그날 알고 있던 값”을 복원하는 API가 아니다. 응답의 `total_basis`를 함께 설명한다.
+- `investment_total_complete=false`이면 투자 합계는 불완전한 부분합이다. 누락값을 0으로 해석하지 않고, 계좌/종목 충돌 이유를 함께 표시한다. coverage의 관측 건수와 계좌 그룹 건수는 단위가 다르므로 하나의 완성률로 계산하지 않는다.
+
+### Toss 수동 수집의 시점·범위
+
+`/investments/selected`의 Toss 항목은 국내·미국 주식(ETF 포함) 범위다. 채권/옵션/예수금을 포함하는 전체 계좌 잔액으로 해석하지 않는다. `valuation_precision=observation_proxy`이면 공급자 평가시각은 미제공이며 `valuation_at`은 조회시각 대용이다. stale=false도 실시간 시세임을 증명하지 않는다. USD→KRW는 별도로 조회한 midRate를 곱한 추정이고 quantity/native_currency/native_market_value/exchange_rate로 확인한다.
+
+수동 `POST /integrations/toss/sync`는 인증된 수집 쓰기 API다. 읽기 전용 소비자는 `/integrations/toss/status`와 selected surface만 읽는다. 실패·부분 수집은 직전 정상치를 보존하고 자동으로 BankSalad 전환하지 않는다. 최초 정상치가 없거나 비주식 scope가 충돌하면 명시적 fallback 사유를 따른다. 계좌 연결은 소스 적용과 별도이며, 소스 정책은 미리보기 후 확인해야 바뀐다. 자산 component/현금 범위가 미확정이면 전체 추정 순자산은 null이다.

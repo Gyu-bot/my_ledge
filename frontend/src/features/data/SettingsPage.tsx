@@ -11,6 +11,7 @@ import { PageHeader } from '../../shell/PageHeader'
 import type { DebtStrategyPreference } from '../../types/settings'
 import { IncomeExpectationsEditor } from '../settings/IncomeExpectationsEditor'
 import { AnalyticsSettingsEditor } from './AnalyticsSettingsEditor'
+import { SourcePolicyEditor } from './SourcePolicyEditor'
 
 type TargetsDraft = {
   readonly emergency_fund_target_months: string
@@ -65,6 +66,8 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader title="데이터 · 설정" meta={<span>분석 파라미터 · 재무 목표</span>} />
+
+      <SourcePolicyEditor />
 
       {settings.isLoading ? <ListSkeleton rows={5} /> :
        settings.error ? <ErrorState onRetry={() => void settings.refetch()} /> :

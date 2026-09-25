@@ -8,6 +8,10 @@ from app.schemas.schema_doc import (
 )
 
 RAW_TABLE_DESCRIPTIONS = {
+    "asset_source_runs": "Append-only source sync runs. Only success_complete whole-account runs are selectable; valuation and ingestion times are distinct. BankSalad account keys are broker groups, not verified account IDs.",
+    "asset_source_observations": "Immutable asset, investment and loan evidence. Raw audit rows are not additive canonical totals; use GET /assets/source-coverage or /investments/selected for selection and conflicts.",
+    "asset_source_mappings": "Explicit confirmed mapping of one complete BankSalad broker group to a Toss account; stable asset component keys and cash scope gate current net-worth replacement.",
+    "asset_source_policy_revisions": "Append-only confirmed source policy revisions with actor/reason. Policies affect selected estimates; historical BankSalad snapshot APIs remain unchanged.",
     "app_settings": (
         "Typed application settings. Analytics defaults are resolved from this table "
         "when request query parameters do not override them."

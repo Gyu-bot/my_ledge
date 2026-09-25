@@ -1,8 +1,8 @@
 ---
 slug: asset-investment-source-priority
-status: drafting
+status: in-progress
 intent: clear
-pending-action: await approval or $start-work for .omo/plans/asset-investment-source-priority.md
+pending-action: review locally verified investment source-selection slice; broader roadmap extensions remain
 approach: Plan exists. Build T015-T018/T016A as the source foundation before Toss integration: observation preservation, priority, resolution, coverage, and settings UI.
 ---
 
@@ -27,6 +27,6 @@ approach: Plan exists. Build T015-T018/T016A as the source foundation before Tos
 ## Open questions
 
 ## Approval gate
-status: drafting
+status: in-progress
 <!-- When exploration is exhausted and unknowns are answered, set status: awaiting-approval. -->
 <!-- That durable record is the loop guard: on a later turn read it and resume at the gate instead of re-running exploration. -->

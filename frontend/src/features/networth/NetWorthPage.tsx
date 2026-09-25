@@ -27,6 +27,7 @@ import {
 import { useProfile } from '../../hooks/useProfile'
 import { useAnalyticsSettings } from '../../hooks/useSettings'
 import { useInstallmentForecast } from '../../hooks/useTransactions'
+import { SelectedInvestmentsPanel } from './SelectedInvestmentsPanel'
 import { monthlyPaymentEvidence, monthlyPaymentMissingLabel, monthlyPaymentSourceLabel } from './loanPresentation'
 import type { LiquidityTier, LoanItem, LoanKind, LoanRepaymentMethod, SnapshotComparisonMode } from '../../types/asset'
 
@@ -240,6 +241,8 @@ export function NetWorthPage() {
           )}
         </div>
 
+        <SelectedInvestmentsPanel />
+
         {/* 순자산 추이 + 구성/신용점수 */}
         <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
           <Card title="순자산 추이" meta="스냅샷 시계열">
@@ -430,7 +433,7 @@ export function NetWorthPage() {
 
         {/* 투자 + 보험 */}
         <div className="grid gap-4 xl:grid-cols-2">
-          <Card title="투자 구성" meta={investments.data?.snapshot_date ?? undefined}>
+          <Card title="뱅샐 스냅샷 투자 내역" meta={investments.data?.snapshot_date ? `뱅샐 스냅샷 ${investments.data.snapshot_date}` : undefined}>
             {investments.isLoading ? <ListSkeleton rows={4} /> :
              investments.data && investments.data.items.length > 0 ? (
                <HBarList

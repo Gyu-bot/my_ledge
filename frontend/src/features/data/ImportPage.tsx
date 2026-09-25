@@ -224,7 +224,7 @@ export function ImportPage() {
               >
                 <div className="font-semibold">{RESET_LABEL[scope]}</div>
                 <div className="mt-0.5 text-micro opacity-80">
-                  {scope === 'transactions_only' ? '거래 내역만 삭제, 스냅샷 유지' : '거래 + 자산·보험·투자·대출 스냅샷 삭제'}
+                  {scope === 'transactions_only' ? '거래 내역만 삭제, 스냅샷 유지' : '거래·스냅샷·소스 관측·계좌 연결·소스 선택 설정 삭제'}
                 </div>
               </button>
             ))}
@@ -246,7 +246,7 @@ export function ImportPage() {
         title={RESET_LABEL[resetScope]}
         description={
           resetScope === 'transactions_and_snapshots'
-            ? '거래 내역과 자산·보험·투자·대출 스냅샷이 모두 삭제됩니다.'
+            ? '거래 내역과 자산·보험·투자·대출 스냅샷이 모두 삭제됩니다. 소스 원본 관측, 계좌 연결 매핑, 소스 선택 설정도 함께 초기화됩니다.'
             : '거래 내역만 삭제됩니다. 자산 스냅샷은 유지됩니다.'
         }
         confirmPhrase={RESET_LABEL[resetScope]}
