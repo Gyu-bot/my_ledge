@@ -16,6 +16,7 @@ import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type { DataResetScope, UploadPreviewResponse } from '../../types/upload'
 import { ImportPreviewPanel } from './ImportPreviewPanel'
 import { canApplyChange, changeKey, selectionFromChange } from './importPreviewModel'
+import { snapshotDateFromFilename } from './uploadFilename'
 
 const RESET_LABEL: Record<DataResetScope, string> = {
   transactions_only: '거래만 초기화',
@@ -32,6 +33,7 @@ export function ImportPage() {
 
   const [file, setFile] = useState<File | null>(null)
   const [snapshotDate, setSnapshotDate] = useState('')
+  const [snapshotDateFromName, setSnapshotDateFromName] = useState(false)
   const [preview, setPreview] = useState<UploadPreviewResponse | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set())
   const [resetScope, setResetScope] = useState<DataResetScope>('transactions_only')
@@ -39,12 +41,16 @@ export function ImportPage() {
 
   function selectFile(nextFile: File) {
     setFile(nextFile)
+    const derivedDate = snapshotDateFromFilename(nextFile.name)
+    if (derivedDate) setSnapshotDate(derivedDate)
+    setSnapshotDateFromName(derivedDate !== null)
     setPreview(null)
     setSelectedKeys(new Set())
   }
 
   function changeSnapshotDate(nextSnapshotDate: string) {
     setSnapshotDate(nextSnapshotDate)
+    setSnapshotDateFromName(false)
     setPreview(null)
     setSelectedKeys(new Set())
   }
@@ -79,6 +85,7 @@ export function ImportPage() {
       })
       setFile(null)
       setSnapshotDate('')
+      setSnapshotDateFromName(false)
       setPreview(null)
       setSelectedKeys(new Set())
     } catch (error) {
@@ -143,6 +150,9 @@ export function ImportPage() {
               {previewUpload.isPending ? '미리보기 생성 중...' : '미리보기 생성'}
             </Button>
             {!snapshotDate && file ? <span className="pb-2 text-micro text-warn">스냅샷 기준일을 입력하세요</span> : null}
+            {snapshotDate && snapshotDateFromName ? (
+              <span className="pb-2 text-micro text-text-muted">파일 이름의 마지막 날짜로 자동 입력됨</span>
+            ) : null}
           </div>
         </Card>
 
