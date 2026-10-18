@@ -210,6 +210,24 @@ describe('ImportPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('뱅샐 기간 파일명은 끝 날짜를 스냅샷 기준일로 자동 입력한다', async () => {
+    const { container } = renderPage()
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')
+    if (!input) throw new Error('file input missing')
+
+    fireEvent.change(input, { target: { files: [new File(['xlsx'], '강민규님_2025-10-17~2026-10-17.xlsx')] } })
+    expect(screen.getByLabelText('스냅샷 기준일 (필수)')).toHaveValue('2026-10-17')
+    expect(screen.getByText('파일 이름의 마지막 날짜로 자동 입력됨')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '미리보기 생성' }))
+    await waitFor(() => {
+      expect(mocks.previewMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ snapshotDate: '2026-10-17' }))
+    })
+
+    fireEvent.change(screen.getByLabelText('스냅샷 기준일 (필수)'), { target: { value: '2026-10-16' } })
+    expect(screen.queryByText('파일 이름의 마지막 날짜로 자동 입력됨')).not.toBeInTheDocument()
+  })
+
   it('중복 후보와 모호한 항목은 수동 확인 상태로 잠근다', async () => {
     const { container } = renderPage()
     chooseFileAndDate(container)
