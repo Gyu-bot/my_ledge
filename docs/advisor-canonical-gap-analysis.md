@@ -1,7 +1,7 @@
 # Advisor Canonical Gap Analysis And Implementation Plan
 
 작성일: 2026-06-10
-상태: historical evidence. 사용자에게 보일 roadmap 항목은 `Implentation-plan.md`로, 에이전트 실행 계획은 `.omo/plans/<slug>.md`로 승격하고, live 여부는 코드와 contract 문서에서 확인한다.
+상태: historical evidence. roadmap 항목은 `Implentation-plan.md`로 승격하고, live 여부는 코드와 contract 문서에서 확인한다.
 
 이 문서는 실제 사용자 데이터 export(`tmp/2025-05-21~2026-05-21.xlsx`, BankSalad 뱅샐현황 + 가계부 내역 1년치)를 canonical read surface에 흘려본 평가 결과다.
 "AI 에이전트가 이 사용자에게 개인 재무상담을 한다"는 관점에서, **에이전트가 값을 잘못 해석하게 만드는 지점**과 **상담에 필요한데 surface에 없는 판단 재료**를 정리하고, 각 항목의 상세 구현 계획을 남긴다.

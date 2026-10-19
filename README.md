@@ -35,7 +35,7 @@ BankSalad 엑셀 내보내기를 데이터 소스로 사용하는 개인 재무 
   - 데이터 사전
 
 제품 요구사항과 Phase 범위는 [PRD.md](PRD.md), repo 운영 규칙은 [AGENTS.md](AGENTS.md), 사용자용 구현 현황/로드맵은 [Implentation-plan.md](Implentation-plan.md)를 기준으로 본다.
-에이전트가 실행할 OMO 계획은 [.omo/plans/](.omo/plans/) 아래에 둔다.
+작업 범위·완료 기준은 `Implentation-plan.md`의 `T###` 항목에, 변경별 구현 방식과 검증 근거는 PR 본문에 둔다.
 `docs/STATUS.md`는 더 이상 handoff/status surface로 유지하지 않는 deprecated pointer다.
 현재 live backend/API contract는 [docs/backend-api-ssot.md](docs/backend-api-ssot.md)를 우선 참조한다.
 에이전트 연동 시에는 [docs/agents/README.md](docs/agents/README.md)와 [docs/agents/canonical-read-surface-reference.md](docs/agents/canonical-read-surface-reference.md)를 먼저 읽고, 운영/skill 패키징은 [docs/agent-integration/README.md](docs/agent-integration/README.md)를 이어서 본다.
@@ -422,7 +422,6 @@ npm run build
 - 제품 요구사항: [PRD.md](PRD.md)
 - repo 운영 규칙: [AGENTS.md](AGENTS.md)
 - 사용자용 구현 현황 / roadmap: [Implentation-plan.md](Implentation-plan.md)
-- OMO 실행계획 index: [.omo/plans/index.md](.omo/plans/index.md)
 - Backend/API live contract: [docs/backend-api-ssot.md](docs/backend-api-ssot.md)
 - Backend 상세 reference: [docs/backend-api-and-metrics-reference.md](docs/backend-api-and-metrics-reference.md)
 - 에이전트용 canonical README: [docs/agents/README.md](docs/agents/README.md)
@@ -430,7 +429,7 @@ npm run build
 - 범용 에이전트 연동 문서 인덱스: [docs/agent-integration/README.md](docs/agent-integration/README.md)
 - Legacy OpenClaw 호환 안내: [docs/openclaw/README.md](docs/openclaw/README.md)
 
-`Implentation-plan.md`는 사용자가 현재까지 구현된 항목과 남은 roadmap을 확인하기 위한 문서다. 에이전트 실행계획은 `.omo/plans/<slug>.md`에 둔다. `docs/STATUS.md`는 deprecated pointer로만 남긴다. 과거 plan/spec/archive 문서의 미체크 항목은 `Implentation-plan.md` 또는 `.omo/plans/`에 승격되어 있지 않으면 current work로 보지 않는다.
+`Implentation-plan.md`는 사용자가 현재까지 구현된 항목과 남은 roadmap을 확인하기 위한 문서다. 작업 범위와 완료 기준도 이 문서의 `T###` 항목에서 관리한다. `docs/STATUS.md`는 deprecated pointer로만 남긴다. 과거 plan/spec/archive 문서의 미체크 항목은 `Implentation-plan.md`에 승격되어 있지 않으면 current work로 보지 않는다.
 
 ## 에이전트 연동
 

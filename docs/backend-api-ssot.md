@@ -382,7 +382,7 @@
 - `GET /api/v1/assets/snapshot-compare`
 
 위 세 endpoint는 현재 `start_date` / `end_date` filter를 받지 않는다.
-현재 live contract에는 asset/investment/loan raw snapshot row를 삭제, 숨김, 만기 처리, 병합하는 endpoint가 없다. `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`는 최신 자산 row의 유동성 metadata만 수정한다. raw-data lifecycle과 multi-source provenance는 사용자용 roadmap에서는 [Implentation-plan.md](../Implentation-plan.md), 실행계획에서는 [`.omo/plans/`](../.omo/plans/) 아래에서 관리한다.
+현재 live contract에는 asset/investment/loan raw snapshot row를 삭제, 숨김, 만기 처리, 병합하는 endpoint가 없다. `PATCH /api/v1/assets/snapshots/{asset_snapshot_id}/liquidity`는 최신 자산 row의 유동성 metadata만 수정한다. raw-data lifecycle과 multi-source provenance는 [Implentation-plan.md](../Implentation-plan.md)의 `T015`-`T019` 항목에서 관리한다.
 
 ### Snapshot Compare Contract
 
@@ -467,9 +467,6 @@
 - `../Implentation-plan.md`
   - 사용자가 보는 구현 현황과 남은 roadmap
   - live contract가 아니라 제품 방향과 남은 항목 정리 기준이다
-- `../.omo/plans/`
-  - 에이전트가 실행할 decision-complete 계획
-  - todo, acceptance criteria, QA, evidence, commit strategy를 담는다
 - `docs/archive/planning/finance-advisor-analytics-expansion.md`
   - historical planning 문서
   - 현재 live backend/API SSOT나 active backlog로 사용하지 않는다

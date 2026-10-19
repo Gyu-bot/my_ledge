@@ -12,10 +12,10 @@
 
 ## 운영 방식
 
-- 이 파일은 사람이 읽는 로드맵/상태 문서이며, 에이전트가 그대로 실행하는 OMO 작업 계획이 아니다.
-- 에이전트 실행 계획은 `.omo/plans/<slug>.md` 아래에 둔다.
+- 이 파일은 로드맵/상태 문서이자 작업 범위의 기준이다. 각 `T###` 항목이 우선순위, 상태, 선행 조건, 완료 기준, 실행 참고를 가진다.
 - 이 파일에서는 완료된 작업, 남은 작업, 우선순위, 막힌 지점, 제품 의도를 확인한다.
-- 구현은 승인된 `.omo/plans/<slug>.md`에서만 시작한다. 적절한 실행 계획이 없으면 `omo:ulw-plan`으로 먼저 만든다.
+- 구현은 사용자가 승인한 `T###` 항목 범위에서 시작한다. 해당 항목이 없거나 범위·접근이 정해지지 않았으면 항목(범위, 하지 않을 것, 완료 기준, 검증)을 먼저 제안하고 승인을 받는다.
+- 변경별 구현 방식과 검증 근거는 PR 본문(`Summary`, `Verification`, `Plan impact`)에 남기고, 완료 후 해당 항목의 체크리스트·상태·참고를 갱신한다. 원본 QA 로그나 개인 금융 값은 커밋하지 않는다.
 - 코드와 live contract가 이 로드맵보다 우선한다. 실제 구현 상태가 다르면 사용자용 로드맵/상태 동기화로 이 파일을 갱신한다.
 - API, schema, canonical view, route, component contract 변경은 가능하면 같은 PR에서 관련 source-of-truth 문서도 함께 갱신한다.
 - workbook 동작에 의존하는 작업의 실데이터 검증은 `tmp/2025-05-21~2026-05-21.xlsx`를 사용한다.
@@ -41,8 +41,7 @@
 
 - 저장소 운영 규칙: `AGENTS.md`와 가장 가까운 하위 `AGENTS.md`
 - 사용자용 로드맵/상태: `Implentation-plan.md`
-- OMO 실행 계획 색인: `.omo/plans/index.md`
-- OMO 실행 계획: `.omo/plans/<slug>.md`
+- 과거 실행 계획의 범위·결정·결과: 이 문서의 `실행 계획 기록` 절
 - live API contract: `docs/backend-api-ssot.md`
 - 상세 API/metric reference: `docs/backend-api-and-metrics-reference.md`
 - agent canonical 값 사전: `docs/agents/canonical-read-surface-reference.md`
@@ -62,7 +61,7 @@
 4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 2026-09-24 공식 API 계약 확인과 사용자 키 사용 승인 후 구현을 진행한다.
 5. `T033`-`T039`와 `T041`은 거래 신뢰도 작업 이후의 automation, forecasting, decision-support, 제한적 tagging 백로그로 유지한다. 각 항목은 선행 조건이 충족된 뒤 집중된 PR로 시작한다.
 6. 대출 후보 `review_status` 및 할부 제안 API는 문서 계약이 SSOT/레퍼런스에 반영되었고, `Implentation-plan.md` 사용자-visible task graph에는 기존 MoM 회귀 커버리지 유지 상태만 보강 노트로 반영되었다.
-7. 2026-09-24 Live 점검 후 `T042` 대출 연결 거래 월상환 추정 복구와 `T043` 진행월 예상 수입·월말 순현금흐름을 추가했다. 후속 사용자 승인으로 `.omo/plans/live-audit-remediation.md`에서 구현·검증·Live 배포와 기존 데이터 복구를 완료했다. PR #22는 main 병합 전 상태이며 반복 지출 전망 후속 보완까지 배포된 애플리케이션 커밋은 `e3809b2`다. `T043`은 `T037` 전체 90일 calendar보다 좁은 월간 선행 작업이다.
+7. 2026-09-24 Live 점검 후 `T042` 대출 연결 거래 월상환 추정 복구와 `T043` 진행월 예상 수입·월말 순현금흐름을 추가했다. 후속 사용자 승인으로 구현·검증·Live 배포와 기존 데이터 복구를 완료했고 PR #22로 main에 병합했다. 반복 지출 전망 후속 보완까지 배포된 애플리케이션 커밋은 `e3809b2`다. `T043`은 `T037` 전체 90일 calendar보다 좁은 월간 선행 작업이다.
 
 ---
 
@@ -72,13 +71,13 @@
 |---|---|---|
 | 운영/로드맵 문서 전환 | `T000` | 완료 |
 | 계산 정확성과 agent read contract 기반 | `T001`-`T012A` | 완료 중심 |
-| 사용자 화면과 운영 확인 | `T013`-`T014` | `T013` PR #20 리뷰 대기, `T014` 완료 |
+| 사용자 화면과 운영 확인 | `T013`-`T014` | 완료 |
 | 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 선택 기반 구현, `T019` 수동 API 연동 진행 |
 | 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
 | issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
 | 다음 P0 거래 신뢰도 | `T030`-`T032` | 완료 |
 | 거래 신뢰 이후 자동화와 의사결정 지원 | `T033`-`T039`, `T041` | 계획됨 |
-| Live 추정값 정합성과 진행월 예측 | `T042`-`T043` | 완료; 수정 브랜치 Live 배포·API 복구·검증, PR #22 병합 전 |
+| Live 추정값 정합성과 진행월 예측 | `T042`-`T043` | 완료; Live 배포·API 복구·검증, PR #22 병합 |
 
 ---
 
@@ -99,7 +98,7 @@
 - 참고:
   - `docs/STATUS.md`는 2026-06-26부터 deprecated pointer로 전환되었고, mainline handoff/status snapshot 역할을 더 이상 맡지 않는다.
   - archived 문서는 참고용이며 사용자용 current roadmap 판단은 이 문서를 우선한다.
-  - 에이전트 실행 지시서는 `.omo/plans/<slug>.md`에 둔다.
+  - 작업 범위와 완료 기준은 이 문서의 `T###` 항목에 둔다.
 
 ### 계산 정확성과 agent read contract 기반
 
@@ -329,7 +328,7 @@
 
 #### 작업 T013. 설정 화면
 - 우선순위: P1
-- 상태: PR #20 리뷰 대기
+- 상태: 완료
 - 선행 조건: T010
 - 완료 기준:
   - [x] `/data/settings` route와 shell navigation entry가 새 frontend IA에 존재한다.
@@ -348,7 +347,7 @@
   - [x] Codex 인앱 브라우저로 `/data/settings` 전체 설정 편집 흐름을 확인한다.
   - [x] frontend docs가 `/data/settings` route와 `settings/analytics` + `financial_targets` 설정 surface를 설명한다.
 - 참고:
-  - 상태 근거: PR #20(`codex/settings-analytics-frontend`)에서 분석 파라미터 full edit UI, default/saved/effective help popover, focused tests, typecheck/lint, browser DOM QA를 완료했다.
+  - 상태 근거: PR #20에서 분석 파라미터 full edit UI, default/saved/effective help popover, focused tests, typecheck/lint, browser DOM QA를 완료했다.
   - 다음 구현: `T014`는 사용자 직접 확인 항목으로 완료 처리한다. 기능 구현을 이어갈 때는 `T015` observation/source foundation부터 시작하고, `/data/settings` source-priority UI(`T016A`)는 `T016` backend/API contract가 안정된 뒤 붙인다.
 
 #### 작업 T014. 운영 배포본 스모크 확인
@@ -365,8 +364,8 @@
 
 ### 자산/투자 source와 provenance
 
-> 2026-09-24 사용자가 토스증권을 첫 대상으로 소스 선택 기반 구현을 승인했다. 실행은 `.omo/plans/asset-investment-source-priority.md`에서 추적한다. 뱅샐의 동일 기준일 순자산/과거 스냅샷과 최신 소스 조합 추정액을 구분하며, 소스별 평가·조회·수집 시각과 계좌 매핑/예수금 범위를 보존한다. 시점 사이의 계좌 간 이체는 혼합 기준일 합계에 중복 반영될 수 있으므로 한계를 명시한다. 실제 토스 API 수집기(`T019`)와 운영 배포는 이번 승인 범위에 포함하지 않는다.
-> 구현 결과: `codex/asset-source-selection`에서 투자 기본/계좌 그룹별 소스 선택, 미리보기·명시 적용, 원본 관측 보존, 완전한 계좌 수집 선택, 혼합 기준일 추정값/설정 화면을 구현·로컬 검증했다. 전체 T015–T018의 일반 lifecycle 편집, 세부 필드 우선순위와 확장 provenance는 아직 완료 처리하지 않는다. 검증 상세는 `.omo/evidence/asset-source-selection-implementation.md`를 본다.
+> 2026-09-24 사용자가 토스증권을 첫 대상으로 소스 선택 기반 구현을 승인했다. 승인된 실행 기준은 `실행 계획 기록` 절에 있다. 뱅샐의 동일 기준일 순자산/과거 스냅샷과 최신 소스 조합 추정액을 구분하며, 소스별 평가·조회·수집 시각과 계좌 매핑/예수금 범위를 보존한다. 시점 사이의 계좌 간 이체는 혼합 기준일 합계에 중복 반영될 수 있으므로 한계를 명시한다. 실제 토스 API 수집기(`T019`)와 운영 배포는 이번 승인 범위에 포함하지 않는다.
+> 구현 결과: PR #23에서 투자 기본/계좌 그룹별 소스 선택, 미리보기·명시 적용, 원본 관측 보존, 완전한 계좌 수집 선택, 혼합 기준일 추정값/설정 화면을 구현·검증해 main에 병합했다. 전체 T015–T018의 일반 lifecycle 편집, 세부 필드 우선순위와 확장 provenance는 아직 완료 처리하지 않는다. 범위별 결과와 남은 경계는 `실행 계획 기록` 절을 본다.
 
 #### 작업 T015. 자산/투자 raw observation lifecycle와 selected canonical view
 - 우선순위: P2
@@ -518,7 +517,7 @@
   - [x] 1차 범위는 보유 평가액과 투자 구성 비중만이며, 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution은 구현하지 않는다.
   - [x] BankSalad snapshot만으로 투자 성과/수익률을 해석하지 않는다.
 - 참고:
-  - 구현 증거: `.omo/evidence/toss-integration-implementation.md`. 소스는 국내·미국 주식만, 평가시각은 observation_proxy. 1Password CLI 인증이 완료되지 않아 실제 계좌 조회 성공은 아직 미확인.
+  - 구현: PR #23. 검증 결과는 `실행 계획 기록` 절을 본다. 소스는 국내·미국 주식만, 평가시각은 observation_proxy. 1Password CLI 인증이 완료되지 않아 실제 계좌 조회 성공은 아직 미확인.
   - 2026-09-24 공식 OpenAPI v1.2.17 확인 및 기존 1Password 개인 볼트 키 사용 승인. 수동 API 수집과 명시적 단일계좌 매핑을 구현한다.
   - 공급자가 평가시각/예수금을 제공하지 않으므로 조회시각 대용과 별도 환율 기준을 보존한다. 보존기간/샌드박스는 문서에서 확인되지 않았다.
   - 투자 성과 분석은 holdings valuation source가 안정화된 뒤 별도 task로 승격한다.
@@ -939,7 +938,7 @@
 - 검증 및 참고:
   - 2026-09-24 Live GET·readonly DB·배포된 순수 계산 함수 대조로, 충분한 연결 거래가 있는 계좌의 `null/manual` 상태와 자동 연결 추가 후 저장 추정액 불일치를 확인했다. 개인별 금액·거래 원문은 버전 관리되는 계획 문서에 넣지 않는다.
   - 코드 경로: `frontend/src/features/data/LoansPage.tsx`, `frontend/src/hooks/useTransactions.ts`, `backend/app/services/assets_service.py`, `backend/app/services/loan_mapping_service.py`, `backend/app/services/auto_classification_service.py`.
-  - `.omo/plans/live-audit-remediation.md`에서 코드·회귀 검증·배포·기존 데이터 복구를 각각 확인했다. Live 네 계좌의 추정액과 관측 근거를 복구했고, 원본 거래 및 80개 연결은 보존했다.
+  - PR #22에서 코드·회귀 검증·배포·기존 데이터 복구를 각각 확인했다. Live 네 계좌의 추정액과 관측 근거를 복구했고, 원본 거래 및 80개 연결은 보존했다.
 
 #### 작업 T043. 진행월 예상 수입과 월말 순현금흐름 분리 표시
 - 우선순위: P1
@@ -964,7 +963,95 @@
   - 2026-09-24 Live에서 월말 급여 패턴, 진행월 급여 미입금, canonical의 추정 수입 제공, 월간 수입·현금흐름 실적 응답을 직접 대조했다. 기존 추정 기능 부재가 아니라 소비 화면 차이와 정기 수입·잔여 지출 모델의 부족이 범위다.
   - `T023`의 관측/추정 basis 분리와 `T024`의 유동성 입력값 산출 완료 상태는 유지한다. 이 작업은 월간 전망을 보완하며 `T037`의 90일 일별 잔액 calendar 전체를 대체하지 않는다.
   - 코드 경로: `backend/app/services/canonical_views_dashboard_service.py`, `backend/app/services/analytics_service.py`, `backend/app/services/assets_service.py`, `frontend/src/features/home/HomePage.tsx`.
-  - `.omo/plans/live-audit-remediation.md`에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 최초 배포는 반복 지출 이력이 부족하면 전체 전망을 비웠다. 후속 사용자 승인으로 거래처별 납부·환급·잔여일 이력을 구분하고, 근거가 약한 경우 낮은 신뢰도의 전망과 확인 사유를 제공하도록 보완해 Live 검증까지 완료했다. 실제 결제 근거가 전혀 없거나 대출·할부·관측 입력이 불명확한 경우의 산출 불가는 유지한다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
+  - PR #22에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 최초 배포는 반복 지출 이력이 부족하면 전체 전망을 비웠다. 후속 사용자 승인으로 거래처별 납부·환급·잔여일 이력을 구분하고, 근거가 약한 경우 낮은 신뢰도의 전망과 확인 사유를 제공하도록 보완해 Live 검증까지 완료했다. 실제 결제 근거가 전혀 없거나 대출·할부·관측 입력이 불명확한 경우의 산출 불가는 유지한다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
+
+## 실행 계획 기록
+
+과거 별도 실행 계획 파일로 관리하던 작업 묶음의 범위·결정·결과를 이 절로 옮겼다. 원본 QA 로그는 보관하지 않으며, 검증 근거는 각 PR 본문과 위 task 항목의 참고를 본다.
+
+| 작업 묶음 | 관련 Task | 결과 | 남은 범위 |
+|---|---|---|---|
+| 거래 source lifecycle·업로드 reconciliation | `T030`, `T031` | 완료, PR #18 | 없음 |
+| settlement group canonical netting | `T032` | 완료, PR #19 | 없음 |
+| 분석 설정 편집 화면 | `T013` | 완료, PR #20 | 없음 |
+| 운영 배포본 스모크 확인 | `T014` | 사용자 직접 확인 항목으로 완료 | 없음 |
+| 대출 후보 검토·할부 거래 제안 | 대출 후보 `review_status`, 할부 제안 API | 완료 | 없음 |
+| frontend 빌드 commit 추적 | 운영 보조 | 완료 | 없음 |
+| Live 점검 오류 수정과 진행월 전망 | `T042`, `T043` | 완료, PR #22 | 없음 |
+| 자산/투자 source 선택 기반 | `T015`-`T018`, `T016A` | 투자 계좌 선택 slice 완료, PR #23 | 일반 lifecycle 편집, field-level 우선순위, 확장 provenance/coverage |
+| 토스증권 보유자산 수집 | `T019` | 수동 수집·소스 반영 완료, PR #23 | 실제 키 조회 확인, allocation/delta, 일별 대표 observation |
+| 거래 신뢰 이후 자동화·전망 | `T033`-`T039`, `T041` | 착수 전 | 전체 |
+
+### 거래 source lifecycle·업로드 reconciliation (`T030`-`T031`)
+
+- 재업로드가 사용자 카테고리, memo, 대출/할부 연결, 지출 검토 상태를 덮어쓰지 않도록 source lifecycle을 먼저 만들고, 그 위에서 missing/replacement/source-changed를 판단하는 preview/apply 흐름을 붙였다.
+- raw 거래는 hard delete하지 않는다.
+
+### settlement group canonical netting (`T032`)
+
+- 원결제·전체취소·부분환불·복수 부분환불을 하나의 settlement group으로 묶어 분석 전반에서 재사용한다. 상태는 `auto_confirmed`, `review_required`, `user_confirmed`, `rejected` 또는 동등값이다.
+- raw signed transaction의 금액·부호는 바꾸지 않는다. 원결제 후보가 여러 개면 자동 확정하지 않는다. `T012` 구매 검토 상계와 이중 상계하지 않는다.
+
+### 분석 설정 편집 화면 (`T013`)
+
+- 기존 `settings/analytics` API·client·hook 패턴을 유지하고 `/data/settings` 한 화면 안에서 섹션별 편집을 제공한다.
+- reset-to-default와 export/import는 일반 사용자 UI에 노출하지 않는다. 새 CSS framework나 상태관리 라이브러리를 추가하지 않는다.
+
+### 대출 후보 검토·할부 거래 제안
+
+- `/data/inbox`의 대출 연결 후보에 `대출 후보 아님`을 영구적이되 되돌릴 수 있는 리뷰 상태로 저장한다. 대출 계좌 숨김 기능으로 대체하지 않는다.
+- 할부 페이지는 활성 할부 계획을 기준으로 거래 후보와 예상 회차를 제안만 하며, 거래 원본 삭제나 자동 연결은 하지 않는다. 지출 MoM 수정은 회귀 검증만 유지한다.
+
+### frontend 빌드 commit 추적
+
+- 배포 frontend에 `build-info.json`(검증된 전체 Git SHA 또는 `unknown`)과 같은 값의 OCI revision label을 넣는다. metadata는 no-store JSON으로 제공하고 없으면 SPA shell 대신 404를 반환한다.
+- 빌드 helper는 `git archive`로 깨끗한 context를 만들어 ignored/untracked 입력과 HEAD 오귀속을 피한다. UI, API, DB, 운영 서비스, host 설정은 바꾸지 않았다.
+
+### Live 점검 오류 수정과 진행월 전망 (`T042`-`T043`)
+
+- 2026-09-24 사용자가 발견된 오류 전부의 수정·push·Live 배포·검증을 승인했다. 범위는 `T042`, `T043`과 점검에서 확정된 오류다: 순자산 음수 자산/부채 처리 일관화, 유동성 기간·부채 중복 제거, 환불 부호와 이상치 방향, 지출 lens의 이체 제외, signal 기간 표시, 큐 필터·페이지네이션, 할부 제안 alias, 현금성 자산 tri-state와 metadata 상속, 잘못된 테스트 규칙 정리, drilldown context 보존, 반복결제 승인 범위, 필요성 분류 우선순위, 반복 탐지 설정 소비, 할부 과거/미래 구분, 취소 후보 표시, 반복 이력과 활성 구독 분리, 필요성 미분류 bucket, 표시 문구, 목록 잘림, 일괄 선택 누락 방지.
+- 운영 데이터 복구는 백업 후 인증된 API로 결정적인 항목만 적용하고 전후 GET으로 대조했다. 직접 DB 쓰기와 불확실한 대출/할부 매칭은 하지 않았다. 금융 값·원본 거래·캡처는 버전 관리 문서에 넣지 않는다.
+
+### 자산/투자 source 선택 기반 (`T015`-`T018`, `T016A`)
+
+2026-09-24 승인된 실행 기준:
+
+- BankSalad 동일 기준일 순자산/과거 스냅샷은 재현 가능하게 유지하고, 최신 소스 조합 값은 별도 이름의 현재 추정액으로 노출한다. 나중 API 관측값으로 과거 스냅샷을 조용히 바꾸지 않는다.
+- 스냅샷 기준일, 실제 평가시각, 조회시각, 수집시각을 구분한다. 나중 업로드가 오래된 평가를 현재값으로 만들지 않으며, 과거 시점 조회는 미래 평가를 선택하지 않는다.
+- 매핑된 계좌 전체의 complete source run만 선택한다. 완료된 빈 보유 결과와 실패/부분 결과를 구분하고, 새로고침 실패 시 마지막 complete 성공을 유지하며 freshness와 실패를 따로 보고한다.
+- workbook은 투자를 broker/product로만 식별하므로 broker 그룹 fallback identity임을 표시하고, 대체 전 명시적이고 모호하지 않은 계좌 매핑을 요구한다. product name 단독 매칭은 금지한다.
+- 추정액은 같은 범위의 매핑된 BankSalad 계좌 구성요소만 대체한다. 계좌 매핑, 현금/환율 범위, 구성요소 coverage가 없거나 모호하면 추정 총액을 추측하지 않고 사유와 함께 unavailable로 둔다.
+- 기준일 사이의 은행→증권 이체는 혼합 기준일 합계에 중복 반영될 수 있으므로 그 한계와 선택 계좌별 basis를 노출한다. 혼합 기준일 추정액은 동일 기준일 확정 순자산도 투자 수익률도 아니다.
+- source policy preview와 명시 적용은 같은 데이터/정책 revision을 사용하고 stale preview는 거부한다. 재업로드는 정책과 이전 관측 근거를 보존한다.
+- 설정 화면은 configured source와 effective source를 구분하고, complete 매핑 관측이 없을 때 Toss를 고르면 BankSalad fallback과 그 이유를 보여준다.
+
+구현 결과(PR #23):
+
+| 범위 | 구현 | 남은 roadmap 경계 |
+|---|---|---|
+| observation/identity | 파싱된 자산·투자·대출 원본 보관, 정규화된 broker/instrument key, source run, migration/backfill, 재업로드 동등성 | 일반 자산/대출 lifecycle 편집, source file/row fingerprint 연결 |
+| source priority | 인증된 policy preview/확정 적용, revision 감사, 투자/계좌 override | global source는 BankSalad 유지, field-level·개별 종목 override는 확장 포인트 |
+| resolution | 계좌 단위 대체, failed/partial/empty/stale 처리, 매핑·현금 안전장치, conflict 노출 | 일반화된 conflict 해결/lifecycle 편집 workflow |
+| coverage | selected-source/coverage API, 기준일·정밀도·동기화·fallback·conflict metadata와 contract 문서 | source confidence/fingerprint/coverage 비율은 구현 완료로 주장하지 않음 |
+| 설정 화면 | 설정 preview/적용, 순자산 화면의 별도 현재 추정액 | 실제 Toss 연결·스케줄링은 `T019` |
+
+남은 일로 착수할 때의 검증 기준: `test_assets_service.py`, `test_assets_api.py`, `test_schema_api.py`, `SettingsPage` 테스트, frontend typecheck/lint, `tmp/2025-05-21~2026-05-21.xlsx`와 `/data/settings` 실데이터 확인. 같은 product name의 서로 다른 broker holding이 분리되는지, partial/failed run이 canonical total에 들어가지 않는지 확인한다.
+
+### 토스증권 보유자산 수집 (`T019`)
+
+- 공식 OpenAPI v1.2.17을 확인했고, 사용자가 기존 1Password 개인 볼트의 단일계좌 키 사용을 승인했다. 수동 수집과 명시적 단일계좌 매핑으로 선택 기반을 확장한다.
+- 공급자가 보유 평가시각과 예수금을 제공하지 않으므로 평가시각은 조회시각 대용(`observation_proxy`)으로 두고 환율 기준을 별도 보존한다. 범위는 국내·미국 주식만이다. 시세시각 주장, 현금 대체, 자동 스케줄링, 거래, 운영 서버 배포는 하지 않는다. 인증 키는 추적 파일에 두지 않는다.
+- 로컬 검증: backend 504 passed(PostgreSQL 전용 동시성 테스트 12개 skip), frontend 237 passed, lint/typecheck/build 통과, source migration upgrade/downgrade와 기존 row 보존 확인, desktop 1280/mobile 390 합성 브라우저 흐름 통과. 리뷰에서 나온 주식 전용 범위와 Decimal overflow 문제는 회귀 테스트와 함께 수정했다.
+- 남은 일: 1Password 데스크톱 인증 후 실제 키 조회 확인, broker/product 기준 allocation ratio와 previous-snapshot delta, 일별 대표 observation 보존, 불확실한 종목 이름 매칭 preview.
+
+### 거래 신뢰 이후 자동화·전망 (`T033`-`T039`, `T041`)
+
+착수 시 실행 기준:
+
+- 선행 조건 `T030`-`T032`는 완료됐다. 전체를 한 PR로 만들지 않고 첫 PR은 `T033` 거래처 정규화 후보 엔진처럼 좁게 시작한다. 순서는 정규화·승인 기반 분류 추천 → 반복결제 series·반복계약 ledger → 90일 현금흐름·sinking fund/adaptive budget·대출 상환 scenario → 제한적 tag다.
+- 결정론적 규칙이 정해진 곳에 LLM/ML을 쓰지 않는다. 사용자에게 보이는 규칙은 preview/승인 없이 자동 적용하지 않는다. 전망과 대출 scenario는 금융 조언이 아니며 가정·confidence·누락 데이터를 노출하고 관측 현금흐름과 분리한다. 금액 분할 회계나 무제한 tag taxonomy는 넣지 않는다.
+- `T037`은 `T043`의 수입 대조를 재사용한다. `T042`/`T043` 승인은 이 묶음 전체의 승인이 아니다.
+- 검증 사례: 정규화는 PG prefix, 법인 접미사, 모호한 거래처, 거절 기억, preview 건수, 수동 override 보존. 반복계약은 같은 거래처 두 구독, 변동 통신비, 공과금, 해외결제, 환불 제외, 가격 변경, 미납, 해지, 할부를 반복계약으로 보지 않음. 전망은 급여 전 저잔액, 반복계약·대출·할부 전망, stale 입력, 투자 제외, 연간 지출, 승인된 sinking fund, 수수료 누락 경고, 금리 상승 가정. tag는 CRUD, 일괄 적용, 필터, 거절 기억, 카테고리 독립성.
 
 ---
 
