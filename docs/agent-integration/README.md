@@ -28,7 +28,6 @@ Hermes, Codex, Claude, OpenClaw 등 범용 에이전트가 `my_ledge`를 읽기/
 | [../backend-api-ssot.md](../backend-api-ssot.md) | live | 현재 호출 가능한 endpoint와 contract 판단 |
 | [../backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md) | live detail | endpoint/metric/canonical 계산 상세 |
 | [../../Implentation-plan.md](../../Implentation-plan.md) | user roadmap | 사용자가 보는 구현 현황과 남은 roadmap |
-| [../../.omo/plans/](../../.omo/plans/) | OMO plans | agent-executable 실행계획 |
 | [../../PRD.md](../../PRD.md) | product intent | 제품 의도와 배경. live contract 판단에는 사용하지 않음 |
 | [../../AGENTS.md](../../AGENTS.md) | workflow | 협업/운영 규칙 |
 

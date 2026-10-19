@@ -1,7 +1,7 @@
 # PROJECT KNOWLEDGE BASE
 
 Generated: 2026-06-26
-Mode: OMO-first repo governance
+Mode: roadmap-first repo governance
 Workspace: `/Users/gyurin/dev/my_ledge`
 
 ## Overview
@@ -30,25 +30,25 @@ Core stack:
 | Need | Source | Rule |
 |---|---|---|
 | Repo operating rules | `AGENTS.md` hierarchy | Start here, then nearest child `AGENTS.md` |
-| User-facing roadmap/status | `Implentation-plan.md` | Human-readable project status and remaining work; filename spelling is intentional |
-| OMO execution plans | `.omo/plans/` | Agent-executable plans with todos, references, acceptance criteria, QA, and commit strategy |
+| Roadmap, status, and execution scope | `Implentation-plan.md` | Task items (`T###`) carry status, prerequisites, acceptance criteria, and execution notes; filename spelling is intentional |
+| Execution detail and verification | PR body | Approach, verification evidence, and plan impact for each change |
 | Live backend/API contract | `docs/backend-api-ssot.md` | Code wins if docs drift |
 | Detailed metric/API formulas | `docs/backend-api-and-metrics-reference.md` | Use for implementation/review details |
 | Agent read values | `docs/agents/canonical-read-surface-reference.md` | Agent-facing value semantics |
 | Frontend UI contract | `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md` | Current frontend truth |
-| Historical context | `docs/archive/**`, `docs/daily/**`, `docs/superpowers/**`, `docs/frontend-remake/**` | Reference only; promote into `Implentation-plan.md` for user visibility or `.omo/plans/` for execution before treating as active |
+| Historical context | `docs/archive/**`, `docs/daily/**`, `docs/superpowers/**`, `docs/frontend-remake/**` | Reference only; promote into `Implentation-plan.md` before treating as active |
 
 `docs/STATUS.md` is deprecated. Do not maintain it as a handoff surface.
 
-## OMO Workflow
+## Workflow
 
 1. Read this file and the nearest child `AGENTS.md`.
 2. Check `git status --short --branch` and protect existing changes.
-3. Read `Implentation-plan.md` for user-facing project context: what is done, what remains, and why it matters.
-4. For execution, use `.omo/plans/index.md` to choose the relevant `.omo/plans/<slug>.md`; if no suitable plan exists, create one with `omo:ulw-plan` and wait for user approval before execution.
+3. Read `Implentation-plan.md` for project context: what is done, what remains, and why it matters.
+4. For execution, start from the relevant `T###` task item and its acceptance criteria. If no task item covers the work, or the scope/approach is not yet decided, propose the task item (scope, guardrails, acceptance criteria, verification) and wait for user approval before execution.
 5. For code changes, inspect the live code path before editing. Do not rely on plan text alone.
 6. For project work, prefer a focused branch or worktree from latest `origin/main` unless the user explicitly asks for local/mainline edits.
-7. Capture completed work in the executing `.omo/plans/<slug>.md` evidence/checklist first; update `Implentation-plan.md` only when the user-facing roadmap/status should change.
+7. Record verification evidence in the PR body, then update the task item's checklist, status, and notes in `Implentation-plan.md`. Do not commit raw QA logs or personal financial values.
 8. Feature/fix PR bodies should carry `Summary`, `Verification`, `Plan impact`, and `Contract docs` when relevant.
 9. Do not merge PRs or push to `main` without explicit user approval.
 
@@ -58,7 +58,7 @@ Core stack:
 - Base new feature/fix worktrees on latest `origin/main`.
 - One session = one worktree = one branch = one PR when practical.
 - Split unrelated changes into focused branches. Keep backend/frontend/docs together only when they serve the same user-visible outcome.
-- Mainline coordination now flows through `.omo/plans/` for execution and `Implentation-plan.md` for user-facing status, not `docs/STATUS.md`.
+- Mainline coordination flows through `Implentation-plan.md` task items and PRs, not `docs/STATUS.md`.
 - Clean up worktrees/branches only after their PRs are merged and no active session needs them.
 
 Generated/foreign paths to ignore for governance generation: `.git`, `.claude/worktrees`, `.codex`, `.venv`, `.uv-cache`, `node_modules`, `dist`, `build`, `__pycache__`, `.pytest_cache`, `.ruff_cache`.
