@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
+from httpx import ASGITransport, AsyncClient
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -21,8 +22,18 @@ from app.models import Base
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
 from app.models.upload_review_operation import UploadReviewOperation
+from app.core.database import get_db_session
+from app.main import create_app
 from app.services import upload_review_service as svc
-from test_upload_review_service import apply, prepare, row, tx, workbook
+from test_upload_review_service import (
+    DAY,
+    apply,
+    apply_request,
+    prepare,
+    row,
+    tx,
+    workbook,
+)
 
 
 @pytest.fixture
@@ -170,3 +181,87 @@ async def test_pg_additive_migration_upgrade_downgrade(pg_factory):
 
         await connection.run_sync(exercise)
         await db.commit()
+
+
+async def test_pg_lock_timeout_http_is_sanitized_and_atomic(
+    pg_factory, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+    data = workbook()
+    async with pg_factory() as seed:
+        target = tx()
+        seed.add(target)
+        await seed.commit()
+        target_id = target.id
+        plan = await prepare(seed, data)
+        before = await svc.state_digest(seed)
+
+    app = create_app()
+
+    async def sessions():
+        async with pg_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db_session] = sessions
+    async with pg_factory() as writer:
+        # Ordinary, uncooperative writer holds ROW EXCLUSIVE without changing
+        # semantics. Production five-second lock timeout must abort review.
+        await writer.execute(
+            update(Transaction)
+            .where(Transaction.id == target_id)
+            .values(description="synthetic")
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                f"/api/v1/upload/review/{plan.operation_id}/apply",
+                headers={"X-API-Key": "test-api-key"},
+                files={"file": ("synthetic.xlsx", data)},
+                data={
+                    "snapshot_date": DAY.isoformat(),
+                    "apply_request": apply_request(plan).model_dump_json(),
+                },
+            )
+        assert resp.status_code == 409
+        assert resp.json() == {
+            "detail": {
+                "code": "database_conflict",
+                "message": "Database transaction conflicted; reconcile operation before retry",
+            }
+        }
+        await writer.rollback()
+    async with pg_factory() as db:
+        assert await svc.state_digest(db) == before
+        stored = await svc.get_review(db, plan.operation_id)
+        assert stored.status == "prepared" and stored.result is None
+    app.dependency_overrides.clear()
+
+
+async def test_pg_late_failure_restores_every_finance_table(
+    pg_factory, tmp_path, monkeypatch
+):
+    async with pg_factory() as db:
+        data = workbook(full_snapshots=True)
+        plan = await prepare(db, data)
+        await apply(db, plan, tmp_path, data)
+        corrected = workbook(
+            [row(category_major="corrected"), row("added", -2)],
+            asset=999,
+            full_snapshots=True,
+        )
+        plan = await prepare(db, corrected)
+        before = await svc.state_digest(db)
+
+    async def fail(*args, **kwargs):
+        raise RuntimeError("synthetic failure after all financial writes")
+
+    monkeypatch.setattr(svc, "verify_snapshots", fail)
+    async with pg_factory() as db:
+        with pytest.raises(RuntimeError):
+            await apply(db, plan, tmp_path, corrected)
+    # Read in an independent session: no failed-session identity-map illusion.
+    async with pg_factory() as db:
+        assert await svc.state_digest(db) == before
+        stored = await svc.get_review(db, plan.operation_id)
+        assert stored.status == "prepared" and stored.result is None

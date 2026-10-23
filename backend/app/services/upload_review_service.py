@@ -6,6 +6,7 @@ canonical human-message provenance must be verified by the finance helper.
 """
 
 from collections import Counter
+from dataclasses import asdict
 from datetime import date, datetime, time
 from decimal import Decimal
 from hashlib import sha256
@@ -96,6 +97,26 @@ def encoded(value):
 
 def digest(value):
     return sha256(encoded(value).encode()).hexdigest()
+
+
+def review_binding(file_hash, snapshot_date, context, rows, snapshots):
+    # Bind interpretation as well as bytes: parser/normalizer upgrades may change
+    # same-count snapshot values, raw evidence, or even explicitly kept rows.
+    # Reuse the durable internal binding column; no public schema change.
+    return digest(
+        {
+            "file": file_hash,
+            "date": snapshot_date,
+            "context": context.model_dump(mode="json"),
+            "parsed": {
+                "rows": rows,
+                "snapshots": asdict(snapshots),
+                "normalized_snapshots": asdict(
+                    normalize_snapshots_for_storage(snapshots)
+                ),
+            },
+        }
+    )
 
 
 def finance_tables():
@@ -219,13 +240,7 @@ async def prepare_review(
         await lock_state(db)
         state = await state_digest(db)
         file_hash = sha256(file_bytes).hexdigest()
-        binding = digest(
-            {
-                "file": file_hash,
-                "date": snapshot_date,
-                "context": context.model_dump(mode="json"),
-            }
-        )
+        binding = review_binding(file_hash, snapshot_date, context, rows, snapshots)
         # Repeated prepare must not reset a human-revised plan/version.
         previous = await db.scalar(
             select(UploadReviewOperation)
@@ -306,6 +321,8 @@ async def ensure_fresh(db, op):
             "not_prepared",
             "Operation is not prepared; read its canonical result or prepare again",
         )
+    if plan_digest(op.payload, op.state_digest) != op.plan_digest:
+        raise ReviewError("digest_mismatch", "Stored plan integrity check failed")
     if await state_digest(db) != op.state_digest:
         op.status = "stale"
         op.payload = {**op.payload, "status": "stale"}
@@ -456,6 +473,15 @@ async def apply_review(
             result = response(op)
             await db.commit()
             return result
+        # New approvals require a whitespace-free exact locator. Validate after
+        # the applied replay branch so a formerly accepted historical locator
+        # can still reconcile its identical stored request without another write.
+        if any(char.isspace() for char in request.approval_reference):
+            raise ReviewError(
+                "invalid_approval_reference",
+                "Approval reference must be a whitespace-free canonical locator",
+                422,
+            )
         if (
             request.plan_digest != op.plan_digest
             or request.context.model_dump(mode="json") != op.payload["context"]
@@ -473,6 +499,19 @@ async def apply_review(
         parsed_rows, snapshots = parse_upload_workbook_contents(
             file_bytes=file_bytes, excel_password=excel_password
         )
+        if (
+            review_binding(
+                op.file_sha256, snapshot_date, request.context, parsed_rows, snapshots
+            )
+            != op.binding_digest
+        ):
+            op.status = "stale"
+            op.payload = {**op.payload, "status": "stale"}
+            await db.commit()  # invalidate interpretation only; no financial write
+            raise ReviewError(
+                "parsed_source_changed",
+                "Workbook interpretation changed; prepare and approve again",
+            )
         current_effects = await snapshot_effects(db, snapshot_date, snapshots)
         if current_effects != op.payload["snapshot_effects"]:
             raise ReviewError(

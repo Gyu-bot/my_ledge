@@ -99,6 +99,7 @@
   - [x] finance의 실제 importer/cron/helper entrypoint를 합성 데이터·native human admission으로 검증하고 응답 유실/재진입에서 중복 반영·알림을 막는다.
   - [ ] exact-head CI, main 병합 및 scoped Live backend 배포·현재 검토 안내 저장을 확인한다. 실제 장부 결정은 별도 사람 승인까지 보류한다.
 - 참고: [정확한 검토 적용 계약](docs/agent-integration/reviewed-imports.md). 공유 API key는 기술 호출자 인증이지 사람 승인 증명/profile ACL이 아니다. private evidence는 공개 저장소에 넣지 않는다. T044–T051 감사 문서 작업과 분리된 명시 승인 기능이며 상세 검증/배포 identity는 PR에 기록한다.
+- API 후속 검증(t_6bfb8b4e): 이미 병합된 기능을 재사용하고 내부 binding_digest에 전체 parsed rows/raw·normalized snapshot 의미를 결속한다. 동일 bytes의 해석 drift와 저장 계획 변조를 적용 전 차단하며 새 승인 locator 내부 공백은 거절하되 기존 applied exact replay는 보존한다. public schema/route/migration 및 기존 safe apply는 변경하지 않는다. 구버전 prepared 계획은 새 prepare/display/별도 사람 승인 전 적용할 수 없다. 격리 합성·실제 PostgreSQL 시험 근거는 후속 인계에 기록하며 전체 Bot Chat 표시/전달/사람 승인 및 신규 배포는 이 API 단계의 완료로 주장하지 않는다.
 
 ### 운영/로드맵 문서 전환
 
