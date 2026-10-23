@@ -1,12 +1,13 @@
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 from pathlib import Path
 import re
 
 from openpyxl import load_workbook
-from sqlalchemy import delete, select
+from sqlalchemy import Numeric, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
@@ -30,6 +31,42 @@ from app.services.transaction_source_lifecycle_service import (
 
 
 UPLOAD_RETENTION_COUNT = 5
+
+SNAPSHOT_MODELS = {
+    "asset_snapshots": AssetSnapshot,
+    "insurance_contracts": InsuranceContract,
+    "investments": Investment,
+    "loans": Loan,
+    "user_profile_snapshots": UserProfileSnapshot,
+}
+GENERATED_SNAPSHOT_FIELDS = {"id", "created_at", "updated_at"}
+
+
+def snapshot_semantic_fields(model):
+    return [
+        c.name
+        for c in model.__table__.columns
+        if c.name not in GENERATED_SNAPSHOT_FIELDS
+    ]
+
+
+def snapshot_semantic_row(model, row, *, storage_scale=True):
+    """Explicit nullable fields and DB Numeric scale; never forecast generated IDs."""
+    result = {}
+    for column in model.__table__.columns:
+        if column.name in GENERATED_SNAPSHOT_FIELDS:
+            continue
+        value = row.get(column.name)
+        if value is not None and isinstance(column.type, Numeric):
+            value = Decimal(str(value))
+            if storage_scale:
+                value = value.quantize(
+                    Decimal(1).scaleb(-column.type.scale), rounding=ROUND_HALF_UP
+                )
+                if value == 0:
+                    value = abs(value)  # PostgreSQL Numeric has no signed zero
+        result[column.name] = value
+    return result
 
 
 @dataclass(slots=True)
@@ -187,16 +224,15 @@ def _prune_original_uploads(*, upload_dir: Path, keep: int) -> None:
         path.unlink()
 
 
-async def replace_snapshots(
+async def snapshot_replacement_rows(
     db_session: AsyncSession,
     snapshot_date: date,
     parsed_snapshots: SnapshotParseResult,
     *,
     preserve_missing_profile: bool = False,
-) -> SnapshotParseResult:
-    from app.services.asset_source_service import preserve_banksalad
-
-    await preserve_banksalad(db_session, snapshot_date, parsed_snapshots)
+    asset_metadata_sources: list[dict] | None = None,
+) -> tuple[SnapshotParseResult, dict[str, list[dict]]]:
+    """Read-only replacement projection, shared with the actual insert path."""
     normalized_snapshots = normalize_snapshots_for_storage(parsed_snapshots)
     existing_assets = (
         (
@@ -204,6 +240,7 @@ async def replace_snapshots(
                 select(AssetSnapshot)
                 .where(AssetSnapshot.snapshot_date <= snapshot_date)
                 .order_by(AssetSnapshot.snapshot_date.desc())
+                .execution_options(populate_existing=True)
             )
         )
         .scalars()
@@ -212,14 +249,19 @@ async def replace_snapshots(
     existing_loans = (
         (
             await db_session.execute(
-                select(Loan).where(Loan.snapshot_date == snapshot_date)
+                select(Loan)
+                .where(Loan.snapshot_date == snapshot_date)
+                .execution_options(populate_existing=True)
             )
         )
         .scalars()
         .all()
     )
     asset_metadata = _asset_metadata_for_import(
-        existing_assets, snapshot_date, parsed_snapshots.asset_snapshots
+        existing_assets,
+        snapshot_date,
+        parsed_snapshots.asset_snapshots,
+        source_rows=asset_metadata_sources,
     )
     loan_metadata = {
         (row.lender, row.product_name): {
@@ -237,28 +279,15 @@ async def replace_snapshots(
         )
     }
 
-    await db_session.execute(
-        delete(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
-    )
-    if not preserve_missing_profile or parsed_snapshots.user_profile is not None:
-        await db_session.execute(
-            delete(UserProfileSnapshot).where(
-                UserProfileSnapshot.snapshot_date == snapshot_date
-            )
-        )
-    await db_session.execute(
-        delete(InsuranceContract).where(
-            InsuranceContract.snapshot_date == snapshot_date
-        )
-    )
-    await db_session.execute(
-        delete(Investment).where(Investment.snapshot_date == snapshot_date)
-    )
-    await db_session.execute(delete(Loan).where(Loan.snapshot_date == snapshot_date))
-
-    asset_rows = []
-    for row in normalized_snapshots.asset_snapshots:
-        stored_row = dict(row)
+    rows = {
+        name: [
+            snapshot_semantic_row(model, {**row, "snapshot_date": snapshot_date})
+            for row in getattr(normalized_snapshots, name)
+        ]
+        for name, model in SNAPSHOT_MODELS.items()
+        if name != "user_profile_snapshots"
+    }
+    for stored_row in rows["asset_snapshots"]:
         metadata = asset_metadata.get(
             (
                 str(stored_row["side"]),
@@ -268,33 +297,61 @@ async def replace_snapshots(
         )
         if metadata:
             stored_row.update(metadata)
-        asset_rows.append(AssetSnapshot(snapshot_date=snapshot_date, **stored_row))
-    db_session.add_all(asset_rows)
-    db_session.add_all(
-        InsuranceContract(snapshot_date=snapshot_date, **row)
-        for row in normalized_snapshots.insurance_contracts
-    )
-    db_session.add_all(
-        Investment(snapshot_date=snapshot_date, **row)
-        for row in normalized_snapshots.investments
-    )
-    loan_rows = []
-    for row in normalized_snapshots.loans:
-        stored_row = dict(row)
+    for stored_row in rows["loans"]:
         metadata = loan_metadata.get(
             (str(stored_row["lender"]), str(stored_row["product_name"]))
         )
         if metadata:
             stored_row.update(metadata)
-        loan_rows.append(Loan(snapshot_date=snapshot_date, **stored_row))
-    db_session.add_all(loan_rows)
+    rows["user_profile_snapshots"] = []
     if normalized_snapshots.user_profile is not None:
-        db_session.add(
-            UserProfileSnapshot(
-                snapshot_date=snapshot_date,
-                **normalized_snapshots.user_profile,
+        rows["user_profile_snapshots"] = [
+            snapshot_semantic_row(
+                UserProfileSnapshot,
+                {**normalized_snapshots.user_profile, "snapshot_date": snapshot_date},
             )
+        ]
+    elif preserve_missing_profile:
+        rows["user_profile_snapshots"] = [
+            snapshot_semantic_row(UserProfileSnapshot, row)
+            for row in (
+                await db_session.execute(
+                    select(UserProfileSnapshot.__table__).where(
+                        UserProfileSnapshot.snapshot_date == snapshot_date
+                    )
+                )
+            ).mappings()
+        ]
+    return normalized_snapshots, rows
+
+
+async def replace_snapshots(
+    db_session: AsyncSession,
+    snapshot_date: date,
+    parsed_snapshots: SnapshotParseResult,
+    *,
+    preserve_missing_profile: bool = False,
+) -> SnapshotParseResult:
+    from app.services.asset_source_service import preserve_banksalad
+
+    await preserve_banksalad(db_session, snapshot_date, parsed_snapshots)
+    normalized_snapshots, rows = await snapshot_replacement_rows(
+        db_session,
+        snapshot_date,
+        parsed_snapshots,
+        preserve_missing_profile=preserve_missing_profile,
+    )
+    for name, model in SNAPSHOT_MODELS.items():
+        if (
+            name == "user_profile_snapshots"
+            and preserve_missing_profile
+            and parsed_snapshots.user_profile is None
+        ):
+            continue  # preserve the stored row itself, including its technical ID
+        await db_session.execute(
+            delete(model).where(model.snapshot_date == snapshot_date)
         )
+        db_session.add_all(model(**row) for row in rows[name])
     return normalized_snapshots
 
 
@@ -302,6 +359,8 @@ def _asset_metadata_for_import(
     existing_assets: list[AssetSnapshot],
     snapshot_date: date,
     incoming_rows: list[dict[str, object]],
+    *,
+    source_rows: list[dict] | None = None,
 ) -> dict[tuple[str, str, str], dict[str, object]]:
     """Carry exact identities forward; generated duplicate names are not identities.
 
@@ -345,6 +404,16 @@ def _asset_metadata_for_import(
             "liquidity_tier": row.liquidity_tier,
             "is_cash_equivalent": row.is_cash_equivalent,
         }
+        if source_rows is not None:
+            source_rows.append(
+                snapshot_semantic_row(
+                    AssetSnapshot,
+                    {
+                        field: getattr(row, field)
+                        for field in snapshot_semantic_fields(AssetSnapshot)
+                    },
+                )
+            )
     return metadata
 
 

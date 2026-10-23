@@ -17,14 +17,11 @@ from uuid import uuid4
 from sqlalchemy import func, select, text, update
 
 from app.models import Base
-from app.models.asset_snapshot import AssetSnapshot
-from app.models.insurance_contract import InsuranceContract
-from app.models.investment import Investment
-from app.models.loan import Loan
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
 from app.models.upload_log import UploadLog
 from app.models.upload_review_operation import UploadReviewOperation
 from app.models.user_profile_snapshot import UserProfileSnapshot
+from app.parsers.snapshots import SnapshotParseResult
 from app.schemas.upload import UploadPreviewChangeCounts, UploadPreviewSourceRow
 from app.schemas.upload_review import (
     ReviewApplyRequest,
@@ -34,6 +31,7 @@ from app.schemas.upload_review import (
 )
 from app.services.loan_mapping_service import (
     apply_loan_repayment_estimates_for_latest_snapshots,
+    project_loan_repayment_estimates,
 )
 from app.services.transaction_source_identity import source_row_hash_from_row
 from app.services.transaction_source_lifecycle_service import (
@@ -45,18 +43,14 @@ from app.services.transaction_source_lifecycle_service import (
 from app.services.upload_preview_service import parse_upload_workbook_contents
 from app.services.upload_review_planner import active_target, build_review_entries
 from app.services.upload_service import (
+    SNAPSHOT_MODELS,
     normalize_snapshots_for_storage,
     persist_original_upload,
     replace_snapshots,
+    snapshot_replacement_rows,
+    snapshot_semantic_fields,
+    snapshot_semantic_row,
 )
-
-SNAPSHOT_MODELS = {
-    "asset_snapshots": AssetSnapshot,
-    "insurance_contracts": InsuranceContract,
-    "investments": Investment,
-    "loans": Loan,
-    "user_profile_snapshots": UserProfileSnapshot,
-}
 
 
 class ReviewError(ValueError):
@@ -170,14 +164,60 @@ async def state_digest(db):
     return digest(state)
 
 
-async def snapshot_effects(db, snapshot_date, snapshots):
-    existing, latest = {}, {}
+def restore_typed(value):
+    """Decode only our durable canonical parser evidence for decision revisions."""
+    if isinstance(value, list):
+        return [restore_typed(v) for v in value]
+    if isinstance(value, dict):
+        if set(value) == {"$type", "$value"}:
+            return {
+                "Decimal": Decimal,
+                "date": date.fromisoformat,
+                "datetime": datetime.fromisoformat,
+                "time": time.fromisoformat,
+                "bytes": bytes.fromhex,
+            }[value["$type"]](value["$value"])
+        return {k: restore_typed(v) for k, v in value.items()}
+    return value
+
+
+def decision_transaction_overrides(entries, decisions):
+    overrides = {}
+    for entry, decision in zip(entries, decisions, strict=True):
+        if decision["action"] == "update":
+            row = UploadPreviewSourceRow.model_validate(entry["incoming_source"])
+            overrides[decision["target_id"]] = {"date": row.date, "amount": row.amount}
+    return overrides
+
+
+async def snapshot_effects(db, snapshot_date, snapshots, entries=(), decisions=()):
+    existing, latest, tables = {}, {}, {}
+    asset_metadata_sources = []
+    normalized, after = await snapshot_replacement_rows(
+        db,
+        snapshot_date,
+        snapshots,
+        preserve_missing_profile=True,
+        asset_metadata_sources=asset_metadata_sources,
+    )
+    incoming_asset_keys = {
+        (r["side"], r["category"], r["product_name"])
+        for r in normalized.asset_snapshots
+    }
+    overrides = decision_transaction_overrides(entries, decisions)
+    after["loans"] = await project_loan_repayment_estimates(
+        db, after["loans"], transaction_overrides=overrides
+    )
     for name, model in SNAPSHOT_MODELS.items():
-        existing[name] = await db.scalar(
-            select(func.count())
-            .select_from(model)
-            .where(model.snapshot_date == snapshot_date)
-        )
+        before = [
+            snapshot_semantic_row(model, r)
+            for r in (
+                await db.execute(
+                    select(model.__table__).where(model.snapshot_date == snapshot_date)
+                )
+            ).mappings()
+        ]
+        existing[name] = len(before)
         newest = await db.scalar(select(func.max(model.snapshot_date)))
         latest[name] = newest.isoformat() if newest else None
         if newest and snapshot_date < newest:
@@ -185,7 +225,42 @@ async def snapshot_effects(db, snapshot_date, snapshots):
                 "older_snapshot",
                 "Snapshot date is older than an existing snapshot; prepare a newer export",
             )
-    normalized = normalize_snapshots_for_storage(snapshots)
+        latest_rows = (
+            [
+                snapshot_semantic_row(model, r)
+                for r in (
+                    await db.execute(
+                        select(model.__table__).where(model.snapshot_date == newest)
+                    )
+                ).mappings()
+            ]
+            if newest
+            else []
+        )
+        incoming_rows = (
+            ([normalized.user_profile] if normalized.user_profile is not None else [])
+            if name == "user_profile_snapshots"
+            else getattr(normalized, name)
+        )
+        tables[name] = {
+            "fields": snapshot_semantic_fields(model),
+            "before": canonical(sorted(before, key=encoded)),
+            "latest": canonical(sorted(latest_rows, key=encoded)),
+            "incoming": canonical(
+                sorted(
+                    [
+                        snapshot_semantic_row(
+                            model,
+                            {**r, "snapshot_date": snapshot_date},
+                            storage_scale=False,
+                        )
+                        for r in incoming_rows
+                    ],
+                    key=encoded,
+                )
+            ),
+            "after": canonical(sorted(after[name], key=encoded)),
+        }
     incoming = {
         name: len(getattr(normalized, name))
         for name in ("asset_snapshots", "insurance_contracts", "investments", "loans")
@@ -195,7 +270,32 @@ async def snapshot_effects(db, snapshot_date, snapshots):
         "tables": list(SNAPSHOT_MODELS),
         "existing_counts": existing,
         "incoming_counts": incoming,
+        "final_counts": {name: len(rows) for name, rows in after.items()},
         "latest_dates": latest,
+        "value_detail": {
+            "version": 1,
+            "tables": tables,
+            "raw_snapshots": canonical(asdict(snapshots)),
+            "transaction_overrides": canonical(
+                [
+                    {"transaction_id": target, **row}
+                    for target, row in sorted(overrides.items())
+                ]
+            ),
+            "asset_metadata_sources": canonical(
+                sorted(
+                    [
+                        row
+                        for row in asset_metadata_sources
+                        if (row["side"], row["category"], row["product_name"])
+                        in incoming_asset_keys
+                    ],
+                    key=encoded,
+                )
+            ),
+            "generated_fields_excluded": ["id", "created_at", "updated_at"],
+            "generated_fields_policy": "generated at apply; not forecast or approved semantic values",
+        },
         "same_day_replacement": any(existing.values()),
         "policy": "replace only selected date; never erase later dates",
         "missing_profile_policy": "preserve existing profile unchanged when optional profile absent",
@@ -217,6 +317,30 @@ def plan_digest(payload, state):
             },
         }
     )
+
+
+def has_snapshot_detail(payload):
+    detail = payload.get("snapshot_effects", {}).get("value_detail", {})
+    if (
+        not isinstance(detail, dict)
+        or detail.get("version") != 1
+        or "raw_snapshots" not in detail
+        or not isinstance(detail.get("tables"), dict)
+        or set(detail["tables"]) != set(SNAPSHOT_MODELS)
+    ):
+        return False
+    for name, model in SNAPSHOT_MODELS.items():
+        table = detail["tables"][name]
+        fields = snapshot_semantic_fields(model)
+        if not isinstance(table, dict) or table.get("fields") != fields:
+            return False
+        for phase in ("before", "latest", "incoming", "after"):
+            rows = table.get(phase)
+            if not isinstance(rows, list) or any(
+                not isinstance(row, dict) or set(row) != set(fields) for row in rows
+            ):
+                return False
+    return True
 
 
 def response(op):
@@ -252,11 +376,10 @@ async def prepare_review(
             .order_by(UploadReviewOperation.created_at.desc())
             .execution_options(populate_existing=True)
         )
-        if previous is not None:
+        if previous is not None and has_snapshot_detail(previous.payload):
             result = response(previous)
             await db.commit()
             return result
-        effects = await snapshot_effects(db, snapshot_date, snapshots)
         entries = await build_review_entries(db, rows)
         decisions = [
             ReviewDecision(
@@ -266,6 +389,10 @@ async def prepare_review(
             ).model_dump(mode="json")
             for e in entries
         ]
+        entry_values = [e.model_dump(mode="json") for e in entries]
+        effects = await snapshot_effects(
+            db, snapshot_date, snapshots, entry_values, decisions
+        )
         counts = Counter(e.change_type.value for e in entries)
         operation_id = str(uuid4())
         payload = {
@@ -276,7 +403,7 @@ async def prepare_review(
             "file_sha256": file_hash,
             "snapshot_date": snapshot_date.isoformat(),
             "context": context.model_dump(mode="json"),
-            "entries": [e.model_dump(mode="json") for e in entries],
+            "entries": entry_values,
             "counts": {k: counts[k] for k in UploadPreviewChangeCounts.model_fields},
             "decisions": decisions,
             "snapshot_effects": effects,
@@ -323,6 +450,11 @@ async def ensure_fresh(db, op):
         )
     if plan_digest(op.payload, op.state_digest) != op.plan_digest:
         raise ReviewError("digest_mismatch", "Stored plan integrity check failed")
+    if not has_snapshot_detail(op.payload):
+        raise ReviewError(
+            "snapshot_detail_required",
+            "Prepared plan lacks value-level snapshot detail; prepare and approve again",
+        )
     if await state_digest(db) != op.state_digest:
         op.status = "stale"
         op.payload = {**op.payload, "status": "stale"}
@@ -389,9 +521,25 @@ async def revise_review(db, operation_id, request: ReviewRevision):
         if request.plan_digest != op.plan_digest:
             raise ReviewError("digest_mismatch", "Exact current plan digest required")
         values = await validate_decisions(db, op.payload["entries"], request.decisions)
-        if values != op.payload["decisions"]:
+        snapshots = SnapshotParseResult(
+            **restore_typed(
+                op.payload["snapshot_effects"]["value_detail"]["raw_snapshots"]
+            )
+        )
+        effects = await snapshot_effects(
+            db, op.snapshot_date, snapshots, op.payload["entries"], values
+        )
+        if (
+            values != op.payload["decisions"]
+            or effects != op.payload["snapshot_effects"]
+        ):
             op.version += 1
-            payload = {**op.payload, "version": op.version, "decisions": values}
+            payload = {
+                **op.payload,
+                "version": op.version,
+                "decisions": values,
+                "snapshot_effects": effects,
+            }
             payload["plan_digest"] = plan_digest(payload, op.state_digest)
             op.plan_digest, op.payload = payload["plan_digest"], payload
         result = response(op)
@@ -402,7 +550,9 @@ async def revise_review(db, operation_id, request: ReviewRevision):
         raise
 
 
-async def verify_snapshots(db, snapshot_date, normalized, preserved_profile):
+async def verify_snapshots(
+    db, snapshot_date, normalized, preserved_profile, *, approved_effects
+):
     expected = {
         name: getattr(normalized, name)
         for name in ("asset_snapshots", "insurance_contracts", "investments", "loans")
@@ -432,12 +582,22 @@ async def verify_snapshots(db, snapshot_date, normalized, preserved_profile):
         # Compare every parsed source field; metadata/loan estimates are additional.
         fields = set().union(*(set(r) for r in incoming)) if incoming else set()
         fields -= {"id", "created_at", "updated_at"}
+        source_rows = [snapshot_semantic_row(model, row) for row in incoming]
         if sorted(encoded({k: r[k] for k in fields}) for r in actual) != sorted(
-            encoded({k: r[k] for k in fields}) for r in incoming
+            encoded({k: r[k] for k in fields}) for r in source_rows
         ):
             raise ReviewError(
                 "snapshot_verification_failed",
                 "Stored snapshot semantics differ from source",
+                500,
+            )
+        semantic_actual = canonical(
+            sorted([snapshot_semantic_row(model, row) for row in actual], key=encoded)
+        )
+        if semantic_actual != approved_effects["value_detail"]["tables"][name]["after"]:
+            raise ReviewError(
+                "snapshot_verification_failed",
+                "Stored final snapshot values or metadata differ from approved effects",
                 500,
             )
     return counts
@@ -512,7 +672,9 @@ async def apply_review(
                 "parsed_source_changed",
                 "Workbook interpretation changed; prepare and approve again",
             )
-        current_effects = await snapshot_effects(db, snapshot_date, snapshots)
+        current_effects = await snapshot_effects(
+            db, snapshot_date, snapshots, op.payload["entries"], values
+        )
         if current_effects != op.payload["snapshot_effects"]:
             raise ReviewError(
                 "snapshot_policy_changed",
@@ -590,7 +752,11 @@ async def apply_review(
         )
         await db.flush()
         counts = await verify_snapshots(
-            db, snapshot_date, normalized, preserved_profile
+            db,
+            snapshot_date,
+            normalized,
+            preserved_profile,
+            approved_effects=current_effects,
         )
         result_data = {
             "upload_id": log.id,

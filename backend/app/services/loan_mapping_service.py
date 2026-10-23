@@ -396,37 +396,90 @@ async def apply_loan_repayment_estimates_for_latest_snapshots(
             product_name=product_name,
         )
 
-        monthly_payment = _estimate_monthly_payment(
-            observations["monthly_totals"],
+        values = loan_repayment_estimate_values(
+            {field: getattr(latest_loan, field) for field in LOAN_REPAYMENT_FIELDS},
+            observations,
             min_observations=effective.monthly_payment_min_observations,
             loan_kind=loan_kind,
         )
-        if monthly_payment is not None and _is_estimate_overwritable(
-            latest_loan.monthly_payment_source
-        ):
-            latest_loan.monthly_payment = monthly_payment
-            latest_loan.monthly_payment_source = "estimated_from_linked_transactions"
-        elif latest_loan.monthly_payment_source == "estimated_from_linked_transactions":
-            latest_loan.monthly_payment = None
-            latest_loan.monthly_payment_source = None
-
-        repayment_method = _infer_repayment_method(observations["monthly_types"])
-        if repayment_method is not None and _is_estimate_overwritable(
-            latest_loan.repayment_method_source
-        ):
-            latest_loan.repayment_method = repayment_method
-            latest_loan.repayment_method_source = "estimated_from_linked_transactions"
-        elif (
-            latest_loan.repayment_method_source == "estimated_from_linked_transactions"
-        ):
-            latest_loan.repayment_method = None
-            latest_loan.repayment_method_source = None
-        elif latest_loan.repayment_method is None and _is_estimate_overwritable(
-            latest_loan.repayment_method_source
-        ):
-            latest_loan.repayment_method = "unknown"
+        for field, value in values.items():
+            setattr(latest_loan, field, value)
 
     await db_session.flush()
+
+
+LOAN_REPAYMENT_FIELDS = (
+    "monthly_payment",
+    "repayment_method",
+    "monthly_payment_source",
+    "repayment_method_source",
+)
+
+
+def loan_repayment_estimate_values(
+    current, observations, *, min_observations, loan_kind
+):
+    """Pure estimate/ownership rules shared by apply and read-only review."""
+    values = {field: current.get(field) for field in LOAN_REPAYMENT_FIELDS}
+    monthly_payment = _estimate_monthly_payment(
+        observations["monthly_totals"],
+        min_observations=min_observations,
+        loan_kind=loan_kind,
+    )
+    if monthly_payment is not None and _is_estimate_overwritable(
+        values["monthly_payment_source"]
+    ):
+        values["monthly_payment"] = monthly_payment
+        values["monthly_payment_source"] = "estimated_from_linked_transactions"
+    elif values["monthly_payment_source"] == "estimated_from_linked_transactions":
+        values["monthly_payment"] = None
+        values["monthly_payment_source"] = None
+
+    repayment_method = _infer_repayment_method(observations["monthly_types"])
+    if repayment_method is not None and _is_estimate_overwritable(
+        values["repayment_method_source"]
+    ):
+        values["repayment_method"] = repayment_method
+        values["repayment_method_source"] = "estimated_from_linked_transactions"
+    elif values["repayment_method_source"] == "estimated_from_linked_transactions":
+        values["repayment_method"] = None
+        values["repayment_method_source"] = None
+    elif values["repayment_method"] is None and _is_estimate_overwritable(
+        values["repayment_method_source"]
+    ):
+        values["repayment_method"] = "unknown"
+    return values
+
+
+async def project_loan_repayment_estimates(
+    db_session, loans, *, transaction_overrides=None
+):
+    """Read only: incoming loans are latest; adds have no pre-existing links."""
+    if not loans:
+        return []
+    effective = (
+        await get_analytics_settings(db_session)
+    ).effective.asset_liability_health
+    result = []
+    for row in loans:
+        observations = await _load_linked_repayment_observations(
+            db_session,
+            lender=row["lender"],
+            product_name=row["product_name"],
+            reference_date=row["snapshot_date"],
+            lookback_months=effective.monthly_payment_estimate_lookback_months,
+            transaction_overrides=transaction_overrides,
+        )
+        values = loan_repayment_estimate_values(
+            row,
+            observations,
+            min_observations=effective.monthly_payment_min_observations,
+            loan_kind=await _load_loan_kind_for_key(
+                db_session, lender=row["lender"], product_name=row["product_name"]
+            ),
+        )
+        result.append({**row, **values})
+    return result
 
 
 async def apply_loan_repayment_estimates_for_accounts(
@@ -1031,6 +1084,7 @@ async def _load_linked_repayment_observations(
     product_name: str,
     reference_date: date,
     lookback_months: int,
+    transaction_overrides: dict[int, dict] | None = None,
 ) -> LinkedRepaymentObservations:
     window_start = _month_window_start(reference_date, lookback_months)
     window_end = _complete_month_window_end(reference_date)
@@ -1041,8 +1095,9 @@ async def _load_linked_repayment_observations(
             "observation_months": [],
         }
 
-    result = await db_session.execute(
+    query = (
         select(
+            Transaction.id,
             Transaction.date,
             Transaction.amount,
             LoanTransactionLink.repayment_type,
@@ -1057,16 +1112,27 @@ async def _load_linked_repayment_observations(
         )
         .where(LoanAccount.lender == lender)
         .where(LoanAccount.product_name == product_name)
-        .where(Transaction.date >= window_start)
-        .where(Transaction.date <= window_end)
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
         .order_by(Transaction.date.asc(), Transaction.id.asc())
     )
+    in_window = Transaction.date.between(window_start, window_end)
+    if transaction_overrides:
+        query = query.where(or_(in_window, Transaction.id.in_(transaction_overrides)))
+    else:
+        query = query.where(in_window)
+    result = await db_session.execute(query)
 
     monthly_amounts: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
     monthly_types: dict[tuple[int, int], set[str]] = defaultdict(set)
-    for transaction_date, amount, repayment_type in result.all():
+    for transaction_id, transaction_date, amount, repayment_type in result.all():
+        # Apply the exact chosen source update before windowing: an update may
+        # move a linked transaction into or out of the closed-month window.
+        override = (transaction_overrides or {}).get(transaction_id, {})
+        transaction_date = override.get("date", transaction_date)
+        amount = override.get("amount", amount)
+        if not window_start <= transaction_date <= window_end:
+            continue
         month_key = (transaction_date.year, transaction_date.month)
         monthly_amounts[month_key] += Decimal(str(amount or 0))
         monthly_types[month_key].add(repayment_type or "unknown")
