@@ -14,6 +14,8 @@
 
 ## Scope
 
+정확한 원본 검토 승인 경로(`T052`)는 [reviewed-imports.md](agent-integration/reviewed-imports.md)를 따른다. 기존 safe apply의 모호한 항목 거절을 완화하지 않으며, 별도 version/digest·전체 결정·snapshot 효과·canonical approval locator를 원자 적용하고 durable operation GET으로 결과를 확인한다. 공유 API key는 기술 인증이지 실제 사람의 승인 증명이 아니므로 소비자는 표시된 계획과 native human provenance를 검증해야 한다.
+
 - FastAPI `/api/v1` live endpoint
 - request/response contract의 현재 구현 상태
 - 문서와 코드가 어긋나기 쉬운 동작 메모
@@ -27,6 +29,10 @@
   - `POST /api/v1/upload`
   - `POST /api/v1/upload/preview`
   - `POST /api/v1/upload/apply`
+  - `POST /api/v1/upload/review/prepare`
+  - `GET /api/v1/upload/review/{operation_id}`
+  - `POST /api/v1/upload/review/{operation_id}/decisions`
+  - `POST /api/v1/upload/review/{operation_id}/apply`
   - `GET /api/v1/schema`
   - `GET /api/v1/canonical-views/dashboard`
   - `GET /api/v1/settings/analytics`

@@ -1,0 +1,608 @@
+"""Transactional reviewed imports. Never log private plans or approval wording.
+
+All registered finance tables are locked/digested, including metadata and links.
+This intentionally over-invalidates plans. API keys authenticate the caller only;
+canonical human-message provenance must be verified by the finance helper.
+"""
+
+from collections import Counter
+from datetime import date, datetime, time
+from decimal import Decimal
+from hashlib import sha256
+import json
+from pathlib import Path
+from uuid import uuid4
+
+from sqlalchemy import func, select, text, update
+
+from app.models import Base
+from app.models.asset_snapshot import AssetSnapshot
+from app.models.insurance_contract import InsuranceContract
+from app.models.investment import Investment
+from app.models.loan import Loan
+from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
+from app.models.upload_log import UploadLog
+from app.models.upload_review_operation import UploadReviewOperation
+from app.models.user_profile_snapshot import UserProfileSnapshot
+from app.schemas.upload import UploadPreviewChangeCounts, UploadPreviewSourceRow
+from app.schemas.upload_review import (
+    ReviewApplyRequest,
+    ReviewDecision,
+    ReviewResponse,
+    ReviewRevision,
+)
+from app.services.loan_mapping_service import (
+    apply_loan_repayment_estimates_for_latest_snapshots,
+)
+from app.services.transaction_source_identity import source_row_hash_from_row
+from app.services.transaction_source_lifecycle_service import (
+    LifecycleTouch,
+    apply_source_managed_row_update,
+    build_imported_transaction,
+    touch_transaction_source_lifecycle,
+)
+from app.services.upload_preview_service import parse_upload_workbook_contents
+from app.services.upload_review_planner import active_target, build_review_entries
+from app.services.upload_service import (
+    normalize_snapshots_for_storage,
+    persist_original_upload,
+    replace_snapshots,
+)
+
+SNAPSHOT_MODELS = {
+    "asset_snapshots": AssetSnapshot,
+    "insurance_contracts": InsuranceContract,
+    "investments": Investment,
+    "loans": Loan,
+    "user_profile_snapshots": UserProfileSnapshot,
+}
+
+
+class ReviewError(ValueError):
+    def __init__(self, code, message, status_code=409):
+        self.code, self.message, self.status_code = code, message, status_code
+        super().__init__(message)
+
+
+def canonical(value):
+    """Typed JSON: no null sentinel, delimiter, decimal, or datetime collisions."""
+    if isinstance(value, (datetime, date, time, Decimal, bytes)):
+        return {
+            "$type": type(value).__name__,
+            "$value": (
+                value.hex()
+                if isinstance(value, bytes)
+                else str(value.normalize())
+                if isinstance(value, Decimal)
+                else str(value)
+            ),
+        }
+    if isinstance(value, dict):
+        return {str(k): canonical(v) for k, v in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [canonical(v) for v in value]
+    return value
+
+
+def encoded(value):
+    return json.dumps(
+        canonical(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def digest(value):
+    return sha256(encoded(value).encode()).hexdigest()
+
+
+def finance_tables():
+    return sorted(
+        (
+            t
+            for t in Base.metadata.tables.values()
+            if t.name != "upload_review_operations"
+        ),
+        key=lambda t: t.name,
+    )
+
+
+async def lock_state(db):
+    # Fixed sorted set/order matches digest scope. Regular writers' ROW EXCLUSIVE
+    # locks conflict too; readers and canonical timeout GET are not blocked.
+    if db.bind.dialect.name == "postgresql":
+        await db.execute(text("SET LOCAL lock_timeout = '5s'"))
+        names = sorted(
+            [t.name for t in finance_tables()] + ["upload_review_operations"]
+        )
+        preparer = db.bind.dialect.identifier_preparer
+        await db.execute(
+            text(
+                "LOCK TABLE "
+                + ", ".join(preparer.quote(n) for n in names)
+                + " IN SHARE ROW EXCLUSIVE MODE"
+            )
+        )
+    elif db.bind.dialect.name == "sqlite":
+        # Acquire SQLite's writer reservation before any state read, even in an
+        # autobegun session. Separate-process writers serialize on the DB file.
+        await db.execute(
+            update(UploadReviewOperation)
+            .where(UploadReviewOperation.id == "")
+            .values(status="prepared")
+        )
+    else:
+        raise ReviewError(
+            "unsupported_database",
+            "Reviewed imports require PostgreSQL or test SQLite",
+            503,
+        )
+
+
+async def state_digest(db):
+    state = {}
+    for table in finance_tables():
+        rows = [dict(r) for r in (await db.execute(select(table))).mappings()]
+        state[table.name] = sorted(rows, key=encoded)
+    return digest(state)
+
+
+async def snapshot_effects(db, snapshot_date, snapshots):
+    existing, latest = {}, {}
+    for name, model in SNAPSHOT_MODELS.items():
+        existing[name] = await db.scalar(
+            select(func.count())
+            .select_from(model)
+            .where(model.snapshot_date == snapshot_date)
+        )
+        newest = await db.scalar(select(func.max(model.snapshot_date)))
+        latest[name] = newest.isoformat() if newest else None
+        if newest and snapshot_date < newest:
+            raise ReviewError(
+                "older_snapshot",
+                "Snapshot date is older than an existing snapshot; prepare a newer export",
+            )
+    normalized = normalize_snapshots_for_storage(snapshots)
+    incoming = {
+        name: len(getattr(normalized, name))
+        for name in ("asset_snapshots", "insurance_contracts", "investments", "loans")
+    }
+    incoming["user_profile_snapshots"] = int(normalized.user_profile is not None)
+    return {
+        "tables": list(SNAPSHOT_MODELS),
+        "existing_counts": existing,
+        "incoming_counts": incoming,
+        "latest_dates": latest,
+        "same_day_replacement": any(existing.values()),
+        "policy": "replace only selected date; never erase later dates",
+        "missing_profile_policy": "preserve existing profile unchanged when optional profile absent",
+        "source_evidence": "append raw BankSalad evidence in the same transaction",
+        "metadata_carry_forward": "shared exact asset identities and same-date loan user metadata",
+        "loan_estimates": "recompute repayment estimates for incoming latest loan keys; user fields retained",
+        "digest_scope": "all registered finance tables except review operations; conservative invalidation",
+    }
+
+
+def plan_digest(payload, state):
+    return digest(
+        {
+            "state": state,
+            "plan": {
+                k: v
+                for k, v in payload.items()
+                if k not in ("plan_digest", "status", "result")
+            },
+        }
+    )
+
+
+def response(op):
+    return ReviewResponse.model_validate(op.payload)
+
+
+async def get_review(db, operation_id):
+    op = await db.get(UploadReviewOperation, operation_id, populate_existing=True)
+    if op is None:
+        raise ReviewError("unknown_operation", "Review operation not found", 404)
+    return response(op)
+
+
+async def prepare_review(
+    db, *, file_bytes, filename, snapshot_date, context, excel_password=None
+):
+    rows, snapshots = parse_upload_workbook_contents(
+        file_bytes=file_bytes, excel_password=excel_password
+    )
+    try:
+        await lock_state(db)
+        state = await state_digest(db)
+        file_hash = sha256(file_bytes).hexdigest()
+        binding = digest(
+            {
+                "file": file_hash,
+                "date": snapshot_date,
+                "context": context.model_dump(mode="json"),
+            }
+        )
+        # Repeated prepare must not reset a human-revised plan/version.
+        previous = await db.scalar(
+            select(UploadReviewOperation)
+            .where(
+                UploadReviewOperation.binding_digest == binding,
+                UploadReviewOperation.state_digest == state,
+                UploadReviewOperation.status == "prepared",
+            )
+            .order_by(UploadReviewOperation.created_at.desc())
+            .execution_options(populate_existing=True)
+        )
+        if previous is not None:
+            result = response(previous)
+            await db.commit()
+            return result
+        effects = await snapshot_effects(db, snapshot_date, snapshots)
+        entries = await build_review_entries(db, rows)
+        decisions = [
+            ReviewDecision(
+                entry_id=e.entry_id,
+                action=e.recommended_action,
+                target_id=e.recommended_target_id,
+            ).model_dump(mode="json")
+            for e in entries
+        ]
+        counts = Counter(e.change_type.value for e in entries)
+        operation_id = str(uuid4())
+        payload = {
+            "operation_id": operation_id,
+            "status": "prepared",
+            "version": 1,
+            "plan_digest": "0" * 64,
+            "file_sha256": file_hash,
+            "snapshot_date": snapshot_date.isoformat(),
+            "context": context.model_dump(mode="json"),
+            "entries": [e.model_dump(mode="json") for e in entries],
+            "counts": {k: counts[k] for k in UploadPreviewChangeCounts.model_fields},
+            "decisions": decisions,
+            "snapshot_effects": effects,
+            "result": None,
+        }
+        payload["plan_digest"] = plan_digest(payload, state)
+        op = UploadReviewOperation(
+            id=operation_id,
+            binding_digest=binding,
+            state_digest=state,
+            file_sha256=file_hash,
+            snapshot_date=snapshot_date,
+            status="prepared",
+            version=1,
+            plan_digest=payload["plan_digest"],
+            payload=payload,
+        )
+        db.add(op)
+        await db.commit()
+        return response(op)
+    except Exception:
+        await db.rollback()
+        raise
+
+
+async def locked_operation(db, operation_id):
+    await lock_state(db)
+    op = await db.scalar(
+        select(UploadReviewOperation)
+        .where(UploadReviewOperation.id == operation_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if op is None:
+        raise ReviewError("unknown_operation", "Review operation not found", 404)
+    return op
+
+
+async def ensure_fresh(db, op):
+    if op.status != "prepared":
+        raise ReviewError(
+            "not_prepared",
+            "Operation is not prepared; read its canonical result or prepare again",
+        )
+    if await state_digest(db) != op.state_digest:
+        op.status = "stale"
+        op.payload = {**op.payload, "status": "stale"}
+        await db.commit()  # persist stale without any financial write
+        raise ReviewError(
+            "stale_plan",
+            "Ledger, metadata, or snapshots changed; new preparation and approval required",
+        )
+
+
+async def validate_decisions(db, entries, decisions):
+    values = [d.model_dump(mode="json") for d in decisions]
+    if [d["entry_id"] for d in values] != [e["entry_id"] for e in entries]:
+        raise ReviewError(
+            "invalid_decisions",
+            "Every entry must appear exactly once, in plan order",
+            422,
+        )
+    targets = []
+    kept_targets = {
+        c["transaction_id"]
+        for e in entries
+        if e["change_type"] == "unchanged"
+        for c in e["candidates"]
+    }
+    for entry, decision in zip(entries, values, strict=True):
+        if decision["action"] not in entry["allowed_actions"]:
+            raise ReviewError("invalid_action", "Action not allowed for entry", 422)
+        if (
+            decision["action"] == "keep"
+            and entry["existing_source"] is not None
+            and len(entry["candidates"]) == 1
+        ):
+            kept_targets.add(entry["candidates"][0]["transaction_id"])
+        if decision["action"] == "update":
+            target = decision["target_id"]
+            if target not in [c["transaction_id"] for c in entry["candidates"]]:
+                raise ReviewError(
+                    "invalid_target",
+                    "Update target must be an exact plan candidate",
+                    422,
+                )
+            tx = await db.get(Transaction, target, populate_existing=True)
+            if tx is None or not active_target(tx):
+                raise ReviewError(
+                    "inactive_target",
+                    "Deleted, merged, or superseded target cannot be mutated",
+                    422,
+                )
+            targets.append(target)
+    if len(targets) != len(set(targets)) or set(targets) & kept_targets:
+        raise ReviewError(
+            "conflicting_targets",
+            "Duplicate update target or target protected by a kept entry",
+            422,
+        )
+    return values
+
+
+async def revise_review(db, operation_id, request: ReviewRevision):
+    try:
+        op = await locked_operation(db, operation_id)
+        await ensure_fresh(db, op)
+        if request.plan_digest != op.plan_digest:
+            raise ReviewError("digest_mismatch", "Exact current plan digest required")
+        values = await validate_decisions(db, op.payload["entries"], request.decisions)
+        if values != op.payload["decisions"]:
+            op.version += 1
+            payload = {**op.payload, "version": op.version, "decisions": values}
+            payload["plan_digest"] = plan_digest(payload, op.state_digest)
+            op.plan_digest, op.payload = payload["plan_digest"], payload
+        result = response(op)
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
+
+
+async def verify_snapshots(db, snapshot_date, normalized, preserved_profile):
+    expected = {
+        name: getattr(normalized, name)
+        for name in ("asset_snapshots", "insurance_contracts", "investments", "loans")
+    }
+    expected["user_profile_snapshots"] = (
+        [normalized.user_profile]
+        if normalized.user_profile is not None
+        else preserved_profile
+    )
+    counts = {}
+    for name, model in SNAPSHOT_MODELS.items():
+        actual = list(
+            (
+                await db.execute(
+                    select(model.__table__).where(model.snapshot_date == snapshot_date)
+                )
+            ).mappings()
+        )
+        counts[name] = len(actual)
+        incoming = expected[name]
+        if len(actual) != len(incoming):
+            raise ReviewError(
+                "snapshot_verification_failed",
+                "Stored snapshot count does not match approved effects",
+                500,
+            )
+        # Compare every parsed source field; metadata/loan estimates are additional.
+        fields = set().union(*(set(r) for r in incoming)) if incoming else set()
+        fields -= {"id", "created_at", "updated_at"}
+        if sorted(encoded({k: r[k] for k in fields}) for r in actual) != sorted(
+            encoded({k: r[k] for k in fields}) for r in incoming
+        ):
+            raise ReviewError(
+                "snapshot_verification_failed",
+                "Stored snapshot semantics differ from source",
+                500,
+            )
+    return counts
+
+
+async def apply_review(
+    db,
+    operation_id,
+    *,
+    file_bytes,
+    filename,
+    snapshot_date,
+    request: ReviewApplyRequest,
+    upload_dir: Path,
+    excel_password=None,
+):
+    # File/context/date and the exact full approval-bound request are checked even
+    # on replay. A timeout must reconcile GET; changed ref/decisions never rerun.
+    request_hash = digest(
+        {
+            "request": request.model_dump(mode="json"),
+            "file": sha256(file_bytes).hexdigest(),
+            "date": snapshot_date,
+        }
+    )
+    try:
+        op = await locked_operation(db, operation_id)
+        if op.status == "applied":
+            if op.applied_request_digest != request_hash:
+                raise ReviewError(
+                    "replay_mismatch", "Applied operation refuses a different request"
+                )
+            result = response(op)
+            await db.commit()
+            return result
+        if (
+            request.plan_digest != op.plan_digest
+            or request.context.model_dump(mode="json") != op.payload["context"]
+            or sha256(file_bytes).hexdigest() != op.file_sha256
+            or snapshot_date != op.snapshot_date
+            or [d.model_dump(mode="json") for d in request.decisions]
+            != op.payload["decisions"]
+        ):
+            raise ReviewError(
+                "binding_mismatch",
+                "Exact stored digest, context, file, date and full decisions required",
+            )
+        await ensure_fresh(db, op)
+        values = await validate_decisions(db, op.payload["entries"], request.decisions)
+        parsed_rows, snapshots = parse_upload_workbook_contents(
+            file_bytes=file_bytes, excel_password=excel_password
+        )
+        current_effects = await snapshot_effects(db, snapshot_date, snapshots)
+        if current_effects != op.payload["snapshot_effects"]:
+            raise ReviewError(
+                "snapshot_policy_changed",
+                "Snapshot effects changed; prepare and approve again",
+            )
+        preserved_profile = (
+            [
+                dict(r)
+                for r in (
+                    await db.execute(
+                        select(UserProfileSnapshot.__table__).where(
+                            UserProfileSnapshot.snapshot_date == snapshot_date
+                        )
+                    )
+                ).mappings()
+            ]
+            if snapshots.user_profile is None
+            else []
+        )
+        log = UploadLog(
+            filename=filename,
+            snapshot_date=snapshot_date,
+            status="processing",
+            reconciliation_mode="reviewed_apply",
+        )
+        db.add(log)
+        await db.flush()
+        await db.refresh(log)
+        applied, kept = [], []
+        for entry, decision in zip(op.payload["entries"], values, strict=True):
+            if decision["action"] == "keep":
+                kept.append(entry["entry_id"])
+                continue  # no lifecycle, timestamp, user-field or link touch
+            row = parsed_rows[int(entry["entry_id"]) - 1]
+            if (
+                UploadPreviewSourceRow.model_validate(row).model_dump(mode="json")
+                != entry["incoming_source"]
+            ):
+                raise ReviewError(
+                    "parsed_source_changed",
+                    "Workbook parser output changed; prepare and approve again",
+                )
+            touch = LifecycleTouch(
+                row_hash=source_row_hash_from_row(row),
+                upload_log_id=log.id,
+                uploaded_at=log.uploaded_at,
+                lifecycle_status=TransactionSourceLifecycleStatus.ACTIVE
+                if decision["action"] == "add"
+                else TransactionSourceLifecycleStatus.SOURCE_CHANGED,
+            )
+            if decision["action"] == "add":
+                tx = build_imported_transaction(row, touch)
+                db.add(tx)
+            else:
+                tx = await db.get(Transaction, decision["target_id"])
+                apply_source_managed_row_update(tx, row)
+                touch_transaction_source_lifecycle(tx, touch)
+            await db.flush()
+            applied.append(
+                {
+                    "entry_id": entry["entry_id"],
+                    "action": decision["action"],
+                    "transaction_id": tx.id,
+                }
+            )
+        normalized = await replace_snapshots(
+            db, snapshot_date, snapshots, preserve_missing_profile=True
+        )
+        await db.flush()
+        await apply_loan_repayment_estimates_for_latest_snapshots(
+            db,
+            loan_keys=[
+                (str(r["lender"]), str(r["product_name"])) for r in normalized.loans
+            ],
+        )
+        await db.flush()
+        counts = await verify_snapshots(
+            db, snapshot_date, normalized, preserved_profile
+        )
+        result_data = {
+            "upload_id": log.id,
+            "applied": applied,
+            "kept": kept,
+            "snapshot_counts": counts,
+            "snapshot_verified": True,
+            "decision_digest": digest(values),
+            "approval_reference": request.approval_reference,
+        }
+        log.tx_total = sum(
+            e["incoming_source"] is not None for e in op.payload["entries"]
+        )
+        log.tx_new = sum(a["action"] == "add" for a in applied)
+        log.tx_skipped = log.tx_total - log.tx_new
+        log.status = "success"
+        log.reconciliation_audit = encoded(
+            {
+                "operation_id": op.id,
+                "version": op.version,
+                "plan_digest": op.plan_digest,
+                "decision_digest": result_data["decision_digest"],
+                "approval_reference": request.approval_reference,
+                "decisions": values,
+                "snapshot_counts": counts,
+                "snapshot_verified": True,
+            }
+        )
+        op.status, op.applied_request_digest = "applied", request_hash
+        op.payload = {**op.payload, "status": "applied", "result": result_data}
+        result = response(op)
+        await db.commit()  # single atomic commit: mutations, audit and canonical result
+    except Exception:
+        await db.rollback()
+        raise
+    try:
+        persist_original_upload(
+            upload_dir=upload_dir,
+            upload_id=result.result.upload_id,
+            filename=filename,
+            file_bytes=file_bytes,
+        )
+    except OSError:
+        # Retention is not the import transaction and never triggers replay. Do
+        # not include filename/exception/private source text in application logs.
+        try:
+            saved_log = await db.get(UploadLog, result.result.upload_id)
+            saved_log.error_message = (
+                "warning: original upload retention failed; import committed"
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+    return result

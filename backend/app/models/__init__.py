@@ -26,6 +26,7 @@ from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
+from app.models.upload_review_operation import UploadReviewOperation
 from app.models.user_profile_snapshot import UserProfileSnapshot
 
 __all__ = [
@@ -55,5 +56,6 @@ __all__ = [
     "SettlementMatchStatus",
     "Transaction",
     "UploadLog",
+    "UploadReviewOperation",
     "UserProfileSnapshot",
 ]

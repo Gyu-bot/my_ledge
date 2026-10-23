@@ -23,6 +23,8 @@ Hermes, Codex, Claude, OpenClaw 등 범용 에이전트가 `my_ledge`를 읽기/
 
 참고 문서:
 
+- [reviewed-imports.md](reviewed-imports.md): BankSalad 정확한 비교 검토·승인·일회 적용과 stale/응답 유실 계약. 실제 금융 승인과 기술 구현 승인을 구분한다.
+
 | 문서 | 상태 | 용도 |
 |---|---|---|
 | [../backend-api-ssot.md](../backend-api-ssot.md) | live | 현재 호출 가능한 endpoint와 contract 판단 |
