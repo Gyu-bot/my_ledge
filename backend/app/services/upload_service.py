@@ -191,6 +191,8 @@ async def replace_snapshots(
     db_session: AsyncSession,
     snapshot_date: date,
     parsed_snapshots: SnapshotParseResult,
+    *,
+    preserve_missing_profile: bool = False,
 ) -> SnapshotParseResult:
     from app.services.asset_source_service import preserve_banksalad
 
@@ -238,11 +240,12 @@ async def replace_snapshots(
     await db_session.execute(
         delete(AssetSnapshot).where(AssetSnapshot.snapshot_date == snapshot_date)
     )
-    await db_session.execute(
-        delete(UserProfileSnapshot).where(
-            UserProfileSnapshot.snapshot_date == snapshot_date
+    if not preserve_missing_profile or parsed_snapshots.user_profile is not None:
+        await db_session.execute(
+            delete(UserProfileSnapshot).where(
+                UserProfileSnapshot.snapshot_date == snapshot_date
+            )
         )
-    )
     await db_session.execute(
         delete(InsuranceContract).where(
             InsuranceContract.snapshot_date == snapshot_date

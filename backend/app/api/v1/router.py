@@ -18,10 +18,12 @@ from app.api.v1.endpoints.settlement_matches import router as settlement_matches
 from app.api.v1.endpoints.settings import router as settings_router
 from app.api.v1.endpoints.transactions import router as transactions_router
 from app.api.v1.endpoints.upload import router as upload_router
+from app.api.v1.endpoints.upload_review import router as upload_review_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
 api_router.include_router(upload_router)
+api_router.include_router(upload_review_router)
 api_router.include_router(schema_router)
 api_router.include_router(canonical_views_router)
 api_router.include_router(settings_router)

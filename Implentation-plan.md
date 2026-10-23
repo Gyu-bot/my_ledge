@@ -83,6 +83,23 @@
 
 ## 로드맵 항목
 
+### 승인된 원본 검토 적용
+
+#### 작업 T052. BankSalad 비교 검토안의 명시 승인·정확한 일회 적용
+- 우선순위: P0
+- 상태: 진행 중
+- 선행 조건: 기존 upload preview/source lifecycle, 사용자의 이 범위 구현·main 병합·Live 배포 명시 승인
+- 범위: 기존 safe apply를 유지하는 별도 review API와 durable operation, 전체 유형/후보/스냅샷 효과 표시, 정확한 결정·소유자·원본·버전 바인딩, stale 검증과 atomic once apply/readback, finance helper/cron 연동.
+- 하지 않을 것: 실제 미결 항목 승인 대체, 자동 삭제·병합, 직접 DB 금융 데이터 수정, 별도 daemon/watch/job, unrelated UI/서비스 변경.
+- 완료 기준:
+  - [x] 전체 8개 change class와 source occurrence별 결정·후보가 정확히 표시 가능한 API를 제공한다.
+  - [x] 엄격한 확인·전체 결정·파일/계정 지문/날짜/버전 digest를 적용 경계에서 검사하고 stale/부분 오류를 원자 거절한다.
+  - [x] ID 유지 update와 missing keep로 사용자 필드·연결을 보존하며 스냅샷 효과를 승인 범위에 포함한다.
+  - [x] 실제 PostgreSQL 동시성·ordinary writer 잠금·추가 migration과 real HTTP 합성 write-path 검증을 통과한다.
+  - [x] finance의 실제 importer/cron/helper entrypoint를 합성 데이터·native human admission으로 검증하고 응답 유실/재진입에서 중복 반영·알림을 막는다.
+  - [ ] exact-head CI, main 병합 및 scoped Live backend 배포·현재 검토 안내 저장을 확인한다. 실제 장부 결정은 별도 사람 승인까지 보류한다.
+- 참고: [정확한 검토 적용 계약](docs/agent-integration/reviewed-imports.md). 공유 API key는 기술 호출자 인증이지 사람 승인 증명/profile ACL이 아니다. private evidence는 공개 저장소에 넣지 않는다. T044–T051 감사 문서 작업과 분리된 명시 승인 기능이며 상세 검증/배포 identity는 PR에 기록한다.
+
 ### 운영/로드맵 문서 전환
 
 #### 작업 T000. 사용자용 roadmap/status 문서 전환

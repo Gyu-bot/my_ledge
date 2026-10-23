@@ -30,6 +30,7 @@ def test_expected_tables_exist() -> None:
         "purchase_gate_reviews",
         "settlement_matches",
         "upload_logs",
+        "upload_review_operations",
         "user_profile_snapshots",
     }
 
