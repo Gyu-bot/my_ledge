@@ -29,6 +29,20 @@ export interface UploadLogListResponse {
   items: UploadLogResponse[]
 }
 
+export interface UploadRollbackPoint {
+  readonly upload_id: number
+  readonly created_at: string
+  readonly status: 'ready' | 'rolled_back' | 'expired'
+  readonly snapshot_date: string | null
+  readonly filename: string | null
+  readonly can_rollback: boolean
+  readonly changed_tables: readonly string[]
+}
+
+export interface UploadRollbackResponse {
+  readonly restored_counts: Readonly<Record<string, number>>
+}
+
 export type UploadPreviewChangeType =
   | 'new'
   | 'unchanged'

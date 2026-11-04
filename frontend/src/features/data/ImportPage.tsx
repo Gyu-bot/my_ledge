@@ -10,13 +10,29 @@ import { EmptyState } from '../../ds/States'
 import { Provenance } from '../../ds/Provenance'
 import { toast } from '../../ds/toastStore'
 import { PageHeader } from '../../shell/PageHeader'
-import { useApplyUploadPreview, useResetData, useUploadLogs, useUploadPreview } from '../../hooks/useUpload'
+import { useApplyUploadPreview, useResetData, useRollbackPoints, useRollbackUpload, useUploadLogs, useUploadPreview } from '../../hooks/useUpload'
 import { useCanonicalViewsDashboard } from '../../hooks/useCanonicalViews'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
-import type { DataResetScope, UploadPreviewResponse } from '../../types/upload'
+import type { DataResetScope, UploadPreviewResponse, UploadRollbackPoint } from '../../types/upload'
 import { ImportPreviewPanel } from './ImportPreviewPanel'
 import { canApplyChange, changeKey, selectionFromChange } from './importPreviewModel'
 import { snapshotDateFromFilename } from './uploadFilename'
+
+const TABLE_LABELS: Record<string, string> = {
+  transactions: '거래',
+  asset_snapshots: '자산 스냅샷',
+  insurance_contracts: '보험',
+  investments: '투자',
+  loans: '대출',
+  user_profile_snapshots: '고객 정보',
+  installment_transaction_links: '할부 연결',
+  loan_transaction_links: '대출 거래 연결',
+  purchase_gate_reviews: '구매 검토',
+  asset_source_runs: '자산 수집 기록',
+  asset_source_observations: '자산 수집 기록',
+  settlement_matches: '정산 연결',
+  loan_accounts: '대출 계좌',
+}
 
 const RESET_LABEL: Record<DataResetScope, string> = {
   transactions_only: '거래만 초기화',
@@ -29,6 +45,8 @@ export function ImportPage() {
   const applyPreview = useApplyUploadPreview()
   const reset = useResetData()
   const logs = useUploadLogs(10)
+  const rollbackPoints = useRollbackPoints()
+  const rollback = useRollbackUpload()
   const canonical = useCanonicalViewsDashboard()
 
   const [file, setFile] = useState<File | null>(null)
@@ -38,6 +56,8 @@ export function ImportPage() {
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set())
   const [resetScope, setResetScope] = useState<DataResetScope>('transactions_only')
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [rollbackPoint, setRollbackPoint] = useState<UploadRollbackPoint | null>(null)
+  const [rollbackStep, setRollbackStep] = useState<'first' | 'changes'>('first')
 
   function selectFile(nextFile: File) {
     setFile(nextFile)
@@ -103,7 +123,22 @@ export function ImportPage() {
     }
   }
 
+  async function runRollback(acceptChanges: boolean) {
+    if (!rollbackPoint || !hasWrite) return
+    try {
+      await rollback.mutateAsync({ uploadId: rollbackPoint.upload_id, acceptChanges })
+      setRollbackPoint(null)
+      toast.success('업로드를 되돌렸어요')
+    } catch (error) {
+      setRollbackPoint(null)
+      // Refresh the point if the ledger changed while the confirmation was open.
+      void rollbackPoints.refetch()
+      toast.error('업로드 되돌리기 실패', { description: String(error) })
+    }
+  }
+
   const coverage = canonical.data?.data_coverage
+  const availablePoint = rollbackPoints.data?.find((point) => point.can_rollback)
 
   return (
     <>
@@ -195,7 +230,7 @@ export function ImportPage() {
               <table className="min-w-[520px] w-full border-collapse text-label">
                 <thead className="bg-bg-inset">
                   <tr>
-                    {['파일명', '상태', '신규', '스킵', '기준일', '시각'].map((header) => (
+                    {['파일명', '상태', '신규', '스킵', '기준일', '시각', '작업'].map((header) => (
                       <th key={header} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{header}</th>
                     ))}
                   </tr>
@@ -206,13 +241,21 @@ export function ImportPage() {
                       <td className="max-w-[180px] truncate px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
                       <td className="px-4 py-2">
                         <Badge variant={log.status === 'failed' ? 'expense' : log.status === 'partial' ? 'warn' : 'accent'}>
-                          {log.status ?? '—'}
+                          {log.status === 'rolled_back' ? '되돌림' : log.status ?? '—'}
                         </Badge>
                       </td>
                       <td className="tnum px-4 py-2 text-income">+{log.tx_new ?? 0}</td>
                       <td className="tnum px-4 py-2 text-text-muted">{log.tx_skipped ?? 0}</td>
                       <td className="tnum px-4 py-2 text-text-muted">{log.snapshot_date ?? '—'}</td>
                       <td className="tnum px-4 py-2 text-right text-text-faint">{log.uploaded_at.slice(0, 16).replace('T', ' ')}</td>
+                      <td className="px-4 py-2">
+                        {availablePoint?.upload_id === log.id ? (
+                          <Button size="sm" variant="danger" disabled={!hasWrite || rollback.isPending} onClick={() => {
+                            setRollbackStep('first')
+                            setRollbackPoint(availablePoint)
+                          }}>되돌리기</Button>
+                        ) : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -249,6 +292,28 @@ export function ImportPage() {
           </Button>
         </Card>
       </div>
+
+      {rollbackPoint ? (
+        <ConfirmDanger
+          key={`${rollbackPoint.upload_id}-${rollbackStep}`}
+          open
+          onClose={() => setRollbackPoint(null)}
+          title={rollbackStep === 'first' ? '업로드 되돌리기' : '이후 변경도 되돌리기'}
+          description={rollbackStep === 'first'
+            ? '이 업로드 직전 상태로 장부를 되돌려요. 이 업로드로 추가·수정된 거래와 스냅샷이 원래대로 돌아가요.'
+            : `반영 뒤에 바뀐 내용(${rollbackPoint.changed_tables.map((table) => TABLE_LABELS[table] ?? table).join(', ')})도 함께 사라져요`}
+          confirmPhrase={rollbackStep === 'first' ? '업로드 되돌리기' : '이후 변경도 되돌리기'}
+          confirmLabel={rollbackStep === 'first' && rollbackPoint.changed_tables.length > 0 ? '다음' : '되돌리기 실행'}
+          pending={rollback.isPending}
+          onConfirm={() => {
+            if (rollbackStep === 'first' && rollbackPoint.changed_tables.length > 0) {
+              setRollbackStep('changes')
+            } else {
+              void runRollback(rollbackStep === 'changes')
+            }
+          }}
+        />
+      ) : null}
 
       <ConfirmDanger
         open={confirmOpen}

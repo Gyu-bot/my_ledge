@@ -9,6 +9,23 @@ export function useUploadLogs(limit = 10) {
   })
 }
 
+export function useRollbackPoints() {
+  return useQuery({
+    queryKey: ['upload', 'rollback-points'],
+    queryFn: uploadApi.rollbackPoints,
+  })
+}
+
+export function useRollbackUpload() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ uploadId, acceptChanges }: { uploadId: number; acceptChanges: boolean }) =>
+      uploadApi.rollback(uploadId, acceptChanges),
+    // Rollback can affect derived dashboard views and relationship queries as well as uploads.
+    onSuccess: () => qc.invalidateQueries(),
+  })
+}
+
 export function useUploadFile() {
   const qc = useQueryClient()
   return useMutation({

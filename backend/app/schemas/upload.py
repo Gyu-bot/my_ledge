@@ -155,3 +155,24 @@ class UploadApplyResponse(BaseModel):
     summary: UploadApplySummary
     snapshots: UploadSnapshotSummary
     applied_changes: list[UploadPreviewChange]
+
+
+class UploadRollbackPointResponse(BaseModel):
+    upload_id: int
+    created_at: datetime
+    status: str
+    snapshot_date: date | None
+    filename: str | None
+    can_rollback: bool
+    changed_tables: list[str]
+
+
+class UploadRollbackRequest(BaseModel):
+    accept_changes: bool = False
+
+
+class UploadRollbackResponse(BaseModel):
+    upload_id: int
+    status: str
+    discarded_changes: list[str]
+    restored_counts: dict[str, int]

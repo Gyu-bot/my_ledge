@@ -6,6 +6,8 @@ import type {
   UploadApplySelection,
   UploadLogListResponse,
   UploadPreviewResponse,
+  UploadRollbackPoint,
+  UploadRollbackResponse,
   UploadResponse,
 } from '../types/upload'
 
@@ -34,6 +36,15 @@ export const uploadApi = {
 
   logs: (limit = 10) =>
     apiFetch<UploadLogListResponse>(`/upload/logs?limit=${limit}`),
+
+  rollbackPoints: () => apiFetch<readonly UploadRollbackPoint[]>('/upload/rollback-points'),
+
+  rollback: (uploadId: number, acceptChanges: boolean) =>
+    apiFetch<UploadRollbackResponse>(`/upload/${uploadId}/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accept_changes: acceptChanges }),
+    }),
 
   reset: (scope: DataResetScope) =>
     apiFetch<DataResetResponse>('/data/reset', {

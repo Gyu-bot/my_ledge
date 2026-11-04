@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from sqlalchemy import func, select, text, update
 
+from app.services import upload_rollback_service as rollback_points
 from app.models import Base
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
 from app.models.upload_log import UploadLog
@@ -118,7 +119,7 @@ def finance_tables():
         (
             t
             for t in Base.metadata.tables.values()
-            if t.name != "upload_review_operations"
+            if t.name not in ("upload_review_operations", "upload_rollback_points")
         ),
         key=lambda t: t.name,
     )
@@ -624,6 +625,7 @@ async def apply_review(
         }
     )
     try:
+        await rollback_points.lock(db)  # before table locks: same order as rollback
         op = await locked_operation(db, operation_id)
         if op.status == "applied":
             if op.applied_request_digest != request_hash:
@@ -703,6 +705,7 @@ async def apply_review(
         db.add(log)
         await db.flush()
         await db.refresh(log)
+        point_id = await rollback_points.begin_point(db, log.id)
         applied, kept = [], []
         for entry, decision in zip(op.payload["entries"], values, strict=True):
             if decision["action"] == "keep":
@@ -788,6 +791,7 @@ async def apply_review(
         op.status, op.applied_request_digest = "applied", request_hash
         op.payload = {**op.payload, "status": "applied", "result": result_data}
         result = response(op)
+        await rollback_points.finish_point(db, point_id, log.id)
         await db.commit()  # single atomic commit: mutations, audit and canonical result
     except Exception:
         await db.rollback()

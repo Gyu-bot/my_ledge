@@ -103,6 +103,8 @@
 | `POST` | `/api/v1/upload` | live | multipart + `snapshot_date` required |
 | `POST` | `/api/v1/upload/preview` | live | no-write preview; multipart + `snapshot_date` required |
 | `POST` | `/api/v1/upload/apply` | live | preview+explicit 선택 적용 + workbook snapshot replace; multipart + `snapshot_date` + `apply_request` required |
+| `GET` | `/api/v1/upload/rollback-points` | live | 최근 20개 되돌리기 지점. `can_rollback`은 최신 `ready` 지점이고 이후 성공 업로드가 없을 때만 true, `changed_tables`는 반영 후 바뀐 표 |
+| `POST` | `/api/v1/upload/{upload_id}/rollback` | live | API key 필요. body `{accept_changes}`. 반영 직전 원장 상태로 원자 복원. 404 `unknown_rollback_point`, 409 `not_latest`/`ledger_changed`(+`changed_tables`)/`schema_changed`; 성공 시 upload log `status=rolled_back` |
 | `POST` | `/api/v1/data/reset` | live | `transactions_only` / `transactions_and_snapshots` |
 | `GET` | `/api/v1/profile` | live | latest BankSalad `1.고객정보` profile snapshot; stores gender/age/KCB score only, not name/email |
 | `GET` | `/api/v1/settings/analytics` | live | API key required, analytics defaults/saved/effective values |
@@ -515,3 +517,10 @@ No successful complete mapped Toss observation means a visible BankSalad fallbac
 - `asset_source_runs.provenance`: `valuation_time_basis=observation_proxy`, `provider_valuation_at=null`, `holdings_scope=kr_us_stocks`, API 버전, 원통화 합계와 FX의 midRate/유효구간/조회시각. 원천 holdings에는 평가시각이 없으므로 valuation_at은 조회시각 대용이고 `valuation_precision=observation_proxy`로 반환한다. 이때 stale는 조회 경과시간이며 시세 최신성을 보장하지 않는다.
 - `/investments/selected` item의 quantity/native_currency/native_market_value/exchange_rate로 원화 추정의 근거를 확인한다. FX는 별도로 조회하므로 원자적 스냅샷이 아니다. 기존 BankSalad 순자산/과거 스냅샷 API는 유지한다. 자산 component·현금 범위가 확인되지 않은 새 매핑은 현재 추정 순자산을 null로 유지한다.
 - 실행 키는 backend 환경변수만 사용한다. 단일 프로세스 토큰 메모리 재사용, 고정 조회 경로, 제한된 429 재시도, 수동 새로고침만 제공한다. 자동 스케줄/주문/이체는 없다. 설정은 [toss-securities-setup.md](toss-securities-setup.md).
+
+
+## Upload rollback points
+
+- 세 가져오기 경로(`/upload`, `/upload/apply`, reviewed apply)는 원장을 쓰기 전에 같은 트랜잭션(legacy는 세션 advisory lock 아래)에서 `upload_rollback_points`에 반영 직전 상태를 저장하고, commit 직전에 post fingerprint를 기록한다. 실패한 가져오기는 지점을 남기지 않는다.
+- 범위: `upload_logs`, `upload_review_operations`, `upload_rollback_points`를 제외한 모든 원장 표. 하나의 advisory lock이 가져오기와 되돌리기를 직렬화한다.
+- 최신 10개 `ready` 지점만 상태를 보관하고 이전 지점은 `expired`(행은 유지)가 된다. 되돌리기는 restored fingerprint가 pre fingerprint와 같을 때만 commit한다. 업로드 로그와 검토 operation은 삭제하지 않는다. PostgreSQL 전용.

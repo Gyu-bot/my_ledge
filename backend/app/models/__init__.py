@@ -27,6 +27,7 @@ from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
 from app.models.upload_review_operation import UploadReviewOperation
+from app.models.upload_rollback_point import UploadRollbackPoint
 from app.models.user_profile_snapshot import UserProfileSnapshot
 
 __all__ = [
@@ -57,5 +58,6 @@ __all__ = [
     "Transaction",
     "UploadLog",
     "UploadReviewOperation",
+    "UploadRollbackPoint",
     "UserProfileSnapshot",
 ]
