@@ -18,6 +18,7 @@ def test_expected_tables_exist() -> None:
         "asset_source_observations",
         "asset_source_mappings",
         "asset_source_policy_revisions",
+        "upload_rollback_points",
         "insurance_contracts",
         "investments",
         "loans",

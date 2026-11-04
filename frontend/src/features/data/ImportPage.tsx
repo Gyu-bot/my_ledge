@@ -28,6 +28,10 @@ const TABLE_LABELS: Record<string, string> = {
   installment_transaction_links: '할부 연결',
   loan_transaction_links: '대출 거래 연결',
   purchase_gate_reviews: '구매 검토',
+  asset_source_runs: '자산 수집 기록',
+  asset_source_observations: '자산 수집 기록',
+  settlement_matches: '정산 연결',
+  loan_accounts: '대출 계좌',
 }
 
 const RESET_LABEL: Record<DataResetScope, string> = {

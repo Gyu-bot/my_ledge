@@ -23,6 +23,9 @@ from app.schemas.upload import (
     UploadPreviewSourceRow,
     UploadPreviewSummary,
     UploadResponse,
+    UploadRollbackPointResponse,
+    UploadRollbackRequest,
+    UploadRollbackResponse,
     UploadSnapshotSummary,
     UploadTransactionSummary,
 )
@@ -35,6 +38,7 @@ from app.services.upload_preview_service import (
     InvalidUploadWorkbookError,
     preview_transaction_upload_workbook,
 )
+from app.services import upload_rollback_service
 from app.services.upload_service import import_transactions_from_workbook
 
 router = APIRouter()
@@ -260,3 +264,37 @@ def _build_upload_preview_change(
         preserved_user_fields=list(change.preserved_user_fields),
         preservation_summary=change.preservation_summary,
     )
+
+
+@router.get("/upload/rollback-points", response_model=list[UploadRollbackPointResponse])
+async def get_upload_rollback_points(
+    db_session: AsyncSession = Depends(get_db_session),
+) -> list[UploadRollbackPointResponse]:
+    points = await upload_rollback_service.list_points(db_session)
+    return [UploadRollbackPointResponse(**point) for point in points]
+
+
+@router.post(
+    "/upload/{upload_id}/rollback",
+    response_model=UploadRollbackResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def rollback_upload(
+    upload_id: int,
+    payload: UploadRollbackRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> UploadRollbackResponse:
+    try:
+        result = await upload_rollback_service.rollback_upload(
+            db_session, upload_id, accept_changes=payload.accept_changes
+        )
+    except upload_rollback_service.RollbackError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "code": exc.code,
+                "message": exc.message,
+                "changed_tables": exc.changed_tables,
+            },
+        ) from exc
+    return UploadRollbackResponse(**result)

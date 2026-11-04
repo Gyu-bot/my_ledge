@@ -8,6 +8,7 @@ from typing import assert_never
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import upload_rollback_service as rollback_points
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.purchase_gate_review import PurchaseGateReview
@@ -91,6 +92,8 @@ async def apply_transaction_upload_from_rows(
     apply_request: UploadApplyRequest,
     parsed_snapshots: SnapshotParseResult | None = None,
 ) -> TransactionUploadApplyResult:
+    # Serialize with other imports and rollbacks before reading the ledger.
+    await rollback_points.lock(db_session)
     preview_plan = await build_transaction_upload_preview_plan_from_rows(
         db_session=db_session,
         parsed_rows=parsed_rows,
@@ -118,6 +121,7 @@ async def apply_transaction_upload_from_rows(
             db_session.add(upload_log)
             await db_session.flush()
             await db_session.refresh(upload_log)
+            point_id = await rollback_points.begin_point(db_session, upload_log.id)
 
             created_transaction_count = 0
             for entry in selected_entries:
@@ -152,6 +156,8 @@ async def apply_transaction_upload_from_rows(
                 change_type_counts=change_type_counts,
             )
             upload_log.status = "success"
+            await db_session.flush()
+            await rollback_points.finish_point(db_session, point_id, upload_log.id)
         await db_session.commit()
     except Exception:
         await db_session.rollback()

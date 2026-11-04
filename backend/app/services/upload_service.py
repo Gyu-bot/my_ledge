@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 from sqlalchemy import Numeric, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import upload_rollback_service as rollback_points
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
@@ -92,6 +93,31 @@ async def import_transactions_from_workbook(
     persist_upload_file: bool = False,
     upload_dir: Path | None = None,
 ) -> TransactionImportResult:
+    # The legacy path commits in stages; hold the import/rollback lock across them.
+    await rollback_points.lock_session(db_session)
+    try:
+        return await _import_transactions_from_workbook(
+            db_session,
+            file_bytes,
+            filename,
+            snapshot_date,
+            excel_password=excel_password,
+            persist_upload_file=persist_upload_file,
+            upload_dir=upload_dir,
+        )
+    finally:
+        await rollback_points.unlock_session(db_session)
+
+
+async def _import_transactions_from_workbook(
+    db_session: AsyncSession,
+    file_bytes: bytes,
+    filename: str,
+    snapshot_date: date,
+    excel_password: str | None = None,
+    persist_upload_file: bool = False,
+    upload_dir: Path | None = None,
+) -> TransactionImportResult:
     workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
     workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
     upload_log = UploadLog(
@@ -103,6 +129,9 @@ async def import_transactions_from_workbook(
     await db_session.commit()
     await db_session.refresh(upload_log)
     upload_id = upload_log.id
+    # Legacy path commits in stages: capture before its first ledger write.
+    point_id = await rollback_points.begin_point(db_session, upload_id)
+    await db_session.commit()
 
     tx_total = 0
     tx_new = 0
@@ -168,6 +197,8 @@ async def import_transactions_from_workbook(
     persisted_upload_log.tx_skipped = tx_skipped
     persisted_upload_log.status = status
     persisted_upload_log.error_message = error_message
+    await db_session.flush()
+    await rollback_points.finish_point(db_session, point_id, upload_id)
     await db_session.commit()
 
     if persist_upload_file:
