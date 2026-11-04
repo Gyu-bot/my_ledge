@@ -14,21 +14,26 @@ const mocks = vi.hoisted(() => ({
   previewMutateAsync: vi.fn(),
   applyMutateAsync: vi.fn(),
   resetMutateAsync: vi.fn(),
+  rollbackMutateAsync: vi.fn(),
+  rollbackPoints: vi.fn(),
+  logs: vi.fn(),
+  writeAccess: vi.fn(),
 }))
 
 vi.mock('../../hooks/useUpload', () => ({
   useUploadPreview: () => ({ mutateAsync: mocks.previewMutateAsync, isPending: false }),
   useApplyUploadPreview: () => ({ mutateAsync: mocks.applyMutateAsync, isPending: false }),
   useResetData: () => ({ mutateAsync: mocks.resetMutateAsync, isPending: false }),
-  useUploadLogs: () =>
-    query({ items: [{ id: 1, uploaded_at: '2026-06-10T09:00:00', filename: 'finance.xlsx', snapshot_date: '2026-06-10', tx_total: 2219, tx_new: 150, tx_skipped: 2069, status: 'success', error_message: null }] }),
+  useRollbackPoints: () => query(mocks.rollbackPoints()),
+  useRollbackUpload: () => ({ mutateAsync: mocks.rollbackMutateAsync, isPending: false }),
+  useUploadLogs: () => query(mocks.logs()),
 }))
 
 vi.mock('../../hooks/useCanonicalViews', () => ({
   useCanonicalViewsDashboard: () => query({ data_coverage: { first_transaction_date: '2025-03-12', last_transaction_date: '2026-06-10' } }),
 }))
 
-vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => true }))
+vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => mocks.writeAccess() }))
 
 function renderPage() {
   return render(<MemoryRouter><ImportPage /><Toaster /></MemoryRouter>)
@@ -155,6 +160,10 @@ describe('ImportPage', () => {
     mocks.previewMutateAsync.mockReset()
     mocks.applyMutateAsync.mockReset()
     mocks.resetMutateAsync.mockReset()
+    mocks.rollbackMutateAsync.mockReset().mockResolvedValue({ restored_counts: {} })
+    mocks.rollbackPoints.mockReset().mockReturnValue([])
+    mocks.logs.mockReset().mockReturnValue({ items: [{ id: 1, uploaded_at: '2026-06-10T09:00:00', filename: 'finance.xlsx', snapshot_date: '2026-06-10', tx_total: 3, tx_new: 1, tx_skipped: 2, status: 'success', error_message: null }] })
+    mocks.writeAccess.mockReset().mockReturnValue(true)
     mocks.previewMutateAsync.mockResolvedValue(previewResponse)
     mocks.applyMutateAsync.mockResolvedValue({
       status: 'success',
@@ -238,6 +247,49 @@ describe('ImportPage', () => {
     const duplicateRow = duplicateBadge.closest('button')
     expect(duplicateRow).toBeDisabled()
     expect(within(duplicateRow as HTMLButtonElement).getByText('수동 확인')).toBeInTheDocument()
+  })
+
+  it('되돌린 업로드의 상태를 표시한다', () => {
+    mocks.logs.mockReturnValue({ items: [{ id: 1, uploaded_at: '2026-06-10T09:00:00', status: 'rolled_back' }] })
+    renderPage()
+    expect(screen.getByText('되돌림')).toBeInTheDocument()
+  })
+
+  it('복원 가능한 일치 행에만 버튼을 표시하고 쓰기 권한이 없으면 잠근다', () => {
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 2, can_rollback: true, changed_tables: [] }])
+    const { rerender } = renderPage()
+    expect(screen.queryByRole('button', { name: '되돌리기' })).not.toBeInTheDocument()
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: [] }])
+    mocks.writeAccess.mockReturnValue(false)
+    rerender(<MemoryRouter><ImportPage /><Toaster /></MemoryRouter>)
+    expect(screen.getByRole('button', { name: '되돌리기' })).toBeDisabled()
+  })
+
+  it('이후 변경이 없으면 한 번 확인하고 accept_changes false를 보낸다', async () => {
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: [] }])
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '되돌리기' }))
+    const dialog = screen.getByRole('alertdialog', { name: '업로드 되돌리기' })
+    expect(within(dialog).getByText(/이 업로드 직전 상태로 장부를 되돌려요/)).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByPlaceholderText('확인 문구 입력'), { target: { value: '업로드 되돌리기' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '되돌리기 실행' }))
+    await waitFor(() => expect(mocks.rollbackMutateAsync).toHaveBeenCalledWith({ uploadId: 1, acceptChanges: false }))
+  })
+
+  it('이후 변경이 있으면 별도 경고를 확인해야 accept_changes true를 보낸다', async () => {
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: ['transactions', 'loans'] }])
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '되돌리기' }))
+    const first = screen.getByRole('alertdialog', { name: '업로드 되돌리기' })
+    fireEvent.change(within(first).getByPlaceholderText('확인 문구 입력'), { target: { value: '업로드 되돌리기' } })
+    fireEvent.click(within(first).getByRole('button', { name: '다음' }))
+    expect(mocks.rollbackMutateAsync).not.toHaveBeenCalled()
+    const second = screen.getByRole('alertdialog', { name: '이후 변경도 되돌리기' })
+    expect(within(second).getByText('반영 뒤에 바뀐 내용(거래, 대출)도 함께 사라져요')).toBeInTheDocument()
+    expect(within(second).getByRole('button', { name: '되돌리기 실행' })).toBeDisabled()
+    fireEvent.change(within(second).getByPlaceholderText('확인 문구 입력'), { target: { value: '이후 변경도 되돌리기' } })
+    fireEvent.click(within(second).getByRole('button', { name: '되돌리기 실행' }))
+    await waitFor(() => expect(mocks.rollbackMutateAsync).toHaveBeenCalledWith({ uploadId: 1, acceptChanges: true }))
   })
 
   it('초기화 실행 시 확인 문구 다이얼로그가 열린다 (스냅샷 포함 안내)', () => {
