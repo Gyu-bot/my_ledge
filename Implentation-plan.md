@@ -1,1095 +1,433 @@
-# My Ledge 사용자 로드맵
+# My Ledge 기능 정의와 개선 계획
 
-생성일: 2026-06-26
-문서 성격: 사용자용 프로젝트 상태와 로드맵
-상태: 활성
+생성일: 2026-11-10
+문서 성격: 제품 기능 정의, 개선 로드맵, 작업 범위의 기준
+상태: 활성. 모든 `T###` 항목은 구현 승인 전이다.
 
 > 파일명은 사용자 요청의 철자 그대로 `Implentation-plan.md`를 사용한다.
 
-## 목적
+## 이 문서의 위치
 
-이 문서는 사용자가 현재까지 구현된 항목, 남아 있는 항목, 그리고 각 항목이 어떤 제품 방향을 뒷받침하는지 확인하기 위한 사용자용 문서다.
+- 2026-11-10 사용자 결정으로 이전 로드맵(`T000`–`T053`)을 폐기하고 이 문서로 대체했다. 이전 문서는 [docs/archive/planning/2026-11-10-Implentation-plan-superseded.md](docs/archive/planning/2026-11-10-Implentation-plan-superseded.md)에 있다.
+- 이전 로드맵의 미완료 항목과, 병합되지 않은 감사 PR #26이 제안했던 후속 항목(`T045`–`T051`)은 모두 삭제했다. 이 문서에 있는 항목만 유효하다.
+- 완료된 기능(가져오기, 검토 적용, 되돌리기, 소스 선택 등)은 그대로 동작한다. 이 계획은 그 위에서 분석 체계와 화면을 다시 짜는 것이다.
+- **가져오기 계약은 이 계획의 변경 범위 밖이다.** 업로드 미리보기·적용, 검토안 준비·결정·적용, 되돌리기 지점, 업로드 기록의 요청·응답 형식과 상태값은 외부 가져오기 자동화가 엄격하게 검증하며 의존한다. 분석 재편 작업에서 이 계약을 고치지 않는다. 고쳐야 하면 별도 항목으로 올리고 소비 측과 함께 버전을 올린다.
+- 작업 번호는 과거 PR·커밋과 겹치지 않도록 `T054`부터 이어 쓴다.
 
 ## 운영 방식
 
-- 이 파일은 로드맵/상태 문서이자 작업 범위의 기준이다. 각 `T###` 항목이 우선순위, 상태, 선행 조건, 완료 기준, 실행 참고를 가진다.
-- 이 파일에서는 완료된 작업, 남은 작업, 우선순위, 막힌 지점, 제품 의도를 확인한다.
-- 구현은 사용자가 승인한 `T###` 항목 범위에서 시작한다. 해당 항목이 없거나 범위·접근이 정해지지 않았으면 항목(범위, 하지 않을 것, 완료 기준, 검증)을 먼저 제안하고 승인을 받는다.
-- 변경별 구현 방식과 검증 근거는 PR 본문(`Summary`, `Verification`, `Plan impact`)에 남기고, 완료 후 해당 항목의 체크리스트·상태·참고를 갱신한다. 원본 QA 로그나 개인 금융 값은 커밋하지 않는다.
-- 코드와 live contract가 이 로드맵보다 우선한다. 실제 구현 상태가 다르면 사용자용 로드맵/상태 동기화로 이 파일을 갱신한다.
-- API, schema, canonical view, route, component contract 변경은 가능하면 같은 PR에서 관련 source-of-truth 문서도 함께 갱신한다.
-- workbook 동작에 의존하는 작업의 실데이터 검증은 `tmp/2025-05-21~2026-05-21.xlsx`를 사용한다.
-- `docs/STATUS.md`는 deprecated pointer이며 더 이상 handoff 문서로 유지하지 않는다.
+- 이 파일이 로드맵과 작업 범위의 기준이다. 각 `T###` 항목이 우선순위, 상태, 선행 조건, 범위, 하지 않을 것, 완료 기준, 검증을 가진다.
+- 구현은 사용자가 승인한 `T###` 항목 범위에서 시작한다. 항목이 없거나 범위가 정해지지 않았으면 항목을 먼저 제안하고 승인을 받는다.
+- 변경별 구현 방식과 검증 근거는 PR 본문(`Summary`, `Verification`, `Plan impact`)에 남기고, 완료 후 해당 항목의 체크리스트와 상태를 갱신한다.
+- 저장소는 공개다. 개인 금융 값, 실제 카테고리·거래처 이름, 원본 QA 로그, 운영 접속 정보는 이 문서와 PR에 쓰지 않는다.
+- 코드와 live contract가 이 문서보다 우선한다. 실제 구현이 다르면 이 문서를 고친다.
+- API, 스키마, 뷰, route 계약이 바뀌면 같은 PR에서 관련 문서(`docs/backend-api-ssot.md` 등)를 함께 고친다.
 
-## 상태값
+상태값:
 
-- `바로 시작 가능`: 지금 착수할 수 있다.
-- `계획됨`: 유효한 백로그이지만 선행 조건이나 범위 순서가 남아 있다.
-- `진행 중`: 현재 작업 중이다.
-- `완료`: 완료 기준을 만족했고 검증되었다.
-- `막힘`: 외부 결정, 데이터, 인증 정보, 문서가 필요하다.
-- `보류`: 이후 제품/아키텍처 시점까지 의도적으로 미룬다.
+- `계획됨 — 구현 승인 전`: 범위는 정해졌고 사용자 승인을 기다린다.
+- `바로 시작 가능`: 승인되었고 선행 조건이 충족됐다.
+- `진행 중`, `완료`, `막힘`, `보류`: 이름 그대로다.
 
-## 우선순위 기준
+우선순위:
 
-- `P0`: 계산 정확성, 데이터 신뢰, source lifecycle, agent read contract 리스크.
-- `P1`: 중요한 workflow, review, automation, advisor 품질 개선.
-- `P1.5`: 핵심 P0/P1 이후에 가치 있는 hardening.
-- `P2`: 더 큰 제품 확장 또는 구조 변경.
+- `P0`: 숫자의 정의와 정확성. 이것이 틀리면 뒤의 모든 분석이 틀린다.
+- `P1`: 화면과 읽기 표면의 재편.
+- `P2`: 새 분석.
+
+---
+
+## 1. 제품 정의
+
+### 1.1 무엇인가
+
+My Ledge는 BankSalad 내보내기 파일에 담긴 과거 기록을 분석해, 사용자와 상담 에이전트가 재무 의사결정의 근거로 쓰는 개인 재무 분석 도구다. 지출이 어디로 흘렀고, 무엇이 변했고, 어디를 조정할 수 있는지를 기록에서 읽어 낸다.
+
+### 1.2 원칙
+
+사용자가 정한 것이다.
+
+1. **기록 분석 도구다.** 자료는 수동으로 올리는 내보내기 파일이라 실시간일 수 없다. 모든 값은 "자료 기준일까지의 기록"이며, 오늘의 잔액을 안다고 말하지 않는다. 미래에 대해서는 진행월의 월말 순현금흐름 전망 하나만 내고, 관측값과 분리해 가정과 함께 보인다.
+2. **분류는 사람이 프론트엔드에서 한다.** 시스템은 분류를 제안하거나 자동으로 채우지 않는다. 사람이 만든 규칙(카테고리나 거래처 단위 기본값)은 사람의 분류로 본다.
+3. **카테고리는 사용자의 의미 분류다.** 사람이나 목적 기준으로 일부러 나눈 카테고리를 포함한다. 거래처 묶음이나 다른 축이 카테고리를 덮거나 대체하지 않는다.
+4. **같은 이름은 같은 정의, 같은 값이다.** API, SQL 뷰, 화면 어디서 조회해도 같다.
+5. **관측과 추정을 섞지 않는다.** 미분류, 미연결, 설명되지 않은 차이는 숨기지 않고 별도 줄로 둔다.
+6. **최종 재무 조언은 제품 밖의 일이다.** 제품은 재현 가능한 계산과 그 근거를 준다.
+
+### 1.3 답해야 하는 질문
+
+| # | 질문 | 답하는 기능 |
+|---|---|---|
+| Q1 | 지난 달들에 돈이 어디로 갔나 | 월 결산 |
+| Q2 | 무엇이 변했고, 변화에 얼마씩 기여했나 | 지출 분석 |
+| Q3 | 조정할 수 있는 지출은 얼마이고 어디에 있나 | 지출 분석 |
+| Q4 | 매달 묶여 있는 지급은 얼마이고 언제 끝나나 | 약정 현황 |
+| Q5 | 남은 돈은 어디로 갔고 순자산은 왜 변했나 | 재무상태 |
+| Q6 | 이 숫자는 언제까지의 자료이고, 분류는 얼마나 되어 있나 | 자료 현황 (모든 화면 공통) |
+
+### 1.4 하지 않는 것
+
+- 실시간 가용액, 구매 가능 여부 판단, 오늘 기준 잔액 안내.
+- 진행월의 월말 순현금흐름 전망을 넘어서는 전망. 90일 현금흐름 달력 같은 것이다.
+- 아직 일어나지 않은 목돈 지급이나 체결 전 계약의 입력과 관리.
+- 대출 상환 시뮬레이션, 자금조달 대안 비교. 필요하면 상담 에이전트가 이 제품의 기록을 읽어 따로 계산한다.
+- 거래 분류의 자동 채움과 분류 추천.
+
+---
+
+## 2. 기준 모델
+
+화면과 API가 공유하는 정의다. `T054`–`T057`과 `T064`가 이 절을 구현한다.
+
+### 2.1 자료 기준일과 월의 상태
+
+- 기준일은 둘이다. **거래 기준일**은 반영된 거래 자료가 덮는 마지막 날이고, **스냅샷 기준일**은 잔액을 찍은 날이다. 둘은 다를 수 있으며 화면과 응답에 각각 표시한다. 스냅샷 기준일은 종류(자산, 대출, 투자, 보험, 프로필)마다 따로 가지며 하나로 합치지 않는다.
+- **마감월**은 거래 자료가 그 달 말일까지 덮은 달이다. 비율 지표와 월 간 비교는 마감월에만 낸다.
+- **진행월**은 자료가 말일까지 오지 않은 가장 최근 달이다. "부분 기록"으로 표시하고 누적 금액과 월말 순현금흐름 전망을 보여 준다. 전망은 관측 누적과 다른 줄에 두고 합치지 않는다. 진행월에 저축률 같은 비율이나 전월 전체 대비 증감을 내지 않는다.
+
+### 2.2 거래의 성격: 두 축
+
+지금의 `cost_kind`, 필수/재량 컬럼 2개, `recurring_payment_kind`를 아래 두 축으로 바꾼다.
+
+**지급 형태** — 이 지급이 약정에 따른 것인가.
+
+- `약정`: 대출에 연결된 거래, 할부 계획에 연결된 거래, 사람이 정기 지급으로 등록한 묶음(거래처 또는 카테고리 단위)에 속한 거래.
+- `수시`: 그 밖의 모든 지출.
+- 주기(월, 연, 회차)와 종료 시점은 약정의 속성이다. 거래마다 반복 여부를 묻지 않는다.
+
+**조정 가능성** — 지금 이 지출을 줄일 수 있는가.
+
+- `보호`: 줄일 수 없거나 줄이지 않기로 한 지출.
+- `조정 가능`: 줄일 수 있는 지출.
+- `미정`: 아직 정하지 않음.
+- 값은 사람이 정한다. 카테고리 단위 기본값을 두고, 약정 단위로 예외를 두며, 거래 단위 지정이 있으면 그것이 가장 우선한다.
+- 대출과 할부는 끝날 때까지 `보호`로 고정한다.
+- 조정 가능성은 지출에만 묻는다. 수입과 이체는 `해당 없음`이며 `미정`으로 세지 않는다.
+
+| 지금 | 바뀐 뒤 |
+|---|---|
+| `cost_kind` (고정/변동) | 지급 형태. "고정비"는 약정 지급을 뜻한다. |
+| `fixed_cost_necessity`, `spend_necessity` | 조정 가능성 하나. |
+| `recurring_payment_kind` (거래마다 입력) | 약정의 주기 속성. 거래 단위 입력과 작업 큐를 없앤다. |
+| 대출 연결, 할부 연결 | 유지. 약정의 한 종류가 된다. |
+| 카테고리 → 고정/변동 → 필수/재량 규칙 | 카테고리 → 조정 가능성 기본값, 카테고리·거래처 → 정기 지급 규칙. |
+
+### 2.3 월 흐름표
+
+모든 거래는 정확히 한 줄에 들어가고, 줄의 합은 항상 맞는다. 다른 분석은 이 표를 자른 것이다.
+
+```
+수입          정기 / 비정기 / 이자·소액
+− 약정 지급   대출 원리금 / 할부 회차 / 정기 지급
+− 수시 지출   보호 / 조정 가능
+− 미정        조정 가능성이 정해지지 않은 수시 지출
+= 잔여
+  잔여의 행방  투자·저축 이체 / 그 밖의 계좌 간 이동
+```
+
+- 대출은 원금과 이자를 나누지 않고 원리금 전체를 약정 지급에 둔다. 원금 상환은 소비가 아니라는 구분은 2.5의 대조에서 대출 잔액 변화로 다룬다. 이자·원금을 추정으로 나누지 않는다.
+- 환불(양수 지출)은 원래 카테고리에서 차감한다. 이체는 수입과 지출에 넣지 않고 잔여의 행방에서만 다룬다.
+- 조정 가능성은 약정 지급에도 적용된다. "조정 가능한 지출"은 수시 조정 가능분과 정기 지급 중 조정 가능분의 합이다.
+
+용어:
+
+| 이름 | 정의 |
+|---|---|
+| 총지급 | 약정 지급 + 수시 지출 + 미정. 환불 차감 후. |
+| 생활 지출 | 총지급 − 대출 원리금. |
+| 조정 가능 지출 | 조정 가능성이 `조정 가능`인 지출의 합. |
+| 잔여 | 수입 − 총지급. |
+| 현금 잔여율 | 잔여 ÷ 수입. 마감월에만 낸다. |
+
+지금의 `expense_total`(표면마다 범위가 다름), `savings_rate`, `true_spendable`, 고정비·변동비 합계는 위 이름으로 대체한다.
+
+### 2.4 비교 계약
+
+통계 함수가 아니라 비교의 조건을 통일한다. 모든 비교는 아래를 응답과 화면에 밝힌다.
+
+- 대상 기간과 기준 기간. 기준 기간의 기본값은 최근 6개 마감월의 중앙값이다.
+- 사용자는 기준 구간의 시작일을 바꿀 수 있다. 생활 구조가 바뀐 뒤에는 그 이후의 달만 기준으로 삼기 위해서다.
+- 진행월은 같은 경과일까지의 누적끼리만 비교한다.
+- 자료가 없는 달과 금액이 0인 달을 구분한다.
+- 해마다 한두 번 나가는 지출은 12개월 창으로 본다.
+- 변화는 증감률이 아니라 금액 기여 순으로 정렬한다. 전체, 보호, 조정 가능을 각각 볼 수 있다.
+
+### 2.5 재무상태와 대조
+
+스냅샷 두 시점 사이의 순자산 변화를 같은 구간의 거래 기록으로 설명한다.
+
+```
+순자산 변화 = 잔여 + 대출 잔액 감소분 + 투자 평가 변동 + 설명되지 않은 차이
+```
+
+- 거래 집계 구간을 스냅샷 구간과 정확히 맞춘다.
+- 대출 잔액 감소분은 스냅샷의 잔액 차이에서 읽는다.
+- 투자 평가 변동은 투자 자산 변화에서 같은 구간의 투자 이체 순액을 뺀 값이다.
+- 설명되지 않은 차이는 그대로 남긴다. 추정 항목으로 채워서 맞추지 않는다.
+
+### 2.6 월말 순현금흐름 전망
+
+진행월에 대해 내는 유일한 전망이다. 지금 구현되어 있고, 유지하되 로직을 점검한다(`T064`).
+
+- 전망은 "거래 기준일까지의 관측" + "남은 기간의 가정"으로 나뉘며, 두 부분의 금액을 각각 보인다.
+- 남은 기간의 가정은 2.3의 줄과 같은 단위로 낸다: 아직 들어오지 않은 정기 수입, 아직 나가지 않은 약정 지급, 남은 기간의 수시 지출.
+- 약정 지급은 기록된 약정의 속성에서 읽고, 이미 관측된 회차를 다시 더하지 않는다.
+- 각 가정의 근거(어느 달들의 기록에서 나왔는지)와 조정 가능성 미정 비중을 함께 보인다.
+- 전망의 정확도는 지난 마감월들로 되짚어 잰 오차로 보인다. 신뢰도 등급 같은 이름만으로 표시하지 않는다.
+
+### 2.7 계산 경로
+
+- 실적값은 SQL 뷰 계층 한 곳에서 계산한다. 유효 거래 → 월 흐름표 → 지출 큐브(월 × 카테고리 × 거래처 × 지급 형태 × 조정 가능성) 순서다. 재무상태 쪽 뷰는 필요한 만큼 둔다.
+- API와 화면은 이 뷰를 읽는다. 같은 뜻의 값을 Python에서 다시 집계하지 않는다.
+- 모든 집계 응답은 정의 이름, 포함 범위, 거래 기준일, 조정 가능성 미정 비중(금액 기준)을 함께 준다.
+
+---
+
+## 3. 기능 정의
+
+### 3.1 화면
+
+지금 13개 route를 5개 영역으로 묶는다.
+
+| 영역 | 답하는 질문 | 담는 것 | 흡수하는 현재 화면 |
+|---|---|---|---|
+| 월 결산 | Q1 | 선택한 마감월의 월 흐름표, 최근 12개월 추이, 진행월의 부분 기록과 월말 순현금흐름 전망 | 홈, 지출(추이·고정비·수입) |
+| 지출 분석 | Q2, Q3 | 카테고리 → 거래처 분해, 변화 기여, 조정 가능 지출, 기존 할부를 뺀 새 구매, 사후 검토할 거래 | 지출(구성·거래처·달력), 신호 |
+| 약정 현황 | Q4 | 대출·할부·정기 지급 목록, 월 부담, 남은 회차와 종료 시점, 관측 여부 | 대출, 할부, 지출(고정비) |
+| 재무상태 | Q5 | 스냅샷 순자산과 구성, 구간별 대조 | 자산·부채, 자산 메타 |
+| 작업대 | — | 분류, 거래, 규칙, 가져오기와 되돌리기, 설정 | 인박스, 거래, 규칙, 가져오기, 설정, 데이터 사전 |
+
+공통 규칙:
+
+- 모든 화면 머리에 자료 현황(거래 기준일, 스냅샷 기준일, 미정 비중)을 둔다.
+- 금액을 누르면 산식, 포함·제외 항목, 해당 거래 목록이 같은 자리에서 열린다.
+- 차트에서 거래로, 거래에서 분류 수정으로, 다시 분석으로 돌아오는 흐름이 끊기지 않는다.
+
+영역별 요점:
+
+- **월 결산**: 첫 화면이다. 가장 최근 마감월의 흐름표가 중심이고, 진행월의 부분 기록과 월말 전망은 그 옆에 관측과 가정을 나눠 보인다.
+- **지출 분석**: 거래처 분석은 카테고리를 유지한 채로 본다. 같은 거래처라도 카테고리가 다르면 따로 센다.
+- **약정 현황**: 미래 전망이 아니라 기록된 약정의 속성을 보여 준다. 각 약정은 해당 기간에 "관측됨", "주기상 있어야 하는데 관측 안 됨", "거래는 있으나 연결 미확인" 중 하나로 표시한다. "미납"이라는 말은 쓰지 않는다.
+- **작업대**: 분류 큐는 금액 영향이 큰 순으로 정렬한다. 반복 여부만 빈 거래는 큐에 올리지 않는다. 카테고리 기본값과 정기 지급 등록은 여기서 한다.
+
+### 3.2 에이전트 읽기 표면
+
+상담 에이전트가 원시 거래를 전부 받아 다시 집계하지 않아도 Q1–Q6에 답할 수 있어야 한다.
+
+- 화면과 같은 정의를 쓰는 작은 응답으로 나눈다: 월 흐름표, 지출 큐브 질의(필터와 묶음 기준 지정), 약정 목록, 순자산 대조, 자료 현황.
+- 한 번에 모든 것을 주는 큰 응답은 없앤다.
+- 인증 실패, 조회 실패, 아직 가져오지 않은 기간, 자료는 있으나 거래가 0건인 기간, 분류가 덜 되어 계산이 불완전함을 서로 다른 상태로 돌려준다.
+- 숫자 형식(문자열과 숫자 혼용), 가정 표기 형식, 언어 혼용을 통일한다.
+
+### 3.3 정리 대상
+
+| 현재 | 처리 |
+|---|---|
+| 월말 순현금흐름 전망, 진행월 예상 수입 | 유지한다. 로직을 점검하고 2.6에 맞춘다(`T064`). |
+| 재량 지출 속도(`discretionary-velocity`) | 없앤다. 진행월은 같은 경과일 누적 비교로 대신한다. |
+| `true_spendable` | 없앤다. 잔여와 조정 가능 지출로 대신한다. |
+| 비상금 개월 수(`liquidity-health`) | 재무상태로 옮긴다. "현금성 자산 ÷ 월 보호 지급"으로 식을 드러내고 미정 비중을 함께 보인다. |
+| `purchase-gate-candidates`, `spending-review-candidates`, 이상 지출 | 지출 분석의 "사후 검토할 거래" 목록 하나로 합친다. |
+| 카테고리 전월 대비, 3개월 평균 대비, 거래처 기준선 등 분석별 기준선 | 2.4의 비교 계약 하나로 바꾼다. |
+| 할부 `missed` 상태 | 3.1의 관측 여부 표시로 바꾼다. |
+| SQL 뷰와 Python의 이중 집계 | 2.7의 단일 계산 경로로 바꾼다. |
+
+---
+
+## 4. 개선 계획
+
+### 4.1 순서
+
+1. **정의 통일** (`T054`–`T057`, `T064`): 숫자의 뜻을 하나로 만들고 전망 로직을 점검한다. 화면보다 먼저다.
+2. **화면과 읽기 표면 재편** (`T058`–`T060`): 통일된 정의 위에서 화면을 묶는다.
+3. **새 분석** (`T061`–`T062`): 지금 없는 분석을 더한다.
+
+`T063`은 위 순서와 독립이며 언제든 먼저 할 수 있다.
+
+| 작업 | 제목 | 우선순위 | 선행 |
+|---|---|---|---|
+| `T054` | 지표 계약과 단일 계산 경로 | P0 | — |
+| `T055` | 거래 금액 보존 결함 수정 | P0 | — |
+| `T056` | 성격 축 정리: 지급 형태와 조정 가능성 | P0 | `T054` |
+| `T057` | 비교 계약과 진행월 처리 | P0 | `T054` |
+| `T058` | 화면 재편 1: 월 결산과 지출 분석 | P1 | `T054`, `T056`, `T057` |
+| `T059` | 화면 재편 2: 약정 현황과 작업대 | P1 | `T056` |
+| `T060` | 에이전트 읽기 표면 재편 | P1 | `T054`, `T056`, `T057` |
+| `T061` | 재무상태와 순자산 대조 | P2 | `T054` |
+| `T062` | 연간성 지출의 월 환산과 한도 대비 | P2 | `T057`, `T058` |
+| `T063` | 배포 경계와 비밀 관리 | P0 | — |
+| `T064` | 월말 순현금흐름 전망 로직 점검 | P0 | `T054`. 고치는 단계는 `T056`, `T057` 뒤 |
+
+### 4.2 작업 항목
+
+#### 작업 T054. 지표 계약과 단일 계산 경로
+- 우선순위: P0
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: 없음
+- 범위: 2.1, 2.3, 2.7의 구현. 월 흐름표와 지출 큐브 뷰를 만들고, 기존 분석 API가 이 뷰를 읽게 바꾼다. 응답에 정의 이름, 포함 범위, 기준일을 싣는다. 이 단계에서는 성격 축을 기존 컬럼에서 읽는다.
+- 하지 않을 것: 화면 재편, 분류 컬럼 변경, 기존 엔드포인트 제거.
+- 완료 기준:
+  - [ ] 월 흐름표의 줄 합계가 유효 거래 전체와 일치함을 테스트로 보장한다.
+  - [ ] 같은 이름의 값이 API, 뷰, 화면에서 같다. 대출 포함 여부처럼 범위가 다른 값은 이름이 다르다.
+  - [ ] 부호, 환불, 이체, 대출 포함 여부가 응답과 문서에 명시된다.
+  - [ ] Python에서 같은 실적값을 다시 집계하는 경로가 남아 있지 않다.
+  - [ ] 거래 기준일과 스냅샷 기준일, 마감월과 진행월 구분이 응답에 들어간다.
+- 검증: PostgreSQL에서 뷰와 API의 값 일치 테스트, 환불·이체·대출 연결·삭제·병합이 섞인 합성 자료, 기존 화면의 값 변화 목록을 PR에 기록.
+
+#### 작업 T055. 거래 금액 보존 결함 수정
+- 우선순위: P0
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: 없음. `T054`와 같은 뷰를 건드리므로 순서를 맞춘다.
+- 범위: 2026-10-22 감사에서 재현한 금액 보존 결함. 대체된 거래의 이중 집계, 부분·다중 환불 배분 뒤 순액 불일치, 월 경계 환불의 귀속, 통화 혼합 합산.
+- 하지 않을 것: 운영 자료의 자동 복구, 환율 서비스 연동.
+- 완료 기준:
+  - [ ] 착수 시 각 결함을 현재 main에서 다시 재현해 유효한 것만 남긴다.
+  - [ ] 대체 승인 전후 유효 합계가 한 번만 반영된다.
+  - [ ] 환불 배분 전후 전체 순액이 보존된다.
+  - [ ] 월 경계 환불의 귀속 규칙이 2.3과 일치하고 문서화된다.
+  - [ ] 원화 외 통화가 섞여 합산되지 않는다.
+- 검증: 합성 불변식 테스트. 운영 자료에 영향이 있으면 영향 범위만 보고하고 복구는 별도 승인.
+- 참고: 감사 보고서는 병합되지 않은 PR #26(`docs/product-readiness-audit-2026-10-22`)에 있다.
+
+#### 작업 T056. 성격 축 정리: 지급 형태와 조정 가능성
+- 우선순위: P0
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T054`
+- 범위: 2.2의 구현. 조정 가능성 컬럼과 카테고리 기본값, 약정(정기 지급) 등록과 주기 속성, 기존 분류 값의 이행, 흐름표와 큐브가 새 축을 읽도록 전환.
+- 하지 않을 것: 자동 분류나 분류 추천, 카테고리 체계 변경, 기존 컬럼의 즉시 삭제.
+- 완료 기준:
+  - [ ] 기존 값에서 새 값으로 가는 대응표를 사용자가 확인한 뒤 이행한다.
+  - [ ] 사람이 직접 지정한 기존 분류가 이행 뒤에도 보존된다. 이행 전후 건수와 금액을 대조한다.
+  - [ ] 조정 가능성은 거래 지정, 약정 지정, 카테고리 기본값 순으로 적용되고 어느 것이 적용됐는지 조회할 수 있다.
+  - [ ] 대출·할부 연결 거래는 약정이자 보호로 집계된다.
+  - [ ] 거래 단위 반복 여부 입력과 그 작업 큐가 없어진다.
+  - [ ] 수입과 이체는 `해당 없음`으로 처리되어 분류 큐와 미정 비중에 들어가지 않는다.
+  - [ ] 테이블 구조 변경이 가져오기 계약과, 테이블 구조에 의존하는 외부 되돌리기 보조 도구에 주는 영향을 착수 전에 확인하고 PR에 기록한다.
+  - [ ] 기존 컬럼은 새 축이 검증될 때까지 읽기 전용으로 남고, 삭제는 별도 승인으로 한다.
+- 검증: 이행 dry-run 보고(건수·금액 대조), 재가져오기 뒤 분류 보존, 우선순위 조합 테스트.
+
+#### 작업 T057. 비교 계약과 진행월 처리
+- 우선순위: P0
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T054`
+- 범위: 2.4의 구현. 기준 기간 기본값과 기준 구간 시작일 설정, 진행월의 같은 경과일 비교, 자료 없는 달 구분, 금액 기여 정렬. 분석별로 흩어진 기준선을 이 계약으로 교체.
+- 하지 않을 것: 새 전망의 추가, 이상치 점수의 새 알고리즘.
+- 완료 기준:
+  - [ ] 모든 비교 응답이 대상 기간, 기준 기간, 부분월 처리 방식을 밝힌다.
+  - [ ] 진행월에 비율 지표와 전월 전체 대비 증감이 나오지 않는다.
+  - [ ] 기준 구간 시작일을 바꾸면 모든 비교가 같이 바뀐다.
+  - [ ] 변화 목록이 금액 기여 순이고 전체·보호·조정 가능으로 나눠 볼 수 있다.
+  - [ ] 내부 알고리즘 문자열 대신 한국어 선택지와 설명이 설정 화면에 나온다.
+- 검증: 부분월, 자료 공백월, 연 1회 지출, 기준 구간 변경 시나리오의 합성 자료 테스트.
+
+#### 작업 T058. 화면 재편 1: 월 결산과 지출 분석
+- 우선순위: P1
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T054`, `T056`, `T057`
+- 범위: 3.1의 월 결산과 지출 분석. 홈, 지출 6개 탭, 신호 화면을 대체. 금액에서 산식과 거래로 내려가는 공통 패널. 사후 검토할 거래 목록.
+- 하지 않을 것: 월말 순현금흐름 전망 외의 전망 표시, 새 차트 라이브러리 도입.
+- 완료 기준:
+  - [ ] 첫 화면이 가장 최근 마감월의 월 흐름표다.
+  - [ ] 진행월 영역이 관측 누적과 월말 전망의 가정을 나눠 보이고, 전망이 관측 수치를 가리지 않는다.
+  - [ ] 흐름표의 모든 금액에서 산식, 포함·제외, 거래 목록이 열린다.
+  - [ ] 지출 분석에서 카테고리를 유지한 거래처 분해와 조정 가능 지출만의 변화를 볼 수 있다.
+  - [ ] 기존 할부 회차를 뺀 새 구매 금액을 볼 수 있다.
+  - [ ] 대체된 route는 새 화면으로 redirect된다.
+  - [ ] 데스크톱과 모바일(320, 390, 768px)에서 화면을 확인한다.
+- 검증: Vitest, 빈 상태·오류·자료 있음 상태, 실제 브라우저 확인.
+
+#### 작업 T059. 화면 재편 2: 약정 현황과 작업대
+- 우선순위: P1
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T056`
+- 범위: 3.1의 약정 현황과 작업대. 대출, 할부, 정기 지급을 한 목록으로. 분류 큐의 금액 영향 순 정렬, 카테고리 기본값 편집, 정기 지급 등록, 자료 현황. 가져오기 화면에서 위험 작업 분리.
+- 하지 않을 것: 약정 후보의 자동 등록, 예정 지급 입력, 전면 디자인 교체.
+- 완료 기준:
+  - [ ] 약정 목록에서 월 부담, 주기, 남은 회차와 종료 시점, 조정 가능성을 볼 수 있다.
+  - [ ] 각 약정의 관측 여부가 세 상태로 표시되고 연결 미확인 거래로 이동할 수 있다.
+  - [ ] 분류 큐가 금액 영향 순이고, 한 번의 조작으로 같은 카테고리나 거래처에 기본값을 줄 수 있다.
+  - [ ] 분석 화면에서 거래를 고치고 돌아오면 필터와 위치가 유지된다.
+  - [ ] 키보드만으로 거래 편집을 열고 저장하고 닫을 수 있다.
+- 검증: Vitest, 대량 큐 성능, 키보드 조작, 모바일 확인.
+
+#### 작업 T060. 에이전트 읽기 표면 재편
+- 우선순위: P1
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T054`, `T056`, `T057`
+- 범위: 3.2의 구현과 3.3의 API 정리. 새 읽기 응답 추가, 형식 통일, 상태 구분, 기존 엔드포인트의 제거 일정.
+- 하지 않을 것: 쓰기 표면 확대, 사용 중인 엔드포인트의 예고 없는 제거.
+- 완료 기준:
+  - [ ] Q1–Q6을 원시 거래 전체 수집 없이 답할 수 있음을 시나리오로 확인한다.
+  - [ ] 새 응답이 화면과 같은 뷰를 읽는다.
+  - [ ] 소비하는 에이전트의 읽기 도구가 기대하는 응답 구조(구역 이름, 목록 형식, 종류별 기준일)를 목록으로 만들고, 새 응답이 그것을 대체할 수 있는지 확인한다.
+  - [ ] 기존 엔드포인트는 소비하는 에이전트 쪽 전환이 끝난 뒤, 사용자 승인으로 제거한다.
+  - [ ] 가져오기 계약에 속한 엔드포인트는 손대지 않는다.
+  - [ ] `docs/backend-api-ssot.md`와 `docs/agents/canonical-read-surface-reference.md`가 새 계약으로 갱신된다.
+- 검증: 계약 테스트, 응답 크기 측정, 인증 실패·빈 자료·오래된 자료 시나리오.
+
+#### 작업 T061. 재무상태와 순자산 대조
+- 우선순위: P2
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T054`
+- 범위: 2.5의 구현과 3.1의 재무상태 화면. 스냅샷 구간별 대조, 투자·저축 이체와 그 밖의 계좌 간 이동 구분, 비상금 개월 수의 이전.
+- 하지 않을 것: 추정 항목으로 차이를 채우는 일, 이자·원금 추정 분리, 실시간 시세 반영.
+- 완료 기준:
+  - [ ] 거래 집계 구간이 스냅샷 구간과 일치한다.
+  - [ ] 내부 이체의 양쪽이 이중으로 세어지지 않는다.
+  - [ ] 설명되지 않은 차이가 항목으로 표시된다.
+  - [ ] 이체를 구분하는 데 필요한 분류는 사람이 작업대에서 한다.
+- 검증: 대출 잔액 변화, 투자 이체, 평가 변동이 섞인 합성 스냅샷 쌍.
+
+#### 작업 T062. 연간성 지출의 월 환산과 한도 대비
+- 우선순위: P2
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: `T057`, `T058`
+- 범위: 해마다 한두 번 나가는 지출의 12개월 환산 표시. 사용자가 정한 한도와 마감월 실적의 대비.
+- 하지 않을 것: 한도 추천, 적립 계획 자동 생성, 진행월의 남은 예산 전망.
+- 완료 기준:
+  - [ ] 월 환산액은 참고 표시이고 총지급에 다시 더해지지 않는다.
+  - [ ] 한도는 사용자가 직접 정하며 카테고리나 조정 가능성 단위로 둘 수 있다.
+  - [ ] 한도 대비는 마감월에만 계산한다.
+- 검증: 연 1회 지출, 한도 미설정, 한도 변경 이력 시나리오.
+
+#### 작업 T063. 배포 경계와 비밀 관리
+- 우선순위: P0
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: 없음
+- 범위: 정적 자산과 런타임 설정에 쓰기 비밀을 두지 않기, 익명 금융 읽기 차단, API·DB 포트의 사설망 바인딩, 비밀 교체 절차.
+- 하지 않을 것: 다중 사용자 구조 도입, 새 공개 노출.
+- 완료 기준:
+  - [ ] 브라우저에 내려가는 파일에 전역 쓰기 비밀이 없다.
+  - [ ] 인증 없는 금융 자료 읽기와 쓰기가 거절된다.
+  - [ ] 기본 배포 설정에서 API와 DB가 외부 인터페이스에 바인딩되지 않는다.
+  - [ ] 비밀 교체 절차가 문서화되고 한 번 실행해 확인한다.
+- 검증: 격리 환경에서 익명·인증 요청 테스트, 정적 파일 비밀 검색, 포트 바인딩 확인.
+
+#### 작업 T064. 월말 순현금흐름 전망 로직 점검
+- 우선순위: P0
+- 상태: 계획됨 — 구현 승인 전
+- 선행 조건: 점검은 `T054`. 고치는 단계는 `T056`, `T057` 뒤.
+- 범위: 2.6. 현재 전망의 각 구성(예상 정기 수입, 반복 지급, 대출 상환, 할부 회차, 남은 기간의 변동 지출)이 어떤 기록과 기준선에서 나오는지 조사하고, 지난 마감월로 되짚어 오차를 잰 뒤, 결과에 따라 고친다.
+- 하지 않을 것: 월말을 넘어서는 전망, 예정 지급의 수동 입력, 점검 결과 없이 알고리즘부터 바꾸는 일.
+- 완료 기준:
+  - [ ] 전망의 구성별 산식, 입력 기간, 제외 규칙을 한 문서로 정리한다.
+  - [ ] 지난 마감월 각각에 대해 월중 여러 시점의 전망과 실제 마감값을 비교한 오차를 구성별로 낸다. 개인 금융 값은 PR에 싣지 않고 비율과 건수로만 보고한다.
+  - [ ] 급여일 전처럼 정기 수입이 아직 관측되지 않은 시점에도 전망이 정기 수입을 반영하는지 확인한다.
+  - [ ] 이미 관측된 약정 회차나 대출 상환이 남은 기간 가정에 다시 더해지지 않는지 확인한다.
+  - [ ] 조정 가능성이나 약정 연결이 비어 있을 때 전망이 어느 방향으로 치우치는지 확인하고, 응답에 그 비중을 싣는다.
+  - [ ] 점검 결과에 따른 수정 범위를 사용자에게 제안하고 승인받은 것만 고친다.
+  - [ ] 고친 뒤 같은 되짚기 측정으로 오차 변화를 확인한다.
+- 검증: 합성 자료(월말 급여, 연 1회 지출, 중도 해지된 약정, 할부 종료월), 지난 마감월 되짚기.
+
+---
 
 ## 참고 문서
 
 - 저장소 운영 규칙: `AGENTS.md`와 가장 가까운 하위 `AGENTS.md`
-- 사용자용 로드맵/상태: `Implentation-plan.md`
-- 과거 실행 계획의 범위·결정·결과: 이 문서의 `실행 계획 기록` 절
-- live API contract: `docs/backend-api-ssot.md`
-- 상세 API/metric reference: `docs/backend-api-and-metrics-reference.md`
-- agent canonical 값 사전: `docs/agents/canonical-read-surface-reference.md`
-- frontend contract: `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`, `docs/frontend-reimplementation-wireframe-functional-requirements.md`
-- 아카이브된 백로그 출처: `docs/archive/planning/2026-06-10-planned-work.md`
-- 아카이브된 advisor 실행 출처: `docs/archive/planning/2026-06-10-advisor-canonical-gap-priority.md`
-- advisor gap 분석 근거: `docs/advisor-canonical-gap-analysis.md`
-- 유지할 기능 로드맵 출처: 사용자가 제공한 `my_ledge_kept_features.md`, 2026-06-25에 이 문서로 반영됨
-
----
-
-## 현재 사용자용 작업 큐
-
-1. `T012`/`T012A`와 GitHub Issue 기반 agent contract 작업 `T023`-`T029`는 `codex/ready-plan-tasks`에서 구현되었고, GitHub Issues `#7`-`#14`는 완료로 닫혔다.
-2. frontend remake PR `#15`가 `main`에 반영되었다. frontend 의존 settings/smoke 작업은 이제 remake line 보류가 아니라 새 `/data/*`와 `/data/settings` 화면을 기준으로 진행할 수 있다.
-3. P0 거래 신뢰도 기반 작업 `T030`-`T032`는 완료되었다: source lifecycle, upload preview/reconciliation, shared settlement groups 순서로 구현했다.
-4. `T015`-`T018`과 `T016A`는 source 선택/reconciliation 실행 흐름으로 유지한다. 유지할 기능 로드맵의 세부사항은 별도 asset-source task ID로 중복하지 않고 기존 작업에 반영했다. `T019`는 2026-09-24 공식 API 계약 확인과 사용자 키 사용 승인 후 구현을 진행한다.
-5. `T033`-`T039`와 `T041`은 거래 신뢰도 작업 이후의 automation, forecasting, decision-support, 제한적 tagging 백로그로 유지한다. 각 항목은 선행 조건이 충족된 뒤 집중된 PR로 시작한다.
-6. 대출 후보 `review_status` 및 할부 제안 API는 문서 계약이 SSOT/레퍼런스에 반영되었고, `Implentation-plan.md` 사용자-visible task graph에는 기존 MoM 회귀 커버리지 유지 상태만 보강 노트로 반영되었다.
-7. 2026-09-24 Live 점검 후 `T042` 대출 연결 거래 월상환 추정 복구와 `T043` 진행월 예상 수입·월말 순현금흐름을 추가했다. 후속 사용자 승인으로 구현·검증·Live 배포와 기존 데이터 복구를 완료했고 PR #22로 main에 병합했다. 반복 지출 전망 후속 보완까지 배포된 애플리케이션 커밋은 `e3809b2`다. `T043`은 `T037` 전체 90일 calendar보다 좁은 월간 선행 작업이다.
-
----
-
-## 기능 단위별 목차
-
-| 기능 단위 | 관련 Task | 현재 보기 |
-|---|---|---|
-| 운영/로드맵 문서 전환 | `T000` | 완료 |
-| 계산 정확성과 agent read contract 기반 | `T001`-`T012A` | 완료 중심 |
-| 사용자 화면과 운영 확인 | `T013`-`T014` | 완료 |
-| 자산/투자 source와 provenance | `T015`-`T019` | `T015`-`T018`/`T016A` 선택 기반 구현, `T019` 수동 API 연동 진행 |
-| 보류/제품 구조 | `T020`-`T022` | 보류/완료/계획 |
-| issue 기반 agent contract 보강 | `T023`-`T029` | 완료 |
-| 다음 P0 거래 신뢰도 | `T030`-`T032` | 완료 |
-| 거래 신뢰 이후 자동화와 의사결정 지원 | `T033`-`T039`, `T041` | 계획됨 |
-| Live 추정값 정합성과 진행월 예측 | `T042`-`T043` | 완료; Live 배포·API 복구·검증, PR #22 병합 |
-
----
-
-## 로드맵 항목
-
-### 업로드 되돌리기
-
-#### 작업 T053. BankSalad 업로드의 원자적 되돌리기
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: 기존 업로드·검토 적용 경로와 PostgreSQL
-- 범위: 세 업로드 경로의 적용 직전 원장 상태를 같은 트랜잭션에 보존하고 최신 업로드를 웹에서 확인 후 복원한다.
-- 하지 않을 것: 업로드·검토 이력 삭제, 독립 수집 데이터 변경, 배포.
-- 완료 기준:
-  - [x] 공통 잠금, 보존 기간 및 지문 검사로 원자적 복원과 이후 변경의 명시적 확인을 보장한다.
-  - [x] 모든 적용 경로와 범위 완전성, 실패·동시성·보존 정책을 실제 PostgreSQL에서 검증한다.
-  - [x] 웹 확인 흐름과 관련 쿼리 무효화, API 계약 문서 및 전체 검증을 완료한다.
-- 검증: 격리 PostgreSQL에서 세 가져오기 경로의 지점 생성·정확 복원, 반영 후 변경 시 명시 확인, 최신만 허용, 실패 시 지점 없음, 보존 기간, 가져오기와 되돌리기 직렬화를 확인했다. 백엔드 전체·프런트엔드 전체 검사 통과.
-
-### 승인된 원본 검토 적용
-
-#### 작업 T052. BankSalad 비교 검토안의 명시 승인·정확한 일회 적용
-- 우선순위: P0
-- 상태: 진행 중
-- 선행 조건: 기존 upload preview/source lifecycle, 사용자의 이 범위 구현·main 병합·Live 배포 명시 승인
-- 범위: 기존 safe apply를 유지하는 별도 review API와 durable operation, 전체 유형/후보/스냅샷 효과 표시, 정확한 결정·소유자·원본·버전 바인딩, stale 검증과 atomic once apply/readback, finance helper/cron 연동.
-- 하지 않을 것: 실제 미결 항목 승인 대체, 자동 삭제·병합, 직접 DB 금융 데이터 수정, 별도 daemon/watch/job, unrelated UI/서비스 변경.
-- 완료 기준:
-  - [x] 전체 8개 change class와 source occurrence별 결정·후보가 정확히 표시 가능한 API를 제공한다.
-  - [x] 엄격한 확인·전체 결정·파일/계정 지문/날짜/버전 digest를 적용 경계에서 검사하고 stale/부분 오류를 원자 거절한다.
-  - [x] ID 유지 update와 missing keep로 사용자 필드·연결을 보존하며 스냅샷 효과를 승인 범위에 포함한다.
-  - [x] 실제 PostgreSQL 동시성·ordinary writer 잠금·추가 migration과 real HTTP 합성 write-path 검증을 통과한다.
-  - [x] finance의 실제 importer/cron/helper entrypoint를 합성 데이터·native human admission으로 검증하고 응답 유실/재진입에서 중복 반영·알림을 막는다.
-  - [ ] exact-head CI, main 병합 및 scoped Live backend 배포·현재 검토 안내 저장을 확인한다. 실제 장부 결정은 별도 사람 승인까지 보류한다.
-- 참고: [정확한 검토 적용 계약](docs/agent-integration/reviewed-imports.md). 공유 API key는 기술 호출자 인증이지 사람 승인 증명/profile ACL이 아니다. private evidence는 공개 저장소에 넣지 않는다. T044–T051 감사 문서 작업과 분리된 명시 승인 기능이며 상세 검증/배포 identity는 PR에 기록한다.
-- API 후속 검증(t_6bfb8b4e): 이미 병합된 기능을 재사용하고 내부 binding_digest에 전체 parsed rows/raw·normalized snapshot 의미를 결속한다. 동일 bytes의 해석 drift와 저장 계획 변조를 적용 전 차단하며 새 승인 locator 내부 공백은 거절하되 기존 applied exact replay는 보존한다. public schema/route/migration 및 기존 safe apply는 변경하지 않는다. 구버전 prepared 계획은 새 prepare/display/별도 사람 승인 전 적용할 수 없다. 격리 합성·실제 PostgreSQL 시험 근거는 후속 인계에 기록하며 전체 Bot Chat 표시/전달/사람 승인 및 신규 배포는 이 API 단계의 완료로 주장하지 않는다.
-- 릴리스 보완: 기존 `snapshot_effects` 안에 5표의 typed before/latest/incoming/after·원본 근거·메타정보·대출 최종효과를 결속했다. 같은 공유 규칙으로 읽기 전용 projection과 실제 저장을 계산하고 revision/apply에서 재검사한다. API/안전 경로/대출 회귀 154 PASS·외부 표본 부재 3 SKIP, 설치 helper 78 PASS, 실제 helper/FastAPI/PostgreSQL populated 결합 11 PASS 및 기존 Bot Chat 긴 합성 목록의 exact settled 전달을 검증했다. 구 prepared 재진입은 별도 새 전체 표시·승인 전 반영하지 않으며 uncertain operation/과거 알림은 재생하지 않는다. 최종 CI·병합·배포 identity는 릴리스 PR에 기록한다.
-
-### 운영/로드맵 문서 전환
-
-#### 작업 T000. 사용자용 roadmap/status 문서 전환
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: 없음
-- 완료 기준:
-  - [x] `docs/planned-work.md`의 미구현 backlog가 사용자용 roadmap/status에 반영되어 있다.
-  - [x] `docs/superpowers/plans/2026-06-10-advisor-canonical-gap-priority.md`의 advisor canonical 우선순위가 사용자용 roadmap/status에 반영되어 있다.
-  - [x] 각 작업 단위가 `Priority`, `Status`, `Depends on`, `Acceptance Criteria`, `Notes` 형식으로 tracking 가능하다.
-  - [x] 기존 계획 문서가 `docs/archive/planning/` 아래로 이동되어 historical reference가 된다.
-  - [x] 프로젝트 시작점 문서가 `Implentation-plan.md`를 사용자용 roadmap/status 문서로 안내한다.
-- 참고:
-  - `docs/STATUS.md`는 2026-06-26부터 deprecated pointer로 전환되었고, mainline handoff/status snapshot 역할을 더 이상 맡지 않는다.
-  - archived 문서는 참고용이며 사용자용 current roadmap 판단은 이 문서를 우선한다.
-  - 작업 범위와 완료 기준은 이 문서의 `T###` 항목에 둔다.
-
-### 계산 정확성과 agent read contract 기반
-
-#### 작업 T001. 음수 자산 중복 차감 제거와 canonical 순자산 정합성 보정
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] `vw_asset_snapshot_canonical.asset_total`이 `side='asset' AND amount >= 0`인 row만 합산한다.
-  - [x] `negative_asset_excluded_total` 컬럼이 추가되어 음수 자산 row 제외분을 노출한다.
-  - [x] 마이너스통장처럼 자산 측 음수 row와 부채 측 대출 row가 동시에 존재해도 순자산이 이중 차감되지 않는다.
-  - [x] `GET /api/v1/analytics/net-worth-breakdown`와 `GET /api/v1/analytics/liquidity-health`의 Python 계산 경로가 canonical view 규칙과 일치한다.
-  - [x] 제외가 발생한 snapshot에서는 응답 `assumptions`에 `negative_asset_rows_excluded` 또는 동등한 명시적 근거가 포함된다.
-  - [x] backend regression test가 음수 자산 + 대응 부채 fixture를 포함한다.
-  - [x] `docs/agents/canonical-read-surface-reference.md`와 `docs/backend-api-and-metrics-reference.md`에 새 컬럼과 해석 규칙이 문서화된다.
-  - [x] 실데이터 workbook 기준 마이너스통장 중복 차감 해소분이 재현된다.
-- 참고:
-  - parser/raw table은 수정하지 않고 canonical/service 레이어에서 정규화한다.
-  - `T002`와 같은 migration/PR로 묶어도 된다.
-
-#### 작업 T002. 현금성 자산 fallback 휴리스틱 보강
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] `vw_asset_snapshot_canonical.cash_equivalent_total`이 음수 자산 row를 제외한다.
-  - [x] category fallback이 `자유입출금`, `전자금융`을 포함한다.
-  - [x] product fallback이 `통장`을 포함하되 `청약`, `저금통`, `보험`, `연금`, `부동산` 같은 locked/non-cash 후보를 현금성으로 오분류하지 않는다.
-  - [x] `backend/app/services/assets_service.py:_is_cash_equivalent_asset`가 DB view와 같은 판단 순서를 사용한다.
-  - [x] 사용자 명시값 `is_cash_equivalent`와 `liquidity_tier`는 기존처럼 휴리스틱보다 우선한다.
-  - [x] 실데이터 workbook 기준 `cash_equivalent_total`이 약 `310099`로 재현된다.
-  - [x] `emergency_fund_months`가 이 사용자의 실제 비상금 부족 상태를 왜곡 없이 보여준다.
-  - [x] backend regression test가 자유입출금/통장/음수 asset row 사례를 포함한다.
-- 참고:
-  - `T001`과 같은 canonical view 재생성 migration에서 처리하는 것이 좋다.
-
-#### 작업 T003. 대출 금리/잔액/만기 surface 문서 승격
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] `docs/agents/canonical-read-surface-reference.md`의 surface 선택표에 `대출 구조/금리/만기 -> GET /api/v1/loans/summary`가 추가된다.
-  - [x] `/loans/summary`의 `interest_rate`, `balance`, `principal`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `maturity_date` 의미가 값 사전에 문서화된다.
-  - [x] `docs/agent-integration/integration-guide.md`에서 대출 상환 부담과 대출 구조를 구분해 안내한다.
-  - [x] `docs/backend-api-and-metrics-reference.md`에 금리는 snapshot 시점 값이며 상환 우선순위 판단은 agent 해석이라는 주의가 포함된다.
-  - [x] 코드 변경 없이 문서 diff만 발생한다.
-- 참고:
-  - `GET /api/v1/loans/summary` 자체는 이미 live다.
-
-#### 작업 T004. 뱅샐현황 고객정보 프로필 스냅샷 수집과 API 추가
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T001, T002
-- 완료 기준:
-  - [x] `backend/app/parsers/snapshots.py`가 `1.고객정보` 섹션에서 `gender`, `age`, `credit_score_kcb`를 파싱한다.
-  - [x] 이름과 이메일은 저장하지 않는다.
-  - [x] `1.고객정보` 섹션이 없는 workbook은 upload가 실패하지 않고 profile을 skip한다.
-  - [x] `user_profile_snapshots` 테이블이 Alembic migration으로 추가된다.
-  - [x] 같은 `snapshot_date` 재업로드 시 profile snapshot은 기존 snapshot replace 패턴을 따른다.
-  - [x] `GET /api/v1/profile`이 최신 `gender`, `age`, `credit_score_kcb`, `snapshot_date`, `credit_score_history[]`를 반환한다.
-  - [x] `GET /api/v1/schema`에서 신규 테이블 또는 API surface가 확인 가능하다.
-  - [x] 실데이터 workbook 기준 `{gender: '남', age: 39, credit_score_kcb: 996}`가 반환된다.
-  - [x] parser, upload service, API regression test가 추가된다.
-  - [x] `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`가 갱신된다.
-- 참고:
-  - 나이와 신용점수는 advisor 판단 재료이며 My Ledge가 리파이낸싱 같은 조언을 생성하지 않는다.
-
-#### 작업 T005. 대출 계좌 canonical view `vw_loan_account_canonical` 추가
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T003
-- 완료 기준:
-  - [x] Alembic migration이 `vw_loan_account_canonical`을 생성한다.
-  - [x] 최신 loan snapshot 선별은 lender/product_name 또는 안정 계좌 identity 기준으로 중복 snapshot 합산을 방지한다.
-  - [x] view가 `loan_account_id`, `display_name`, `lender`, `product_name`, `loan_kind`, `snapshot_date`, `principal`, `balance`, `interest_rate`, `monthly_payment`, `monthly_payment_source`, `repayment_method`, `start_date`, `maturity_date`, `estimated_monthly_interest`를 제공한다.
-  - [x] `loan_accounts`에 아직 매핑되지 않은 snapshot loan도 누락되지 않는다.
-  - [x] `estimated_monthly_interest`는 `round(balance * interest_rate / 100 / 12)`로 계산하고 null 입력에서는 null을 반환한다.
-  - [x] `backend/app/services/canonical_views.py`와 `/schema`에 view가 등록된다.
-  - [x] 실데이터 workbook 기준 4.03% 주담대 월 이자 추정치가 약 `573000`이고 5.85% 신용대출이 최고 금리 row로 식별된다.
-  - [x] schema/view regression test가 추가된다.
-  - [x] agent/reference 문서에 단리 근사값이며 실제 상환 스케줄이 아니라는 해석 주의가 포함된다.
-- 참고:
-  - dashboard API 포함은 1차 scope가 아니다. readonly SQL/canonical view와 문서 등재를 먼저 완료한다.
-
-#### 작업 T006. canonical dashboard 데이터 커버리지와 부분월 표시 추가
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T001, T002
-- 완료 기준:
-  - [x] `GET /api/v1/canonical-views/dashboard` 최상위 응답에 `data_coverage.first_transaction_date`와 `data_coverage.last_transaction_date`가 추가된다.
-  - [x] `monthly_cashflow[]` row에 `is_complete_month`가 추가된다.
-  - [x] `true_spendable_monthly[]` row에 `is_complete_month`가 추가된다.
-  - [x] dashboard가 노출하는 fixed cost 계열 월별 row에도 동일한 complete-month 판단이 적용된다.
-  - [x] complete-month 판단은 해당 월의 시작과 끝이 전체 거래 관측 범위 안에 모두 포함되는지로 계산한다.
-  - [x] 진행월의 `income_basis='estimated'`와 `is_complete_month=false`가 서로 독립적으로 표현된다.
-  - [x] 실데이터 workbook 기준 `2025-05=false`, `2025-06`부터 `2026-04=true`, `2026-05=false`가 재현된다.
-  - [x] API schema와 API regression test가 추가된다.
-  - [x] agent 문서에 `is_complete_month=false` 월을 baseline/추세 계산에서 제외하거나 부분월임을 명시하라는 규칙이 추가된다.
-- 참고:
-  - DB view 원본값은 바꾸지 않고 dashboard API enrichment로 처리한다.
-
-#### 작업 T007. 월별 수입 구성 canonical view 추가
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T006
-- 완료 기준:
-  - [x] Alembic migration이 `vw_income_monthly_by_category`를 생성한다.
-  - [x] source는 `vw_transactions_effective`이고 `type='수입'`만 포함한다.
-  - [x] view는 `period`, `effective_category_major`, `income_total`, `transaction_count`를 제공한다.
-  - [x] category별 월 수입 합계가 같은 월의 `vw_monthly_cashflow.income_total`과 일치한다.
-  - [x] 실데이터 workbook 기준 2026-02의 급여, 보험금, 기타 수입이 분리된다.
-  - [x] `backend/app/services/canonical_views.py`와 `/schema`에 view가 등록된다.
-  - [x] schema/view regression test가 추가된다.
-  - [x] agent/reference 문서에 `급여` 카테고리는 BankSalad 또는 사용자 수정 effective category 기준이며 정기성 판단은 월별 분해를 보고 agent가 해석한다고 명시된다.
-- 참고:
-  - 첫 PR에서는 `vw_monthly_cashflow`에 `salary_income_total`/`non_salary_income_total`을 추가하지 않는다. 명확한 consumer가 생기면 별도 task로 승격한다.
-
-#### 작업 T008. 보험 계약 snapshot 수집과 summary API
-- 우선순위: P1.5
-- 상태: 완료
-- 선행 조건: T004
-- 완료 기준:
-  - [x] parser가 `4.보험현황`에서 보험사, 보험명, 계약상태, 총납입금, 계약일자, 만기일자를 파싱한다.
-  - [x] `총계` row는 저장하지 않는다.
-  - [x] `insurance_contracts` 테이블이 Alembic migration으로 추가된다.
-  - [x] 같은 snapshot date 재업로드 시 보험 계약 snapshot은 replace 패턴을 따른다.
-  - [x] `GET /api/v1/insurance/summary`가 최신 계약 목록을 반환한다.
-  - [x] `monthly_premium_estimate`는 최근 마감월 보험 카테고리 지출 기반으로 계산하고 assumptions에 근거를 남긴다.
-  - [x] 계약-거래 매핑은 제공하지 않는다고 문서화된다.
-  - [x] parser, upload, API regression test가 추가된다.
-  - [x] agent/reference 문서가 갱신된다.
-- 참고:
-  - 보험료 적정성 판단은 agent layer 해석이다. My Ledge는 계약과 추정 보험료 재료만 제공한다.
-
-#### 작업 T009. BankSalad 현금흐름현황 기반 가져오기 정합성 강화
-- 우선순위: P1.5
-- 상태: 완료
-- 선행 조건: T001, T002
-- 완료 기준:
-  - [x] `2.현금흐름현황`의 월별/카테고리별 집계 값을 저장하지 않고 검증 기준값으로만 읽는다.
-  - [x] upload 또는 parity 검증 스크립트가 BankSalad 현금흐름현황과 DB 거래 재집계를 비교한다.
-  - [x] 불일치는 upload 차단이 아니라 경고 리포트로 남긴다.
-  - [x] 리포트에는 비교 월, category, BankSalad 값, DB 값, 차이가 포함된다.
-  - [x] 수식 셀을 값으로 오독하지 않도록 숫자 값 영역만 사용한다.
-  - [x] prepared workbook으로 parity smoke를 재현한다.
-  - [x] 실패 시 upload log 또는 검증 리포트가 어느 row 범위를 비교했는지 남긴다.
-- 참고:
-  - 기존 import parity hardening 항목을 실데이터 기반 외부 기준값 검증으로 구체화한 task다.
-
-#### 작업 T010. 최소 재무 목표 설정
-- 우선순위: P1.5
-- 상태: 완료
-- 선행 조건: T001, T002, T006
-- 완료 기준:
-  - [x] `GET /api/v1/settings/analytics` 응답에 `financial_targets` 섹션이 추가된다.
-  - [x] `PATCH /api/v1/settings/analytics`가 `emergency_fund_target_months`, `savings_rate_target`, `debt_strategy_preference`를 저장한다.
-  - [x] `emergency_fund_target_months` 기본값은 3이다.
-  - [x] `savings_rate_target` 기본값은 null이다.
-  - [x] `debt_strategy_preference`는 `avalanche`, `snowball`, null만 허용한다.
-  - [x] `/analytics/liquidity-health`가 `emergency_fund_target_months`와 `target_progress_ratio`를 echo한다.
-  - [x] agent가 목표를 제안할 수는 있지만 저장은 사용자 명시 의사로만 한다는 규칙이 문서화된다.
-  - [x] API settings regression test가 추가된다.
-- 참고:
-  - budgets/goals 전체 기능은 P2에 남긴다. 이 task는 advisor가 목표 대비 현재 위치를 말할 수 있게 하는 최소 선행분이다.
-
-#### 작업 T011. 투자 집중도 보조 필드
-- 우선순위: P1.5
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] `GET /api/v1/investments/summary` items에 `pct_of_investment_total`이 추가된다.
-  - [x] 계산식은 `market_value / totals.market_value`이며 분모가 0이면 null을 반환한다.
-  - [x] 성과/수익률/매수매도 attribution은 추가하지 않는다.
-  - [x] agent/reference 문서에 snapshot 구성 비율일 뿐 투자 성과 분석이 아니라고 명시한다.
-  - [x] API regression test가 추가된다.
-  - [x] 실데이터 workbook 기준 알파벳 단일종목 집중도가 투자자산의 약 56%로 노출된다.
-- 참고:
-  - 투자 성과/상품 배분 분석은 증권사 API 이후로 미룬다는 기존 결정은 유지한다.
-
-#### 작업 T012. 구매 검토 흐름과 결제취소 상계
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] `/operations/purchase-review` 또는 insights 내 review-focused section의 위치가 결정된다.
-  - [x] purchase gate 후보에 review memo를 저장할 수 있다.
-  - [x] 후보 review 상태에 `reviewed_at`이 기록된다.
-  - [x] 후보 재노출 제어를 위한 `cooldown_until` 또는 동등한 상태가 저장된다.
-  - [x] snooze/dismiss 후보의 재노출 규칙이 backend와 frontend에서 일관된다.
-  - [x] 기존 purchase gate 후보 생성 규칙은 고정비, 필수지출, 대출연결, 필요성 미분류 거래를 제외한다.
-  - [x] `type='지출'`이면서 양수인 결제취소/환불 row를 같은 거래처/결제수단/통화/절대금액과 근접 날짜 기준으로 원결제 row와 상계한다.
-  - [x] 완전 취소되어 순액이 0인 원결제는 purchase gate 후보에서 제외한다.
-  - [x] 부분 환불은 원결제 금액이 아니라 환불 차감 후 순지출 기준으로 `min_candidate_amount`, `large_purchase_threshold`, spike 신호를 판단한다.
-  - [x] 자동 매칭 신뢰도가 낮은 환불 의심 케이스는 임의 제외하지 않고 `assumptions` 또는 reason/signal로 드러낸다.
-  - [x] 관련 API contract 문서와 frontend wireframe 문서가 갱신된다.
-  - [x] backend API test가 `-150000` 원결제와 `+150000` 결제취소 fixture를 포함하고, 완전 취소 건이 후보에서 제외됨을 검증한다.
-  - [x] backend API test가 부분 환불 fixture를 포함하고, 순지출 기준 후보 판단을 검증한다.
-  - [x] frontend interaction test 또는 browser smoke가 포함된다.
-- 참고:
-  - My Ledge는 구매 허용/금지 판단을 하지 않고 review queue와 근거만 제공한다.
-  - 결제취소/환불 상계는 구매 허용/금지 판단이 아니라 관측 거래가 실제 구매로 남았는지 정규화하는 전처리다.
-  - `codex/ready-plan-tasks`에서 insights 내 review-focused section을 유지하고, `7일 숨김`/`닫기` action과 refund netting을 함께 구현했다.
-
-#### 작업 T012A. 구매 검토 이름, alias, 시점, future-friction contract 정리
-- Parent Task: T012
-- GitHub Issue: [#14](https://github.com/Gyu-bot/my_ledge/issues/14)
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] 현재 `/analytics/purchase-gate-candidates` docs가 already-posted transaction 기반 post-transaction spending review 후보임을 명시한다.
-  - [x] 기존 `/analytics/purchase-gate-candidates` endpoint는 호환성을 위해 유지된다.
-  - [x] preferred alias `/analytics/spending-review-candidates` 또는 동등한 이름이 추가된다.
-  - [x] docs에 `purchase-gate-candidates`는 legacy naming이고 preferred name은 spending review/future-friction candidate surface임이 명시된다.
-  - [x] response에 `review_timing='post_transaction'` 또는 동등한 timing field가 포함된다.
-  - [x] response에 `candidate_purpose='future_friction_rule_candidate'` 또는 동등한 purpose field가 포함된다.
-  - [x] response가 `future_friction_suggestion` 또는 동등한 구조로 condition/action을 표현할 수 있다.
-  - [x] frontend/API client가 새 alias를 사용할지 기존 endpoint를 유지할지 결정하고, 사용자-facing label은 post-transaction review 의미로 정리한다.
-  - [x] 진짜 pre-purchase gate는 planned purchase intent를 입력으로 받는 별도 issue/surface로 분리하고, 이 task 범위에서는 구현하지 않는다.
-  - [x] backend API regression test가 legacy endpoint와 preferred alias가 같은 후보 contract를 반환함을 검증한다.
-  - [x] 관련 API contract 문서와 agent 문서가 갱신된다.
-- 참고:
-  - 이 subtask는 기존 기능 제거가 아니라 현재 기능의 시점을 이름과 contract에 정확히 반영하는 작업이다.
-  - `T012`의 review placement/snooze/refund netting과 같은 branch에서 처리했고, GitHub Issue #14는 completed로 close했다.
-
-### 사용자 화면과 운영 확인
-
-#### 작업 T013. 설정 화면
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T010
-- 완료 기준:
-  - [x] `/data/settings` route와 shell navigation entry가 새 frontend IA에 존재한다.
-  - [x] `GET/PATCH /api/v1/settings/analytics` frontend API client와 React Query hook이 존재한다.
-  - [x] `financial_targets` 재무 목표 편집 UI가 현재 backend effective/default 값을 조회하고 저장한다.
-  - [x] 비상금 목표 개월, 저축률 목표, 부채 상환 전략을 편집할 수 있다.
-  - [x] 기존 재무 목표 편집 UI와 같은 화면에서 분석 파라미터 섹션별 default/saved/effective 값을 표시한다.
-  - [x] 분석 파라미터 섹션별 편집 UI를 제공한다.
-  - [x] purchase gate threshold/settings를 편집할 수 있다.
-  - [x] discretionary velocity threshold/settings를 편집할 수 있다.
-  - [x] recurring dry-run 기본값/settings를 편집할 수 있다.
-  - [x] asset-liability settings 중 `asset_liability_health` 월상환 추정/유동성 설정을 편집할 수 있다.
-  - [x] reset-to-default, export/import는 일반 사용자 UI에 노출하지 않고 별도 개발/리뷰 도구로 남긴다.
-  - [x] `SettingsPage` vitest가 effective 값 초기화와 저축률 `% -> ratio` PATCH 변환을 검증한다.
-  - [x] 분석 파라미터 편집까지 포함한 frontend typecheck/lint/test가 통과한다.
-  - [x] Codex 인앱 브라우저로 `/data/settings` 전체 설정 편집 흐름을 확인한다.
-  - [x] frontend docs가 `/data/settings` route와 `settings/analytics` + `financial_targets` 설정 surface를 설명한다.
-- 참고:
-  - 상태 근거: PR #20에서 분석 파라미터 full edit UI, default/saved/effective help popover, focused tests, typecheck/lint, browser DOM QA를 완료했다.
-  - 다음 구현: `T014`는 사용자 직접 확인 항목으로 완료 처리한다. 기능 구현을 이어갈 때는 `T015` observation/source foundation부터 시작하고, `/data/settings` source-priority UI(`T016A`)는 `T016` backend/API contract가 안정된 뒤 붙인다.
-
-#### 작업 T014. 운영 배포본 스모크 확인
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] 운영/로컬 배포본 화면 확인은 사용자가 직접 수행하는 확인 항목으로 분리한다.
-  - [x] 이 항목은 에이전트 구현 scope에 포함하지 않는다.
-  - [x] 확인 중 발견된 문제는 별도 fix task 또는 issue로 분리한다.
-- 참고:
-  - 상태 근거: 사용자가 `T014`는 직접 확인하면 되는 비구현 항목이라고 정리했으므로 로드맵에서 완료 처리한다.
-  - 다음 구현 대상은 `T015` observation/source foundation이다.
-
-### 자산/투자 source와 provenance
-
-> 2026-09-24 사용자가 토스증권을 첫 대상으로 소스 선택 기반 구현을 승인했다. 승인된 실행 기준은 `실행 계획 기록` 절에 있다. 뱅샐의 동일 기준일 순자산/과거 스냅샷과 최신 소스 조합 추정액을 구분하며, 소스별 평가·조회·수집 시각과 계좌 매핑/예수금 범위를 보존한다. 시점 사이의 계좌 간 이체는 혼합 기준일 합계에 중복 반영될 수 있으므로 한계를 명시한다. 실제 토스 API 수집기(`T019`)와 운영 배포는 이번 승인 범위에 포함하지 않는다.
-> 구현 결과: PR #23에서 투자 기본/계좌 그룹별 소스 선택, 미리보기·명시 적용, 원본 관측 보존, 완전한 계좌 수집 선택, 혼합 기준일 추정값/설정 화면을 구현·검증해 main에 병합했다. 전체 T015–T018의 일반 lifecycle 편집, 세부 필드 우선순위와 확장 provenance는 아직 완료 처리하지 않는다. 범위별 결과와 남은 경계는 `실행 계획 기록` 절을 본다.
-
-#### 작업 T015. 자산/투자 raw observation lifecycle와 selected canonical view
-- 우선순위: P2
-- 상태: 바로 시작 가능
-- 선행 조건: T001, T002, T005
-- 완료 기준:
-  - [ ] raw observation은 일반 운영에서 hard delete하지 않는다.
-  - [ ] 기존 BankSalad snapshot row와 외부 source row를 보존할 별도 observation table 또는 observation metadata layer가 도입된다.
-  - [ ] asset/investment/loan observation에 lifecycle status 또는 별도 metadata table이 도입된다.
-  - [ ] status는 최소 `active`, `hidden_by_user`, `matured_candidate`, `matured_confirmed`, `replaced`, `duplicate`, `conflict`, `stale`, `needs_review`를 표현한다.
-  - [ ] `hidden_by_user`, `matured_confirmed`, `replaced`, `duplicate` observation은 raw audit에서는 보이지만 기본 canonical totals에서는 제외된다.
-  - [ ] `stale`은 freshness 신호일 뿐 자동 제외 근거가 아니다.
-  - [ ] 만기 지난 대출/자산은 자동 숨김이 아니라 review candidate로 제안된다.
-  - [ ] selected canonical view가 raw observation 중 canonical total/API에 반영될 row를 명시한다.
-  - [ ] BankSalad snapshot 기반 `asset_snapshots`, `loans`, `insurance_contracts`, `user_profile_snapshots`의 기존 동작은 유지하고, 투자 source 확장은 investment observation/canonical layer에서만 시작한다.
-  - [ ] Toss Securities source는 투자 증권계좌 holdings 전용 source로 모델링하고, 일반 자산/대출/보험/profile snapshot을 대체하지 않는다.
-  - [ ] BankSalad 투자 row 중 Toss Securities 계좌 항목은 우선 `broker` 정규화값으로 식별하되, 실제 workbook 값 확인 후 `broker + product_name` 또는 별도 account/source mapping으로 보강할 수 있다.
-  - [ ] investment canonical identity는 `canonical_investment_key = normalized_account_key + normalized_instrument_key` 구조로 정의한다.
-  - [ ] `normalized_account_key`는 Toss API 계좌 식별자 또는 BankSalad `broker` 정규화값을 사용하고, `normalized_instrument_key`는 Toss API 종목 식별자/ISIN/ticker를 우선하되 BankSalad-only row는 정규화된 `product_name`으로 fallback한다.
-  - [ ] source별 sync run을 구분하고, run 상태는 최소 `pending`, `success_complete`, `success_partial`, `failed`, `rejected`를 표현한다.
-  - [ ] complete sync만 canonical source 후보가 되며, partial/failed sync는 raw audit과 운영 상태에는 남기되 전체 계좌 대체에는 사용하지 않는다.
-  - [ ] Toss Securities holdings는 종목별 조각이 아니라 계좌 전체 complete sync run을 선택 단위로 다루며, 수량/가격/평가액/통화/환율은 같은 source run에서 함께 선택된다.
-  - [ ] preview API가 canonical total 영향, latest asset screen 영향, raw audit 보존 여부를 보여준다.
-  - [ ] apply API가 explicit confirmation 후 감사 가능한 이유와 actor/source를 남긴다.
-  - [ ] 관련 contract docs와 agent coverage 해석 규칙이 갱신된다.
-- 참고:
-  - 상태 근거: 바로 착수 가능한 backend/domain 설계 작업이다. Toss 공식 API 문서가 없어도 BankSalad observation 보존, investment canonical identity, selected view foundation은 진행할 수 있다.
-  - 이 task부터는 더 큰 asset reconciliation 구조 변경이므로 advisor canonical P0/P1 완료 후 착수한다.
-  - Toss Securities holdings replacement는 기존 snapshot table을 덮어쓰지 않고 selected canonical investment view에서 표현한다.
-  - 샘플 workbook `tmp/2025-05-21~2026-05-21.xlsx`에서는 `broker='토스증권'` 6건과 `broker='카카오페이 증권'` 3건이 분리되며, `알파벳`/`테슬라`류 종목명이 증권사 간 중복될 수 있어 product name 단독 identity는 금지한다.
-
-#### 작업 T016. 사용자 제어 source 우선순위 profile
-- 우선순위: P2
-- 상태: 바로 시작 가능
-- 선행 조건: T015
-- 완료 기준:
-  - [ ] source priority profile 저장 모델이 추가된다.
-  - [ ] global default priority를 표현할 수 있다.
-  - [ ] asset class별 priority를 표현할 수 있다.
-  - [ ] canonical asset key별 override를 표현할 수 있다.
-  - [ ] field별 override를 표현할 수 있다.
-  - [ ] 1차 profile은 `investment` asset class에서 `banksalad_snapshot`과 `toss_securities_api` 중 선택할 수 있다.
-  - [ ] `toss_securities_api` 선택 시 Toss Securities 계좌에 속한 투자 항목은 BankSalad 투자 row와 field merge하지 않고 Toss API observation 값으로 완전 대체된다.
-  - [ ] Toss Securities 계좌가 아닌 투자 항목과 모든 비투자 snapshot surface는 BankSalad latest snapshot을 계속 사용한다.
-  - [ ] source 선택 단위는 기본값으로 `asset_class=investment` override를 제공하고, 필요 시 `canonical_asset_key` override로 특정 계좌/상품만 예외 처리할 수 있게 한다.
-  - [ ] priority 변경은 historical observation을 수정하지 않고 future resolution rule로 기록된다.
-  - [ ] `GET/PATCH /api/v1/assets/source-priority` 또는 동등한 API가 제공된다.
-  - [ ] API 응답은 현재 적용 중인 effective priority와 override source를 설명한다.
-  - [ ] source priority override key는 product name 단독이 아니라 `canonical_investment_key` 또는 `normalized_account_key` 단위로 저장된다.
-  - [ ] account-level source override는 해당 계좌에만 적용되고, 적용 전 순자산 영향 preview를 제공한다.
-  - [ ] frontend 설정 화면 없이도 API/agent contract로 source conflict를 해석할 수 있다.
-  - [ ] agent는 source conflict를 임의로 해결하지 않고 저장된 priority와 conflict reason을 설명한다.
-  - [ ] 관련 backend/API contract docs와 agent coverage 해석 규칙이 갱신된다.
-- 참고:
-  - 상태 근거: 구현 순서는 `T015` 이후지만 같은 source-selection backend batch로 바로 착수 가능하므로 바로 시작 가능하다.
-  - 증권사/부동산/수동 valuation 같은 외부 source adapter와 연결될 기반이다.
-  - 추천 기본값은 global default `banksalad_snapshot`, Toss 연동 시 investment override `toss_securities_api`, 예외 처리는 canonical asset key override 이다.
-  - field-level override는 장기 확장 포인트로 남기되, Toss Securities 1차 구현은 계좌 holdings row 단위 replacement로 제한한다.
-  - 이 task는 backend/API/policy scope만 다룬다. frontend settings surface는 `T016A`에서 별도로 추적한다.
-
-#### 작업 T016A. source 우선순위 설정 화면
-- Parent Task: T016
-- 우선순위: P2
-- 상태: 바로 시작 가능
-- 선행 조건: T016
-- 완료 기준:
-  - [ ] 새 frontend의 `/data/settings` 또는 동등한 설정 surface에 자산 source 선택 섹션이 추가된다.
-  - [ ] global default priority를 조회/저장할 수 있다.
-  - [ ] asset class별 priority를 조회/저장할 수 있다.
-  - [ ] canonical asset key별 override를 조회/저장할 수 있다.
-  - [ ] field별 override를 조회/저장할 수 있다.
-  - [ ] Toss Securities 연동을 켜면 "토스 증권계좌 투자 항목만 Toss API 값으로 대체하고, 나머지 자산/대출/보험/profile은 BankSalad snapshot을 유지한다"는 범위가 화면에서 명확하다.
-  - [ ] 설정 화면은 BankSalad snapshot 기준일과 Toss API 조회/평가 기준일이 서로 다를 수 있음을 표시한다.
-  - [ ] configured source, effective source, selected run, 마지막 성공 동기화, 마지막 동기화 시도, 평가 기준시각, stale 여부, fallback 이유를 표시한다.
-  - [ ] priority 변경이 historical observation을 수정하지 않는 future resolution rule임을 화면 copy와 interaction으로 명확히 한다.
-  - [ ] frontend typecheck/lint/test가 통과한다.
-  - [ ] Codex 인앱 브라우저 또는 동등한 visual QA로 기본 조회/저장 흐름을 확인한다.
-  - [ ] frontend docs가 새 settings surface 기준으로 갱신된다.
-- 참고:
-  - 상태 근거: frontend remake가 완료됐고 `/data/settings` surface가 있으므로 바로 시작 가능하다. 저장/조회 API는 `T016`과 같은 sequence에서 맞춘다.
-  - Frontend remake가 main에 반영되었으므로 더 이상 remake branch에 막혀 있지 않다.
-
-#### 작업 T017. 결정론적 field-level resolution과 conflict queue
-- 우선순위: P2
-- 상태: 바로 시작 가능
-- 선행 조건: T015, T016
-- 완료 기준:
-  - [ ] 동일 자산 identity의 여러 source를 `canonical_asset_key + as_of_date` 또는 source별 `valuation_as_of`로 묶는다.
-  - [ ] 투자 identity는 `canonical_investment_key`를 사용하며, 같은 `product_name`이라도 계좌/broker가 다르면 다른 holding으로 유지한다.
-  - [ ] lifecycle에서 제외된 observation은 resolution 후보에서 제외된다.
-  - [ ] field별 source priority가 적용된다.
-  - [ ] tie-break 순서가 `user_confirmed`, source priority, fresher observed_at, source_confidence, ingested_at, stable row id 순으로 고정된다.
-  - [ ] Toss Securities가 선택된 투자 계좌 holdings는 field-level merge 없이 Toss observation row를 selected source로 고른다.
-  - [ ] Toss 계좌는 account snapshot 단위로 선택하며, BankSalad와 Toss API 값을 이중 합산하지 않는다.
-  - [ ] 최신 Toss sync가 실패하면 마지막 successful complete run을 유지하고 stale/refresh failure를 표시한다.
-  - [ ] Toss successful complete run이 한 번도 없을 때만 BankSalad fallback을 허용한다.
-  - [ ] BankSalad snapshot 기준일과 Toss API 조회일이 다른 mixed-date canonical total은 각 row/source별 basis metadata를 함께 노출한다.
-  - [ ] tolerance를 넘는 같은 우선순위 source 충돌은 conflict queue에 남긴다.
-  - [ ] conflict queue가 최소 `missing_in_toss`, `missing_in_banksalad`, `value_difference`, `quantity_difference`, `currency_mismatch`, `account_mapping_ambiguous`, `instrument_mapping_ambiguous`, `stale_comparison`, `possible_duplicate`를 표현한다.
-  - [ ] 차이가 있다는 이유만으로 raw 데이터를 자동 수정하지 않고, BankSalad 재업로드도 저장된 Toss source 설정을 덮어쓰지 않는다.
-  - [ ] reconciliation preview가 field별 선택 이유와 conflict 정보를 보여준다.
-  - [ ] apply는 explicit confirmation 후 replacement chain 또는 lifecycle decision을 저장한다.
-  - [ ] `POST /api/v1/data/reset`은 대량 초기화용으로 남고 reconciliation API와 분리된다.
-- 참고:
-  - 상태 근거: 구현 순서는 `T015`/`T016` 이후지만 같은 reconciliation backend batch로 바로 착수 가능하므로 바로 시작 가능하다.
-  - row 단위 merge보다 field 단위 resolution을 우선한다.
-
-#### 작업 T018. provenance와 agent coverage surface
-- 우선순위: P2
-- 상태: 바로 시작 가능
-- 선행 조건: T015, T016, T017
-- 완료 기준:
-  - [ ] source provenance 필드 또는 별도 table이 `source_system`, `source_run_id`, `source_file_fingerprint`, `source_row_hash`, `canonical_asset_key`, `source_confidence`, `observed_at`, `valuation_as_of`를 표현한다.
-  - [ ] `source_system`은 최소 `banksalad_snapshot`과 `toss_securities_api`를 구분한다.
-  - [ ] BankSalad source는 `snapshot_date`, Toss source는 API 조회 시각(`observed_at`)과 평가 기준일(`valuation_as_of` 또는 API 제공 동등값)을 분리해서 저장한다.
-  - [ ] 사용자 확인/정책 적용 필드가 `is_user_confirmed`, `priority_policy_id`, `decision_reason`, `reviewed_by`, `reviewed_at`를 표현한다.
-  - [ ] supersession/selection 필드가 `superseded_by_observation_id`, `selected_source_system`, `selected_observation_id`를 표현한다.
-  - [ ] freshness/conflict 필드가 `freshness_sla_days`, `stale_days`, `conflict_status`를 표현한다.
-  - [ ] `GET /api/v1/analytics/asset-source-coverage` 또는 `vw_asset_source_coverage`가 제공된다.
-  - [ ] canonical asset coverage가 raw/selected/excluded/confirmed/derived/hidden/conflicted/stale 비율을 설명할 수 있다.
-  - [ ] coverage 지표가 raw observation 수, selected observation 수, Toss selected 비율, BankSalad selected 비율, unmapped holding 수, conflict 수, stale account 수, incomplete sync 수를 포함한다.
-  - [ ] investment summary와 net-worth 관련 API는 selected source, source basis date, mixed-source 여부를 agent가 설명할 수 있게 metadata를 제공한다.
-  - [ ] agent 문서가 source가 섞인 자산 값을 확정 총액처럼 말하지 않도록 안내한다.
-- 참고:
-  - 상태 근거: 구현 순서는 `T015`-`T017` 이후지만 같은 coverage/contract hardening batch로 바로 착수 가능하므로 바로 시작 가능하다.
-  - coverage surface는 외부 agent가 raw DB를 직접 재해석하지 않도록 하는 read contract다.
-
-#### 작업 T019. Toss Securities holdings valuation 연동
-- 우선순위: P2
-- 상태: 수동 수집·소스 반영 로컬 구현 및 모의 검증 완료, 실제 키 검증/운영 연결 대기
-- 선행 조건: T015, T016, T017, T018, 공식 Toss Securities API 문서
-- 완료 기준:
-  - [ ] 사용자가 제공한 Toss Securities 공식 문서 기준으로 인증, 조회 가능 holdings 필드, rate limit, 저장 가능 범위가 확인된다.
-  - [x] Toss Securities adapter는 증권계좌 투자 holdings만 조회하고 일반 자산/대출/보험/profile은 조회하거나 대체하지 않는다.
-  - [x] Toss API 조회 결과는 별도 investment observation table에 저장하며, 기존 BankSalad `investments` snapshot row를 직접 수정하지 않는다.
-  - [x] 저장 필드는 최소 broker/source account identity, product identifier/name, quantity 또는 units, cost basis if available, market value, currency, observed_at, valuation_as_of, source_run_id를 포함한다.
-  - [x] BankSalad snapshot의 Toss Securities 투자 row를 식별할 수 있는 mapping/normalization이 제공된다.
-  - [ ] Toss API 종목 식별자와 BankSalad `product_name`을 연결하는 mapping은 자동 정규화 preview 후 저장하며, 불확실한 이름 매칭은 canonical replacement에 바로 사용하지 않는다.
-  - [x] source priority가 `toss_securities_api`일 때 selected canonical investment view가 Toss Securities 계좌 내 항목을 Toss API observation 값으로 완전 대체한다.
-  - [x] source priority가 `banksalad_snapshot`이거나 Toss observation이 없으면 기존 BankSalad 투자 snapshot 값으로 fallback한다.
-  - [x] `GET /api/v1/investments/summary` 또는 새 canonical investment summary API가 selected source 기준 items/totals와 source metadata를 반환한다.
-  - [ ] broker/product type/product 기준 allocation ratio와 previous-snapshot delta가 제공된다.
-  - [x] 인증정보와 API 오류 detail은 로그에 민감정보를 남기지 않는다.
-  - [x] 일부 조회 실패는 `success_partial`로 기록하고 canonical source 후보에서 제외한다.
-  - [x] 수동 새로고침, pagination, rate limit, 원화/외화 평가액, 환율 기준 저장을 처리한다.
-  - [x] 기존 확정 순자산(`동일 BankSalad snapshot_date의 총자산 - 총부채`)과 현재 추정 순자산(`최신 BankSalad 비토스 자산 + selected Toss 투자자산 - 최신 BankSalad 부채`)을 구분한다.
-  - [ ] API 연동 이후 일별 대표 투자 observation을 보존하되, API 연동 이전 history를 임의로 복원하지 않는다.
-  - [x] 실패한 sync가 직전 정상 observation을 덮지 않으며, 장기 stale 상태도 자동 source 전환이 아니라 경고와 수동 전환 선택지로 표현한다.
-  - [x] 1차 범위는 보유 평가액과 투자 구성 비중만이며, 매수/매도/입출금 cashflow 기반 수익률과 성과 attribution은 구현하지 않는다.
-  - [x] BankSalad snapshot만으로 투자 성과/수익률을 해석하지 않는다.
-- 참고:
-  - 구현: PR #23. 검증 결과는 `실행 계획 기록` 절을 본다. 소스는 국내·미국 주식만, 평가시각은 observation_proxy. 1Password CLI 인증이 완료되지 않아 실제 계좌 조회 성공은 아직 미확인.
-  - 2026-09-24 공식 OpenAPI v1.2.17 확인 및 기존 1Password 개인 볼트 키 사용 승인. 수동 API 수집과 명시적 단일계좌 매핑을 구현한다.
-  - 공급자가 평가시각/예수금을 제공하지 않으므로 조회시각 대용과 별도 환율 기준을 보존한다. 보존기간/샌드박스는 문서에서 확인되지 않았다.
-  - 투자 성과 분석은 holdings valuation source가 안정화된 뒤 별도 task로 승격한다.
-
-### 보류/제품 구조
-
-#### 작업 T020. 이체 추적
-- 우선순위: P2
-- 상태: 보류
-- 선행 조건: T006
-- 완료 기준:
-  - [ ] `GET /api/v1/transfers/summary` contract가 정의된다.
-  - [ ] `GET /api/v1/transfers` contract가 정의된다.
-  - [ ] `GET /api/v1/transfers/unmatched` contract가 정의된다.
-  - [ ] raw `type='이체'` 기반 자산 이동을 먼저 다룬다.
-  - [ ] 대출 원금/이자 상환처럼 `type='지출'`에 섞인 debt movement는 raw type을 바꾸지 않고 파생 레이어로만 처리한다.
-  - [ ] ambiguous row는 review candidate로 남긴다.
-  - [ ] 구현 전까지는 `vw_monthly_cashflow.transfer_activity_total`만 보조 값으로 유지한다.
-- 참고:
-  - 사용자 가치가 낮아 뒤쪽 P2로 미룬 기존 결정을 유지한다.
-
-#### 작업 T021. frontend 재구축
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: 없음
-- 완료 기준:
-  - [x] 현재 main의 live 기능, route, API contract를 기준으로 remake 범위를 다시 정의한다.
-  - [x] legacy component cleanup이나 단기 theme polish를 독립 목표로 삼지 않는다.
-  - [x] 새 frontend IA/wireframe이 current route별 기능을 누락하지 않는다.
-  - [x] frontend docs가 remake 기준으로 갱신된다.
-  - [x] 구현 시 브라우저 visual QA를 포함한다.
-- 참고:
-  - frontend remake PR `#15` / commit `0b71238`에서 완료됐다.
-  - 새 IA는 `/`, `/spending`, `/net-worth`, `/signals`, `/data/*` route를 기준으로 한다.
-
-#### 작업 T022. 장기 제품 확장 큐
-- 우선순위: P2
-- 상태: 계획됨
-- 선행 조건: T001-T014
-- 완료 기준:
-  - [ ] 수입 분석을 별도 top-level route로 둘지, 현재 새 IA처럼 홈(`/`) 또는 신호(`/signals`) 안의 section으로 유지할지 결정한다.
-  - [ ] 별도 수입 route를 만들 경우 현재 legacy `/income -> /` redirect와 충돌하지 않도록 새 route/redirect 정책을 먼저 정의한다.
-  - [ ] 자동 백업 크론을 별도 infra task로 쪼갤지 결정한다.
-  - [ ] 도메인 연결과 HTTPS를 별도 deployment task로 쪼갤지 결정한다.
-  - [ ] budgets/goals/advice preferences 전체 기능을 `T010` 이후 별도 product task로 쪼갠다.
-  - [ ] health score/personalized coaching은 My Ledge core 책임 경계와 충돌하지 않는 consumer/advisor layer 작업으로 분리한다.
-- 참고:
-  - 이 task는 queue placeholder가 아니라 분해 대상 tracking task다. 착수 전 더 작은 executable task로 재작성한다.
-  - 현재 frontend route 기준으로 `/income`은 별도 페이지가 아니라 `/` redirect다.
-
-### issue 기반 agent contract 보강
-
-#### 작업 T023. 진행월 cashflow 대표 지표와 savings rate basis 명시
-- GitHub Issue: [#7](https://github.com/Gyu-bot/my_ledge/issues/7)
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T006
-- 완료 기준:
-  - [x] 진행월이고 `is_complete_month=false`이며 observed income이 closed-month baseline 대비 낮은 경우, `savings_rate`가 raw observed income 기준 대표 지표로 오해되도록 노출되지 않는다.
-  - [x] `CanonicalMonthlyCashflowItem` 또는 동등한 dashboard response surface에 `savings_rate_basis` 또는 equivalent field가 추가된다.
-  - [x] observed cashflow 지표와 estimated cashflow/spendable 보조 지표가 응답에서 명확히 분리된다.
-  - [x] `income_total` / `observed_income_total`은 관측값이고 `estimated_income_total`은 진행월 해석 보조값이라는 규칙이 API/agent 문서에 명시된다.
-  - [x] agent-facing 해석은 `income_basis`, `is_complete_month`, `savings_rate_basis` 또는 equivalent field를 함께 확인해야 한다고 문서화된다.
-  - [x] backend regression test가 incomplete current month, low observed income, derivable estimated income fixture를 포함한다.
-  - [x] 테스트는 representative `savings_rate`가 null 또는 explicitly estimated/insufficient basis로 표시됨을 검증한다.
-  - [x] frontend가 해당 field를 소비한다면 진행월 cashflow/savings rate 표시가 observed-only completed-month 지표처럼 보이지 않도록 회귀 테스트 또는 browser smoke가 포함된다.
-- 참고:
-  - `income_basis`, `estimated_income_total`, `excluded_income_periods`, `estimated_spendable_before_variable_spend`, `estimated_remaining_after_variable_spend`는 이미 live다.
-  - 이 task의 핵심은 estimated income enrichment 존재 여부가 아니라 대표 cashflow 지표의 해석 기준이다.
-  - `T024`와 closed-month income baseline utility를 공유할 수 있지만, 이 task는 dashboard/true-spendable contract 문제로 별도 완료 기준을 가진다.
-
-#### 작업 T024. liquidity-health 기본 호출 closed-month 입력값 산출
-- GitHub Issue: [#8](https://github.com/Gyu-bot/my_ledge/issues/8)
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T006, T010
-- 완료 기준:
-  - [x] `GET /api/v1/analytics/liquidity-health`를 query param 없이 호출해도 closed-month 기반 `monthly_income`이 채워진다.
-  - [x] `GET /api/v1/analytics/liquidity-health`를 query param 없이 호출해도 closed-month 기반 `monthly_required_spend`가 채워진다.
-  - [x] 기본 `monthly_income`은 진행월을 제외한 최근 완료월 수입의 median 또는 outlier-trimmed average로 산출된다.
-  - [x] 기본 `monthly_required_spend`는 진행월을 제외한 최근 완료월의 필수지출과 대출상환을 합친 값으로 산출된다.
-  - [x] 계산 가능할 때 `emergency_fund_months`, `debt_payment_ratio`, `target_progress_ratio`가 null로 남지 않는다.
-  - [x] 응답에 `monthly_income_source`, `monthly_required_spend_source`, `derived_from_periods`, `manual_input_overrides` 또는 동등한 source/basis metadata가 포함된다.
-  - [x] query param으로 `monthly_income` 또는 `monthly_required_spend`가 전달되면 manual value가 derived value보다 우선한다.
-  - [x] 진행월 partial income은 기본 derivation에서 제외되거나 별도 basis로 명시된다.
-  - [x] backend API/service regression test가 derived default와 manual override를 모두 검증한다.
-  - [x] `docs/backend-api-ssot.md`, `docs/backend-api-and-metrics-reference.md`, `docs/agents/canonical-read-surface-reference.md`에 기본값 source와 confidence 해석 규칙이 문서화된다.
-- 참고:
-  - 이 endpoint는 agent가 단독 호출할 가능성이 크므로, 기본 호출만으로 유동성/부채부담 판단 재료가 충분해야 한다.
-  - `T023`과 baseline 계산 유틸을 공유할 수 있으나, `T024`는 liquidity-health input derivation과 source metadata에 집중한다.
-
-#### 작업 T025. 대출 계좌 active/historical scope metadata
-- GitHub Issue: [#9](https://github.com/Gyu-bot/my_ledge/issues/9)
-- 우선순위: P1.5
-- 상태: 완료
-- 선행 조건: T005
-- 완료 기준:
-  - [x] `/loan-accounts` row에 `as_of_date`, `latest_snapshot_date`, `is_active`, `is_matured`, `is_stale`, `lifecycle_status` 또는 동등한 상태 필드가 추가된다.
-  - [x] `as_of_date`는 명시 입력이 없으면 최신 전체 loan snapshot date를 사용한다.
-  - [x] 계좌별 `latest_snapshot_date < as_of_date`이면 `is_stale=true`로 표시하고, 최신 전체 스냅샷에서 해당 대출이 사라졌음을 response만 보고 알 수 있다.
-  - [x] `loan_maturity_date < as_of_date`이면 해당 row는 schedule 기준으로 `is_matured=true`로 표시한다.
-  - [x] `loan_maturity_date < as_of_date`이고 `latest_snapshot_date < as_of_date`이면 `lifecycle_status='matured_and_missing_from_latest_snapshot'` 또는 동등한 상태로 표시한다.
-  - [x] `loan_maturity_date < as_of_date`이고 계좌별 마지막 관측 snapshot의 `balance` 또는 `principal`이 0보다 크면 `lifecycle_status='past_maturity_with_last_observed_balance'` 또는 동등한 review 상태로 표시한다.
-  - [x] 계좌별 마지막 관측 `balance`/`principal`은 현재 잔액처럼 해석되지 않도록 `last_observed_balance`, `last_observed_principal`, `last_observed_snapshot_date` 또는 동등한 필드/문서로 구분한다.
-  - [x] `loan_maturity_date < as_of_date`이고 계좌별 마지막 관측 잔액이 없거나 0이면 `is_active=false`, `excluded_from_summary_reason='matured_loan'` 또는 동등한 reason으로 표시한다.
-  - [x] `/loan-accounts` row에 `included_in_active_summary` 또는 `excluded_from_summary`가 추가되어 `/loans/summary` 포함 여부를 설명한다.
-  - [x] `/loan-accounts` row에 `excluded_from_summary_reason`이 추가되어 만기/비활성/historical row가 active summary에서 빠지는 이유를 response만 보고 알 수 있다.
-  - [x] `/loans/summary` 응답에 `summary_scope='active_loans_only'` 또는 동등한 scope metadata가 추가된다.
-  - [x] `loan_account_id=null`인 row가 정상적으로 존재할 수 있는 경우 `stable_identity_status`와 `stable_identity_reason` 또는 동등한 설명 필드가 제공된다.
-  - [x] 만기일이 지난 종료 대출 fixture, 만기일이 지났고 최신 전체 스냅샷에서 사라졌지만 과거 잔액이 남은 fixture, active loan fixture가 `/loan-accounts`와 `/loans/summary`에서 서로 다른 scope/status로 표현됨을 backend test가 검증한다.
-  - [x] docs에 `/loan-accounts`는 historical/canonical inventory 성격이고 `/loans/summary`는 active/current loan summary라는 차이가 명시된다.
-- 참고:
-  - 현재 구현상 `/loans/summary`는 요청 snapshot 또는 최신 전체 `loans.snapshot_date`에 존재하는 row만 보여주므로, 최신 스냅샷에서 사라진 대출은 active summary에서 빠질 수 있다.
-  - 현재 구현상 `/loan-accounts`와 `vw_loan_account_canonical`은 계좌별 마지막 관측 loan snapshot을 사용할 수 있으므로, active summary에서 빠진 historical loan도 inventory surface에는 남을 수 있다.
-  - 실제 제품 기준에서 만기일은 scheduled maturity 신호다. 만기일이 지났고 최신 전체 스냅샷에서 사라졌다면 종료 가능성이 높지만, 과거 관측 잔액은 현재 잔액이 아니라 last observed value로 명시해야 한다.
-  - `loan_maturity_date`가 null이면 만기 여부는 확정하지 않고 latest snapshot freshness, balance, active summary 포함 규칙을 함께 노출한다.
-  - 만기 지난 계좌가 active summary에서 제외되는 동작 자체는 정상이다. historical/canonical inventory에서는 숨기지 않고 active summary 제외 이유와 stale/maturity 상태를 함께 보여준다.
-  - 큰 asset lifecycle 구조 변경인 `T015` 전에 최소 metadata 보강으로 처리할 수 있다.
-
-#### 작업 T026. sparse baseline 지출 이상치 표현 안정화
-- GitHub Issue: [#10](https://github.com/Gyu-bot/my_ledge/issues/10)
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] baseline이 매우 작거나 sparse한 경우 user-facing `reason`에 과도한 percentage가 그대로 들어가지 않는다.
-  - [x] raw 계산값은 유지하되 display/reason field와 분리된다. 예: `delta_pct_raw`, `delta_pct_display`, `delta_display_capped`.
-  - [x] response item에 `anomaly_mode` 또는 `baseline_quality`가 포함된다.
-  - [x] `sparse_baseline_spike` 또는 `insufficient_baseline` 같은 mode가 baseline floor 또는 baseline month count 기준으로 결정된다.
-  - [x] 기존 `delta_pct` 호환성 유지 여부가 결정되고, breaking change가 있으면 contract docs에 명시된다.
-  - [x] backend regression test가 tiny baseline에서 raw percent가 크게 튀는 fixture를 포함한다.
-  - [x] 테스트는 sparse baseline에서 user-facing reason/display 값이 capped/null/stable expression으로 내려옴을 검증한다.
-  - [x] docs에 raw score와 user-facing reason/display field의 차이가 명시된다.
-- 참고:
-  - anomaly 탐지 자체를 약하게 만드는 task가 아니다. 계산용 raw value와 사용자/agent가 인용할 표현을 분리하는 task다.
-  - 기존 settings precedence는 `query param > persisted setting > code default`를 유지한다.
-
-#### 작업 T027. 미분류 작업 큐 필터와 issue signal 분리
-- GitHub Issue: [#11](https://github.com/Gyu-bot/my_ledge/issues/11)
-- 우선순위: P1.5
-- 상태: 완료
-- 선행 조건: T006
-- 완료 기준:
-  - [x] `unclassified_work_queue` 또는 dashboard queue API에서 `issue_type`별 조회가 가능하다. 최소 type은 `cost_kind`, `spend_necessity`, `recurring_kind`, `loan_link`를 포함한다.
-  - [x] 복수 `issue_type` 선택 방식이 정의된다. 예: comma-separated query param 또는 repeated query param.
-  - [x] `period_from`, `period_to`, `current_only` 또는 동등한 period/current 필터가 추가된다.
-  - [x] current period 중심 cleanup과 historical cleanup을 분리해서 조회할 수 있다.
-  - [x] recurring-kind issue에는 `recurrence_signal`이 포함된다. 최소 `has_monthly_pattern`, `active_month_count`, `same_month_repeat_only`를 표현한다.
-  - [x] priority explanation이 단일 `priority_reason` string뿐 아니라 `issues[]`와 primary issue 또는 동등한 구조로 설명 가능하다.
-  - [x] backend view/API regression test가 issue type filtering, current-only filtering, recurring signal serialization을 검증한다.
-  - [x] docs에 이 queue가 financial risk queue가 아니라 data-quality cleanup queue임이 명시된다.
-- 참고:
-  - 현재 recurring 후보 보수화는 이미 live다. 이 task는 서로 다른 cleanup issue가 하나의 priority score에 섞여 agent가 다음 액션을 고르기 어려운 문제를 푸는 작업이다.
-  - DB view 확장과 dashboard API enrichment 중 어느 쪽이 source of truth가 될지 구현 전 결정한다.
-
-#### 작업 T028. 거래 요약 집계 기준 metadata
-- GitHub Issue: [#12](https://github.com/Gyu-bot/my_ledge/issues/12)
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] `/transactions/summary` 응답에 `basis` metadata가 포함된다.
-  - [x] `basis.aggregation_surface`가 raw transactions summary인지 canonical cashflow인지 명시한다.
-  - [x] `basis.amount_sign_convention`이 raw signed amount인지 normalized expense인지 명시한다.
-  - [x] `basis.included_types`와 `basis.excluded_types`가 transaction type 포함/제외 기준을 명시한다.
-  - [x] `basis.includes_loan_repayments`, `basis.excludes_deleted`, `basis.excludes_merged`, `basis.canonical_cashflow_equivalent` 또는 동등한 필드가 제공된다.
-  - [x] loan repayment, transfer, deleted, merged row 처리 기준이 docs에 명시된다.
-  - [x] canonical dashboard 숫자와 `/transactions/summary` 숫자가 다를 수 있는 이유가 response 또는 docs만으로 설명 가능하다.
-  - [x] 필요한 경우 `basis=raw_transactions|canonical_cashflow|non_loan_expense` 같은 query param 도입 여부를 결정하고 구현한다.
-  - [x] backend API regression test가 default summary basis metadata를 검증한다.
-- 참고:
-  - 현재 계산이 틀렸다는 뜻이 아니라 endpoint 이름만 보고 canonical cashflow와 같은 의미로 오해하기 쉬운 문제를 줄이는 task다.
-  - `basis` query param이 scope creep이면 첫 PR은 response metadata만 구현하고 query param은 별도 후속 task로 분리해도 된다.
-
-#### 작업 T029. 프로필/보험 empty-state metadata
-- GitHub Issue: [#13](https://github.com/Gyu-bot/my_ledge/issues/13)
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T004, T008
-- 완료 기준:
-  - [x] `GET /api/v1/profile` empty state에서 `has_snapshot`, `missing_reason`, `expected_source` 또는 동등한 metadata가 제공된다.
-  - [x] `GET /api/v1/insurance/summary` empty state에서 `has_contract_snapshot`, `missing_reason`, `expected_source` 또는 동등한 metadata가 제공된다.
-  - [x] source section missing, source section present but parsed-null, snapshot row exists with partial null fields, intentionally blank, never imported 상태를 가능한 범위에서 구분한다.
-  - [x] `monthly_premium_estimate`가 계약 snapshot 부재로 계산 불가한 경우 `basis` 또는 equivalent metadata로 이유를 명시한다.
-  - [x] upload/import diagnostics와 연결할 수 있는 `last_upload_checked`, `source_section_found`, `parser_warning_count` 또는 동등한 metadata 도입 여부를 결정한다.
-  - [x] backend API regression test가 profile no snapshot, insurance no snapshot, partial-null snapshot 사례를 검증한다.
-  - [x] docs에 null field, missing snapshot, source section missing의 의미가 명시된다.
-- 참고:
-  - 이 task는 비어 있는 값을 임의로 채우는 작업이 아니다. API consumer가 empty response의 원인을 구분하게 만드는 task다.
-  - parser-level diagnostics가 커지면 첫 PR은 response-level missing metadata로 제한하고 diagnostics는 별도 task로 분리해도 된다.
-
-### 다음 P0 거래 신뢰도
-
-#### 작업 T030. 거래 source lifecycle
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T000
-- 완료 기준:
-  - [x] BankSalad upload row와 사용자 수정 거래를 분리하는 transaction source lifecycle model이 도입된다.
-  - [x] lifecycle status는 최소 `active`, `missing_from_latest_export`, `source_changed`, `superseded`를 표현하고, `duplicate_candidate`, `ambiguous`는 적용 전 검토가 필요한 review/reserved 상태로 모델에서 구분해 표현한다.
-  - [x] transaction source tracking이 `source_row_hash`, `first_seen_import_id`, `last_seen_import_id`, `source_first_seen_at`, `source_last_seen_at`, `superseded_by_transaction_id` 또는 동등한 필드를 제공한다.
-  - [x] 최신 파일에서 사라진 거래를 즉시 hard delete하지 않고 `missing_from_latest_export` 또는 동등한 상태로 보존한다.
-  - [x] 기존 거래 수정 시 delete 후 insert보다 source field update 또는 supersession을 우선한다.
-  - [x] BankSalad가 갱신할 수 있는 원본 필드와 업로드가 덮어쓰면 안 되는 사용자 필드가 코드와 contract docs에서 분리된다.
-  - [x] 사용자 카테고리, 정규화 거래처, 대출 연결, 할부 연결, spending review 상태, memo가 재업로드로 손실되지 않는다.
-  - [x] 거래별 source 이력 또는 import lineage를 조회할 수 있다.
-  - [x] backend regression test가 missing row, changed source field, superseded transaction, preserved user override fixture를 포함한다.
-  - [x] 관련 API/agent contract docs가 lifecycle status 해석 규칙을 설명한다.
-- 참고:
-  - Kept feature roadmap Track A의 첫 P0이다.
-  - `transactions` soft delete와 upload incremental insert 동작을 유지하되, 반복 업로드에서 사용자 작업이 사라지지 않게 하는 기반이다.
-
-#### 작업 T031. 업로드 preview와 reconciliation v2
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T030
-- 완료 기준:
-  - [x] upload apply 전에 DB를 변경하지 않는 reconciliation preview API가 제공된다.
-  - [x] preview flow는 `파일 업로드 -> 파싱 -> reconciliation preview -> 안전 변경 자동 선택 -> 사용자 확인 -> apply`로 분리된다.
-  - [x] preview change type은 최소 `new`, `unchanged`, `source_fields_changed`, `time_shifted`, `possible_replacement`, `missing_from_latest_export`, `possible_duplicate`, `ambiguous`를 표현한다.
-  - [x] 안전하게 자동 적용할 변경과 사용자 검토가 필요한 변경이 response에서 분리된다.
-  - [x] preview item이 기존 값, 신규 값, 판단 근거, 사용자 수정 보존 여부를 보여준다.
-  - 제외: canonical/cashflow 영향 범위 표시는 2026-06-27 사용자 지시에 따라 T031 완료 범위에서 제외한다.
-  - [x] apply API는 explicit confirmation 후 선택된 change set만 반영한다.
-  - [x] apply 결과와 판단 근거가 upload log 또는 별도 reconciliation log에 기록된다.
-  - [x] 기존 `POST /api/v1/upload` 호환 경로의 동작과 새 preview/apply flow의 관계가 문서화된다.
-  - [x] backend API/service test가 preview no-write, safe apply, ambiguous no-auto-apply, upload log 기록을 검증한다.
-  - [x] frontend surface가 포함되는 경우 `/data/import`에서 preview/apply flow를 브라우저로 확인한다.
-- 참고:
-  - `T030` lifecycle 없이는 replacement/missing/source-changed 판단이 불안정하므로 `T030` 이후에 착수한다.
-  - 첫 PR은 backend preview/apply contract만 만들고 frontend는 후속으로 쪼갤 수 있다.
-
-#### 작업 T032. settlement group canonical netting
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T030, T031
-- 완료 기준:
-  - [x] 원결제, 완전 취소, 부분환불, 복수 부분환불을 하나의 settlement group으로 묶는 model 또는 canonical layer가 도입된다.
-  - [x] settlement status는 최소 `auto_confirmed`, `review_required`, `user_confirmed`, `rejected`를 표현한다.
-  - [x] 자동 매칭은 동일/정규화 거래처, 동일 결제수단, 동일 통화, 반대 부호, 절대금액 일치 또는 원결제 이하, 근접 날짜, 원본 설명 유사도, 기존 연결 여부를 사용한다.
-  - [x] 후보 원결제가 여러 개인 경우 자동 확정하지 않고 review queue로 보낸다.
-  - [x] 사용자가 settlement 연결을 수정하거나 해제할 수 있다.
-  - [x] 완전 취소는 실제 지출 합계에서 제외되고, 부분환불은 순액만 반영된다.
-  - [x] settlement 순액은 공통 service/view로 제공되며, 현재 월간 지출, 카테고리 지출, 거래처 지출, 이상 지출, 구매 후 검토 분석에서 재사용한다. 반복결제 탐지, 예산 사용액, 현금흐름 예측 소비면은 후속 구현 시 같은 shared layer를 사용한다.
-  - [x] 기존 `T012` spending review refund netting과 중복 계산하지 않고 shared settlement service/view로 수렴한다.
-  - [x] backend regression test가 완전 취소, 부분환불, 복수 부분환불, 다중 원결제 후보, user rejected fixture를 포함한다.
-  - [x] API/agent docs가 raw signed transaction과 settlement-netted analysis surface의 차이를 설명한다.
-- 참고:
-  - `T012`에서 구매 후보용 refund netting은 이미 구현됐지만, 이 task는 분석 전반에 재사용되는 공통 경제적 거래 layer로 승격하는 작업이다.
-
-### 거래 신뢰 이후 자동화와 의사결정 지원
-
-#### 작업 T033. 거래처 정규화 후보 엔진
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T030, T032
-- 완료 기준:
-  - [ ] 표기만 다른 동일 거래처를 결정론적 규칙으로 추천하는 candidate engine이 추가된다.
-  - [ ] 후보 생성은 대소문자 통일, 공백 제거, 특수문자 정규화, 법인 표기 정리, 괄호/하이픈 정리, PG사 접두어 처리, 기존 alias dictionary, 문자열 유사도, 결제 패턴 비교를 사용한다.
-  - [ ] 모든 추천은 confidence, reason, matched evidence, expected affected transaction count를 제공한다.
-  - [ ] very high confidence는 자동 적용 가능 후보로 표시할 수 있지만, 실제 rule 저장/적용은 사용자 승인 또는 명시 설정을 따른다.
-  - [ ] medium confidence는 `/data/inbox` 또는 `/data/rules` 추천으로 남기고 low confidence는 추천하지 않는다.
-  - [ ] 사용자 거절 후보는 같은 근거로 반복 추천하지 않는다.
-  - [ ] 승인 시 기존 merchant alias rule로 저장한다.
-  - [ ] 거래별 수동 정규화 값은 자동 alias rule보다 우선한다.
-  - [ ] backend test가 PG사 접두어, 법인 표기, 비슷하지만 다른 거래처, 거절 후보 재추천 방지를 검증한다.
-  - [ ] frontend를 포함하는 경우 candidate review/approve/reject flow를 browser 또는 component test로 검증한다.
-- 참고:
-  - 기존 merchant alias rule/apply 기능은 live다. 이 task는 rule을 사람이 직접 입력하기 전 후보를 만들어주는 고도화다.
-  - LLM/ML 도입 없이 deterministic rule로 시작한다.
-
-#### 작업 T034. 승인 기반 분류 추천
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T030, T033
-- 완료 기준:
-  - [ ] 사용자의 과거 승인 결과를 기반으로 카테고리, 고정비/변동비, 필수/재량 추천을 생성한다.
-  - [ ] 추천 우선순위는 `거래별 수동 override > 거래처 + 원본 설명 규칙 > 거래처 규칙 > 원본 소분류 규칙 > 원본 대분류 규칙 > 과거 동일 패턴의 다수 승인 결과 > 미분류`로 고정된다.
-  - [ ] 거래처만으로 모호한 경우 원본 설명, 원본 소분류, 금액, 결제수단을 함께 사용한다.
-  - [ ] 추천은 confidence, reason, source rule, matched historical approvals, affected count를 제공한다.
-  - [ ] 단건 승인, 동일 패턴 전체 승인, 규칙 저장, 추천 거절, 기존 데이터 일괄 적용 preview를 지원한다.
-  - [ ] 자동 적용 전 예상 변경 건수와 보존될 수동 override를 보여준다.
-  - [ ] 거절한 추천은 동일 근거로 반복 노출하지 않는다.
-  - [ ] 수동 수정은 자동 규칙보다 항상 우선한다.
-  - [ ] backend test가 precedence, ambiguous merchant, rejection memory, preview count, manual override preservation을 검증한다.
-  - [ ] 관련 `/data/inbox` 또는 `/data/rules` UI가 포함되면 visual/browser smoke를 수행한다.
-- 참고:
-  - 기존 category/recurring classification rule과 dry-run 기능을 대체하지 않고, 승인 기반 추천 queue를 얹는 작업이다.
-
-#### 작업 T035. 반복결제 series 분리
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T032, T033
-- 완료 기준:
-  - [ ] 한 거래처 안에 여러 월간 결제가 존재할 때 별도 recurring series로 분리한다.
-  - [ ] series key 후보는 정규화 거래처, 결제수단, 금액 클러스터, 결제일 패턴, 원본 설명 유사도를 함께 사용한다.
-  - [ ] 정액 구독은 동일 금액 또는 `+-1%` 범위, 보험/통신은 안정 범위 내 변동, 공과금은 금액보다 결제일 반복 우선, 해외 결제는 외화 금액 또는 환율 변동을 고려한다.
-  - [ ] 환불/취소/settlement reversal 거래는 반복 횟수와 금액 안정성 계산에서 제외된다.
-  - [ ] series candidate마다 confidence, separation reason, matched transaction ids, excluded settlement ids를 제공한다.
-  - [ ] 불확실한 series는 사용자 승인 대상으로 남긴다.
-  - [ ] 기존 `recurring_payment_kind` 거래 단위 분류와 충돌하지 않고, series는 반복 계약 후보의 상위 grouping으로 취급한다.
-  - [ ] backend test가 같은 merchant의 두 구독, 통신비 변동, 공과금, 해외 결제, 환불 제외 fixture를 포함한다.
-  - [ ] agent docs가 merchant-level recurring과 series-level recurring의 차이를 설명한다.
-- 참고:
-  - 현재 recurring 후보 보수화와 dry-run은 live지만 merchant 단위에 가깝다. 이 task는 계약/series 단위로 분리하는 기반이다.
-
-#### 작업 T036. 반복계약 ledger
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T035
-- 완료 기준:
-  - [ ] recurring series candidate를 지속 관리되는 recurring contract ledger로 승격할 수 있다.
-  - [ ] contract row는 `display_name`, `merchant`, `expected_amount`, `amount_tolerance`, `expected_day`, `expected_interval`, `payment_method`, `status`, `first_observed_at`, `last_observed_at`, `next_expected_at`, `annualized_cost` 또는 동등한 필드를 가진다.
-  - [ ] status는 최소 `candidate`, `active`, `paused`, `cancelled`, `ended_candidate`, `missing_payment`, `price_changed`를 표현한다.
-  - [ ] 다음 결제일, 예상 금액 범위, 연간 환산 비용, 신규 반복결제, 가격 인상, 결제 누락, 종료 추정, 해지 후 재발생을 계산하거나 후보로 제안한다.
-  - [ ] 실제 거래가 들어오면 예상 결제와 자동 연결하되 ambiguous match는 review 상태로 남긴다.
-  - [ ] 반복계약과 할부 계획은 별도 개념으로 유지한다.
-  - [ ] 사용자가 활성/종료/반복 아님 상태를 관리할 수 있다.
-  - [ ] 90일 현금흐름 예측에서 confirmed/high-confidence expected outflow로 사용할 수 있는 API 또는 canonical view가 제공된다.
-  - [ ] backend test가 active contract, price change, missing payment, cancelled contract, installment-not-recurring separation을 검증한다.
-  - [ ] docs가 recurring contract ledger와 기존 recurring classification rule의 역할 차이를 설명한다.
-- 참고:
-  - `T037` cashflow calendar의 핵심 입력이므로 forecasting 전에 먼저 끝내는 것이 좋다.
-
-#### 작업 T037. 90일 현금흐름 calendar
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T006, T010, T024, T032, T036
-- 완료 기준:
-  - [ ] 향후 90일 일별 예상 잔액을 계산하는 API 또는 canonical surface가 제공된다.
-  - [ ] 입력은 최신 현금성 자산, 최근 급여 패턴과 급여일 설정, 대출 월상환액과 상환일, 할부 forecast, recurring contract 예상 결제, 카드 결제일, 비정기 지출 적립금, 사용자가 등록한 예정 현금 유출입을 포함할 수 있다.
-  - [ ] 출력은 향후 30/60/90일 최저 잔액, 잔액 부족 예상일, 급여일까지 안전 사용 가능 금액, 확정 예정 지출, 추정 예정 지출을 포함한다.
-  - [ ] 각 예상 거래는 `confirmed`, `high_confidence`, `estimated`, `manual_plan`, `unknown` 또는 동등한 confidence를 가진다.
-  - [ ] 오래된 데이터에는 stale 경고를 표시한다.
-  - [ ] 투자 평가액은 기본 가용 현금에 포함하지 않는다.
-  - [ ] forecast는 관측 cashflow를 수정하지 않고 projection layer로만 제공된다.
-  - [ ] backend test가 급여 전 잔액 부족, 반복계약, 대출상환, 할부 forecast, stale input, 투자자산 제외 fixture를 포함한다.
-  - [ ] frontend surface가 포함되면 `/signals` 또는 `/data/settings` 연결 화면을 browser smoke로 확인한다.
-  - [ ] docs가 forecast confidence와 observed/canonical cashflow의 차이를 설명한다.
-- 참고:
-  - 월간 총액 분석이 아니라 날짜별 유동성 위험을 보기 위한 surface다.
-  - `T036` 없이도 최소 forecast는 가능하지만, 제품 의미가 약하므로 recurring contract ledger 이후로 둔다.
-  - 진행월 급여 미입금과 예상 월수입·월말 순현금흐름은 `T043`에서 먼저 다룬다. 이 task는 그 수입 예상/실제 입금 대조를 재사용하며, 기존 90일 일별 잔액·예정 지출 요구사항을 유지한다.
-
-#### 작업 T038. sinking fund와 adaptive budget
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T010, T037
-- 완료 기준:
-  - [ ] 여행, 경조사, 자동차 유지비 같은 비정기 지출을 위한 sinking fund goal model 또는 settings section이 정의된다.
-  - [ ] 월 필요 적립액은 `(목표 금액 - 현재 준비액) / 남은 개월`을 기본으로 계산한다.
-  - [ ] 추천 근거는 최근 12개월 합계, 월별 중앙값, 상위 75/90 percentile, 계절성, 일회성 제외 여부, 반복된 연간 지출을 포함할 수 있다.
-  - [ ] adaptive budget은 필수 월지출, 재량 월지출 한도, 비정기 지출 적립, 대출 추가상환, 장기 목표 적립을 분리해 표현한다.
-  - [ ] forecast에 예정 적립액을 반영할 수 있다.
-  - [ ] 적립금으로 준비한 거래를 단순 이상 지출로만 처리하지 않도록 anomaly/spending review basis가 구분된다.
-  - [ ] 시스템 추천은 사용자 승인 후에만 goal/plan으로 저장된다.
-  - [ ] backend test가 annual expense, seasonal expense, approved sinking fund, rejected suggestion, forecast inclusion을 검증한다.
-  - [ ] agent docs가 My Ledge는 계산/추천 근거를 제공하고 최종 예산 판단은 사용자 또는 advisor layer가 수행한다고 설명한다.
-- 참고:
-  - 기존 `T010` financial targets는 미니멀 목표 설정이다. 이 task는 더 넓은 budgeting/product feature다.
-
-#### 작업 T039. 대출 상환 scenario simulator
-- 우선순위: P1
-- 상태: 계획됨
-- 선행 조건: T005, T010, T024
-- 완료 기준:
-  - [ ] 대출 잔액, 금리, 월상환액, 상환 방식 metadata를 기반으로 추가상환 시나리오를 비교하는 API가 제공된다.
-  - [ ] 기본 시나리오는 현재 상환 유지, 월 10만원/30만원/50만원 추가, 최고금리 우선, 최저잔액 우선, 사용자 지정 순서, 금리 상승, 일부 일시상환, 리파이낸싱 가정을 포함할 수 있다.
-  - [ ] 출력은 예상 완납일, 총 예상 이자, 기준안 대비 절감 이자, 상환기간 단축, 월별 현금 부담, 비상금 목표 영향을 포함한다.
-  - [ ] 계산에 사용한 가정과 누락 데이터를 response basis에 명시한다.
-  - [ ] 중도상환수수료, 실제 상환 스케줄, 변동금리 조건이 없으면 미반영 사실을 표시한다.
-  - [ ] My Ledge는 비교 계산과 근거만 제공하고 최종 판단은 사용자 또는 외부 advisor가 수행한다.
-  - [ ] backend test가 fixed-rate amortization approximation, missing fee warning, emergency fund impact, manual scenario order, rate increase assumption을 검증한다.
-  - [ ] docs가 실제 금융 조언이 아니라 scenario calculator임을 명시한다.
-- 참고:
-  - `T025` active/historical scope metadata는 Done이므로, scenario input은 active loan summary와 canonical loan inventory의 scope 차이를 존중해야 한다.
-
-#### 작업 T041. 제한적 다차원 거래 tag
-- 우선순위: P2
-- 상태: 계획됨
-- 선행 조건: T030, T034
-- 완료 기준:
-  - [ ] 기존 카테고리와 별개로 거래 맥락을 표현하는 tag model이 도입된다.
-  - [ ] 1차 tag type은 최소 `context`, `person`, `project`, `reimbursable`, `shared` 또는 동등한 제한된 set으로 시작한다.
-  - [ ] 사용자가 단건 거래 또는 선택 거래에 태그를 일괄 적용할 수 있다.
-  - [ ] 동일 거래처/기간 기반 추천과 승인 기반 규칙 재사용은 가능하되, 자동 태깅보다 사용자 승인 flow를 우선한다.
-  - [ ] 금액 분할은 범위에 포함하지 않는다.
-  - [ ] 태그는 category, spend necessity, recurring kind, loan/installment link를 대체하지 않는다.
-  - [ ] export/API/agent surface에서 tag filtering 또는 tag aggregation을 제공한다.
-  - [ ] backend test가 tag CRUD, bulk apply, filtered transaction list, rejected suggestion memory, category independence를 검증한다.
-  - [ ] frontend가 포함되면 거래 테이블 bulk edit과 tag filter UX를 browser smoke로 확인한다.
-  - [ ] 실제 사용 수요가 확인되기 전에는 tag taxonomy 자동 확장이나 split accounting을 추가하지 않는다.
-- 참고:
-  - Kept feature roadmap에서 `제한적 유지`로 분류된 항목이다.
-  - 공동비용/환급/여행 같은 맥락 표시는 유용하지만, accounting split까지 들어가면 별도 큰 기능이 되므로 명시적으로 제외한다.
-
----
-
-## Live 점검 후 추가된 수정·보완 항목
-
-#### 작업 T042. 대출 연결 거래 월상환 추정 저장·재계산·화면 갱신 복구
-- 우선순위: P0
-- 상태: 완료
-- 선행 조건: T005, T030, T031
-- 목표: 거래 연결이 있어도 추정액이 사라지거나 과거 값으로 남는 문제를 고치고, 실제 수동 설정은 보존한다.
-- 확인된 문제:
-  - 계좌명·대출 성격 저장 시 편집하지 않은 빈 수동 월상환액이 `monthly_payment=null`로 함께 전송될 수 있다. 서버는 이를 `monthly_payment_source='manual'`로 저장하고 이후 자동 추정을 차단한다.
-  - 자동 대출 규칙 적용은 거래 연결을 생성·변경하지만 관련 계좌의 월상환 추정치를 재계산하지 않는다.
-  - 일괄 연결과 자동 규칙 적용 후 거래 query만 갱신하여 대출 요약 카드가 오래된 값을 유지할 수 있다.
-- 완료 기준:
-  - [x] 계좌명·종류만 저장하면 편집하지 않은 월상환액·상환 방식과 각 source가 바뀌지 않는다. 비동기 응답 순서가 달라도 기존 상환 필드를 빈값으로 덮어쓰지 않는다.
-  - [x] 실제 수동 월상환액은 자동 계산보다 우선하고, 수동 설정 해제 및 자동 추정 복귀는 명시적인 API/UI 동작으로 구분한다. 기존 `null` 계약을 조용히 재해석하지 않는다.
-  - [x] 자동 규칙으로 링크가 생성·변경되면 변경 전후 계좌의 최신 스냅샷 추정액을 재계산한다. 수동 연결·연결 해제·계좌 이동과 같은 결과를 보장한다.
-  - [x] 수동 일괄 연결과 자동 규칙 적용 성공 후 대출 계좌·요약·관련 분석 query가 필요한 범위에서 갱신된다.
-  - [x] 추정값 없음의 이유를 수동 설정, 관측 월 부족, 진행월 제외, 연결 없음 등으로 구분해 설명하고 관측 구간·계산 근거를 제공한다.
-  - [x] 회귀 검증에 계좌명만 저장, 상환 방식만 편집, 실제 수동 금액 보존, 수동 설정 해제, 자동 연결 추가·계좌 이동, 최신 요약 표시를 포함한다.
-  - [x] 기존 잘못된 `null/manual`과 오래된 추정값의 복구 대상을 읽기 전용으로 선별한다. 배포 확인 후 승인된 API 경로로 복구하고, 실제 수동값과 거래 연결을 보존한 채 전후 GET 결과를 대조한다. 직접 DB 수정은 사용하지 않는다.
-- 검증 및 참고:
-  - 2026-09-24 Live GET·readonly DB·배포된 순수 계산 함수 대조로, 충분한 연결 거래가 있는 계좌의 `null/manual` 상태와 자동 연결 추가 후 저장 추정액 불일치를 확인했다. 개인별 금액·거래 원문은 버전 관리되는 계획 문서에 넣지 않는다.
-  - 코드 경로: `frontend/src/features/data/LoansPage.tsx`, `frontend/src/hooks/useTransactions.ts`, `backend/app/services/assets_service.py`, `backend/app/services/loan_mapping_service.py`, `backend/app/services/auto_classification_service.py`.
-  - PR #22에서 코드·회귀 검증·배포·기존 데이터 복구를 각각 확인했다. Live 네 계좌의 추정액과 관측 근거를 복구했고, 원본 거래 및 80개 연결은 보존했다.
-
-#### 작업 T043. 진행월 예상 수입과 월말 순현금흐름 분리 표시
-- 우선순위: P1
-- 상태: 완료
-- 선행 조건: T007, T023, T024, T032
-- 목표: 급여 입금 전에도 과거 정기 수입을 근거로 월 전체 수입을 예상하고, 실제 입금·아직 들어오지 않은 예상 수입·월말 전망을 구분해 보여준다.
-- 수정 전 확인한 동작:
-  - canonical dashboard는 진행월 관측 수입이 과거 수입 baseline의 50%보다 작으면 추정 수입과 추정 가용액을 제공한다. 홈의 수입 카드와 월간 현금흐름 차트는 관측값만 소비한다.
-  - 현재 보정은 과거 월 총수입 기반이며 급여 입금 여부·급여일을 직접 판단하지 않는다. 보험금·중고판매 등 비정기 수입이 baseline 또는 임계값에 영향을 줄 수 있다.
-  - 현재 추정 가용액은 추정 수입에서 지금까지 기록된 지출을 차감한 보조값이다. 남은 예정 지출을 반영한 월말 순현금흐름이나 은행 잔액 예측으로 해석하지 않는다.
-- 완료 기준:
-  - [x] `observed_income`, `expected_remaining_income`, `projected_month_income` 또는 동등한 필드를 분리하고, 월 예상 수입은 실제 수입 + 아직 관측되지 않은 예상 수입으로 구성한다. 관측 거래·canonical 실적 금액은 수정하지 않는다.
-  - [x] 급여 등 정기 수입을 입금처·사용자 분류·금액 안정성·주기·입금일 범위로 판별하고, 사용자가 금액·예정일·중단 여부를 확인하거나 보정할 수 있다. 소액 급여 정산·보너스·보험금·중고판매·환급을 매월 반복 수입으로 단순 전개하지 않는다.
-  - [x] 최근 완료월의 범위, 실제 데이터 coverage, 누락 월, 이상치 제외, 기준일을 명시한다. 단순히 현재 월보다 과거라는 이유로 부분 수집 월을 완료월로 취급하지 않는다.
-  - [x] 실제 급여가 들어오면 해당 예상 입금과 대조해 중복 합산하지 않는다. 분할 입금·복수 입금처·금액 변경·휴일 전후 입금·입금 지연·퇴사 또는 중단·이력 부족을 검증하고, 불확실한 일치는 사유와 검토 상태를 남긴다.
-  - [x] 수입 카드·현금흐름 차트·순현금흐름 표시에서 실적과 전망을 함께 식별할 수 있다. 수입에만 예상값을 넣고 순현금흐름은 실적값인 상태를 동일 기준처럼 표시하지 않는다.
-  - [x] 월말 순현금흐름은 월 예상 수입 - (관측 순지출 + 잔여 예상 순지출)로 계산하며, 실제 거래와 예정 대출·할부·반복결제·변동 지출의 중복 차감을 방지한다. 남은 지출 입력이 부족하면 그 한계를 표시하고 단순히 현재까지 지출을 뺀 값을 월말 전망이라고 부르지 않는다.
-  - [x] 대출 월상환 추정치를 잔여 지출 입력으로 사용할 때는 `T042`의 정합성 복구가 선행되어야 한다. `T036`의 반복계약은 완성 후 연결할 수 있도록 경계를 유지하며, 미제공 입력을 확인된 예정 금액처럼 취급하지 않는다.
-  - [x] 응답과 화면에 추정 근거, 포함/제외 기간, 예정일 또는 범위, 기준일, 최신 업로드 coverage, confidence, 누락 사유를 표시한다. 부분월 수입 임계값만으로 정기 수입 예측을 켜거나 끄지 않는다.
-  - [x] 회귀 검증에 급여 전 소액 수입, 급여 실제 입금 후 예상 제거, 급여 전 큰 일시수입, 분할·변동 급여, 지연·중단, 부분월 데이터, 잔여 지출·중복 제거를 포함한다. 월말 전망과 현재 현금 잔액은 별개임을 API·화면에서 확인한다.
-- 검증 및 참고:
-  - 2026-09-24 Live에서 월말 급여 패턴, 진행월 급여 미입금, canonical의 추정 수입 제공, 월간 수입·현금흐름 실적 응답을 직접 대조했다. 기존 추정 기능 부재가 아니라 소비 화면 차이와 정기 수입·잔여 지출 모델의 부족이 범위다.
-  - `T023`의 관측/추정 basis 분리와 `T024`의 유동성 입력값 산출 완료 상태는 유지한다. 이 작업은 월간 전망을 보완하며 `T037`의 90일 일별 잔액 calendar 전체를 대체하지 않는다.
-  - 코드 경로: `backend/app/services/canonical_views_dashboard_service.py`, `backend/app/services/analytics_service.py`, `backend/app/services/assets_service.py`, `frontend/src/features/home/HomePage.tsx`.
-  - PR #22에서 월간 범위 구현과 Live 검증을 완료했다. 수입원별 관측·예상·입금 대조, 사용자 보정, 지출 중복 제거와 산출 제한을 제공한다. 최초 배포는 반복 지출 이력이 부족하면 전체 전망을 비웠다. 후속 사용자 승인으로 거래처별 납부·환급·잔여일 이력을 구분하고, 근거가 약한 경우 낮은 신뢰도의 전망과 확인 사유를 제공하도록 보완해 Live 검증까지 완료했다. 실제 결제 근거가 전혀 없거나 대출·할부·관측 입력이 불명확한 경우의 산출 불가는 유지한다. `T033`-`T036` 전체 자동화 묶음은 완료 범위에 포함하지 않는다.
-
-## 실행 계획 기록
-
-과거 별도 실행 계획 파일로 관리하던 작업 묶음의 범위·결정·결과를 이 절로 옮겼다. 원본 QA 로그는 보관하지 않으며, 검증 근거는 각 PR 본문과 위 task 항목의 참고를 본다.
-
-| 작업 묶음 | 관련 Task | 결과 | 남은 범위 |
-|---|---|---|---|
-| 거래 source lifecycle·업로드 reconciliation | `T030`, `T031` | 완료, PR #18 | 없음 |
-| settlement group canonical netting | `T032` | 완료, PR #19 | 없음 |
-| 분석 설정 편집 화면 | `T013` | 완료, PR #20 | 없음 |
-| 운영 배포본 스모크 확인 | `T014` | 사용자 직접 확인 항목으로 완료 | 없음 |
-| 대출 후보 검토·할부 거래 제안 | 대출 후보 `review_status`, 할부 제안 API | 완료 | 없음 |
-| frontend 빌드 commit 추적 | 운영 보조 | 완료 | 없음 |
-| Live 점검 오류 수정과 진행월 전망 | `T042`, `T043` | 완료, PR #22 | 없음 |
-| 자산/투자 source 선택 기반 | `T015`-`T018`, `T016A` | 투자 계좌 선택 slice 완료, PR #23 | 일반 lifecycle 편집, field-level 우선순위, 확장 provenance/coverage |
-| 토스증권 보유자산 수집 | `T019` | 수동 수집·소스 반영 완료, PR #23 | 실제 키 조회 확인, allocation/delta, 일별 대표 observation |
-| 거래 신뢰 이후 자동화·전망 | `T033`-`T039`, `T041` | 착수 전 | 전체 |
-
-### 거래 source lifecycle·업로드 reconciliation (`T030`-`T031`)
-
-- 재업로드가 사용자 카테고리, memo, 대출/할부 연결, 지출 검토 상태를 덮어쓰지 않도록 source lifecycle을 먼저 만들고, 그 위에서 missing/replacement/source-changed를 판단하는 preview/apply 흐름을 붙였다.
-- raw 거래는 hard delete하지 않는다.
-
-### settlement group canonical netting (`T032`)
-
-- 원결제·전체취소·부분환불·복수 부분환불을 하나의 settlement group으로 묶어 분석 전반에서 재사용한다. 상태는 `auto_confirmed`, `review_required`, `user_confirmed`, `rejected` 또는 동등값이다.
-- raw signed transaction의 금액·부호는 바꾸지 않는다. 원결제 후보가 여러 개면 자동 확정하지 않는다. `T012` 구매 검토 상계와 이중 상계하지 않는다.
-
-### 분석 설정 편집 화면 (`T013`)
-
-- 기존 `settings/analytics` API·client·hook 패턴을 유지하고 `/data/settings` 한 화면 안에서 섹션별 편집을 제공한다.
-- reset-to-default와 export/import는 일반 사용자 UI에 노출하지 않는다. 새 CSS framework나 상태관리 라이브러리를 추가하지 않는다.
-
-### 대출 후보 검토·할부 거래 제안
-
-- `/data/inbox`의 대출 연결 후보에 `대출 후보 아님`을 영구적이되 되돌릴 수 있는 리뷰 상태로 저장한다. 대출 계좌 숨김 기능으로 대체하지 않는다.
-- 할부 페이지는 활성 할부 계획을 기준으로 거래 후보와 예상 회차를 제안만 하며, 거래 원본 삭제나 자동 연결은 하지 않는다. 지출 MoM 수정은 회귀 검증만 유지한다.
-
-### frontend 빌드 commit 추적
-
-- 배포 frontend에 `build-info.json`(검증된 전체 Git SHA 또는 `unknown`)과 같은 값의 OCI revision label을 넣는다. metadata는 no-store JSON으로 제공하고 없으면 SPA shell 대신 404를 반환한다.
-- 빌드 helper는 `git archive`로 깨끗한 context를 만들어 ignored/untracked 입력과 HEAD 오귀속을 피한다. UI, API, DB, 운영 서비스, host 설정은 바꾸지 않았다.
-
-### Live 점검 오류 수정과 진행월 전망 (`T042`-`T043`)
-
-- 2026-09-24 사용자가 발견된 오류 전부의 수정·push·Live 배포·검증을 승인했다. 범위는 `T042`, `T043`과 점검에서 확정된 오류다: 순자산 음수 자산/부채 처리 일관화, 유동성 기간·부채 중복 제거, 환불 부호와 이상치 방향, 지출 lens의 이체 제외, signal 기간 표시, 큐 필터·페이지네이션, 할부 제안 alias, 현금성 자산 tri-state와 metadata 상속, 잘못된 테스트 규칙 정리, drilldown context 보존, 반복결제 승인 범위, 필요성 분류 우선순위, 반복 탐지 설정 소비, 할부 과거/미래 구분, 취소 후보 표시, 반복 이력과 활성 구독 분리, 필요성 미분류 bucket, 표시 문구, 목록 잘림, 일괄 선택 누락 방지.
-- 운영 데이터 복구는 백업 후 인증된 API로 결정적인 항목만 적용하고 전후 GET으로 대조했다. 직접 DB 쓰기와 불확실한 대출/할부 매칭은 하지 않았다. 금융 값·원본 거래·캡처는 버전 관리 문서에 넣지 않는다.
-
-### 자산/투자 source 선택 기반 (`T015`-`T018`, `T016A`)
-
-2026-09-24 승인된 실행 기준:
-
-- BankSalad 동일 기준일 순자산/과거 스냅샷은 재현 가능하게 유지하고, 최신 소스 조합 값은 별도 이름의 현재 추정액으로 노출한다. 나중 API 관측값으로 과거 스냅샷을 조용히 바꾸지 않는다.
-- 스냅샷 기준일, 실제 평가시각, 조회시각, 수집시각을 구분한다. 나중 업로드가 오래된 평가를 현재값으로 만들지 않으며, 과거 시점 조회는 미래 평가를 선택하지 않는다.
-- 매핑된 계좌 전체의 complete source run만 선택한다. 완료된 빈 보유 결과와 실패/부분 결과를 구분하고, 새로고침 실패 시 마지막 complete 성공을 유지하며 freshness와 실패를 따로 보고한다.
-- workbook은 투자를 broker/product로만 식별하므로 broker 그룹 fallback identity임을 표시하고, 대체 전 명시적이고 모호하지 않은 계좌 매핑을 요구한다. product name 단독 매칭은 금지한다.
-- 추정액은 같은 범위의 매핑된 BankSalad 계좌 구성요소만 대체한다. 계좌 매핑, 현금/환율 범위, 구성요소 coverage가 없거나 모호하면 추정 총액을 추측하지 않고 사유와 함께 unavailable로 둔다.
-- 기준일 사이의 은행→증권 이체는 혼합 기준일 합계에 중복 반영될 수 있으므로 그 한계와 선택 계좌별 basis를 노출한다. 혼합 기준일 추정액은 동일 기준일 확정 순자산도 투자 수익률도 아니다.
-- source policy preview와 명시 적용은 같은 데이터/정책 revision을 사용하고 stale preview는 거부한다. 재업로드는 정책과 이전 관측 근거를 보존한다.
-- 설정 화면은 configured source와 effective source를 구분하고, complete 매핑 관측이 없을 때 Toss를 고르면 BankSalad fallback과 그 이유를 보여준다.
-
-구현 결과(PR #23):
-
-| 범위 | 구현 | 남은 roadmap 경계 |
-|---|---|---|
-| observation/identity | 파싱된 자산·투자·대출 원본 보관, 정규화된 broker/instrument key, source run, migration/backfill, 재업로드 동등성 | 일반 자산/대출 lifecycle 편집, source file/row fingerprint 연결 |
-| source priority | 인증된 policy preview/확정 적용, revision 감사, 투자/계좌 override | global source는 BankSalad 유지, field-level·개별 종목 override는 확장 포인트 |
-| resolution | 계좌 단위 대체, failed/partial/empty/stale 처리, 매핑·현금 안전장치, conflict 노출 | 일반화된 conflict 해결/lifecycle 편집 workflow |
-| coverage | selected-source/coverage API, 기준일·정밀도·동기화·fallback·conflict metadata와 contract 문서 | source confidence/fingerprint/coverage 비율은 구현 완료로 주장하지 않음 |
-| 설정 화면 | 설정 preview/적용, 순자산 화면의 별도 현재 추정액 | 실제 Toss 연결·스케줄링은 `T019` |
-
-남은 일로 착수할 때의 검증 기준: `test_assets_service.py`, `test_assets_api.py`, `test_schema_api.py`, `SettingsPage` 테스트, frontend typecheck/lint, `tmp/2025-05-21~2026-05-21.xlsx`와 `/data/settings` 실데이터 확인. 같은 product name의 서로 다른 broker holding이 분리되는지, partial/failed run이 canonical total에 들어가지 않는지 확인한다.
-
-### 토스증권 보유자산 수집 (`T019`)
-
-- 공식 OpenAPI v1.2.17을 확인했고, 사용자가 기존 1Password 개인 볼트의 단일계좌 키 사용을 승인했다. 수동 수집과 명시적 단일계좌 매핑으로 선택 기반을 확장한다.
-- 공급자가 보유 평가시각과 예수금을 제공하지 않으므로 평가시각은 조회시각 대용(`observation_proxy`)으로 두고 환율 기준을 별도 보존한다. 범위는 국내·미국 주식만이다. 시세시각 주장, 현금 대체, 자동 스케줄링, 거래, 운영 서버 배포는 하지 않는다. 인증 키는 추적 파일에 두지 않는다.
-- 로컬 검증: backend 504 passed(PostgreSQL 전용 동시성 테스트 12개 skip), frontend 237 passed, lint/typecheck/build 통과, source migration upgrade/downgrade와 기존 row 보존 확인, desktop 1280/mobile 390 합성 브라우저 흐름 통과. 리뷰에서 나온 주식 전용 범위와 Decimal overflow 문제는 회귀 테스트와 함께 수정했다.
-- 남은 일: 1Password 데스크톱 인증 후 실제 키 조회 확인, broker/product 기준 allocation ratio와 previous-snapshot delta, 일별 대표 observation 보존, 불확실한 종목 이름 매칭 preview.
-
-### 거래 신뢰 이후 자동화·전망 (`T033`-`T039`, `T041`)
-
-착수 시 실행 기준:
-
-- 선행 조건 `T030`-`T032`는 완료됐다. 전체를 한 PR로 만들지 않고 첫 PR은 `T033` 거래처 정규화 후보 엔진처럼 좁게 시작한다. 순서는 정규화·승인 기반 분류 추천 → 반복결제 series·반복계약 ledger → 90일 현금흐름·sinking fund/adaptive budget·대출 상환 scenario → 제한적 tag다.
-- 결정론적 규칙이 정해진 곳에 LLM/ML을 쓰지 않는다. 사용자에게 보이는 규칙은 preview/승인 없이 자동 적용하지 않는다. 전망과 대출 scenario는 금융 조언이 아니며 가정·confidence·누락 데이터를 노출하고 관측 현금흐름과 분리한다. 금액 분할 회계나 무제한 tag taxonomy는 넣지 않는다.
-- `T037`은 `T043`의 수입 대조를 재사용한다. `T042`/`T043` 승인은 이 묶음 전체의 승인이 아니다.
-- 검증 사례: 정규화는 PG prefix, 법인 접미사, 모호한 거래처, 거절 기억, preview 건수, 수동 override 보존. 반복계약은 같은 거래처 두 구독, 변동 통신비, 공과금, 해외결제, 환불 제외, 가격 변경, 미납, 해지, 할부를 반복계약으로 보지 않음. 전망은 급여 전 저잔액, 반복계약·대출·할부 전망, stale 입력, 투자 제외, 연간 지출, 승인된 sinking fund, 수수료 누락 경고, 금리 상승 가정. tag는 CRUD, 일괄 적용, 필터, 거절 기억, 카테고리 독립성.
-
----
-
-## 아카이브 메모
-
-- `docs/planned-work.md`는 `docs/archive/planning/2026-06-10-planned-work.md`로 아카이브되었다.
-- `docs/superpowers/plans/2026-06-10-advisor-canonical-gap-priority.md`는 `docs/archive/planning/2026-06-10-advisor-canonical-gap-priority.md`로 아카이브되었다.
-- 앞으로의 에이전트는 아카이브 문서의 미체크 항목을 이 파일에 반영되어 있지 않은 한 current backlog로 보지 않는다.
+- live API 계약: `docs/backend-api-ssot.md`
+- 상세 API·지표 참조: `docs/backend-api-and-metrics-reference.md`
+- 에이전트 읽기 값 사전: `docs/agents/canonical-read-surface-reference.md`
+- 프론트엔드 계약: `docs/frontend-design-tokens.md`, `docs/frontend/components-and-design-token-inventory.md`, `docs/frontend/page-wireframes.md`
+- 폐기된 이전 로드맵: `docs/archive/planning/2026-11-10-Implentation-plan-superseded.md`
+
+위 계약 문서들은 현재 코드를 설명한다. 이 계획의 작업이 구현될 때 해당 PR에서 함께 고친다.
