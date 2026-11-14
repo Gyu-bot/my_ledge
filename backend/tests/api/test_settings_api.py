@@ -21,7 +21,28 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
     initial = await async_client.get("/api/v1/settings/analytics", headers=api_headers)
 
     assert initial.status_code == 200
-    assert initial.json() == {
+    initial_payload = initial.json()
+    guide = initial_payload.pop("comparison_guide")
+    assert guide["title"] == "비교 기준"
+    assert [option["key"] for option in guide["options"]] == [
+        "baseline_start_date",
+        "baseline_method",
+        "partial_month_handling",
+        "no_data_months",
+        "annual_window",
+        "ordering",
+    ]
+    assert [option["editable"] for option in guide["options"]] == [
+        True,
+        False,
+        False,
+        False,
+        False,
+        False,
+    ]
+    assert guide["options"][0]["label"] == "기준 구간 시작일"
+    assert guide["options"][1]["value_label"] == "최근 6개 마감월의 중앙값"
+    assert initial_payload == {
         "defaults": {
             "spending_anomalies": {
                 "min_delta_amount": 100000,
@@ -86,6 +107,7 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
                 "savings_rate_target": None,
                 "debt_strategy_preference": None,
             },
+            "comparison": {"baseline_start_date": None},
         },
         "saved": {
             "spending_anomalies": {
@@ -146,6 +168,7 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
                 "savings_rate_target": None,
                 "debt_strategy_preference": None,
             },
+            "comparison": {"baseline_start_date": None},
         },
         "effective": {
             "spending_anomalies": {
@@ -211,6 +234,7 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
                 "savings_rate_target": None,
                 "debt_strategy_preference": None,
             },
+            "comparison": {"baseline_start_date": None},
         },
     }
 
@@ -364,3 +388,41 @@ async def _seed_anomaly_transactions(db_session: AsyncSession) -> None:
             )
         )
     await db_session.commit()
+
+
+async def test_comparison_setting_write_requires_api_key_and_validates_date(
+    async_client: AsyncClient,
+    api_headers: dict[str, str],
+) -> None:
+    unauthorized = await async_client.patch(
+        "/api/v1/settings/analytics",
+        json={"comparison": {"baseline_start_date": "2026-03-01"}},
+    )
+    assert unauthorized.status_code == 401
+
+    invalid = await async_client.patch(
+        "/api/v1/settings/analytics",
+        headers=api_headers,
+        json={"comparison": {"baseline_start_date": "not-a-date"}},
+    )
+    assert invalid.status_code == 422
+
+    saved = await async_client.patch(
+        "/api/v1/settings/analytics",
+        headers=api_headers,
+        json={"comparison": {"baseline_start_date": "2026-03-01"}},
+    )
+    assert saved.status_code == 200
+    payload = saved.json()
+    assert payload["saved"]["comparison"] == {"baseline_start_date": "2026-03-01"}
+    assert payload["effective"]["comparison"] == {"baseline_start_date": "2026-03-01"}
+    assert "2026-03부터" in payload["comparison_guide"]["options"][0]["value_label"]
+
+    other_section = await async_client.patch(
+        "/api/v1/settings/analytics",
+        headers=api_headers,
+        json={"spending_anomalies": {"min_delta_amount": 1}},
+    )
+    assert other_section.json()["effective"]["comparison"] == {
+        "baseline_start_date": "2026-03-01"
+    }

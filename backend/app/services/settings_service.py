@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from datetime import date
 import json
 from typing import Any
 
@@ -14,6 +15,9 @@ from app.schemas.settings import (
     AssetLiabilityHealthSettings,
     BulkOperationsSavedSettings,
     BulkOperationsSettings,
+    ComparisonSavedSettings,
+    ComparisonSettings,
+    ComparisonSettingsGuide,
     DiscretionaryVelocitySavedSettings,
     DiscretionaryVelocitySettings,
     FinancialTargetsSavedSettings,
@@ -25,6 +29,7 @@ from app.schemas.settings import (
     PurchaseGateSettings,
     RecurringDryRunSavedSettings,
     RecurringDryRunSettings,
+    SettingOptionDescription,
     SpendingAnomaliesSavedSettings,
     SpendingAnomaliesSettings,
 )
@@ -36,6 +41,11 @@ RECURRING_DRY_RUN_SCOPE = "analytics.recurring_dry_run"
 ASSET_LIABILITY_HEALTH_SCOPE = "analytics.asset_liability_health"
 BULK_OPERATIONS_SCOPE = "analytics.bulk_operations"
 FINANCIAL_TARGETS_SCOPE = "analytics.financial_targets"
+COMPARISON_SCOPE = "analytics.comparison"
+
+# Comparison contract default (Implentation-plan.md 2.4): median of the most
+# recent 6 closed months. Shared by every comparison surface.
+DEFAULT_COMPARISON_BASELINE_MONTHS = 6
 
 DEFAULT_SPENDING_ANOMALIES_SETTINGS = SpendingAnomaliesSettings(
     min_delta_amount=100_000,
@@ -100,6 +110,7 @@ DEFAULT_FINANCIAL_TARGETS_SETTINGS = FinancialTargetsSettings(
     savings_rate_target=None,
     debt_strategy_preference=None,
 )
+DEFAULT_COMPARISON_SETTINGS = ComparisonSettings(baseline_start_date=None)
 
 _SECTION_CONFIGS = {
     "spending_anomalies": (
@@ -137,6 +148,11 @@ _SECTION_CONFIGS = {
         DEFAULT_FINANCIAL_TARGETS_SETTINGS,
         FinancialTargetsSavedSettings,
     ),
+    "comparison": (
+        COMPARISON_SCOPE,
+        DEFAULT_COMPARISON_SETTINGS,
+        ComparisonSavedSettings,
+    ),
 }
 
 
@@ -146,6 +162,9 @@ async def get_analytics_settings(db_session: AsyncSession) -> AnalyticsSettingsR
         for section_name in _SECTION_CONFIGS
     }
     response = _build_full_analytics_settings_response(saved_sections)
+    response.comparison_guide = build_comparison_settings_guide(
+        response.effective.comparison
+    )
     # Retain legacy installations until a canonical upload preference is saved.
     if response.saved.recurring_dry_run.upload_auto_apply is None:
         legacy = await db_session.get(
@@ -168,6 +187,7 @@ async def patch_analytics_settings(
     asset_liability_health: Mapping[str, Any] | None = None,
     bulk_operations: Mapping[str, Any] | None = None,
     financial_targets: Mapping[str, Any] | None = None,
+    comparison: Mapping[str, Any] | None = None,
 ) -> AnalyticsSettingsResponse:
     if recurring_dry_run:
         await lock_recurring_configuration(db_session)
@@ -219,6 +239,7 @@ async def patch_analytics_settings(
     await _patch_settings_section(
         db_session, "financial_targets", financial_targets or {}
     )
+    await _patch_settings_section(db_session, "comparison", comparison or {})
 
     await db_session.commit()
     return await get_analytics_settings(db_session)
@@ -243,6 +264,113 @@ async def resolve_spending_anomalies_settings(
         min_delta_amount=min_delta_amount
         if min_delta_amount is not None
         else effective.min_delta_amount,
+    )
+
+
+async def get_comparison_settings(db_session: AsyncSession) -> ComparisonSettings:
+    """Effective comparison setting; the one value every comparison reads."""
+    saved = await _load_saved_settings(db_session, "comparison")
+    return _effective_settings(DEFAULT_COMPARISON_SETTINGS, saved)
+
+
+def baseline_start_period(baseline_start_date: date | None) -> str | None:
+    """First month that counts as baseline: only months on/after the date.
+
+    A month that starts before the date would mix days from before the change,
+    so a date that is not the 1st starts the baseline from the next month.
+    """
+    if baseline_start_date is None:
+        return None
+    if baseline_start_date.day == 1:
+        return baseline_start_date.strftime("%Y-%m")
+    year = baseline_start_date.year + baseline_start_date.month // 12
+    month = baseline_start_date.month % 12 + 1
+    return f"{year:04d}-{month:02d}"
+
+
+def build_comparison_settings_guide(
+    effective: ComparisonSettings,
+) -> ComparisonSettingsGuide:
+    start = effective.baseline_start_date
+    start_period = baseline_start_period(start)
+    start_label = (
+        "제한 없음 — 자료가 있는 마감월을 모두 기준 후보로 씁니다."
+        if start is None
+        else f"{start.isoformat()} 이후의 달만 씁니다 ({start_period}부터)."
+    )
+    return ComparisonSettingsGuide(
+        summary=(
+            "모든 비교 화면과 응답은 같은 기준을 씁니다. 기준 구간 시작일을 바꾸면 "
+            "모든 비교가 함께 바뀝니다."
+        ),
+        options=[
+            SettingOptionDescription(
+                key="baseline_start_date",
+                label="기준 구간 시작일",
+                description=(
+                    "생활 구조가 바뀐 뒤(이사, 이직, 가족 변화 등)에는 그 이후의 달만 "
+                    "비교 기준으로 삼을 수 있습니다. 1일을 고르면 그 달부터, 다른 날을 "
+                    "고르면 다음 달부터 기준에 들어갑니다. 비우면 제한이 없습니다."
+                ),
+                editable=True,
+                value_label=start_label,
+            ),
+            SettingOptionDescription(
+                key="baseline_method",
+                label="기준 기간",
+                description=(
+                    "대상 달 직전의 마감월 최대 "
+                    f"{DEFAULT_COMPARISON_BASELINE_MONTHS}개에서 월별 금액의 중앙값을 "
+                    "기준으로 씁니다. 한두 달의 큰 지출이 기준을 끌어올리지 않습니다. "
+                    "마감월이 모자라면 있는 만큼만 쓰고 몇 달을 썼는지 함께 보여 줍니다."
+                ),
+                editable=False,
+                value_label=(
+                    f"최근 {DEFAULT_COMPARISON_BASELINE_MONTHS}개 마감월의 중앙값"
+                ),
+            ),
+            SettingOptionDescription(
+                key="partial_month_handling",
+                label="진행 중인 달",
+                description=(
+                    "자료가 말일까지 오지 않은 달은 기준 달들도 같은 날짜까지의 누적만 "
+                    "비교합니다. 이 달에는 현금 잔여율 같은 비율과 전월 전체 대비 증감을 "
+                    "내지 않습니다."
+                ),
+                editable=False,
+                value_label="같은 경과일까지의 누적끼리 비교",
+            ),
+            SettingOptionDescription(
+                key="no_data_months",
+                label="자료 없는 달",
+                description=(
+                    "거래 자료가 한 건도 없는 달은 0원으로 세지 않고 기준에서 뺍니다. "
+                    "자료는 있지만 그 항목 지출이 없는 달은 0원으로 셉니다."
+                ),
+                editable=False,
+                value_label="자료 없음과 0원을 구분",
+            ),
+            SettingOptionDescription(
+                key="annual_window",
+                label="해마다 한두 번 나가는 지출",
+                description=(
+                    "최근 12개월 중 한두 달에만 나간 지출은 월별 비교 대신 12개월 합계를 "
+                    "그 직전 12개월과 비교합니다."
+                ),
+                editable=False,
+                value_label="12개월 창으로 비교",
+            ),
+            SettingOptionDescription(
+                key="ordering",
+                label="변화 정렬",
+                description=(
+                    "변화 목록은 증감률이 아니라 금액(원) 기여가 큰 순서로 보여 줍니다. "
+                    "전체, 보호, 조정 가능 지출을 따로 볼 수 있습니다."
+                ),
+                editable=False,
+                value_label="금액 기여 순",
+            ),
+        ],
     )
 
 
@@ -317,6 +445,7 @@ def _build_analytics_settings_response(
             asset_liability_health=DEFAULT_ASSET_LIABILITY_HEALTH_SETTINGS,
             bulk_operations=DEFAULT_BULK_OPERATIONS_SETTINGS,
             financial_targets=DEFAULT_FINANCIAL_TARGETS_SETTINGS,
+            comparison=DEFAULT_COMPARISON_SETTINGS,
         ),
         saved=AnalyticsSavedSettingsSection(
             spending_anomalies=saved,
@@ -344,6 +473,7 @@ def _build_analytics_settings_response(
             financial_targets=FinancialTargetsSavedSettings(
                 **{key: None for key in DEFAULT_FINANCIAL_TARGETS_SETTINGS.model_fields}
             ),
+            comparison=ComparisonSavedSettings(baseline_start_date=None),
         ),
         effective=AnalyticsSettingsSection(
             spending_anomalies=effective,
@@ -353,6 +483,7 @@ def _build_analytics_settings_response(
             asset_liability_health=DEFAULT_ASSET_LIABILITY_HEALTH_SETTINGS,
             bulk_operations=DEFAULT_BULK_OPERATIONS_SETTINGS,
             financial_targets=DEFAULT_FINANCIAL_TARGETS_SETTINGS,
+            comparison=DEFAULT_COMPARISON_SETTINGS,
         ),
     )
 
@@ -387,6 +518,8 @@ def _effective_settings(defaults, saved):
 
 
 def _serialize_setting_value(value: Any) -> str:
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, list):
         return json.dumps(value, ensure_ascii=False)
     if isinstance(value, bool):
