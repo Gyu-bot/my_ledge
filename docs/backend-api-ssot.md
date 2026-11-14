@@ -35,6 +35,9 @@
   - `POST /api/v1/upload/review/{operation_id}/apply`
   - `GET /api/v1/schema`
   - `GET /api/v1/canonical-views/dashboard`
+  - `GET /api/v1/metrics/monthly-flow`
+  - `GET /api/v1/metrics/spend-cube`
+  - `GET /api/v1/metrics/data-status`
   - `GET /api/v1/settings/analytics`
   - `PATCH /api/v1/settings/analytics`
   - `GET /api/v1/settings/income-expectations`
@@ -213,7 +216,30 @@
 | `GET` | `/api/v1/analytics/spending-review-candidates` | live | preferred alias for post-transaction spending review candidates; same contract as legacy purchase-gate path |
 | `PATCH` | `/api/v1/analytics/purchase-gate-candidates/{candidate_key}/review` | live | API key required, persist review status, memo, reviewed_at, cooldown_until under canonical `transaction:{transaction_id}` key |
 
+All aggregate analytics responses above now also carry an optional `contract` object (see Metric Contract below). Existing fields keep their names and types.
+
+### Metrics (T054 metric contract)
+
+| Method | Path | Status | Notes |
+|---|---|---|---|
+| `GET` | `/api/v1/metrics/monthly-flow` | live | API key required. `start_period`/`end_period` (`YYYY-MM`). Month totals and per-row lines of `vw_monthly_flow_summary`/`vw_monthly_flow`, `month_status`, `residual_rate` (closed months only), `contract` |
+| `GET` | `/api/v1/metrics/spend-cube` | live | API key required. `group_by` = comma list of `period, effective_category_major, effective_category_minor, merchant, payment_form, commitment_kind, adjustability, flow_row`; same-named equality filters; `limit` 1–2000. Reads `vw_spend_cube` |
+| `GET` | `/api/v1/metrics/data-status` | live | API key required. Transaction/snapshot as-of dates, closed months, in-progress month, 미정 share, excluded non-KRW summary |
+
 ## Key Contract Notes
+
+### Metric Contract (T054/T055)
+
+- One calculation path. `vw_metric_transactions` (유효 거래) → `vw_metric_flow_lines` → `vw_monthly_flow`, `vw_monthly_flow_summary`, `vw_spend_cube`, created by migration `20261115_0035`. The definitions live once in `backend/app/services/metric_views.py`; the migration stores a frozen PostgreSQL compile guarded by `tests/migrations/test_metric_views_migration.py`. Analytics, the dashboard legacy views, the projection's observed totals and liquidity/insurance inputs read these views; they do not re-sum actuals in Python.
+- Effective basis: `is_deleted = false`, `merged_into_id IS NULL`, not superseded (`source_lifecycle_status <> 'superseded'` and `superseded_by_transaction_id IS NULL`), effective category `COALESCE(category_*_user, category_*)`. Raw rows and lineage stay in `transactions` and `/api/v1/transactions`.
+- Currency: every metric total is KRW only. Non-KRW effective rows are never summed with KRW; they are listed in `vw_metric_excluded_currency`, counted in `contract.non_krw_transaction_count`, and returned by `/metrics/data-status`. No FX conversion exists.
+- Monthly flow rows (each won of each effective KRW transaction lands in exactly one): `income_undetermined`, `committed_loan`, `committed_installment`, `committed_recurring`, `ad_hoc_protected`, `ad_hoc_adjustable`, `undecided`, `transfer_undetermined`, `other_type`. Payment form and adjustability are read from the existing columns until T056; the mapping table is in [backend-api-and-metrics-reference.md](backend-api-and-metrics-reference.md#metric-contract-t054t055).
+- Names and scope: `total_outflow` (총지급, includes loan 원리금, refunds netted), `living_spend` (생활 지출 = `total_outflow − committed_loan_total`), `adjustable_spend` (조정 가능 지출), `residual` (잔여 = `income_total − total_outflow`), `residual_rate` (현금 잔여율, closed months only), `transfer_net` (signed transfers; never income or spend). Legacy `expense`/`expense_total` keep their historical scope, stated per field in `contract.field_scopes`.
+- Signs: `income_total`, `transfer_net` received-positive; spend totals paid-positive with refunds reducing them; `signed_amount`/`signed_total` keep the source sign.
+- Refund attribution (T055): a refund (positive `지출`) stays in the month it was posted. A confirmed settlement allocation (`auto_confirmed`/`user_confirmed`, both sides effective KRW) only moves the classification of the allocated part to the original purchase; the unallocated remainder keeps the refund row's classification. Linking or unlinking a refund never changes a month's totals. `review_required`/`rejected` matches move nothing.
+- As-of dates: `transaction_as_of` = latest effective transaction date (basis `max_effective_transaction_date`); snapshot as-of dates are separate per kind (`assets`, `loans`, `investments`, `insurance`, `profile`) and never merged. A month is `closed` when `transaction_as_of` reaches its last day; the latest uncovered month is `in_progress`.
+- `contract` object on aggregate responses: `definition`, `scope`, `inclusion` (basis view, currency, exclusions, sign/refund/transfer/loan/period rules), `as_of`, `adjustability_undecided_total` and `adjustability_undecided_share` (amount basis, share of `total_outflow`), `non_krw_transaction_count`, `field_scopes`.
+- Purchase-level detectors (`recurring-payments`, `discretionary-velocity`, `purchase-gate-candidates`/`spending-review-candidates`) use a separate, named basis `purchase_net.v1` (`vw_metric_transactions.purchase_net_amount`): confirmed allocations net into the original purchase regardless of posting date; an unallocated refund remainder stays on the refund row. These are review signals, not monthly cashflow actuals.
 
 ### Transactions
 
@@ -311,14 +337,13 @@
 ### Settlement Group Canonical Netting Boundary
 
 - `raw` `transactions` rows preserve original import sign and amount. This includes a positive `type='지출'` refund/cancellation row, which remains positive in raw storage and raw `/api/v1/transactions` responses.
-- Settlement economics are applied only in downstream analytics surfaces as a canonical read layer:
+- Settlement economics are applied only in downstream read layers (`vw_metric_refund_allocations`):
   - confirmed-only states: `auto_confirmed`, `user_confirmed`
-  - unconfirmed states: `review_required`, `rejected` (no canonical netting)
-  - confirmed netting is skipped if either participant leaves canonical analytics basis (`type='지출'`, `is_deleted=false`, `merged_into_id is null`, non-zero signed amount)
-- `/api/v1/analytics/*` 집계는 confirmed match가 있을 때 해당 구매-환불 묶음을 netted 값으로 계산한다.
-- `/api/v1/analytics/*`는 read-only다. 현재 조회만 수행하며 `settlement_matches` 생성/갱신/reconcile write 동작을 수행하지 않는다.
-- `review_required`/`rejected`의 환불은 raw signed semantics를 유지해 월별 raw expense에 반영되므로, confirmed 환불처럼 즉시 소거되지 않는다.
-- 구매 게이트/리뷰 큐는 동일한 settlement metadata를 공유해 confirmed partial refund를 반복 계산하지 않는다.
+  - unconfirmed states: `review_required`, `rejected` (no allocation)
+  - an allocation counts only while both participants stay in the effective basis (`type='지출'`, not deleted/merged/superseded, KRW, purchase negative, refund positive)
+- Cashflow aggregates (`/api/v1/analytics/monthly-cashflow`, `category-mom`, `fixed-cost-*`, `merchant-spend`, `payment-method-patterns`, `spending-anomalies`, `/metrics/*`, dashboard views) keep every refund in its posting month; a confirmed allocation only re-attributes the allocated part's classification to the original purchase. The signed monthly net is identical whether or not a refund is linked (T055).
+- `/api/v1/analytics/*` and `/api/v1/metrics/*` are read-only and never create, update or reconcile `settlement_matches`.
+- Purchase-level detectors (recurring payments, discretionary velocity, purchase gate/review queue) use `purchase_net.v1`: confirmed allocations net into the original purchase; a partially allocated refund keeps its unallocated remainder (previously the whole refund was dropped).
 
 ### Snapshot Import Behavior
 
@@ -360,7 +385,8 @@
 
 ### Observed Values and Monthly Projection
 
-- Dashboard canonical monthly rows remain observed values. Legacy `true_spendable_monthly.estimated_*` fields are retained as nullable compatibility fields; forecasts use the separate `month_projection` object.
+- Dashboard canonical monthly rows remain observed values. Since `20261115_0035` the legacy aggregate views (`vw_monthly_cashflow`, `vw_true_spendable_monthly`, `vw_fixed_cost_monthly_summary`, `vw_loan_repayment_monthly`, `vw_merchant_monthly_baseline`, `vw_recurring_merchant_monthly`, `vw_category_monthly_spend`, `vw_income_monthly_by_category`) read `vw_metric_flow_lines` with unchanged columns. Dashboard `data_coverage` uses the metric basis and the response adds `metric_as_of`.
+- `month_projection.observed_income`/`observed_net_expense` are SQL totals over `vw_metric_flow_lines` (same definition as `income_total`/`total_outflow`); projection input rows come from `vw_metric_transactions` (KRW, not superseded). The forecast algorithm is unchanged (review is T064). Legacy `true_spendable_monthly.estimated_*` fields are retained as nullable compatibility fields; forecasts use the separate `month_projection` object.
 - `month_projection` separates observed income/expense, remaining expected income/expense, and projected month-end net. It supplies source evidence, dates, confidence, coverage, excluded periods and missing reasons. Unknown expense components propagate null to the full expense/net forecast; null is not zero.
 - Recurring components expose source-level gross payments, refunds, net actuals, baseline and remaining estimates with confidence, warnings and history. Weak current explicit recurring histories can yield a numeric low-confidence scenario. Refunds do not generate a replacement obligation; excess observed payments stay in actuals. Sources without payment evidence and genuinely unknown loan/installment/coverage inputs still propagate null.
 - Remaining recurring estimates use historical payment dates after the observation cutoff, capped by the baseline less current gross payments. `warnings` mark reviewable estimates separately from `missing_reasons`; `expected|observed|review` describes projection evidence, not a confirmed contract state.
@@ -373,8 +399,9 @@
 
 - Category month comparison exposes `reference_date`, `is_partial_period` and `comparison_basis`; a partial selected month is compared with the same day range in the previous month, including when the target month has no rows.
 - Expense refunds remain signed in recurring amounts, necessity buckets, anomalies and discretionary velocity. Anomalies include `direction`; necessity-unclassified amounts/counts are separate from cost-kind-unclassified values.
+- Count fields on cashflow aggregates (`merchant-spend.count`, `payment-method-patterns.transaction_count`, `fixed-cost-*.unclassified_count`/`necessity_unclassified_count`) count distinct transactions whose amount lands in the bucket, including refunds and zero-amount rows.
 - Snapshot totals, history, comparison, net-worth breakdown and liquidity health share `aggregation_basis='nonnegative_asset_rows_minus_liability_rows'`. Raw negative asset rows are preserved and excluded from asset totals; their signed sum is `negative_asset_excluded_total`.
-- Liquidity defaults are anchored to the selected snapshot date. Required spend nets essential expenses and adds linked debt expense only when it is not already essential. Debt payment uses the selected loan snapshot once. Input dates, required-spend period/components and debt-payment snapshot date are returned as provenance.
+- Liquidity defaults are anchored to the selected snapshot date. Required spend nets essential expenses and adds linked debt expense only when it is not already essential. Debt payment uses the selected loan snapshot once. Input dates, required-spend period/components and debt-payment snapshot date are returned as provenance. Transaction inputs (income, required spend, insurance premium estimate) read `vw_metric_flow_lines` (effective KRW basis).
 - Asset liquidity PATCH preserves omitted fields; explicit null restores automatic/heuristic behavior and explicit false is an override.
 
 ### Investment / Loan Summary
