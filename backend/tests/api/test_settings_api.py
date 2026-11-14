@@ -47,7 +47,7 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
             "spending_anomalies": {
                 "min_delta_amount": 100000,
                 "anomaly_threshold": 0.5,
-                "baseline_months": 3,
+                "baseline_months": 6,
             },
             "discretionary_velocity": {
                 "baseline_months": 6,
@@ -174,7 +174,7 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
             "spending_anomalies": {
                 "min_delta_amount": 100000,
                 "anomaly_threshold": 0.5,
-                "baseline_months": 3,
+                "baseline_months": 6,
             },
             "discretionary_velocity": {
                 "baseline_months": 6,
@@ -259,7 +259,7 @@ async def test_get_and_patch_analytics_settings_returns_defaults_saved_and_effec
     assert payload["effective"]["spending_anomalies"] == {
         "min_delta_amount": 30000,
         "anomaly_threshold": 1.25,
-        "baseline_months": 3,
+        "baseline_months": 6,
     }
 
     settings_patch = await async_client.patch(

@@ -50,7 +50,7 @@ DEFAULT_COMPARISON_BASELINE_MONTHS = 6
 DEFAULT_SPENDING_ANOMALIES_SETTINGS = SpendingAnomaliesSettings(
     min_delta_amount=100_000,
     anomaly_threshold=0.5,
-    baseline_months=3,
+    baseline_months=DEFAULT_COMPARISON_BASELINE_MONTHS,
 )
 DEFAULT_DISCRETIONARY_VELOCITY_SETTINGS = DiscretionaryVelocitySettings(
     baseline_months=6,

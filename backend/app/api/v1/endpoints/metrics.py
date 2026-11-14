@@ -5,11 +5,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.security import require_api_key
+from app.schemas.comparison import (
+    ComparisonAdjustabilityView,
+    ComparisonLevel,
+    ComparisonMonthlyFlowResponse,
+    ContributionResponse,
+)
 from app.schemas.metrics import (
     MetricDataStatusResponse,
     MonthlyFlowResponse,
     SpendCubeDimension,
     SpendCubeResponse,
+)
+from app.services.comparison_service import (
+    get_change_contributions,
+    get_monthly_flow_comparison,
 )
 from app.services.metrics_service import (
     get_metric_data_status,
@@ -99,3 +109,50 @@ async def get_metrics_data_status(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> MetricDataStatusResponse:
     return await get_metric_data_status(db_session)
+
+
+@router.get(
+    "/metrics/comparison/monthly-flow",
+    response_model=ComparisonMonthlyFlowResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def get_metrics_monthly_flow_comparison(
+    period: str | None = Query(
+        default=None,
+        pattern=PERIOD_PATTERN,
+        description="대상 월. 생략하면 가장 최근 마감월(없으면 진행월).",
+    ),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> ComparisonMonthlyFlowResponse:
+    return await get_monthly_flow_comparison(db_session, period=period)
+
+
+@router.get(
+    "/metrics/comparison/contributions",
+    response_model=ContributionResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def get_metrics_change_contributions(
+    period: str | None = Query(
+        default=None,
+        pattern=PERIOD_PATTERN,
+        description="대상 월. 생략하면 가장 최근 마감월(없으면 진행월).",
+    ),
+    adjustability: ComparisonAdjustabilityView = Query(default="all"),
+    level: ComparisonLevel = Query(default="category"),
+    category: str | None = Query(
+        default=None,
+        max_length=50,
+        description="이 카테고리(대분류, 빈 값은 '미분류') 안으로 좁힌다.",
+    ),
+    limit: int = Query(default=100, ge=1, le=1000),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> ContributionResponse:
+    return await get_change_contributions(
+        db_session,
+        period=period,
+        adjustability=adjustability,
+        level=level,
+        category=category,
+        limit=limit,
+    )

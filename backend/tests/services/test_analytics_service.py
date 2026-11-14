@@ -27,13 +27,23 @@ from app.services.analytics_service import (
 )
 
 
+_CONTRACT_FIELDS = {
+    "contract",
+    "month_status",
+    # T057 comparison contract (additive fields)
+    "comparison",
+    "baseline_amount",
+    "baseline_change_amount",
+}
+
+
 def _legacy_shape(payload):
-    """Drop fields added by the T054 metric contract; legacy fields stay exact."""
+    """Drop fields added by the T054/T057 contracts; legacy fields stay exact."""
     if isinstance(payload, dict):
         return {
             key: _legacy_shape(value)
             for key, value in payload.items()
-            if key not in {"contract", "month_status"}
+            if key not in _CONTRACT_FIELDS
         }
     if isinstance(payload, list):
         return [_legacy_shape(item) for item in payload]
@@ -210,7 +220,8 @@ async def test_get_monthly_cashflow_groups_income_expense_and_transfer(
                 "expense": 500,
                 "transfer": 300,
                 "net_cashflow": 1000,
-                "savings_rate": 0.6667,
+                # T057: data ends mid-February (in-progress month) -> no ratio.
+                "savings_rate": None,
             },
         ]
     }
@@ -490,10 +501,12 @@ async def test_get_category_mom_uses_effective_categories_and_previous_month_bas
         tx_type="지출",
     )
 
+    # T057: the data ends on 2026-03-06, so March is in progress and is
+    # compared with February through the same day, never all of February.
     assert _legacy_shape(response.model_dump()) == {
-        "reference_date": date(2026, 3, 31),
-        "is_partial_period": False,
-        "comparison_basis": "full_previous_month",
+        "reference_date": date(2026, 3, 6),
+        "is_partial_period": True,
+        "comparison_basis": "same_day_previous_month",
         "items": [
             {
                 "period": "2026-03",
@@ -583,10 +596,11 @@ async def test_get_category_mom_keeps_rejected_settlement_on_raw_basis(
         tx_type="지출",
     )
 
+    # T057: data ends on 2026-03-04 (in-progress month, same-day comparison).
     assert _legacy_shape(response.model_dump()) == {
-        "reference_date": date(2026, 3, 31),
-        "is_partial_period": False,
-        "comparison_basis": "full_previous_month",
+        "reference_date": date(2026, 3, 4),
+        "is_partial_period": True,
+        "comparison_basis": "same_day_previous_month",
         "items": [
             {
                 "period": "2026-03",
@@ -844,7 +858,8 @@ async def test_get_fixed_cost_trend_groups_cost_classification_by_month(
                 "unclassified_count": 1,
                 "necessity_unclassified_total": 30,
                 "necessity_unclassified_count": 1,
-                "fixed_ratio": 0.8,
+                # T057: March is the in-progress month of this data -> no ratio.
+                "fixed_ratio": None,
             },
         ]
     }
@@ -1823,7 +1838,8 @@ async def test_get_spending_anomalies_partial_period_uses_same_day_baseline_cuto
 
     assert response.items == []
     assert response.comparison_mode == "partial"
-    assert response.reference_date == date(2026, 4, 7)
+    # T057: counted only through the transaction as-of date (2026-04-06).
+    assert response.reference_date == date(2026, 4, 6)
     assert response.is_partial_period is True
     assert "부분 기간 비교" in response.assumptions
 

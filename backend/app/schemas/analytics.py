@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.comparison import ComparisonBasis
 from app.schemas.metrics import MetricContract, MonthStatus
 
 
@@ -29,6 +30,17 @@ class CategoryMoMItem(BaseModel):
     previous_amount: int
     delta_amount: int
     delta_pct: float | None
+    baseline_amount: int | None = Field(
+        default=None,
+        description=(
+            "비교 계약(comparison.v1) 기준값: 기준 기간 월별 금액의 중앙값. "
+            "previous_*는 기존 전월 비교로 유지."
+        ),
+    )
+    baseline_change_amount: int | None = Field(
+        default=None,
+        description="current_amount − baseline_amount (원). 기준 기간이 없으면 null.",
+    )
 
 
 class CategoryMoMResponse(BaseModel):
@@ -39,6 +51,7 @@ class CategoryMoMResponse(BaseModel):
         "full_previous_month"
     )
     contract: MetricContract | None = None
+    comparison: ComparisonBasis | None = None
 
 
 class FixedCostSummaryResponse(BaseModel):
@@ -190,6 +203,7 @@ class SpendingAnomaliesResponse(BaseModel):
     is_partial_period: bool
     assumptions: str
     contract: MetricContract | None = None
+    comparison: ComparisonBasis | None = None
 
 
 class DiscretionaryVelocityResponse(BaseModel):

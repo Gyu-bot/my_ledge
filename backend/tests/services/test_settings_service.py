@@ -14,7 +14,8 @@ async def test_analytics_settings_defaults_when_no_saved_values(
 
     assert settings.defaults.spending_anomalies.min_delta_amount == 100_000
     assert settings.defaults.spending_anomalies.anomaly_threshold == 0.5
-    assert settings.defaults.spending_anomalies.baseline_months == 3
+    # T057: the anomaly baseline defaults to the comparison contract's 6 months.
+    assert settings.defaults.spending_anomalies.baseline_months == 6
     assert settings.saved.spending_anomalies.min_delta_amount is None
     assert settings.effective.spending_anomalies.min_delta_amount == 100_000
 
@@ -34,7 +35,7 @@ async def test_patch_analytics_settings_persists_and_resets_individual_values(
     assert saved.saved.spending_anomalies.anomaly_threshold == 1.25
     assert saved.saved.spending_anomalies.baseline_months is None
     assert saved.effective.spending_anomalies.min_delta_amount == 30_000
-    assert saved.effective.spending_anomalies.baseline_months == 3
+    assert saved.effective.spending_anomalies.baseline_months == 6
 
     reset = await patch_analytics_settings(
         db_session,
