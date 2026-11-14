@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.main import app
 from app.models import Base
+from app.services.metric_views import metric_view_ddl
 from app.services.upload_service import import_transactions_from_workbook
 
 
@@ -120,6 +121,10 @@ async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        # Same view definitions the PostgreSQL migration freezes, compiled for
+        # SQLite so services can read the metric views by name in tests.
+        for statement in metric_view_ddl(connection.dialect):
+            await connection.exec_driver_sql(statement)
 
     session_factory = async_sessionmaker(
         bind=engine,

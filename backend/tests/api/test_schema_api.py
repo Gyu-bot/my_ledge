@@ -188,6 +188,15 @@ async def test_schema_endpoint_returns_tables(
         "vw_transactions_effective",
         "vw_true_spendable_monthly",
         "vw_unclassified_work_queue",
+        # T054 metric view layer
+        "vw_metric_refund_allocations",
+        "vw_metric_transactions",
+        "vw_metric_flow_lines",
+        "vw_metric_as_of",
+        "vw_monthly_flow",
+        "vw_monthly_flow_summary",
+        "vw_spend_cube",
+        "vw_metric_excluded_currency",
     }
 
     effective_view = next(
