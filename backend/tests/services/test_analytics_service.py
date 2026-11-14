@@ -27,6 +27,19 @@ from app.services.analytics_service import (
 )
 
 
+def _legacy_shape(payload):
+    """Drop fields added by the T054 metric contract; legacy fields stay exact."""
+    if isinstance(payload, dict):
+        return {
+            key: _legacy_shape(value)
+            for key, value in payload.items()
+            if key not in {"contract", "month_status"}
+        }
+    if isinstance(payload, list):
+        return [_legacy_shape(item) for item in payload]
+    return payload
+
+
 def _transaction(
     *,
     tx_date: date,
@@ -181,7 +194,7 @@ async def test_get_monthly_cashflow_groups_income_expense_and_transfer(
         end_date=date(2026, 2, 28),
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "items": [
             {
                 "period": "2026-01",
@@ -263,16 +276,25 @@ async def test_get_monthly_cashflow_uses_confirmed_settlement_net_amount(
         end_date=date(2026, 2, 28),
     )
 
-    assert response.model_dump() == {
+    # T055 (audit F03): a confirmed refund stays in its posting month.
+    assert _legacy_shape(response.model_dump()) == {
         "items": [
             {
                 "period": "2026-01",
                 "income": 1500,
-                "expense": 500,
+                "expense": 600,
                 "transfer": 0,
-                "net_cashflow": 1000,
-                "savings_rate": 0.6667,
-            }
+                "net_cashflow": 900,
+                "savings_rate": 0.6,
+            },
+            {
+                "period": "2026-02",
+                "income": 0,
+                "expense": -100,
+                "transfer": 0,
+                "net_cashflow": 100,
+                "savings_rate": None,
+            },
         ]
     }
     assert await _settlement_match_count(db_session) == before_count
@@ -372,7 +394,7 @@ async def test_get_monthly_cashflow_keeps_review_required_refund_on_raw_basis(
         end_date=date(2026, 1, 31),
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "items": [
             {
                 "period": "2026-01",
@@ -468,7 +490,7 @@ async def test_get_category_mom_uses_effective_categories_and_previous_month_bas
         tx_type="지출",
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "reference_date": date(2026, 3, 31),
         "is_partial_period": False,
         "comparison_basis": "full_previous_month",
@@ -561,7 +583,7 @@ async def test_get_category_mom_keeps_rejected_settlement_on_raw_basis(
         tx_type="지출",
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "reference_date": date(2026, 3, 31),
         "is_partial_period": False,
         "comparison_basis": "full_previous_month",
@@ -675,7 +697,7 @@ async def test_get_fixed_cost_summary_reports_fixed_variable_and_unclassified_to
         end_date=date(2026, 3, 31),
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "expense_total": 290,
         "fixed_total": 150,
         "variable_total": 110,
@@ -788,7 +810,7 @@ async def test_get_fixed_cost_trend_groups_cost_classification_by_month(
         end_date=date(2026, 3, 31),
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "items": [
             {
                 "period": "2026-02",
@@ -890,7 +912,7 @@ async def test_get_merchant_spend_groups_by_merchant_and_limits_results(
         limit=2,
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "items": [
             {
                 "merchant": "쿠팡",
@@ -972,14 +994,15 @@ async def test_get_merchant_spend_uses_confirmed_settlement_net_amount(
         limit=2,
     )
 
-    assert response.model_dump() == {
+    assert _legacy_shape(response.model_dump()) == {
         "items": [
             {
+                # T054: count is distinct transactions; amount unchanged.
                 "merchant": "쿠팡",
                 "amount": 80,
-                "count": 1,
-                "avg_amount": 80.0,
-                "last_seen_at": datetime(2026, 1, 1, 10, 0),
+                "count": 2,
+                "avg_amount": 40.0,
+                "last_seen_at": datetime(2026, 1, 3, 9, 0),
             },
             {
                 "merchant": "넷플릭스",

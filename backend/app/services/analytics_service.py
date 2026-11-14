@@ -5,9 +5,10 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal, NotRequired, TypedDict
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, case, func, not_, or_, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.schemas.analytics import (
@@ -36,11 +37,25 @@ from app.schemas.analytics import (
 )
 from app.schemas.settings import DiscretionaryVelocitySettings, PurchaseGateSettings
 from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
-from app.services.canonical_views import build_transactions_effective_select
-from app.services.settlement_group_service import (
-    SettlementAnalysisNetting,
-    build_confirmed_settlement_analysis_netting,
+from app.services.metric_views import (
+    EXPENSE,
+    FLOW_LINES_VIEW,
+    INCOME,
+    METRIC_CURRENCY,
+    METRIC_TRANSACTIONS_VIEW,
+    TRANSFER,
+    day_of_month,
+    flow_summary_columns,
 )
+from app.services.metrics_service import (
+    PURCHASE_NET_DEFINITION,
+    build_flow_contract,
+    build_purchase_net_contract,
+    month_status,
+)
+
+_LINES = FLOW_LINES_VIEW
+_NECESSITY_VALUES = ("essential", "discretionary")
 
 
 class AnalyticsRow(TypedDict):
@@ -89,46 +104,51 @@ async def get_monthly_cashflow(
     start_date: date | None,
     end_date: date | None,
 ) -> MonthlyCashflowResponse:
-    rows = await _load_analytics_transactions(
+    totals = (
+        select(_LINES.c.period, *flow_summary_columns(_LINES))
+        .where(*_date_filters(start_date, end_date))
+        .group_by(_LINES.c.period)
+        .subquery("monthly_flow")
+    )
+    result = await db_session.execute(
+        select(
+            totals.c.period,
+            totals.c.income_total,
+            totals.c.total_outflow,
+            totals.c.transfer_activity_total,
+            totals.c.residual,
+        ).order_by(totals.c.period.asc())
+    )
+    contract = await build_flow_contract(
         db_session,
+        definition="monthly_cashflow.legacy_v1",
+        scope="월별 수입·총지급·이체 활동. 월 흐름표(monthly_flow.v1)와 같은 줄에서 계산",
         start_date=start_date,
         end_date=end_date,
-        tx_type="all",
+        field_scopes={
+            "income": "income_total (수입, 이체 제외)",
+            "expense": "total_outflow (총지급: 대출 원리금 포함, 환불은 게시월에서 차감)",
+            "transfer": "transfer_activity_total (이체 절댓값 합, 수입·지출 아님)",
+            "net_cashflow": "residual = income − expense",
+            "savings_rate": "net_cashflow ÷ income (모든 월에 계산되는 기존 필드; 현금 잔여율은 마감월에만 /metrics/monthly-flow 참조)",
+        },
     )
-
-    grouped: dict[str, dict[str, int]] = defaultdict(
-        lambda: {
-            "income": 0,
-            "expense": 0,
-            "transfer": 0,
-        }
-    )
-    for row in rows:
-        period = _month_key(row["date"])
-        if row["type"] == "수입":
-            grouped[period]["income"] += row["amount"]
-        elif row["type"] == "지출":
-            grouped[period]["expense"] += -row["amount"]
-        elif row["type"] == "이체":
-            grouped[period]["transfer"] += abs(row["amount"])
-
     items = []
-    for period in sorted(grouped):
-        income = grouped[period]["income"]
-        expense = grouped[period]["expense"]
-        transfer = grouped[period]["transfer"]
-        net_cashflow = income - expense
+    for row in result.mappings():
+        income = int(row["income_total"])
+        net_cashflow = int(row["residual"])
         items.append(
             MonthlyCashflowItem(
-                period=period,
+                period=row["period"],
                 income=income,
-                expense=expense,
-                transfer=transfer,
+                expense=int(row["total_outflow"]),
+                transfer=int(row["transfer_activity_total"]),
                 net_cashflow=net_cashflow,
                 savings_rate=_safe_ratio(net_cashflow, income),
+                month_status=month_status(row["period"], contract.as_of),
             )
         )
-    return MonthlyCashflowResponse(items=items)
+    return MonthlyCashflowResponse(items=items, contract=contract)
 
 
 async def get_category_mom(
@@ -139,13 +159,16 @@ async def get_category_mom(
     level: TransactionCategoryLevel,
     tx_type: TransactionTypeFilter,
 ) -> CategoryMoMResponse:
-    rows = await _load_analytics_transactions(
-        db_session,
-        start_date=start_date,
-        end_date=end_date,
-        tx_type=tx_type,
+    scope_filters = [
+        *_date_filters(start_date, end_date),
+        *_type_filters(tx_type),
+    ]
+    max_line_date = await db_session.scalar(
+        select(func.max(_LINES.c.date)).where(*scope_filters)
     )
-    ref_date = end_date or (max(row["date"] for row in rows) if rows else None)
+    ref_date = end_date or (
+        _as_date(max_line_date) if max_line_date is not None else None
+    )
     is_partial_period = end_date is not None and not _is_month_end(end_date)
     response_basis = {
         "reference_date": ref_date,
@@ -154,38 +177,67 @@ async def get_category_mom(
             "same_day_previous_month" if is_partial_period else "full_previous_month"
         ),
     }
+    contract = await build_flow_contract(
+        db_session,
+        definition="category_change.legacy_v1",
+        scope=(
+            "기준월과 전월의 카테고리별 금액. 지출은 순지출(환불 차감), 수입은 수입액, "
+            "이체는 절댓값. 부분월이면 전월도 같은 날짜까지만 집계"
+        ),
+        start_date=start_date,
+        end_date=end_date,
+    )
     if ref_date is None:
-        return CategoryMoMResponse(items=[], **response_basis)
+        return CategoryMoMResponse(items=[], contract=contract, **response_basis)
 
     current_period = _month_key(ref_date)
     previous_period = _previous_period(current_period)
+    category = func.coalesce(
+        func.nullif(
+            _LINES.c.effective_category_major
+            if level == "major"
+            else _LINES.c.effective_category_minor,
+            "",
+        ),
+        "미분류",
+    )
+    period_filters: list[ColumnElement[bool]] = [
+        _LINES.c.period.in_([current_period, previous_period])
+    ]
+    if is_partial_period:
+        period_filters.append(
+            not_(
+                and_(
+                    _LINES.c.period == previous_period,
+                    day_of_month(_LINES.c.date) > ref_date.day,
+                )
+            )
+        )
+    result = await db_session.execute(
+        select(
+            _LINES.c.period,
+            category.label("category"),
+            func.coalesce(func.sum(_analytics_amount()), 0).label("amount"),
+        )
+        .where(*scope_filters, *period_filters)
+        .group_by(_LINES.c.period, category)
+    )
     grouped: dict[tuple[str, str], int] = defaultdict(int)
     categories: set[str] = set()
-
-    for row in rows:
-        period = _month_key(row["date"])
-        if period not in {current_period, previous_period}:
-            continue
-        if (
-            is_partial_period
-            and period == previous_period
-            and row["date"].day > ref_date.day
-        ):
-            continue
-        category = _category_value(row, level)
-        grouped[(period, category)] += _amount_for_analytics(row["type"], row["amount"])
-        categories.add(category)
+    for row in result.mappings():
+        grouped[(row["period"], row["category"])] = int(row["amount"])
+        categories.add(row["category"])
 
     items = []
-    for category in categories:
-        current_amount = grouped[(current_period, category)]
-        previous_amount = grouped[(previous_period, category)]
+    for category_name in categories:
+        current_amount = grouped[(current_period, category_name)]
+        previous_amount = grouped[(previous_period, category_name)]
         delta_amount = current_amount - previous_amount
         items.append(
             CategoryMoMItem(
                 period=current_period,
                 previous_period=previous_period,
-                category=category,
+                category=category_name,
                 current_amount=current_amount,
                 previous_amount=previous_amount,
                 delta_amount=delta_amount,
@@ -194,7 +246,7 @@ async def get_category_mom(
         )
 
     items.sort(key=lambda item: (-item.delta_amount, item.category))
-    return CategoryMoMResponse(items=items, **response_basis)
+    return CategoryMoMResponse(items=items, contract=contract, **response_basis)
 
 
 async def get_fixed_cost_summary(
@@ -203,65 +255,35 @@ async def get_fixed_cost_summary(
     start_date: date | None,
     end_date: date | None,
 ) -> FixedCostSummaryResponse:
-    rows = await _load_analytics_transactions(
-        db_session,
-        start_date=start_date,
-        end_date=end_date,
-        tx_type="지출",
+    row = (
+        (
+            await db_session.execute(
+                select(*_fixed_cost_columns()).where(
+                    _LINES.c.type == EXPENSE, *_date_filters(start_date, end_date)
+                )
+            )
+        )
+        .mappings()
+        .one()
     )
-
-    expense_total = 0
-    fixed_total = 0
-    variable_total = 0
-    essential_fixed_total = 0
-    discretionary_fixed_total = 0
-    essential_variable_total = 0
-    discretionary_variable_total = 0
-    unclassified_total = 0
-    unclassified_count = 0
-    necessity_unclassified_total = 0
-    necessity_unclassified_count = 0
-
-    for row in rows:
-        amount = -row["amount"]
-        expense_total += amount
-        cost_kind = row["cost_kind"]
-        if _necessity_is_missing(row):
-            necessity_unclassified_total += amount
-            necessity_unclassified_count += 1
-        if cost_kind == "fixed":
-            fixed_total += amount
-            if row["fixed_cost_necessity"] == "essential":
-                essential_fixed_total += amount
-            elif row["fixed_cost_necessity"] == "discretionary":
-                discretionary_fixed_total += amount
-        elif cost_kind == "variable":
-            variable_total += amount
-            if row["spend_necessity"] == "essential":
-                essential_variable_total += amount
-            elif row["spend_necessity"] == "discretionary":
-                discretionary_variable_total += amount
-        else:
-            unclassified_total += amount
-            unclassified_count += 1
-
+    values = {key: int(row[key] or 0) for key in _FIXED_COST_FIELDS}
     return FixedCostSummaryResponse(
-        expense_total=expense_total,
-        fixed_total=fixed_total,
-        variable_total=variable_total,
-        fixed_ratio=_safe_ratio(fixed_total, expense_total),
-        essential_fixed_total=essential_fixed_total,
-        discretionary_fixed_total=discretionary_fixed_total,
-        essential_variable_total=essential_variable_total,
-        discretionary_variable_total=discretionary_variable_total,
-        required_spend_total=essential_fixed_total + essential_variable_total,
-        discretionary_spend_total=(
-            discretionary_fixed_total + discretionary_variable_total
+        **values,
+        fixed_ratio=_safe_ratio(values["fixed_total"], values["expense_total"]),
+        required_spend_total=(
+            values["essential_fixed_total"] + values["essential_variable_total"]
         ),
-        unclassified_total=unclassified_total,
-        unclassified_count=unclassified_count,
-        necessity_unclassified_total=necessity_unclassified_total,
-        necessity_unclassified_count=necessity_unclassified_count,
+        discretionary_spend_total=(
+            values["discretionary_fixed_total"] + values["discretionary_variable_total"]
+        ),
+        contract=await build_flow_contract(
+            db_session,
+            definition="fixed_cost_summary.legacy_v1",
+            scope=_FIXED_COST_SCOPE,
+            start_date=start_date,
+            end_date=end_date,
+            field_scopes=_FIXED_COST_FIELD_SCOPES,
+        ),
     )
 
 
@@ -271,63 +293,27 @@ async def get_fixed_cost_trend(
     start_date: date | None,
     end_date: date | None,
 ) -> FixedCostTrendResponse:
-    rows = await _load_analytics_transactions(
+    result = await db_session.execute(
+        select(_LINES.c.period, *_fixed_cost_columns())
+        .where(_LINES.c.type == EXPENSE, *_date_filters(start_date, end_date))
+        .group_by(_LINES.c.period)
+        .order_by(_LINES.c.period.asc())
+    )
+    contract = await build_flow_contract(
         db_session,
+        definition="fixed_cost_trend.legacy_v1",
+        scope=_FIXED_COST_SCOPE,
         start_date=start_date,
         end_date=end_date,
-        tx_type="지출",
+        field_scopes=_FIXED_COST_FIELD_SCOPES,
     )
-
-    grouped: dict[str, dict[str, int]] = defaultdict(
-        lambda: {
-            "expense_total": 0,
-            "fixed_total": 0,
-            "variable_total": 0,
-            "essential_fixed_total": 0,
-            "discretionary_fixed_total": 0,
-            "essential_variable_total": 0,
-            "discretionary_variable_total": 0,
-            "unclassified_total": 0,
-            "unclassified_count": 0,
-            "necessity_unclassified_total": 0,
-            "necessity_unclassified_count": 0,
-        }
-    )
-    for row in rows:
-        period = _month_key(row["date"])
-        amount = -row["amount"]
-        grouped[period]["expense_total"] += amount
-        if _necessity_is_missing(row):
-            grouped[period]["necessity_unclassified_total"] += amount
-            grouped[period]["necessity_unclassified_count"] += 1
-        cost_kind = row["cost_kind"]
-        if cost_kind == "fixed":
-            grouped[period]["fixed_total"] += amount
-            if row["fixed_cost_necessity"] == "essential":
-                grouped[period]["essential_fixed_total"] += amount
-            elif row["fixed_cost_necessity"] == "discretionary":
-                grouped[period]["discretionary_fixed_total"] += amount
-        elif cost_kind == "variable":
-            grouped[period]["variable_total"] += amount
-            if row["spend_necessity"] == "essential":
-                grouped[period]["essential_variable_total"] += amount
-            elif row["spend_necessity"] == "discretionary":
-                grouped[period]["discretionary_variable_total"] += amount
-        else:
-            grouped[period]["unclassified_total"] += amount
-            grouped[period]["unclassified_count"] += 1
-
-    return FixedCostTrendResponse(
-        items=[
+    items = []
+    for row in result.mappings():
+        values = {key: int(row[key] or 0) for key in _FIXED_COST_FIELDS}
+        items.append(
             FixedCostTrendItem(
-                period=period,
-                expense_total=values["expense_total"],
-                fixed_total=values["fixed_total"],
-                variable_total=values["variable_total"],
-                essential_fixed_total=values["essential_fixed_total"],
-                discretionary_fixed_total=values["discretionary_fixed_total"],
-                essential_variable_total=values["essential_variable_total"],
-                discretionary_variable_total=values["discretionary_variable_total"],
+                period=row["period"],
+                **values,
                 required_spend_total=(
                     values["essential_fixed_total"] + values["essential_variable_total"]
                 ),
@@ -335,15 +321,86 @@ async def get_fixed_cost_trend(
                     values["discretionary_fixed_total"]
                     + values["discretionary_variable_total"]
                 ),
-                unclassified_total=values["unclassified_total"],
-                unclassified_count=values["unclassified_count"],
-                necessity_unclassified_total=values["necessity_unclassified_total"],
-                necessity_unclassified_count=values["necessity_unclassified_count"],
                 fixed_ratio=_safe_ratio(values["fixed_total"], values["expense_total"]),
+                month_status=month_status(row["period"], contract.as_of),
             )
-            for period, values in sorted(grouped.items())
-        ]
+        )
+    return FixedCostTrendResponse(items=items, contract=contract)
+
+
+_FIXED_COST_SCOPE = (
+    "기존 cost_kind(고정/변동)와 필수/재량 컬럼으로 나눈 지출(환불 차감, 대출 연결 거래 "
+    "포함). 새 지급 형태·조정 가능성 축은 /metrics/monthly-flow 참조"
+)
+_FIXED_COST_FIELD_SCOPES = {
+    "expense_total": "모든 유효 KRW 지출 순액 (대출 포함) = monthly_flow total_outflow",
+    "fixed_total": "cost_kind = fixed (대출 연결 거래도 cost_kind에 따라 포함)",
+    "unclassified_total": "cost_kind가 fixed/variable이 아닌 지출",
+    "*_count": "해당 구간에 금액이 걸린 서로 다른 거래 수",
+}
+_FIXED_COST_FIELDS = (
+    "expense_total",
+    "fixed_total",
+    "variable_total",
+    "essential_fixed_total",
+    "discretionary_fixed_total",
+    "essential_variable_total",
+    "discretionary_variable_total",
+    "unclassified_total",
+    "unclassified_count",
+    "necessity_unclassified_total",
+    "necessity_unclassified_count",
+)
+
+
+def _fixed_cost_columns() -> list[ColumnElement]:
+    lines = _LINES
+    spend = -lines.c.amount
+    is_fixed = lines.c.cost_kind == "fixed"
+    is_variable = lines.c.cost_kind == "variable"
+    unclassified = or_(
+        lines.c.cost_kind.is_(None), lines.c.cost_kind.not_in(["fixed", "variable"])
     )
+    necessity_missing = or_(
+        unclassified,
+        and_(
+            is_fixed,
+            func.coalesce(lines.c.fixed_cost_necessity, "").not_in(_NECESSITY_VALUES),
+        ),
+        and_(
+            is_variable,
+            func.coalesce(lines.c.spend_necessity, "").not_in(_NECESSITY_VALUES),
+        ),
+    )
+
+    def total(condition: ColumnElement[bool] | None = None) -> ColumnElement:
+        value = spend if condition is None else case((condition, spend), else_=0)
+        return func.coalesce(func.sum(value), 0)
+
+    def count(condition: ColumnElement[bool]) -> ColumnElement:
+        return func.count(case((condition, lines.c.transaction_id)).distinct())
+
+    return [
+        total().label("expense_total"),
+        total(is_fixed).label("fixed_total"),
+        total(is_variable).label("variable_total"),
+        total(and_(is_fixed, lines.c.fixed_cost_necessity == "essential")).label(
+            "essential_fixed_total"
+        ),
+        total(and_(is_fixed, lines.c.fixed_cost_necessity == "discretionary")).label(
+            "discretionary_fixed_total"
+        ),
+        total(and_(is_variable, lines.c.spend_necessity == "essential")).label(
+            "essential_variable_total"
+        ),
+        total(and_(is_variable, lines.c.spend_necessity == "discretionary")).label(
+            "discretionary_variable_total"
+        ),
+        total(unclassified).label("unclassified_total"),
+        count(unclassified).label("unclassified_count"),
+        total(necessity_missing).label("necessity_unclassified_total"),
+        count(necessity_missing).label("necessity_unclassified_count"),
+    ]
 
 
 async def get_merchant_spend(
@@ -354,40 +411,66 @@ async def get_merchant_spend(
     tx_type: TransactionTypeFilter,
     limit: int,
 ) -> MerchantSpendResponse:
-    rows = await _load_analytics_transactions(
-        db_session,
-        start_date=start_date,
-        end_date=end_date,
-        tx_type=tx_type,
+    scope_filters = [*_date_filters(start_date, end_date), *_type_filters(tx_type)]
+    merchant = func.coalesce(func.nullif(_LINES.c.merchant, ""), "미분류")
+    totals = await db_session.execute(
+        select(
+            merchant.label("merchant"),
+            func.coalesce(func.sum(_analytics_amount()), 0).label("amount"),
+            func.count(_LINES.c.transaction_id.distinct()).label("count"),
+        )
+        .where(*scope_filters)
+        .group_by(merchant)
     )
-
-    grouped: dict[str, dict[str, int | datetime]] = defaultdict(
-        lambda: {
-            "amount": 0,
-            "count": 0,
-            "last_seen_at": datetime.min,
-        }
+    ranked = (
+        select(
+            merchant.label("merchant"),
+            _LINES.c.date,
+            _LINES.c.time,
+            func.row_number()
+            .over(
+                partition_by=merchant,
+                order_by=(_LINES.c.date.desc(), _LINES.c.time.desc()),
+            )
+            .label("position"),
+        )
+        .where(*scope_filters)
+        .subquery("ranked")
     )
-    for row in rows:
-        merchant = row["merchant"] or "미분류"
-        grouped[merchant]["amount"] += _amount_for_analytics(row["type"], row["amount"])
-        grouped[merchant]["count"] += 1
-        last_seen_at = datetime.combine(row["date"], row["time"])
-        if last_seen_at > grouped[merchant]["last_seen_at"]:
-            grouped[merchant]["last_seen_at"] = last_seen_at
-
+    last_seen = {
+        row["merchant"]: datetime.combine(_as_date(row["date"]), _as_time(row["time"]))
+        for row in (
+            await db_session.execute(
+                select(ranked.c.merchant, ranked.c.date, ranked.c.time).where(
+                    ranked.c.position == 1
+                )
+            )
+        ).mappings()
+    }
     items = [
         MerchantSpendItem(
-            merchant=merchant,
-            amount=int(values["amount"]),
-            count=int(values["count"]),
-            avg_amount=round(int(values["amount"]) / int(values["count"]), 2),
-            last_seen_at=values["last_seen_at"],
+            merchant=row["merchant"],
+            amount=int(row["amount"]),
+            count=int(row["count"]),
+            avg_amount=round(int(row["amount"]) / int(row["count"]), 2),
+            last_seen_at=last_seen[row["merchant"]],
         )
-        for merchant, values in grouped.items()
+        for row in totals.mappings()
     ]
     items.sort(key=lambda item: (-item.amount, item.merchant))
-    return MerchantSpendResponse(items=items[:limit])
+    return MerchantSpendResponse(
+        items=items[:limit],
+        contract=await build_flow_contract(
+            db_session,
+            definition="merchant_spend.legacy_v1",
+            scope=(
+                "거래처별 금액(지출은 환불 차감 순액, 확정 정산된 환불은 원거래 거래처로 "
+                "귀속). count는 서로 다른 거래 수"
+            ),
+            start_date=start_date,
+            end_date=end_date,
+        ),
+    )
 
 
 async def get_payment_method_patterns(
@@ -397,34 +480,51 @@ async def get_payment_method_patterns(
     end_date: date | None,
     tx_type: TransactionTypeFilter,
 ) -> PaymentMethodPatternsResponse:
-    rows = await _load_analytics_transactions(
-        db_session,
-        start_date=start_date,
-        end_date=end_date,
-        tx_type=tx_type,
+    scope_filters = [*_date_filters(start_date, end_date), *_type_filters(tx_type)]
+    method = func.coalesce(func.nullif(_LINES.c.payment_method, ""), "알 수 없음")
+    grouped = await db_session.execute(
+        select(
+            method.label("payment_method"),
+            func.coalesce(func.sum(_analytics_amount()), 0).label("amount"),
+            func.count(_LINES.c.transaction_id.distinct()).label("count"),
+        )
+        .where(*scope_filters)
+        .group_by(method)
     )
-
-    grouped: dict[str, dict[str, int]] = defaultdict(lambda: {"amount": 0, "count": 0})
-    for row in rows:
-        method = row["payment_method"] or "알 수 없음"
-        grouped[method]["amount"] += _amount_for_analytics(row["type"], row["amount"])
-        grouped[method]["count"] += 1
-
-    total_amount = sum(v["amount"] for v in grouped.values())
+    total_amount = int(
+        await db_session.scalar(
+            select(func.coalesce(func.sum(_analytics_amount()), 0)).where(
+                *scope_filters
+            )
+        )
+        or 0
+    )
     items = [
         PaymentMethodPatternItem(
-            payment_method=method,
-            total_amount=values["amount"],
-            transaction_count=values["count"],
-            avg_amount=round(values["amount"] / values["count"])
-            if values["count"]
+            payment_method=row["payment_method"],
+            total_amount=int(row["amount"]),
+            transaction_count=int(row["count"]),
+            avg_amount=round(int(row["amount"]) / int(row["count"]))
+            if row["count"]
             else 0,
-            pct_of_total=_safe_ratio(values["amount"] * 100, total_amount),
+            pct_of_total=_safe_ratio(int(row["amount"]) * 100, total_amount),
         )
-        for method, values in grouped.items()
+        for row in grouped.mappings()
     ]
     items.sort(key=lambda item: (-item.total_amount, item.payment_method))
-    return PaymentMethodPatternsResponse(items=items)
+    return PaymentMethodPatternsResponse(
+        items=items,
+        contract=await build_flow_contract(
+            db_session,
+            definition="payment_method_patterns.legacy_v1",
+            scope=(
+                "결제수단별 금액(지출은 환불 차감 순액, 확정 정산된 환불은 원거래 "
+                "결제수단으로 귀속). transaction_count는 서로 다른 거래 수"
+            ),
+            start_date=start_date,
+            end_date=end_date,
+        ),
+    )
 
 
 async def get_income_stability(
@@ -440,26 +540,41 @@ async def get_income_stability(
     assert ref_date is not None
     partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
 
-    rows = await _load_analytics_transactions(
+    filters: list[ColumnElement[bool]] = [
+        _LINES.c.type == INCOME,
+        *_date_filters(start_date, ref_date),
+    ]
+    if partial_cutoff_day is not None:
+        filters.append(
+            not_(
+                and_(
+                    _LINES.c.date < date(ref_date.year, ref_date.month, 1),
+                    day_of_month(_LINES.c.date) > partial_cutoff_day,
+                )
+            )
+        )
+    result = await db_session.execute(
+        select(
+            _LINES.c.period,
+            func.coalesce(func.sum(_LINES.c.amount), 0).label("income"),
+        )
+        .where(*filters)
+        .group_by(_LINES.c.period)
+        .order_by(_LINES.c.period.asc())
+    )
+    items = [
+        IncomeMonthlyItem(period=row["period"], income=int(row["income"]))
+        for row in result.mappings()
+    ]
+    values = [item.income for item in items]
+    contract = await build_flow_contract(
         db_session,
+        definition="income_stability.legacy_v1",
+        scope="월별 수입(이체 제외) 합계와 그 변동성. 수입이 관측된 월만 포함",
         start_date=start_date,
         end_date=ref_date,
-        tx_type="수입",
+        include_undecided=False,
     )
-
-    monthly: dict[str, int] = defaultdict(int)
-    for row in rows:
-        row_date = row["date"]
-        if (
-            partial_cutoff_day is not None
-            and row_date < date(ref_date.year, ref_date.month, 1)
-            and row_date.day > partial_cutoff_day
-        ):
-            continue
-        monthly[_month_key(row_date)] += row["amount"]
-
-    items = [IncomeMonthlyItem(period=p, income=monthly[p]) for p in sorted(monthly)]
-    values = [item.income for item in items]
 
     if not values:
         return IncomeStabilityResponse(
@@ -475,6 +590,7 @@ async def get_income_stability(
                 partial_cutoff_day=partial_cutoff_day,
                 ref_date=ref_date,
             ),
+            contract=contract,
         )
 
     avg = round(sum(values) / len(values))
@@ -494,6 +610,7 @@ async def get_income_stability(
             partial_cutoff_day=partial_cutoff_day,
             ref_date=ref_date,
         ),
+        contract=contract,
     )
 
 
@@ -509,7 +626,7 @@ async def get_recurring_payments(
     recent_days: int = 90,
 ) -> RecurringPaymentsResponse:
     reference_date = end_date or date.today()
-    rows = await _load_analytics_transactions(
+    rows = await _load_purchase_net_rows(
         db_session,
         start_date=start_date,
         end_date=reference_date,
@@ -625,6 +742,14 @@ async def get_recurring_payments(
             "avg_amount는 전체 순지출을 양수 순지출 관측일 수로 나눈 값입니다. "
             "recurring_payment_kind는 사용자가 수동 분류한 거래값을 집계한다."
         ),
+        contract=await build_purchase_net_contract(
+            db_session,
+            definition=f"recurring_payment_candidates.{PURCHASE_NET_DEFINITION}",
+            scope=(
+                "반복 결제 후보 탐지. 구매 단위 순액(확정 정산 환불을 원거래에서 차감, "
+                "미배분 환불 잔액은 환불 행에 유지) 기준이며 월 현금흐름 실적이 아님"
+            ),
+        ),
     )
 
 
@@ -669,25 +794,36 @@ async def get_spending_anomalies(
             y += 1
     baseline_period_set = set(baseline_periods)
 
-    rows = await _load_analytics_transactions(
-        db_session,
-        start_date=load_start,
-        end_date=load_end,
-        tx_type="지출",
+    filters: list[ColumnElement[bool]] = [
+        _LINES.c.type == EXPENSE,
+        *_date_filters(load_start, load_end),
+    ]
+    if partial_cutoff_day is not None and baseline_period_set:
+        filters.append(
+            not_(
+                and_(
+                    _LINES.c.period.in_(sorted(baseline_period_set)),
+                    day_of_month(_LINES.c.date) > partial_cutoff_day,
+                )
+            )
+        )
+    category_expr = func.coalesce(
+        func.nullif(_LINES.c.effective_category_major, ""), "미분류"
     )
-
-    # (period, category) → amount
-    grouped: dict[tuple[str, str], int] = defaultdict(int)
-    for row in rows:
-        period = _month_key(row["date"])
-        if (
-            partial_cutoff_day is not None
-            and period in baseline_period_set
-            and row["date"].day > partial_cutoff_day
-        ):
-            continue
-        category = row["effective_category_major"] or "미분류"
-        grouped[(period, category)] += -row["amount"]
+    result = await db_session.execute(
+        select(
+            _LINES.c.period,
+            category_expr.label("category"),
+            func.coalesce(func.sum(-_LINES.c.amount), 0).label("amount"),
+        )
+        .where(*filters)
+        .group_by(_LINES.c.period, category_expr)
+    )
+    # (period, category) -> net spend, aggregated in SQL from the flow lines.
+    grouped: dict[tuple[str, str], int] = {
+        (row["period"], row["category"]): int(row["amount"])
+        for row in result.mappings()
+    }
 
     # 카테고리별 baseline 통계
     all_categories = {cat for (_, cat) in grouped.keys()}
@@ -783,6 +919,16 @@ async def get_spending_anomalies(
             partial_cutoff_day=partial_cutoff_day,
             ref_date=ref_date,
         ),
+        contract=await build_flow_contract(
+            db_session,
+            definition="spending_anomalies.legacy_v1",
+            scope=(
+                "대분류 카테고리별 월 순지출(환불은 게시월에서 차감, 대출 포함)의 "
+                "기준월 대비 기준 기간 평균 비교"
+            ),
+            start_date=load_start,
+            end_date=load_end,
+        ),
     )
 
 
@@ -799,7 +945,7 @@ async def get_discretionary_velocity(
     month_progress_ratio = round(ref_date.day / month_end.day, 4)
     baseline_start = _add_months(month_start, -settings.baseline_months)
 
-    rows = await _load_analytics_transactions(
+    rows = await _load_purchase_net_rows(
         db_session,
         start_date=baseline_start,
         end_date=ref_date,
@@ -903,6 +1049,14 @@ async def get_discretionary_velocity(
             "현재 지출과 기준월 모두 환급을 차감한 순지출이며, 확정 정산은 원거래에 반영합니다.",
             "분류 커버리지는 환급을 제외한 결제액 중 필요도가 분류된 금액의 비율입니다.",
         ],
+        contract=await build_purchase_net_contract(
+            db_session,
+            definition=f"discretionary_velocity.{PURCHASE_NET_DEFINITION}",
+            scope=(
+                "진행월 재량 지출 속도(대출 제외). 구매 단위 순액 기준이며 3.3에 따라 "
+                "같은 경과일 비교로 대체될 예정"
+            ),
+        ),
     )
 
 
@@ -919,7 +1073,7 @@ async def get_purchase_gate_candidates(
     ref_end = end_date or date.today()
     ref_start = start_date or date(ref_end.year, ref_end.month, 1)
     lookback_start = _add_months(ref_start, -settings.new_merchant_lookback_months)
-    rows = await _load_analytics_transactions(
+    rows = await _load_purchase_net_rows(
         db_session,
         start_date=lookback_start,
         end_date=ref_end,
@@ -1124,6 +1278,14 @@ async def get_purchase_gate_candidates(
             "후보는 구매 금지/허용 판단이 아니라 사용자 검토 queue입니다.",
             f"기본 cooldown은 {settings.review_cooldown_days}일입니다.",
         ],
+        contract=await build_purchase_net_contract(
+            db_session,
+            definition=f"spending_review_candidates.{PURCHASE_NET_DEFINITION}",
+            scope=(
+                "사후 검토 후보. 구매 단위 순액(확정 정산 환불을 원거래에서 차감) 기준이며 "
+                "월 현금흐름 실적이 아님"
+            ),
+        ),
     )
 
 
@@ -1187,49 +1349,48 @@ async def update_purchase_gate_candidate_review(
     )
 
 
-async def _load_analytics_transactions(
+async def _load_purchase_net_rows(
     db_session: AsyncSession,
     *,
     start_date: date | None,
     end_date: date | None,
     tx_type: TransactionTypeFilter,
 ) -> list[AnalyticsRow]:
-    canonical = build_transactions_effective_select().subquery(
-        "vw_transactions_effective"
+    """Per-purchase rows for detectors (purchase_net.v1, not cashflow actuals).
+
+    ``purchase_net_amount`` is computed in ``vw_metric_transactions``: confirmed
+    refund allocations net into the original purchase and only the unallocated
+    remainder stays on the refund row. Rows whose net is zero are omitted.
+    """
+    tx = METRIC_TRANSACTIONS_VIEW
+    query = (
+        select(tx)
+        .where(func.upper(tx.c.currency) == METRIC_CURRENCY)
+        .where(tx.c.purchase_net_amount != 0)
     )
-    query = select(canonical)
     if start_date is not None:
-        query = query.where(canonical.c.date >= start_date)
+        query = query.where(tx.c.date >= start_date)
     if end_date is not None:
-        query = query.where(canonical.c.date <= end_date)
+        query = query.where(tx.c.date <= end_date)
     if tx_type == "income_expense":
-        query = query.where(canonical.c.type.in_(["수입", "지출"]))
+        query = query.where(tx.c.type.in_([INCOME, EXPENSE]))
     elif tx_type != "all":
-        query = query.where(canonical.c.type == tx_type)
+        query = query.where(tx.c.type == tx_type)
     result = await db_session.execute(
-        query.order_by(
-            canonical.c.date.asc(), canonical.c.time.asc(), canonical.c.id.asc()
-        )
+        query.order_by(tx.c.date.asc(), tx.c.time.asc(), tx.c.id.asc())
     )
-    rows = [_parse_analytics_row(row) for row in result.mappings().all()]
-    if not rows:
-        return []
-    settlement_netting = await build_confirmed_settlement_analysis_netting(db_session)
-    adjusted_rows: list[AnalyticsRow] = []
-    for row in rows:
-        adjusted_row = _apply_settlement_netting(row, settlement_netting)
-        if adjusted_row is not None:
-            adjusted_rows.append(adjusted_row)
-    return adjusted_rows
+    return [_parse_purchase_net_row(row) for row in result.mappings().all()]
 
 
-def _parse_analytics_row(row: RowMapping) -> AnalyticsRow:
-    parsed: AnalyticsRow = {
+def _parse_purchase_net_row(row: RowMapping) -> AnalyticsRow:
+    amount = int(row["amount"])
+    is_purchase = row["type"] == EXPENSE and amount < 0
+    return {
         "id": int(row["id"]),
-        "date": row["date"],
-        "time": row["time"],
+        "date": _as_date(row["date"]),
+        "time": _as_time(row["time"]),
         "type": str(row["type"]),
-        "amount": int(row["amount"]),
+        "amount": int(row["purchase_net_amount"]),
         "merchant": row["merchant"],
         "description": str(row["description"]),
         "payment_method": row["payment_method"],
@@ -1240,76 +1401,50 @@ def _parse_analytics_row(row: RowMapping) -> AnalyticsRow:
         "spend_necessity": row["spend_necessity"],
         "loan_account_id": row["loan_account_id"],
         "recurring_payment_kind": row["recurring_payment_kind"],
+        "settlement_refund_total": (
+            int(row["settlement_refund_total"] or 0) if is_purchase else 0
+        ),
     }
-    settlement_refund_total = row.get("settlement_refund_total")
-    if settlement_refund_total is not None:
-        parsed["settlement_refund_total"] = int(settlement_refund_total)
-    return parsed
 
 
-def _apply_settlement_netting(
-    row: AnalyticsRow,
-    settlement_netting: SettlementAnalysisNetting,
-) -> AnalyticsRow | None:
-    adjusted: AnalyticsRow = {
-        "id": row["id"],
-        "date": row["date"],
-        "time": row["time"],
-        "type": row["type"],
-        "amount": row["amount"],
-        "merchant": row["merchant"],
-        "description": row["description"],
-        "payment_method": row["payment_method"],
-        "effective_category_major": row["effective_category_major"],
-        "effective_category_minor": row["effective_category_minor"],
-        "cost_kind": row["cost_kind"],
-        "fixed_cost_necessity": row["fixed_cost_necessity"],
-        "spend_necessity": row["spend_necessity"],
-        "loan_account_id": row["loan_account_id"],
-        "recurring_payment_kind": row["recurring_payment_kind"],
-    }
-    adjusted["settlement_refund_total"] = 0
-
-    if row["type"] != "지출":
-        return adjusted
-
-    amount = row["amount"]
-    transaction_id = row["id"]
-    if amount < 0:
-        refund_total = settlement_netting.refund_total_by_original_transaction_id.get(
-            transaction_id,
-            0,
-        )
-        adjusted["amount"] = amount + refund_total
-        adjusted["settlement_refund_total"] = refund_total
-    elif transaction_id in settlement_netting.excluded_refund_transaction_ids:
-        adjusted["amount"] = 0
-
-    if adjusted["amount"] == 0:
-        return None
-    return adjusted
+def _date_filters(
+    start_date: date | None, end_date: date | None
+) -> list[ColumnElement[bool]]:
+    filters: list[ColumnElement[bool]] = []
+    if start_date is not None:
+        filters.append(_LINES.c.date >= start_date)
+    if end_date is not None:
+        filters.append(_LINES.c.date <= end_date)
+    return filters
 
 
-def _necessity_is_missing(row: AnalyticsRow) -> bool:
-    if row["cost_kind"] == "fixed":
-        return row["fixed_cost_necessity"] not in {"essential", "discretionary"}
-    if row["cost_kind"] == "variable":
-        return row["spend_necessity"] not in {"essential", "discretionary"}
-    return True
+def _type_filters(tx_type: TransactionTypeFilter) -> list[ColumnElement[bool]]:
+    if tx_type == "income_expense":
+        return [_LINES.c.type.in_([INCOME, EXPENSE])]
+    if tx_type == "all":
+        return []
+    return [_LINES.c.type == tx_type]
 
 
-def _amount_for_analytics(tx_type: str, amount: int) -> int:
-    if tx_type == "지출":
-        return -amount
-    if tx_type == "이체":
-        return abs(amount)
-    return amount
+def _analytics_amount() -> ColumnElement:
+    """Legacy analytics amount: spend paid-positive, transfers absolute."""
+    return case(
+        (_LINES.c.type == EXPENSE, -_LINES.c.amount),
+        (_LINES.c.type == TRANSFER, func.abs(_LINES.c.amount)),
+        else_=_LINES.c.amount,
+    )
 
 
-def _category_value(row: AnalyticsRow, level: TransactionCategoryLevel) -> str:
-    if level == "major":
-        return row["effective_category_major"] or "미분류"
-    return row["effective_category_minor"] or "미분류"
+def _as_date(value: object) -> date:
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _as_time(value: object) -> time:
+    if isinstance(value, time):
+        return value
+    return time.fromisoformat(str(value))
 
 
 def _month_key(value: date) -> str:

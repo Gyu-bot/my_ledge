@@ -18,6 +18,8 @@ from app.schemas.canonical_views import (
     CanonicalViewsDashboardResponse,
 )
 
+from app.schemas.metrics import MetricAsOf
+from app.services.metrics_service import load_as_of
 from app.services.monthly_projection_service import (
     covered_periods,
     get_monthly_projection,
@@ -43,23 +45,11 @@ def _reference_period(reference_date: date) -> str:
     return reference_date.strftime("%Y-%m")
 
 
-async def _load_data_coverage(db_session: AsyncSession) -> CanonicalDataCoverage:
-    rows = await _fetch_rows(
-        db_session,
-        """
-        SELECT
-            MIN(date) AS first_transaction_date,
-            MAX(date) AS last_transaction_date
-        FROM transactions
-        WHERE is_deleted = false
-          AND merged_into_id IS NULL
-        """,
-        {},
-    )
-    row = rows[0] if rows else {}
+def _data_coverage(as_of: MetricAsOf) -> CanonicalDataCoverage:
+    # Same effective basis as the metric views (excludes superseded rows).
     return CanonicalDataCoverage(
-        first_transaction_date=row.get("first_transaction_date"),
-        last_transaction_date=row.get("last_transaction_date"),
+        first_transaction_date=as_of.first_transaction_date,
+        last_transaction_date=as_of.transaction_as_of,
     )
 
 
@@ -317,9 +307,8 @@ async def get_canonical_views_dashboard(
         observed_dates = await _fetch_rows(
             db_session,
             """
-            SELECT DISTINCT date FROM transactions
-            WHERE is_deleted = false AND merged_into_id IS NULL
-              AND date >= :start_date AND date <= :reference_date
+            SELECT DISTINCT date FROM vw_metric_transactions
+            WHERE date >= :start_date AND date <= :reference_date
         """,
             {
                 "start_date": date.fromisoformat(periods[0] + "-01"),
@@ -339,7 +328,8 @@ async def get_canonical_views_dashboard(
                 if period < _reference_period(resolved_reference_date)
             ],
         )
-    data_coverage = await _load_data_coverage(db_session)
+    metric_as_of = await load_as_of(db_session)
+    data_coverage = _data_coverage(metric_as_of)
     monthly_cashflow_items = [
         item.model_copy(
             update={"is_complete_month": item.period in sufficiently_covered}
@@ -366,6 +356,7 @@ async def get_canonical_views_dashboard(
     )
     return CanonicalViewsDashboardResponse(
         data_coverage=data_coverage,
+        metric_as_of=metric_as_of,
         month_projection=projection,
         merchant_monthly_baseline_total=int(summary_counts[0]["merchant_total"]),
         recurring_merchant_monthly_total=int(summary_counts[0]["recurring_total"]),

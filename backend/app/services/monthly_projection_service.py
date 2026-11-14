@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from statistics import median
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.installment_plan import InstallmentPlan
@@ -27,8 +27,14 @@ from app.schemas.income_projection import (
     RecurringExpenseProjectionSource,
     income_source_key,
 )
-from app.services.canonical_views import build_transactions_effective_select
 from app.services.income_expectations_service import get_income_expectations
+from app.services.metric_views import (
+    EXPENSE,
+    FLOW_LINES_VIEW,
+    INCOME,
+    METRIC_CURRENCY,
+    METRIC_TRANSACTIONS_VIEW,
+)
 
 LOOKBACK = 6
 MIN_MONTHS = 3
@@ -44,6 +50,13 @@ ONEOFF_WORDS = (
     "refund",
 )
 SALARY_WORDS = ("급여", "월급", "근로", "salary", "payroll")
+
+
+def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
+    value = row["date"]
+    if not isinstance(value, date):
+        row["date"] = date.fromisoformat(str(value))
+    return row
 
 
 def _period(value: date) -> str:
@@ -714,13 +727,16 @@ async def get_monthly_projection(
 ) -> MonthlyProjection:
     month_start = reference_date.replace(day=1)
     start = _shift_month(month_start, -LOOKBACK)
-    effective = build_transactions_effective_select().subquery()
+    # Same effective basis as the metric views (no deleted/merged/superseded
+    # rows, KRW only). The forecast algorithm itself is unchanged (T064).
+    effective = METRIC_TRANSACTIONS_VIEW
     result = await db_session.execute(
-        select(effective).where(
-            effective.c.date >= start, effective.c.date <= reference_date
-        )
+        select(effective)
+        .where(func.upper(effective.c.currency) == METRIC_CURRENCY)
+        .where(effective.c.date >= start, effective.c.date <= reference_date)
+        .order_by(effective.c.date, effective.c.time, effective.c.id)
     )
-    rows = [dict(row) for row in result.mappings()]
+    rows = [_normalize_row(dict(row)) for row in result.mappings()]
     upload = await db_session.scalar(
         select(UploadLog.snapshot_date)
         .where(
@@ -762,9 +778,25 @@ async def get_monthly_projection(
     components = _expense_components(
         rows, reference_date, coverage, list(latest_loans.values()), plans, links
     )
-    current = [row for row in rows if row["date"] >= month_start]
-    observed_income = sum(row["amount"] for row in current if row["type"] == "수입")
-    observed_expense = sum(-row["amount"] for row in current if row["type"] == "지출")
+    lines = FLOW_LINES_VIEW
+    observed = (
+        await db_session.execute(
+            select(
+                func.coalesce(
+                    func.sum(case((lines.c.type == INCOME, lines.c.amount), else_=0)),
+                    0,
+                ).label("income"),
+                func.coalesce(
+                    func.sum(case((lines.c.type == EXPENSE, -lines.c.amount), else_=0)),
+                    0,
+                ).label("expense"),
+            ).where(lines.c.date >= month_start, lines.c.date <= reference_date)
+        )
+    ).one()
+    # Observed actuals come from the monthly-flow lines (same definition as
+    # /metrics/monthly-flow income_total and total_outflow).
+    observed_income = int(observed.income or 0)
+    observed_expense = int(observed.expense or 0)
     remaining_income = sum(source.remaining_amount for source in sources)
     reasons = [
         reason for component in components for reason in component.missing_reasons
