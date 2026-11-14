@@ -230,7 +230,7 @@ Queue 필터는 count/limit/offset 전에 적용된다. 월별 두 관측 배열
 | `discretionary_spend_total` | `discretionary_fixed_total + discretionary_variable_total`. |
 | `unclassified_expense_total` | 일반 지출 중 `cost_kind is null`인 금액 합계. |
 | `net_cashflow` | `income_total - expense_total`. 대출 상환은 expense에 이미 포함된다. |
-| `savings_rate` | `net_cashflow / income_total`. 수입이 0이면 `null`. |
+| `savings_rate` | `net_cashflow / income_total`. 수입이 0이면 `null`. DB 뷰에서는 모든 달에 계산되지만, 대시보드 응답은 T057 비교 계약에 따라 진행월(`metric_as_of.last_closed_period` 이후)에 `null`을 준다. |
 
 ### Raw signed vs settlement-netted surfaces
 
@@ -388,8 +388,8 @@ DB queue의 `needs_recurring_payment_kind`는 검토 필요 신호다. 실제 �
 
 | Endpoint | 주요 값 | 의미 |
 |---|---|---|
-| `/analytics/monthly-cashflow` | `income`, `expense`, `transfer`, `net_cashflow`, `savings_rate` | 월별 수입/지출/이체 활동량과 저축률. `transfer`는 `abs(amount)` 활동량이다. |
-| `/analytics/category-mom` | `current_amount`, `previous_amount`, `delta_amount`, `delta_pct` | `reference_date`, `is_partial_period`, `comparison_basis`로 비교 범위를 밝힌다. 명시적 부분월은 이전 달의 같은 날짜 구간과 비교하며 빈 대상 월도 유지한다. |
+| `/analytics/monthly-cashflow` | `income`, `expense`, `transfer`, `net_cashflow`, `savings_rate` | 월별 수입/지출/이체 활동량과 저축률. `transfer`는 `abs(amount)` 활동량이다. `savings_rate`는 마감월에만 내고 진행월은 `null`(T057). |
+| `/analytics/category-mom` | `current_amount`, `previous_amount`, `delta_amount`, `delta_pct`, `baseline_amount`, `baseline_change_amount` | `reference_date`, `is_partial_period`, `comparison_basis`로 비교 범위를 밝힌다. 명시적 부분월과 진행월은 이전 달의 같은 날짜 구간과 비교하며(진행월을 전월 전체와 비교하지 않음) 빈 대상 월도 유지한다. `baseline_*`와 `comparison`은 T057 비교 계약(최근 마감월 중앙값) 기준이다. |
 | `/analytics/fixed-cost-summary` | `expense_total`, `fixed_total`, `variable_total`, `fixed_ratio`, `essential_fixed_total`, `discretionary_fixed_total`, `essential_variable_total`, `discretionary_variable_total`, `required_spend_total`, `discretionary_spend_total`, `unclassified_total`, `unclassified_count` | 기간 전체의 고정비/변동비/필수/재량/미분류 구조. `necessity_unclassified_total/count`는 cost kind 미분류와 다른 축이며 중복될 수 있다. 환급은 순액에 반영된다. |
 | `/analytics/fixed-cost-trend` | monthly fixed/variable/essential/discretionary/unclassified fields | 월별 고정비 구조 추이. |
 | `/analytics/merchant-spend` | `merchant`, `amount`, `count`, `avg_amount`, `last_seen_at` | 거래처별 총액, 빈도, 평균 금액, 마지막 거래일. |
@@ -399,7 +399,7 @@ DB queue의 `needs_recurring_payment_kind`는 검토 필요 신호다. 실제 �
 | `/analytics/spending-review-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing`, `candidate_purpose`, `future_friction_suggestion`, `assumptions`, `reasons` | preferred name for post-transaction discretionary review queue. Legacy `/analytics/purchase-gate-candidates` is kept for compatibility. Confirmed refunds use net spend. `possible_cancellation`/`cancellation_evidence_transaction_ids`는 미확정 취소 검토 힌트이며 조회로 settlement를 만들지 않는다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 순지출/반복분류와 `activity_status`. `activity=active`는 active candidate만 반환하고 historical/irregular/non_positive/not_recurring과 구분한다. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
 | `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`/`past_unconfirmed_total`은 지난 미연결 회차이며 미납 확정이 아니다. `is_future_obligation`을 구분하고 projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
-| `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `delta_pct_raw`, `delta_pct_display`, `baseline_quality`, `anomaly_mode`, `anomaly_score` | 기준 월과 baseline window의 category 지출 차이. `direction`은 signed delta의 증가/감소를 구분하고 sparse baseline에서는 raw percent와 표시용 percent를 구분한다. 환급 순감소를 증가로 말하지 않는다. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
+| `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `delta_pct_raw`, `delta_pct_display`, `baseline_quality`, `anomaly_mode`, `anomaly_score` | 기준 월과 비교 계약 기준 기간(T057: 자료 있는 최근 마감월 최대 6개의 중앙값, 기준 구간 시작일 적용, 진행월은 같은 경과일)의 category 지출 차이. `baseline_avg`는 이름과 달리 중앙값이다. `direction`은 signed delta의 증가/감소를 구분하고 sparse baseline에서는 raw percent와 표시용 percent를 구분한다. 환급 순감소를 증가로 말하지 않는다. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
 | `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. snapshot/history/compare/health와 공통의 `aggregation_basis` 및 `negative_asset_excluded_total`을 제공한다. |
 | `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `emergency_fund_target_months`, `target_progress_ratio`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 목표 대비 진행률, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. `input_as_of_date`, `required_spend_period`, 필수/추가상환 금액, `debt_payment_snapshot_date`를 확인한다. 선택 snapshot 이후 거래를 섞지 않으며 이미 필수인 상환을 다시 더하지 않는다. |
 
