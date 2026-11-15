@@ -57,9 +57,11 @@ async def test_flow_summary_matches_hand_computed_months(
     february = rows["2026-02"]
     assert february["month_status"] == "closed"
     assert february["ad_hoc_adjustable_total"] == 30_000
-    assert february["ad_hoc_protected_total"] == 10_000
-    assert february["undecided_total"] == 86_777
-    assert february["committed_recurring_total"] == 7_000
+    # T056: fixed+not_recurring (12,000) is ad hoc protected and
+    # variable+monthly_recurring (9,000) is committed instead of undecided.
+    assert february["ad_hoc_protected_total"] == 22_000
+    assert february["undecided_total"] == 65_777
+    assert february["committed_recurring_total"] == 16_000
     assert february["total_outflow"] == 133_777
     assert february["refund_total"] == 205_000
     assert february["transfer_net"] == 200_000
@@ -124,7 +126,7 @@ async def test_monthly_flow_endpoint_reads_the_view(
     assert january["residual_rate"] == round(1_944_000 / 3_000_000, 4)
     assert march["residual_rate"] is None  # in-progress month: no ratio
     contract = payload["contract"]
-    assert contract["definition"] == "monthly_flow.v1"
+    assert contract["definition"] == "monthly_flow.v2"
     assert contract["as_of"]["transaction_as_of"] == AS_OF.isoformat()
     assert contract["as_of"]["last_closed_period"] == "2026-02"
     assert contract["as_of"]["snapshot_as_of"] == {
@@ -169,10 +171,10 @@ async def test_spend_cube_endpoint_groups_the_cube(
     payload = response.json()
     assert payload["total_amount"] == 133_777
     assert {row["flow_row"]: row["amount"] for row in payload["rows"]} == {
-        "undecided": 86_777,
+        "undecided": 65_777,
         "ad_hoc_adjustable": 30_000,
-        "ad_hoc_protected": 10_000,
-        "committed_recurring": 7_000,
+        "ad_hoc_protected": 22_000,
+        "committed_recurring": 16_000,
     }
 
     bad = await async_client.get(

@@ -1,7 +1,8 @@
 """Synthetic ledger for metric-view invariants (no real financial data).
 
 Mixes income, transfers, loan- and installment-linked payments, every
-classification combination the flow mapping reads, refunds (unallocated, fully
+legacy classification combination the T056 mapping reads (written through to
+the two-axis tables exactly as an edit in the current frontend would be), refunds (unallocated, fully
 allocated across a month boundary, partially allocated, allocated to several
 purchases), zero-amount rows, and rows the metric basis must exclude (deleted,
 merged, superseded, non-KRW).
@@ -20,6 +21,7 @@ from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
+from app.services.nature_axes_service import write_through_legacy_classification
 from app.services.metric_views import (
     FLOW_LINES_VIEW,
     MONTHLY_FLOW_SUMMARY_VIEW,
@@ -202,6 +204,10 @@ async def build_synthetic_ledger(db_session: AsyncSession) -> SyntheticLedger:
             _tx(date(2026, 2, 20), 200_000, tx_type="이체", name="own-account"),
             "transfer_undetermined",
         ),
+        # T056 mapping (user decision 2026-11-15): fixed + not_recurring is
+        # ad hoc with its necessity; variable + monthly_recurring is a
+        # variable-amount recurring commitment; an installment kind without a
+        # plan link is ad hoc flagged "link unconfirmed".
         "fixed_not_recurring": (
             _tx(
                 date(2026, 2, 18),
@@ -211,7 +217,7 @@ async def build_synthetic_ledger(db_session: AsyncSession) -> SyntheticLedger:
                 fixed_cost_necessity="essential",
                 recurring_payment_kind="not_recurring",
             ),
-            "undecided",
+            "ad_hoc_protected",
         ),
         "variable_monthly": (
             _tx(
@@ -222,7 +228,7 @@ async def build_synthetic_ledger(db_session: AsyncSession) -> SyntheticLedger:
                 spend_necessity="essential",
                 recurring_payment_kind="monthly_recurring",
             ),
-            "undecided",
+            "committed_recurring",
         ),
         "installment_kind_unlinked": (
             _tx(
@@ -343,6 +349,10 @@ async def build_synthetic_ledger(db_session: AsyncSession) -> SyntheticLedger:
             ),
         ]
     )
+    await db_session.commit()
+    # Old-column classification reaches the metric views only through the
+    # T056 tables, the same way a PATCH /transactions edit is written through.
+    await write_through_legacy_classification(db_session, ids.values())
     await db_session.commit()
 
     excluded = {"deleted", "merged", "superseded_old", "foreign_currency"}

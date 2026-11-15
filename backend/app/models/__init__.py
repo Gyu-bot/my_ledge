@@ -22,6 +22,11 @@ from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_candidate_review import LoanCandidateReview
 from app.models.loan_transaction_link import LoanTransactionLink
+from app.models.nature_axes import (
+    CategoryAdjustabilityDefault,
+    RecurringCommitment,
+    TransactionNatureOverride,
+)
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
@@ -39,6 +44,7 @@ __all__ = [
     "AutoClassificationSettings",
     "AssetSnapshot",
     "Base",
+    "CategoryAdjustabilityDefault",
     "CategoryClassificationRule",
     "Investment",
     "InstallmentPlan",
@@ -52,10 +58,12 @@ __all__ = [
     "MerchantAliasRule",
     "PurchaseGateReview",
     "RecurringCategoryRule",
+    "RecurringCommitment",
     "TimestampMixin",
     "SettlementMatch",
     "SettlementMatchStatus",
     "Transaction",
+    "TransactionNatureOverride",
     "UploadLog",
     "UploadReviewOperation",
     "UploadRollbackPoint",
