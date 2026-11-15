@@ -601,3 +601,49 @@ No successful complete mapped Toss observation means a visible BankSalad fallbac
 - 범위: `upload_logs`, `upload_review_operations`, `upload_rollback_points`를 제외한 모든 원장 표. 하나의 advisory lock이 가져오기와 되돌리기를 직렬화한다.
 - T056의 새 표(`recurring_commitments`, `category_adjustability_defaults`, `transaction_nature_overrides`)도 이 범위에 자동으로 들어간다. 마이그레이션 0036 이전에 만든 지점은 새 표가 스냅샷에 없어 `schema_changed`로 거절된다(설계된 동작).
 - 최신 10개 `ready` 지점만 상태를 보관하고 이전 지점은 `expired`(행은 유지)가 된다. 되돌리기는 restored fingerprint가 pre fingerprint와 같을 때만 commit한다. 업로드 로그와 검토 operation은 삭제하지 않는다. PostgreSQL 전용.
+
+## Agent Read Surface (T060)
+
+Small read responses for consulting agents (plan 3.2). Code: `backend/app/api/v1/endpoints/read_surface.py`, `backend/app/services/read_surface_service.py`, `read_commitments_service.py`, `read_review_items_service.py`, `read_surface_index.py`, schemas `backend/app/schemas/read_surface.py`. Reads only; every route requires `X-API-Key`. No migration. Existing endpoints keep their bodies, fields, types, and status codes. Retirement plan: [agents/read-surface-migration.md](agents/read-surface-migration.md).
+
+| Method | Path | Status | Notes |
+|---|---|---|---|
+| `GET` | `/api/v1/read/index` | live | Entries (`key`, `name`, `path`, `questions` Q1–Q6, `definition`, `availability=live\|reserved`, `provided_by`, `parameters`), the status vocabulary, format rules. Net-worth reconciliation (Q5) is `reserved`, `provided_by=T061`, `path=null`. |
+| `GET` | `/api/v1/read/monthly-flow` | live | `start_period`/`end_period`. `data.items` = the `/metrics/monthly-flow` items unchanged. |
+| `GET` | `/api/v1/read/spend-cube` | live | Same parameters as `/metrics/spend-cube`. `data`: `group_by`, `filters`, `total_amount` (before truncation), `row_count`, `truncated`, `rows` (same row model). |
+| `GET` | `/api/v1/read/comparison/monthly-flow` | live | `period`. `data`: `comparison`, `measures`, `residual_rate` of `/metrics/comparison/monthly-flow`. |
+| `GET` | `/api/v1/read/comparison/contributions` | live | Same parameters as `/metrics/comparison/contributions`; `data` = that response without `contract`. |
+| `GET` | `/api/v1/read/review-items` | live | `period` (default latest closed month), `limit` 1–500. One post-hoc review list: purchase-level candidates (`subject=transaction`, the existing `purchase-gate-candidates` detector) and category changes (`subject=category_month`, the existing `spending-anomalies` detector). Each item has `listed_because[]` (`source`, `code`, `code_label`, the detector's own `detail` sentence and `signals`). No new score; `risk_level`, `review_priority`, `confidence`, `future_friction_suggestion` are not carried. Order: transactions by amount, then category items by absolute change. |
+| `GET` | `/api/v1/read/commitments` | live | `period` (default latest closed month). Loans, installment plans, recurring bundles in one list: `monthly_burden` + `monthly_burden_basis` (`recorded_monthly_payment`, `plan_monthly_amount`, `last_observed_closed_month`, `not_available`), `cycle`, `start_date`/`end_date`, `total_count`, `remaining_count`, `linked_count`, `adjustability` + basis, `lifecycle`, last observed month, and `observation` for the period: `observed`, `expected_not_observed`, `unlinked_transaction_present`, `not_expected`, `not_determinable`, each with a `reason`. `data.totals.observed_committed_total` equals the period's `committed_total`. |
+| `GET` | `/api/v1/read/data-status` | live | Transaction coverage, closed periods, in-progress period, per-kind snapshots (`assets`, `loans`, `investments`, `insurance`, `profile`, each with `days_before_transaction_as_of`), classification completeness (undecided amount/share/count, uncategorized expense, installment-link-unconfirmed count, commitments without cycle/adjustability), `coverage_gaps` (imported months with zero transactions), per-period states, excluded currency, and where the month-end forecast lives. `/metrics/data-status` is unchanged. |
+
+Envelope (every route except `index`): `surface`, `surface_label`, `read_surface_version` (`read_surface.v1`), `questions`, `status`, `status_label`, `status_reasons[]` (`code`, `label`, `periods`, `detail`), `as_of` (`transaction_as_of`, `first_transaction_date`, `last_closed_period`, `in_progress_period`, `snapshot_as_of` per kind), `period_scope` (`start_period`, `end_period`, `periods[]` with `coverage`, `month_status`, `status`, `transaction_count`, `total_outflow`, undecided total/share), `classification` (undecided total, total outflow, share, `complete`), `basis` (`definition`, `scope`, `rules`, `field_scopes`, `assumptions[]`), `labels` (English key → Korean name), `data`.
+
+Status vocabulary:
+
+| Status | Meaning | HTTP |
+|---|---|---|
+| `ok` | Data present and the scope has no undecided adjustability. | 200 |
+| `classification_incomplete` | Data present, but undecided spend (or, for commitments/data status, commitments without cycle or adjustability) makes the split incomplete. | 200 |
+| `no_transactions` | Period inside the imported range (first effective transaction month .. as-of month) with zero effective transactions. | 200 |
+| `not_imported` | No transactions at all, or the requested periods are outside the imported range. | 200 |
+| `query_failed` | The database read failed; body `ReadErrorResponse` (`surface`, `status`, `status_label`, `detail`), no values. | 503 |
+| auth failure | Missing or wrong `X-API-Key`; existing body `{"detail": "Invalid API key."}`. | 401 |
+
+Precedence: `not_imported` > `no_transactions` > `classification_incomplete` > `ok`. Every applicable reason is listed (`periods_not_imported`, `periods_without_transactions`, `in_progress_month_included`, `adjustability_undecided`, `commitment_attributes_missing`, `non_krw_excluded`). Invalid parameters stay FastAPI `422`.
+
+Format rules: amounts are integer won; shares/rates are 0–1 floats (4 dp); dates ISO `YYYY-MM-DD`; periods `YYYY-MM`; stable English keys with Korean labels (sibling `*_label` on new item models, envelope `labels` for screen payloads whose shape is shared with `/metrics/*`); one basis block with assumptions as a list of Korean sentences; snapshot dates per kind, never merged.
+
+Deprecated (OpenAPI `deprecated: true`, response headers `Deprecation: true` and `Link: <successor>; rel="successor-version"`; body and status unchanged, nothing removed):
+
+| Path | Successor |
+|---|---|
+| `GET /api/v1/canonical-views/dashboard` | `/api/v1/read/index` (its `month_projection` has no successor yet) |
+| `GET /api/v1/analytics/discretionary-velocity` | `/api/v1/read/comparison/monthly-flow` |
+| `GET /api/v1/analytics/purchase-gate-candidates` | `/api/v1/read/review-items` |
+| `GET /api/v1/analytics/spending-review-candidates` | `/api/v1/read/review-items` |
+| `GET /api/v1/analytics/spending-anomalies` | `/api/v1/read/review-items` |
+| `GET /api/v1/analytics/category-mom` | `/api/v1/read/comparison/contributions` |
+| `GET /api/v1/installments/forecast` | `/api/v1/read/commitments` |
+
+Import-contract endpoints are not marked. `liquidity-health` is not marked until `T061` provides its place.

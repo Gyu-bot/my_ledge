@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.deprecation import DeprecationHeaderMiddleware, mark_deprecated_routes
 
 
 def create_app() -> FastAPI:
@@ -19,6 +20,9 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router)
+    # T060: deprecation marks for read endpoints the read surface replaces.
+    mark_deprecated_routes(app)
+    app.add_middleware(DeprecationHeaderMiddleware)
     return app
 
 

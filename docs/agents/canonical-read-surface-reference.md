@@ -459,3 +459,32 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 `/investments/selected`의 Toss 항목은 국내·미국 주식(ETF 포함) 범위다. 채권/옵션/예수금을 포함하는 전체 계좌 잔액으로 해석하지 않는다. `valuation_precision=observation_proxy`이면 공급자 평가시각은 미제공이며 `valuation_at`은 조회시각 대용이다. stale=false도 실시간 시세임을 증명하지 않는다. USD→KRW는 별도로 조회한 midRate를 곱한 추정이고 quantity/native_currency/native_market_value/exchange_rate로 확인한다.
 
 수동 `POST /integrations/toss/sync`는 인증된 수집 쓰기 API다. 읽기 전용 소비자는 `/integrations/toss/status`와 selected surface만 읽는다. 실패·부분 수집은 직전 정상치를 보존하고 자동으로 BankSalad 전환하지 않는다. 최초 정상치가 없거나 비주식 scope가 충돌하면 명시적 fallback 사유를 따른다. 계좌 연결은 소스 적용과 별도이며, 소스 정책은 미리보기 후 확인해야 바뀐다. 자산 component/현금 범위가 미확정이면 전체 추정 순자산은 null이다.
+
+## 에이전트 읽기 표면 (T060)
+
+상담 에이전트는 Q1–Q6을 답할 때 `/api/v1/read/*`를 먼저 쓴다. 원시 거래 목록을 전부 받아 다시 집계할 필요가 없다. 계약 요약은 [backend-api-ssot.md](../backend-api-ssot.md#agent-read-surface-t060), 기존 엔드포인트에서 옮기는 방법은 [read-surface-migration.md](read-surface-migration.md)에 있다.
+
+| 질문 | 먼저 읽을 곳 |
+|---|---|
+| Q1 지난 달들에 돈이 어디로 갔나 | `/read/monthly-flow`, 필요하면 `/read/spend-cube` |
+| Q2 무엇이 변했고 얼마씩 기여했나 | `/read/comparison/monthly-flow`, `/read/comparison/contributions` |
+| Q3 조정할 수 있는 지출은 얼마이고 어디에 있나 | `/read/spend-cube?adjustability=adjustable`, `/read/comparison/contributions?adjustability=adjustable`, `/read/review-items` |
+| Q4 매달 묶여 있는 지급은 얼마이고 언제 끝나나 | `/read/commitments` |
+| Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `T061`이 제공(색인에 예약됨). 그 전까지는 기존 자산 엔드포인트 |
+| Q6 언제까지의 자료이고 분류는 얼마나 되었나 | `/read/data-status`, 그리고 모든 응답의 `as_of`·`classification` |
+
+값의 뜻:
+
+| 항목 | 의미 |
+|---|---|
+| `status` | `ok`, `classification_incomplete`(미정 지출이나 주기·조정 가능성이 빈 약정 때문에 나눔이 불완전), `no_transactions`(가져온 기간 안인데 거래 0건: 자료 공백과 구분할 수 없음), `not_imported`(가져오지 않은 기간). 조회 실패는 HTTP 503 본문의 `query_failed`, 인증 실패는 HTTP 401이다. 이유는 `status_reasons`에 모두 적힌다. |
+| `period_scope.periods[]` | 요청한 달마다 가져왔는지(`coverage`), 마감월·진행월, 거래 수, 미정 비중. 가져온 기간은 첫 유효 거래의 달부터 거래 기준일의 달까지다(업로드 기록에 파일 범위가 없어서). |
+| `as_of` | 거래 기준일과 종류별 스냅샷 기준일. 스냅샷 날짜는 종류마다 다르며 합치지 않는다. 자료가 오래되었는지는 판단하지 않고 날짜만 준다. `data-status`는 종류별로 거래 기준일과의 차이(일)를 준다. |
+| `classification` | 그 응답 범위의 조정 가능성 미정 금액과 총지급, 금액 기준 미정 비중. `complete=false`이면 보호·조정 가능 합계가 미정만큼 덜 잡혀 있다. |
+| `basis` | 정의 이름과 범위, 부호·환불·이체·대출·기간 귀속 규칙, 가정(한국어 문장 목록). 다른 형식의 가정 표기는 없다. |
+| `labels` | 응답에 나오는 영문 키의 한국어 이름(`flow_row.committed_loan` → "약정 지급 · 대출 원리금" 등). |
+| 약정 `observation.state` | `observed`(그 달 약정에 속한 지출이 있음), `expected_not_observed`(마감월이고 기록된 주기상 있어야 하는데 연결된 거래가 없음), `unlinked_transaction_present`(할부 회차 달에 같은 거래처의 '할부 연결 미확인' 표시 거래가 있음), `not_expected`(시작 전·종료 뒤·주기 밖·총 횟수 모두 관측), `not_determinable`(주기나 시작이 기록되지 않음, 진행월, 거래 0건 달, 가져오지 않은 기간). "관측 안 됨"은 기록에 연결된 거래가 없다는 뜻이지 지급하지 않았다는 증거가 아니다. |
+| 약정 `monthly_burden` | 기록된 월 부담이다: 대출 스냅샷의 월 상환액, 할부 계획의 월 금액, 매월 묶음은 최근 마감월에 관측된 합계. 매년·회차 묶음은 월 부담을 내지 않는다(월 환산은 `T062`). 근거는 `monthly_burden_basis`. 전망이 아니다. |
+| 대출의 주기 | 대출에는 주기 기록이 없다. 최신 스냅샷에 월 상환액이 있을 때만 매월로 보고, 없으면 `cycle=null`, 관측 판단은 `not_determinable`이다. |
+| 사후 검토 `listed_because` | 어느 기존 검출기가 어떤 사유 코드로 올렸는지와 검출기의 문장·기준값 그대로. 새 점수나 위험 등급이 아니다. 이미 일어난 거래의 사후 검토용이며 구매 전 판단이 아니다. 구매 단위 후보 검출기는 아직 예전 재량 분류(`spend_necessity`)를 읽는다. |
+| 월말 순현금흐름 전망 | 읽기 표면은 다시 계산하지 않는다. 기존 대시보드 응답의 `month_projection`에 그대로 있다(`T064` 수정 단계는 별도 승인). |
