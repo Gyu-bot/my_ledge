@@ -15,6 +15,7 @@ from app.api.v1.endpoints.loan_mapping import router as loan_mapping_router
 from app.api.v1.endpoints.metrics import router as metrics_router
 from app.api.v1.endpoints.nature_axes import router as nature_axes_router
 from app.api.v1.endpoints.profile import router as profile_router
+from app.api.v1.endpoints.read_surface import router as read_surface_router
 from app.api.v1.endpoints.schema import router as schema_router
 from app.api.v1.endpoints.settlement_matches import router as settlement_matches_router
 from app.api.v1.endpoints.settings import router as settings_router
@@ -41,5 +42,6 @@ api_router.include_router(loan_mapping_router)
 api_router.include_router(data_management_router)
 api_router.include_router(settlement_matches_router)
 api_router.include_router(transactions_router)
+api_router.include_router(read_surface_router)
 
 api_router.include_router(toss_router)
