@@ -85,6 +85,7 @@ REASON_CODES = (
     ("충분히 관측된 마감월 3개월이 없어", "variable_insufficient_history"),
     ("정기 수입을 식별할", "income_source_not_identified"),
     ("확인이 필요한 급여 출처", "income_source_needs_review"),
+    ("처음 보는 입금처의 급여 입금", "income_source_possible_payer_rename"),
     ("7일 이상 오래되어", "stale_observation"),
 )
 

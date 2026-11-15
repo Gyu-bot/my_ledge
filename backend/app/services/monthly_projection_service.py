@@ -50,6 +50,15 @@ ONEOFF_WORDS = (
     "refund",
 )
 SALARY_WORDS = ("급여", "월급", "근로", "salary", "payroll")
+RENAMED_PAYER_SOURCE_REASON = (
+    "이번 달 이 입금처 급여는 아직 없는데 처음 보는 입금처의 급여 분류 입금이 관측됨; "
+    "입금처 이름이 바뀐 같은 급여일 수 있어 예상액을 더하지 않음. "
+    "다른 수입이면 설정에서 새 입금처를 예상 수입으로 등록"
+)
+RENAMED_PAYER_MISSING_REASON = (
+    "처음 보는 입금처의 급여 입금과 아직 입금되지 않은 기존 급여 출처가 함께 있어 "
+    "기존 출처의 예상액을 보류함; 입금처 이름 변경 여부 확인 필요"
+)
 
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -149,6 +158,23 @@ def _coverage(
     )
 
 
+def _covered_day(coverage: ProjectionCoverage, reference: date) -> int:
+    """Last day of the reference month already covered by the ledger (T064 R10).
+
+    The remaining period starts the day after the later of the last observed
+    transaction and the latest successful upload snapshot not after the as-of
+    date. Quiet days inside the export are observed (nothing happened), not
+    unobserved. Dates outside the reference month do not count.
+    """
+    period = _period(reference)
+    covered = [
+        value
+        for value in (coverage.last_observed_date, coverage.latest_upload_date)
+        if value is not None and value <= reference and _period(value) == period
+    ]
+    return max(covered).day if covered else 0
+
+
 def _stable_history(
     rows: list[dict[str, Any]], periods: list[str], *, income: bool
 ) -> tuple[int | None, list[str], list[str], list[dict[str, Any]]]:
@@ -212,6 +238,10 @@ def _income_sources(
             current[key].append(row)
         else:
             grouped[key].append(row)
+    # Salary-category payers seen for the first time this month (no earlier
+    # deposit in the window, no user expectation).
+    new_payers = {key for key in current if key not in grouped and key not in settings}
+    new_salary_amount = sum(row["amount"] for key in new_payers for row in current[key])
     sources = []
     for key in sorted(set(grouped) | set(settings) | set(current)):
         history = grouped[key]
@@ -345,6 +375,17 @@ def _income_sources(
         ):
             state, confidence = "late", "low"
             reason += "; 예상 입금일 경과, 지연 또는 중단 여부 확인 필요"
+        if (
+            key not in new_payers
+            and state in {"expected", "late"}
+            and observed == 0
+            and remaining > 0
+            and new_salary_amount >= expected_amount * 0.1
+        ):
+            # T064 R9: a payer rename would otherwise count this month's salary
+            # twice (observed under the new name, expected under the old one).
+            state, remaining, confidence = "uncertain", 0, "low"
+            reason = RENAMED_PAYER_SOURCE_REASON
         sources.append(
             IncomeProjectionSource(
                 source_key=key,
@@ -525,12 +566,7 @@ def _expense_components(
 ) -> list[ExpenseProjectionComponent]:
     period = _period(reference)
     current_start = reference.replace(day=1)
-    observed_day = (
-        coverage.last_observed_date.day
-        if coverage.last_observed_date
-        and _period(coverage.last_observed_date) == period
-        else 0
-    )
+    covered_day = _covered_day(coverage, reference)
     expenses = [row for row in rows if row["type"] == "지출"]
     by_id = {row["id"]: row for row in expenses}
     link_map = {link.transaction_id: link for link in links}
@@ -586,6 +622,7 @@ def _expense_components(
         else:
             loan_remaining += max(round(loan.monthly_payment) - paid, 0)
     installment_remaining = 0
+    installment_warnings: list[str] = []
     used_actual_ids: set[int] = set()
     for plan in plans:
         offset = (
@@ -597,13 +634,25 @@ def _expense_components(
             continue
         number = offset + 1
         due = _shift_month(plan.first_payment_date, offset)
-        matched_links = [
+        plan_links = [
             link
             for link in links
-            if link.installment_plan_id == plan.id
-            and link.installment_number == number
-            and link.transaction_id in by_id
+            if link.installment_plan_id == plan.id and link.transaction_id in by_id
         ]
+        # T064 R3: this month's occurrence is a payment linked to the plan and
+        # dated in this month, whatever installment number the link carries. A
+        # different number only raises a warning. Without such a payment, the
+        # link of the computed number (any month in the window) still counts.
+        matched_links = [
+            link
+            for link in plan_links
+            if _period(by_id[link.transaction_id]["date"]) == period
+        ] or [link for link in plan_links if link.installment_number == number]
+        if any(link.installment_number != number for link in matched_links):
+            installment_warnings.append(
+                f"{plan.display_name}: 이번 달 연결 거래의 회차 번호가 계산한 회차({number}회차)와 다름; "
+                "이번 달 회차로 보고 예정액을 다시 더하지 않음. 첫 납부일·연결 회차 확인 필요"
+            )
         matched = [by_id[link.transaction_id] for link in matched_links]
         if any(row.get("loan_account_id") is not None for row in matched):
             reasons["installment"].append(
@@ -635,7 +684,7 @@ def _expense_components(
             installment_remaining += max(
                 plan.monthly_amount - sum(-row["amount"] for row in matched), 0
             )
-        elif due < current_start + timedelta(days=max(observed_day - 1, 0)):
+        elif due < current_start + timedelta(days=max(covered_day - 1, 0)):
             reasons["installment"].append(
                 "예정일이 지난 미연결 할부는 미래 지출로 더하지 않음; 실제 결제 여부 확인 필요"
             )
@@ -648,7 +697,7 @@ def _expense_components(
     for row in partitions["recurring"]:
         merchant_rows[_payer(row)].append(row)
     for _, items in sorted(merchant_rows.items()):
-        source = _recurring_source(items, reference, coverage, observed_day)
+        source = _recurring_source(items, reference, coverage, covered_day)
         if source is None:
             explicit_recurring = any(
                 row.get("recurring_payment_kind") == "monthly_recurring"
@@ -674,7 +723,7 @@ def _expense_components(
                 -row["amount"]
                 for row in partitions["variable"]
                 if _period(row["date"]) == baseline_period
-                and min(row["date"].day, _month_end(reference).day) > observed_day
+                and min(row["date"].day, _month_end(reference).day) > covered_day
             )
             for baseline_period in coverage.adequately_covered_periods
         ]
@@ -703,6 +752,10 @@ def _expense_components(
             for warning in source.warnings
         }
     )
+    component_warnings = {
+        "installment": sorted(set(installment_warnings)),
+        "recurring": recurring_warnings,
+    }
     return [
         ExpenseProjectionComponent(
             kind=kind,
@@ -713,9 +766,9 @@ def _expense_components(
             confidence="unavailable"
             if reasons[kind]
             else "low"
-            if kind == "recurring" and recurring_warnings
+            if component_warnings.get(kind)
             else "medium",
-            warnings=recurring_warnings if kind == "recurring" else [],
+            warnings=component_warnings.get(kind, []),
             sources=recurring_sources if kind == "recurring" else [],
         )
         for kind in ("loan", "installment", "recurring", "variable")
@@ -728,7 +781,7 @@ async def get_monthly_projection(
     month_start = reference_date.replace(day=1)
     start = _shift_month(month_start, -LOOKBACK)
     # Same effective basis as the metric views (no deleted/merged/superseded
-    # rows, KRW only). The forecast algorithm itself is unchanged (T064).
+    # rows, KRW only).
     effective = METRIC_TRANSACTIONS_VIEW
     result = await db_session.execute(
         select(effective)
@@ -811,6 +864,8 @@ async def get_monthly_projection(
         for source in sources
     ):
         reasons.append("확인이 필요한 급여 출처가 있음; 출처별 상태와 제외 사유 참고")
+    if any(source.reason == RENAMED_PAYER_SOURCE_REASON for source in sources):
+        reasons.append(RENAMED_PAYER_MISSING_REASON)
     stale = (
         coverage.last_observed_date is None
         or (reference_date - coverage.last_observed_date).days > 7
@@ -833,6 +888,9 @@ async def get_monthly_projection(
         component.known_expected_remaining for component in components
     )
     projected_income = observed_income + remaining_income
+    remaining_start = month_start + timedelta(
+        days=_covered_day(coverage, reference_date)
+    )
     projected_expense = (
         observed_expense + remaining_expense if remaining_expense is not None else None
     )
@@ -840,6 +898,9 @@ async def get_monthly_projection(
         period=_period(reference_date),
         as_of_date=reference_date,
         observed_through=coverage.last_observed_date,
+        remaining_period_start=remaining_start
+        if remaining_start <= _month_end(reference_date)
+        else None,
         observed_income=observed_income,
         expected_remaining_income=remaining_income,
         projected_month_income=projected_income,

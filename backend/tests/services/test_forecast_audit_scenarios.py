@@ -1,10 +1,11 @@
-"""T064 audit: characterization of the CURRENT month-end forecast.
+"""T064 audit: characterization of the month-end forecast.
 
-Each scenario pins what ``get_monthly_projection`` returns today. Where the
-current result is wrong, a separate ``xfail(strict=True)`` test states the
+Each scenario pins what ``get_monthly_projection`` returns. Where the result
+is still wrong, a separate ``xfail(strict=True)`` test states the
 expected-correct result, so the defect stays recorded and an accidental fix
-(or regression of the recorded behavior) is noticed. Nothing here changes the
-forecast. Synthetic identities and amounts only.
+(or regression of the recorded behavior) is noticed. Round 1 fixes (R3, R9,
+R10) turned their xfails into normal tests. Synthetic identities and amounts
+only.
 """
 
 import calendar
@@ -22,7 +23,13 @@ from app.models import (
     Transaction,
     UploadLog,
 )
-from app.schemas.income_projection import MonthlyProjection
+from app.schemas.income_projection import (
+    IncomeExpectation,
+    IncomeExpectationsSettings,
+    MonthlyProjection,
+    income_source_key,
+)
+from app.services.income_expectations_service import save_income_expectations
 from app.services.monthly_projection_service import get_monthly_projection
 
 SALARY = 100_000
@@ -167,29 +174,85 @@ async def _renamed_salary_payer(db: AsyncSession) -> MonthlyProjection:
     return await get_monthly_projection(db, reference_date=reference)
 
 
-async def test_current_renamed_salary_payer_is_counted_twice(db_session):
+async def test_renamed_salary_payer_withholds_pending_old_source(db_session):
+    """T064 R9 (F-I2): the old payer's pending salary is held for review."""
     result = await _renamed_salary_payer(db_session)
-    statuses = {source.merchant: source.status for source in result.income_sources}
-    assert statuses == {
-        "Example Payer": "expected",
+    sources = {source.merchant: source for source in result.income_sources}
+    assert {name: source.status for name, source in sources.items()} == {
+        "Example Payer": "uncertain",
         "Example Payer Renamed": "uncertain",
     }
+    old = sources["Example Payer"]
+    assert old.expected_amount == SALARY
+    assert old.observed_amount == 0
+    assert old.remaining_amount == 0
+    assert old.confidence == "low"
+    assert "입금처 이름이 바뀐" in old.reason
     assert result.observed_income == SALARY
-    assert result.expected_remaining_income == SALARY
-    assert result.projected_month_income == 2 * SALARY
+    assert result.projected_month_income == SALARY
+    assert any("입금처 이름 변경" in reason for reason in result.missing_reasons)
+    # Income-side review never removes the month-end value (audit 2.4).
     assert result.projected_month_end_net is not None
+    assert result.confidence == "low"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-I2: income sources are keyed by payer text; a salary received "
-    "under a new payer name does not settle the old payer's expected salary.",
-)
 async def test_expected_renamed_salary_payer_not_counted_twice(db_session):
     result = await _renamed_salary_payer(db_session)
     assert (
         result.projected_month_end_net is None or result.expected_remaining_income == 0
     )
+
+
+async def test_second_salary_payer_with_history_is_not_treated_as_rename(db_session):
+    """A payer with earlier deposits in the window is a separate source."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference)
+    for year, month in H1:
+        db_session.add(tx(date(year, month, 15), 50_000, "Example Side Payer", "급여"))
+    db_session.add(tx(date(2031, 7, 15), 50_000, "Example Side Payer", "급여"))
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    statuses = {source.merchant: source.status for source in result.income_sources}
+    assert statuses == {"Example Payer": "expected", "Example Side Payer": "received"}
+    assert result.expected_remaining_income == SALARY
+    assert not any("입금처 이름 변경" in reason for reason in result.missing_reasons)
+
+
+async def test_new_payer_registered_in_settings_is_not_treated_as_rename(db_session):
+    """A user expectation for the new payer marks it as a separate income."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference)
+    db_session.add(tx(date(2031, 7, 15), SALARY, "Example New Payer", "급여"))
+    await db_session.commit()
+    await save_income_expectations(
+        db_session,
+        IncomeExpectationsSettings(
+            items=[
+                IncomeExpectation(
+                    source_key=income_source_key("Example New Payer"),
+                    merchant="Example New Payer",
+                    expected_amount=SALARY,
+                    expected_day=15,
+                )
+            ]
+        ),
+    )
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    statuses = {source.merchant: source.status for source in result.income_sources}
+    assert statuses["Example Payer"] == "expected"
+    assert result.expected_remaining_income == SALARY
+
+
+async def test_tiny_new_salary_category_deposit_does_not_withhold(db_session):
+    """Below the 10% salary-event floor a new deposit is not a rename signal."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference)
+    db_session.add(tx(date(2031, 7, 15), SALARY // 20, "Example Adjuster", "급여"))
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    statuses = {source.merchant: source.status for source in result.income_sources}
+    assert statuses["Example Payer"] == "expected"
+    assert result.expected_remaining_income == SALARY
 
 
 # --------------------------------------------------------------------------
@@ -317,25 +380,57 @@ async def _quiet_days_after_last_transaction(db: AsyncSession) -> MonthlyProject
     return await get_monthly_projection(db, reference_date=reference)
 
 
-async def test_current_quiet_days_after_last_transaction_count_as_unobserved(
-    db_session,
-):
+async def test_quiet_days_inside_export_are_observed(db_session):
+    """T064 R10 (F-O1): the remaining period starts after the upload date."""
     result = await _quiet_days_after_last_transaction(db_session)
     assert result.coverage.latest_upload_date == date(2031, 7, 26)
     assert result.observed_through == date(2031, 7, 20)
-    # Days 21-26 are inside the export but still get the day-21/25 tail.
-    assert component(result, "variable").expected_remaining == 300
+    assert result.remaining_period_start == date(2031, 7, 27)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-O1: the remaining period starts after the last transaction "
-    "date, not after the export coverage date, so quiet days already covered "
-    "by the upload are assumed again.",
-)
 async def test_expected_quiet_days_inside_export_are_not_assumed_again(db_session):
     result = await _quiet_days_after_last_transaction(db_session)
     assert component(result, "variable").expected_remaining == 100
+
+
+async def test_upload_before_last_transaction_keeps_transaction_day(db_session):
+    """The later of the two dates wins; an older upload never moves it back."""
+    reference = date(2031, 7, 26)
+    await seed(db_session, months=H1, reference=reference)
+    db_session.add(
+        UploadLog(snapshot_date=date(2031, 7, 22), status="success", filename="z.xlsx")
+    )
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    assert result.observed_through == reference
+    assert result.remaining_period_start == date(2031, 7, 27)
+    assert component(result, "variable").expected_remaining == 100
+
+
+async def test_upload_after_as_of_or_in_previous_month_is_ignored(db_session):
+    """Only uploads in the reference month and not after the as-of count."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference)
+    db_session.add(
+        UploadLog(snapshot_date=date(2031, 7, 26), status="success", filename="f.xlsx")
+    )
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    assert result.remaining_period_start == date(2031, 7, 21)
+    # Day-21 and day-25 grocery tails are still assumed.
+    assert component(result, "variable").expected_remaining == 300
+
+    early = await get_monthly_projection(db_session, reference_date=date(2031, 7, 1))
+    # The previous month's upload and last transaction do not cover July.
+    assert early.remaining_period_start == date(2031, 7, 1)
+
+
+async def test_fully_covered_month_has_no_remaining_period(db_session):
+    reference = date(2031, 7, 31)
+    await seed(db_session, months=H1, reference=reference)
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    assert result.remaining_period_start is None
+    assert component(result, "variable").expected_remaining == 0
 
 
 # --------------------------------------------------------------------------
@@ -493,24 +588,70 @@ async def _installment_number_off_by_one(db: AsyncSession) -> MonthlyProjection:
     return await get_monthly_projection(db, reference_date=reference)
 
 
-async def test_current_installment_link_number_mismatch_adds_paid_installment_again(
-    db_session,
-):
+async def test_installment_link_number_mismatch_only_warns(db_session):
+    """T064 R3 (F-C3): the July payment linked as #7 is July's occurrence."""
     result = await _installment_number_off_by_one(db_session)
-    # July's installment (#7) is linked and observed, but the schedule looks
-    # for #8 in July, finds no link, and adds the monthly amount again.
+    installment = component(result, "installment")
     assert result.observed_net_expense == 100 + 1_000
-    assert component(result, "installment").expected_remaining == 1_000
+    assert installment.expected_remaining == 0
+    assert installment.missing_reasons == []
+    assert installment.confidence == "low"
+    assert len(installment.warnings) == 1
+    assert installment.warnings[0].startswith("Example Plan: ")
+    assert "8회차" in installment.warnings[0]
+    assert installment.warnings[0] in result.warnings
+    assert result.projected_month_end_net is not None
+    assert result.confidence == "low"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-C3: the schedule matches links only by computed installment "
-    "number; a linked payment of this month with another number is added again.",
-)
 async def test_expected_linked_installment_of_this_month_not_added_again(db_session):
     result = await _installment_number_off_by_one(db_session)
     assert component(result, "installment").expected_remaining == 0
+
+
+async def test_linked_installment_of_this_month_with_matching_number_has_no_warning(
+    db_session,
+):
+    months = [(2031, month) for month in range(1, 8)]
+    result = await _installment(
+        db_session, reference=date(2031, 7, 25), months=months, linked=True
+    )
+    installment = component(result, "installment")
+    assert installment.expected_remaining == 0
+    assert installment.warnings == []
+    assert installment.confidence == "medium"
+
+
+async def test_installment_link_number_mismatch_before_this_month_payment(db_session):
+    """Before July's payment posts, the computed #8 link is absent: assume it."""
+    reference = date(2031, 7, 5)
+    await seed(db_session, months=H1, reference=reference)
+    plan = InstallmentPlan(
+        display_name="Example Plan",
+        merchant="Example Device",
+        monthly_amount=1_000,
+        first_payment_date=date(2030, 12, 20),
+        total_installments=12,
+        status="active",
+    )
+    db_session.add(plan)
+    await db_session.flush()
+    for number, month in enumerate(range(1, 7), start=1):
+        row = tx(date(2031, month, 20), -1_000, "Example Device", "쇼핑")
+        db_session.add(row)
+        await db_session.flush()
+        db_session.add(
+            InstallmentTransactionLink(
+                transaction_id=row.id,
+                installment_plan_id=plan.id,
+                installment_number=number,
+            )
+        )
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=reference)
+    installment = component(result, "installment")
+    assert installment.expected_remaining == 1_000
+    assert installment.warnings == []
 
 
 # --------------------------------------------------------------------------
