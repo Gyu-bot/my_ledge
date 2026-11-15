@@ -143,7 +143,7 @@
 
 | Method | Path | Status | Notes |
 |---|---|---|---|
-| `GET` | `/api/v1/transactions` | live | pagination, search, edited/deleted/merged filters 지원 |
+| `GET` | `/api/v1/transactions` | live | pagination, search, edited/deleted/merged filters 지원. T059: optional monthly-flow line filters `flow_row`, `payment_form`, `adjustability` (read from `vw_metric_flow_lines`) |
 | `GET` | `/api/v1/transactions/{id}` | live | one stored transaction by id; `404` if absent; independent of list filters |
 | `GET` | `/api/v1/transactions/filter-options` | live | category/payment method distinct options |
 | `GET` | `/api/v1/transactions/summary` | live | `group_by=month|week|day`; response includes `basis` metadata for raw signed aggregation |
@@ -338,6 +338,10 @@ Every route requires `X-API-Key` (reads included). Transfer purposes are written
   - `search`
   - `page`
   - `per_page`
+  - `flow_row` (T059): `income_undetermined`, `committed_loan`, `committed_installment`, `committed_recurring`, `ad_hoc_protected`, `ad_hoc_adjustable`, `undecided`, `transfer_undetermined`, `other_type`
+  - `payment_form` (T059): `committed`, `ad_hoc`, `not_applicable`
+  - `adjustability` (T059): `protected`, `adjustable`, `undecided`, `not_applicable`
+- Monthly-flow line filters (T059, additive and optional; existing parameters and the response shape are unchanged): a transaction is kept when one of its `vw_metric_flow_lines` lines has every given value (`EXISTS` on the view; the classification is not re-derived). With `start_date`/`end_date` covering one month, `flow_row` lists exactly the transactions behind that monthly-flow line, and `total` equals the line's `transaction_count`. Consequences of reading the lines: only effective KRW transactions have lines, so any of these filters drops deleted, merged, superseded and non-KRW rows even with `include_deleted`/`include_merged`; a refund whose part is allocated to a purchase is listed under the purchase's row (and under its own row for the unallocated remainder), while `amount` stays the raw signed amount of the whole refund row. Unknown values return `422`.
 - Transaction response includes live fields that matter to frontend/workbench:
   - `merchant`
   - `cost_kind`

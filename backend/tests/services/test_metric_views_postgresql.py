@@ -37,6 +37,7 @@ from metric_synthetic_ledger import (
 )
 import test_amount_conservation as t055
 import test_metric_flow_invariants as invariants
+import test_transaction_flow_filters as flow_filters
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -345,3 +346,11 @@ async def test_pg_f03_month_boundary_refund_stays_in_posting_month(
 
 async def test_pg_f04_non_krw_amounts_are_not_summed_with_krw(pg_session) -> None:
     await t055.test_f04_non_krw_amounts_are_not_summed_with_krw(pg_session)
+
+
+async def test_pg_transaction_flow_filters_match_the_flow_lines(
+    pg_session: AsyncSession, pg_client: AsyncClient
+) -> None:
+    """T059: the transactions listing's line filters read the PostgreSQL view."""
+    await build_synthetic_ledger(pg_session)
+    await flow_filters.assert_listing_matches_flow_lines(pg_client, pg_session)

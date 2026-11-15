@@ -393,6 +393,9 @@ Each flow line belongs to one model partition. Known portions survive a componen
   - `search`
   - `page` default `1`
   - `per_page` default `50`, max `200`
+  - `flow_row` (T059, optional): a `vw_metric_flow_lines.flow_row` value
+  - `payment_form: "committed" | "ad_hoc" | "not_applicable"` (T059, optional)
+  - `adjustability: "protected" | "adjustable" | "undecided" | "not_applicable"` (T059, optional)
 - Response model: `TransactionListResponse`
 - Response shape:
   - `total`
@@ -415,6 +418,7 @@ Each flow line belongs to one model partition. Known portions survive a componen
   - query is built from `build_transactions_effective_select()`
   - default excludes deleted and merged rows
   - `search` is `ILIKE %keyword%` over `description`, `merchant`, `memo`, `payment_method`
+  - T059 line filters add `EXISTS (SELECT 1 FROM vw_metric_flow_lines l WHERE l.transaction_id = t.id AND …)` with every given value on the same line. `l.transaction_id` is the posting row, so an allocated refund part (which carries the original purchase's category, merchant and axes) lists the refund row under the purchase's flow row. Rows without lines (deleted, merged, superseded, non-KRW) never match.
   - ordered by `date asc, time asc, id asc`
 
 `income_expense` selects income and expense while excluding transfers. It is shared by transaction/analytics endpoints using `TransactionTypeFilter`; `all` still includes transfers. Amounts remain raw signed values, not a claim of equivalence to canonical cashflow.
