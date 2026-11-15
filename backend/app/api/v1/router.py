@@ -14,12 +14,14 @@ from app.api.v1.endpoints.installments import router as installments_router
 from app.api.v1.endpoints.loan_mapping import router as loan_mapping_router
 from app.api.v1.endpoints.metrics import router as metrics_router
 from app.api.v1.endpoints.nature_axes import router as nature_axes_router
+from app.api.v1.endpoints.net_worth import router as net_worth_router
 from app.api.v1.endpoints.profile import router as profile_router
 from app.api.v1.endpoints.read_surface import router as read_surface_router
 from app.api.v1.endpoints.schema import router as schema_router
 from app.api.v1.endpoints.settlement_matches import router as settlement_matches_router
 from app.api.v1.endpoints.settings import router as settings_router
 from app.api.v1.endpoints.transactions import router as transactions_router
+from app.api.v1.endpoints.transfer_purpose import router as transfer_purpose_router
 from app.api.v1.endpoints.upload import router as upload_router
 from app.api.v1.endpoints.upload_review import router as upload_review_router
 
@@ -34,6 +36,8 @@ api_router.include_router(auto_classification_router)
 api_router.include_router(analytics_router)
 api_router.include_router(metrics_router)
 api_router.include_router(nature_axes_router)
+api_router.include_router(net_worth_router)
+api_router.include_router(transfer_purpose_router)
 api_router.include_router(assets_router)
 api_router.include_router(asset_sources_router)
 api_router.include_router(profile_router)

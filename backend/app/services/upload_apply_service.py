@@ -44,6 +44,7 @@ from app.services.loan_mapping_service import (
 )
 from app.services.upload_service import persist_original_upload, replace_snapshots
 from app.services.nature_axes_service import move_nature_override
+from app.services.transfer_purpose_service import move_transfer_purpose_override
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +386,12 @@ async def _move_transaction_relationships(
         review.candidate_key = f"transaction:{new_transaction_id}"
     # T056: the two-axis classification follows the replacement like the links.
     await move_nature_override(
+        db_session,
+        old_transaction_id=old_transaction_id,
+        new_transaction_id=new_transaction_id,
+    )
+    # T061: a human transfer purpose follows the replacement the same way.
+    await move_transfer_purpose_override(
         db_session,
         old_transaction_id=old_transaction_id,
         new_transaction_id=new_transaction_id,
