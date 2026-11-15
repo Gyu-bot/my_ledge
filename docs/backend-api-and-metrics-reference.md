@@ -1002,6 +1002,7 @@ Single and bulk PATCH share field-presence semantics: omitted fields preserve st
 #### `GET /api/v1/analytics/liquidity-health`
 
 - Purpose: cash-equivalent liquidity and debt burden read surface
+- Status: legacy for 비상금 개월 수 since T061 (unchanged). The 재무상태 value with the explicit formula "현금성 자산 ÷ 월 보호 지급" and the 미정 share is `GET /api/v1/metrics/net-worth/emergency-fund` ([T061](#net-worth-reconciliation-t061)).
 - Query params:
   - `snapshot_date` optional; omitted uses latest snapshot
   - `monthly_required_spend` optional decimal
@@ -2078,6 +2079,76 @@ Not migrated in T057 (each keeps its own baseline, stated here so consumers do n
 - `fixed-cost-summary.fixed_ratio` and `payment-method-patterns.pct_of_total`: composition shares of the requested range, not month comparisons; unchanged.
 - `income-stability`: variability of observed months, not a baseline comparison; unchanged (its default reference date still uses today's date).
 - Monthly projection baselines (`T064`) and snapshot comparisons (`T061`).
+
+## Net Worth Reconciliation (T061)
+
+Plan reference: `Implentation-plan.md` 2.5, 3.3 (비상금 개월 수), task `T061` (backend and API only; the 재무상태 screen is a later frontend task). Code: `backend/app/services/net_worth_service.py`, `net_worth_views.py`, `transfer_purpose_service.py`, `metric_views.py` (`vw_transfer_purpose`, flow-line columns), schemas `backend/app/schemas/net_worth.py`, `transfer_purpose.py`, migration `20261116_0039_transfer_purpose_net_worth_views.py`.
+
+### Formula
+
+```
+net_worth_change            = NW(end) − NW(start)                       (vw_net_worth_snapshots)
+residual                    = income_total − total_outflow over (start, end]   (vw_metric_flow_lines)
+loan_balance_decrease       = L(start) − L(end)                          (vw_snapshot_kind_totals, kind=loans)
+investment_net_transfer_in  = − Σ amount of 이체 lines with transfer_purpose = 'investment' in (start, end]
+investment_valuation_change = (I(end) − I(start)) − investment_net_transfer_in   (kind=investments)
+unexplained_difference      = net_worth_change − residual − loan_balance_decrease − investment_valuation_change
+```
+
+- `NW(d)` = Σ non-negative `asset` rows − Σ `liability` rows at `d` (negative asset rows excluded and shown as `negative_asset_excluded_total`), the same definition as `/assets/snapshots`, `/assets/net-worth-history`, `vw_asset_snapshot_canonical`. `L(d)` = Σ `loans.balance` (every row; `is_hidden` loan accounts are not excluded, because the liability side of the asset snapshot is not filtered either). `I(d)` = Σ `investments.market_value`. Empty values count as 0 and are reported as `missing_value_row_count`.
+- Every snapshot total is rounded half-up to the won before differencing, so the identity is exact on the returned integers.
+- Why this explains net worth: transfers are not in the residual. A savings or investment transfer moves money out of a ledger account (−X) into a holding (+X); both sides are in net worth, so it cancels there. For investments the snapshot change is the transfer plus the valuation, hence `valuation = ΔI − net transfer in`. A loan payment is in `total_outflow` as the full 원리금; the balance decrease adds the principal back, leaving the interest. Whatever the records cannot explain (unrecorded fees, transfers to untracked accounts, a new loan disbursed as a transfer, valuation of savings, timing of the export) stays in `unexplained_difference`.
+
+### Interval boundary
+
+A snapshot is the balance at the end of its date (it includes that day's transactions). The transactions of the interval are therefore dated `start + 1 day` … `end` inclusive (`transaction_start_date`, `transaction_end_date` in the response). This is the only choice under which consecutive intervals partition the ledger: (D0, D1] and (D1, D2] together equal (D0, D2] (tested). With month-end snapshots the interval equals the calendar months of the monthly flow.
+
+### Comparable snapshot pairs and states
+
+- The interval is chosen by two asset (net worth) snapshot dates. Defaults: the latest two.
+- Per kind (loans, investments): `observed` when rows exist on both dates; `absent` when the kind has no rows in any snapshot (both ends 0, stated in `status_reasons`); otherwise `mismatched`, with `start_as_of`/`end_as_of` = the kind's latest snapshot on or before each date. A mismatched kind's item and the unexplained difference are `null`. Kinds are never aligned to a nearby date. Insurance and profile are not used; their as-of dates are reported in `other_kinds`.
+- Transactions cover the interval when `first_transaction_date ≤ start + 1`, `transaction_as_of ≥ end`, and every month intersecting the interval has at least one effective KRW line (`periods_without_data` otherwise).
+- `status`: `no_snapshot_pair` (fewer than two asset snapshot dates) > `snapshot_dates_mismatched` > `transactions_not_covered` > `incomplete_classification` (an undecided transfer leg in the interval; the valuation may be wrong by its amount) > `complete`. `items` other than the unexplained difference are still returned for `transactions_not_covered` so the partial evidence is visible.
+
+### Transfer purpose
+
+| Purpose | Meaning (set by a human) |
+|---|---|
+| `investment` | The leg moves money between a ledger account and a holding reported in the `investments` snapshot. |
+| `savings` | The leg moves money between a ledger account and a savings deposit that is an asset row but not an `investments` row. |
+| `internal_move` | Any other move between the person's own accounts (그 밖의 계좌 간 이동). |
+| `undecided` | Nothing set. Never inferred. |
+
+- Resolution (`vw_transfer_purpose`, one row per effective 이체, any currency): `transfer_purpose_overrides.purpose` > first merchant-scope rule with the same normalized `merchant` (lowest id) > first category-scope rule with the same effective major and the same minor (including none) or a whole-major rule, exact minor first, then lowest id > `undecided`. `purpose_source` = `transaction`, `rule_merchant`, `rule_category`, `none`.
+- `investment` and `savings` are separate values because the plan's valuation formula subtracts investment transfers only; the monthly-flow row 투자·저축 이체 is their sum.
+- Netting of the two legs: amounts are summed with their source sign everywhere (never gross). A move between two ledger accounts has both legs (−X, +X) marked `internal_move`, which nets to 0 in `transfer_internal_move_net` and does not touch the residual or the valuation. If a person marks both legs of such a pair `investment`, they cancel in `investment_net` too (the pair never left the ledger) — tested. Gross activity (`transfer_activity_total`) is the sum of absolute leg amounts and is used only for the undecided share.
+- Re-import: the safe-apply replacement path moves `transfer_purpose_overrides` to the replacement row (`move_transfer_purpose_override`, next to the T056 nature move). Rules match by key and need no move. A rollback restores the moved row (tested on PostgreSQL).
+
+### Monthly flow split (잔여의 행방)
+
+`vw_metric_flow_lines` gains `transfer_purpose`, `transfer_purpose_source` (non-null exactly for 이체 lines). `vw_monthly_flow_summary` / `flow_summary_columns` gain `transfer_investment_net`, `transfer_savings_net`, `transfer_investment_savings_net`, `transfer_internal_move_net`, `transfer_undecided_net`, `transfer_undecided_activity_total`. Invariants (tested on SQLite and PostgreSQL): `transfer_net = investment + savings + internal_move + undecided`; `investment_savings = investment + savings`; every 이체 line has exactly one purpose. `/metrics/monthly-flow` adds these fields, `transfer_undecided_share`, and `transfer_rows[]`; the existing `rows[]` keeps its single `transfer_undetermined` row (meaning all transfers) so no existing value changes.
+
+### Emergency fund months (`GET /api/v1/metrics/net-worth/emergency-fund`)
+
+```
+emergency_fund_months = cash_like_total ÷ monthly_protected_outflow   (2 decimals; null when the denominator ≤ 0)
+```
+
+- `cash_like_total`: latest asset snapshot, rule of `vw_asset_snapshot_canonical.cash_equivalent_total` (non-negative asset rows with `is_cash_equivalent IS TRUE` or `liquidity_tier IN ('immediate','cash','cash_equivalent')`, or with neither set and the existing name rule). `cash_like_name_rule_total` is the part decided by the name rule only. Equality with the canonical view is tested on PostgreSQL. Note: the canonical rule counts a cash `liquidity_tier` even when `is_cash_equivalent` is false; the legacy Python rule of `liquidity-health` checks the flag first. This existing difference is kept, not resolved here.
+- `monthly_protected_outflow`: median (`median_won`) of `vw_monthly_flow_summary.protected_spend` over the baseline months: walk back from `last_closed_period` (inclusive), skip months without data, stop before the first data month (`limited_by=data_start`) or before the comparison baseline start month (`baseline_start_date`), up to 6 months. Same rules as the comparison contract, except that the last closed month itself is included (nothing is compared against it).
+- `adjustability_undecided_share` = Σ `adjustability_undecided_total` ÷ Σ `total_outflow` over those months; `monthly_adjustability_undecided_outflow` = their median. Undecided spend is not assumed protected, so with a positive share the months are an upper bound; `status=incomplete_classification` says so.
+- The asset snapshot date and the transaction as-of date are reported separately.
+
+### Import contract and rollback impact
+
+- New tables only (`transfer_purpose_rules`, `transfer_purpose_overrides`); no column, index or constraint on an existing table. Upload preview/apply, review prepare/decisions/apply, rollback points and upload logs keep their request/response shapes and status values; `preserved_user_fields` is unchanged.
+- Rollback points and review state digests enumerate `Base.metadata`, so the new tables are captured and restored automatically (values only). A rollback point captured before 0039 is refused with `schema_changed`; a review prepared before 0039 becomes `stale_plan`.
+- An external helper that restores `transactions` with `TRUNCATE … CASCADE` or row deletes also clears `transfer_purpose_overrides` (`ON DELETE CASCADE`) and must add the two tables to its snapshot list to keep human marks.
+
+### Values that changed
+
+- `/metrics/monthly-flow` `contract.inclusion.transfers` text now states the T061 split and netting rule; `contract.field_scopes.transfer_net` text no longer says "(투자·저축 구분은 T061)" and a `transfer_rows` scope was added. No numeric value of an existing field changes.
+- `GET /api/v1/schema`: two new tables and three new views are listed; `vw_metric_flow_lines` and `vw_monthly_flow_summary` list the new columns.
 
 ## Implementation Notes That Matter
 
