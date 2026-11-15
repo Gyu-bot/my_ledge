@@ -10,6 +10,10 @@ def test_expected_tables_exist() -> None:
         "app_settings",
         "auto_classification_settings",
         "category_classification_rules",
+        # T056 two-axis nature tables (new tables; no existing table altered).
+        "category_adjustability_defaults",
+        "recurring_commitments",
+        "transaction_nature_overrides",
         "merchant_alias_rules",
         "recurring_category_rules",
         "transactions",
