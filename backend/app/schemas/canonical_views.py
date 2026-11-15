@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.income_projection import MonthlyProjection
+from app.schemas.metrics import MetricAsOf
 
 
 class CanonicalMonthlyCashflowItem(BaseModel):
@@ -130,6 +131,7 @@ class CanonicalDataCoverage(BaseModel):
 
 class CanonicalViewsDashboardResponse(BaseModel):
     data_coverage: CanonicalDataCoverage
+    metric_as_of: MetricAsOf | None = None
     month_projection: MonthlyProjection | None = None
     merchant_monthly_baseline_total: int = 0
     recurring_merchant_monthly_total: int = 0

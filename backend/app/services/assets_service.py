@@ -12,8 +12,6 @@ from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
-from app.models.loan_transaction_link import LoanTransactionLink
-from app.models.transaction import Transaction
 from app.schemas.asset import (
     AssetSnapshotTotalsResponse,
     AssetSnapshotComparisonDeltaResponse,
@@ -39,6 +37,7 @@ from app.schemas.asset import (
     NetWorthBreakdownResponse,
     SnapshotComparisonMode,
 )
+from app.services.metric_views import FLOW_LINES_VIEW
 from app.services.settings_service import get_analytics_settings
 from app.services import loan_mapping_service
 
@@ -690,11 +689,9 @@ async def _estimate_monthly_insurance_premium(
     *,
     as_of_date: date,
 ) -> InsurancePremiumEstimateResponse:
+    lines = FLOW_LINES_VIEW
     latest_transaction_date = await db_session.scalar(
-        select(func.max(Transaction.date))
-        .where(Transaction.date <= as_of_date)
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
+        select(func.max(lines.c.date)).where(lines.c.date <= as_of_date)
     )
     if latest_transaction_date is None:
         return InsurancePremiumEstimateResponse(
@@ -704,23 +701,17 @@ async def _estimate_monthly_insurance_premium(
         )
 
     period_start, period_end = _recent_closed_month_bounds(as_of_date)
-    result = await db_session.execute(
-        select(Transaction.amount)
-        .where(Transaction.date >= period_start)
-        .where(Transaction.date <= period_end)
-        .where(Transaction.type == "지출")
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
-        .where(
-            func.coalesce(
-                Transaction.category_major_user,
-                Transaction.category_major,
-            )
-            == "보험"
+    # Same effective KRW basis as the metric views (T055): no superseded rows,
+    # no non-KRW amounts; refunds net in their posting month.
+    net_spend = Decimal(
+        await db_session.scalar(
+            select(func.coalesce(func.sum(-lines.c.amount), 0))
+            .where(lines.c.date >= period_start)
+            .where(lines.c.date <= period_end)
+            .where(lines.c.type == "지출")
+            .where(lines.c.effective_category_major == "보험")
         )
-    )
-    net_spend = sum(
-        (Decimal(-amount) for amount in result.scalars().all()), Decimal("0")
+        or 0
     )
     return InsurancePremiumEstimateResponse(
         period=f"{period_start:%Y-%m}",
@@ -747,13 +738,11 @@ async def _derive_liquidity_health_defaults(
     # The requested snapshot bounds every transaction input, including income.
     closed_month_start, closed_month_end = _recent_closed_month_bounds(as_of_date)
     closed_period = closed_month_end.strftime("%Y-%m")
-    valid_transactions = (
-        Transaction.is_deleted.is_(False),
-        Transaction.merged_into_id.is_(None),
-        Transaction.date <= as_of_date,
-    )
+    # Same effective KRW basis as the metric views (T055).
+    lines = FLOW_LINES_VIEW
+    valid_transactions = (lines.c.date <= as_of_date,)
     latest_transaction_date = await db_session.scalar(
-        select(func.max(Transaction.date)).where(*valid_transactions)
+        select(func.max(lines.c.date)).where(*valid_transactions)
     )
     provenance = {
         "input_as_of_date": as_of_date,
@@ -772,39 +761,42 @@ async def _derive_liquidity_health_defaults(
         }
 
     income_rows = await db_session.execute(
-        select(Transaction.date, Transaction.amount)
-        .where(Transaction.type == "수입", *valid_transactions)
-        .where(Transaction.date <= closed_month_end)
+        select(lines.c.period, func.coalesce(func.sum(lines.c.amount), 0))
+        .where(lines.c.type == "수입", *valid_transactions)
+        .where(lines.c.date <= closed_month_end)
+        .group_by(lines.c.period)
     )
-    income_by_period: dict[str, Decimal] = {}
-    for tx_date, amount in income_rows.all():
-        period = tx_date.strftime("%Y-%m")
-        income_by_period[period] = income_by_period.get(period, Decimal("0")) + Decimal(
-            amount or 0
-        )
+    income_by_period: dict[str, Decimal] = {
+        period: Decimal(amount or 0) for period, amount in income_rows.all()
+    }
     monthly_income = (
         Decimal(str(median(income_by_period.values())))
         if income_by_period
         else Decimal("0")
     )
-    is_linked_debt = (
-        select(LoanTransactionLink.id)
-        .where(LoanTransactionLink.transaction_id == Transaction.id)
-        .exists()
+    is_essential = lines.c.spend_necessity == "essential"
+    is_additional_debt = and_(
+        lines.c.loan_account_id.is_not(None),
+        func.coalesce(lines.c.spend_necessity, "") != "essential",
     )
-    spending_rows = await db_session.execute(
-        select(Transaction.amount, Transaction.spend_necessity, is_linked_debt)
-        .where(Transaction.type == "지출", *valid_transactions)
-        .where(Transaction.date >= closed_month_start)
-        .where(Transaction.date <= closed_month_end)
-    )
-    essential_spend = Decimal("0")
-    additional_debt_spend = Decimal("0")
-    for amount, necessity, linked_debt in spending_rows:
-        if necessity == "essential":
-            essential_spend -= Decimal(amount)
-        elif linked_debt:
-            additional_debt_spend -= Decimal(amount)
+    spending = (
+        await db_session.execute(
+            select(
+                func.coalesce(
+                    func.sum(case((is_essential, -lines.c.amount), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(case((is_additional_debt, -lines.c.amount), else_=0)),
+                    0,
+                ),
+            )
+            .where(lines.c.type == "지출", *valid_transactions)
+            .where(lines.c.date >= closed_month_start)
+            .where(lines.c.date <= closed_month_end)
+        )
+    ).one()
+    essential_spend = Decimal(spending[0] or 0)
+    additional_debt_spend = Decimal(spending[1] or 0)
     money_scale = Decimal("0.01")
     provenance["required_spend_essential_total"] = essential_spend.quantize(money_scale)
     provenance["required_spend_additional_debt_total"] = additional_debt_spend.quantize(

@@ -58,6 +58,7 @@
 
 - `GET /api/v1/schema`
 - `GET /api/v1/canonical-views/dashboard`
+- `GET /api/v1/metrics/monthly-flow`, `GET /api/v1/metrics/spend-cube`, `GET /api/v1/metrics/data-status`
 - `GET /api/v1/settings/analytics`
 - `PATCH /api/v1/settings/analytics`
 - `GET /api/v1/settings/income-expectations`
@@ -1567,7 +1568,7 @@ Where it is used:
 
 ### `vw_category_monthly_spend`
 
-This view is registered in `CANONICAL_VIEWS` for schema documentation purposes, but the current analytics code computes category monthly spend directly in Python from `vw_transactions_effective` rows rather than querying a DB materialized view.
+Since migration `20261115_0035` this view reads `vw_metric_flow_lines` (`type='지출'`, signed `SUM(amount)`, so spend is negative and refunds positive). Analytics endpoints no longer compute category spend in Python; they aggregate `vw_metric_flow_lines` in SQL.
 
 Documented columns:
 
@@ -1579,7 +1580,7 @@ Documented columns:
 ### `vw_fixed_cost_monthly_summary`
 
 Canonical monthly aggregate for fixed-cost analysis. It is intended for readonly SQL and AI drill-down use cases where the caller needs the same month-level structure shown in the spending page.
-Loan-linked repayments are excluded from ordinary fixed/variable totals.
+Loan-linked repayments are excluded from ordinary fixed/variable totals, so this view's `expense_total` equals `vw_monthly_flow_summary.living_spend`, while `/analytics/fixed-cost-summary.expense_total` includes loans and equals `total_outflow`. The two legacy names differ in scope; prefer the T054 names.
 
 Documented columns:
 
@@ -1740,21 +1741,14 @@ Source: `app.services.assets_service`
 
 ### Monthly Cashflow
 
-Source: `app.services.analytics_service.get_monthly_cashflow`
+Source: `app.services.analytics_service.get_monthly_cashflow` (SQL over `vw_metric_flow_lines` with the shared `flow_summary_columns`)
 
-- loads all transaction types
-- groups by `YYYY-MM`
-- signs:
-  - `income += amount`
-  - `expense += -amount`
-  - `transfer += abs(amount)`
-- settlement handling:
-  - confirmed settlements (`auto_confirmed`, `user_confirmed`) only are folded into netting economics before final rollup.
-  - confirmed settlements are skipped if either participant leaves canonical analytics basis after delete/merge.
-  - `review_required`, `rejected` settlement matches are excluded from confirmed-net math and keep raw signed semantics.
-  - read path is calculation-only and does not create/update settlement match rows.
-- `net_cashflow = income - expense`
-- `savings_rate = net_cashflow / income`
+- groups by posting month `YYYY-MM`
+- `income = income_total`, `expense = total_outflow` (loans included, refunds netted in their posting month), `transfer = transfer_activity_total` (`SUM(ABS(amount))` of `이체`)
+- settlement links never move amounts between months (T055); see [Metric Contract](#metric-contract-t054t055)
+- `net_cashflow = residual = income - expense`
+- `savings_rate = net_cashflow / income` for every month (legacy); the plan's 현금 잔여율 is `residual_rate`, closed months only, on `/metrics/monthly-flow`
+- items add `month_status`; the response adds `contract`
 
 ### Category MoM
 
@@ -1764,10 +1758,11 @@ Source: `app.services.analytics_service.get_category_mom`
 - an explicit `end_date` selects the current period even if it has no rows; otherwise derives it from the latest observed month
 - derives `previous_period = previous calendar month`
 - compares those two months; partial explicit dates truncate the prior month to the same day-of-month and expose `same_day_previous_month` rather than `full_previous_month`
-- amount sign is normalized with `_amount_for_analytics`
+- amount sign is normalized in SQL (`_analytics_amount`)
   - income positive
   - expense positive via `-amount`
   - transfer positive via `abs(amount)`
+- categories come from `vw_metric_flow_lines`; a confirmed refund allocation counts under the original purchase's category in the refund's posting month
 
 ### Fixed Cost Summary
 
@@ -1781,30 +1776,31 @@ Source: `app.services.analytics_service.get_fixed_cost_summary`
 - `required_spend_total = essential_fixed_total + essential_variable_total`
 - `discretionary_spend_total = discretionary_fixed_total + discretionary_variable_total`
 - missing cost kind goes to `unclassified_*`; missing usable necessity separately goes to `necessity_unclassified_*`. These axes can overlap, so their totals are not additive.
+- loan-linked rows are included (by their `cost_kind`), so `expense_total` equals `total_outflow`; `*_count` fields count distinct transactions with an amount in the bucket
 - Amounts use signed net expense, including refunds. Category auto-classification can fill classification values; only actual user changes to the cost/necessity tuple mark the row manual.
 
 ### Merchant Spend
 
 Source: `app.services.analytics_service.get_merchant_spend`
 
-- groups by `merchant` with fallback `"미분류"`
+- groups by `merchant` with fallback `"미분류"` (SQL over `vw_metric_flow_lines`)
 - stores:
   - total normalized amount
-  - count
-  - average amount
-  - latest observed datetime
+  - count = distinct transactions (a linked refund counts under the original purchase's merchant)
+  - average amount = amount / count
+  - latest observed datetime (refund lines included)
 - sorted by descending amount
 
 ### Payment Method Patterns
 
 Source: `app.services.analytics_service.get_payment_method_patterns`
 
-- groups by `payment_method` with fallback `"알 수 없음"`
+- groups by `payment_method` with fallback `"알 수 없음"` (SQL over `vw_metric_flow_lines`)
 - stores:
   - total normalized amount
-  - count
+  - count = distinct transactions
   - average amount
-  - percent of total
+  - percent of total (total computed in SQL over the same scope)
 
 ### Income Stability
 
@@ -1881,6 +1877,74 @@ Source: `app.services.analytics_service.get_spending_anomalies`
 - final filters:
   - `abs(delta) >= min_delta_amount`
   - `anomaly_score >= anomaly_threshold`
+
+## Metric Contract (T054/T055)
+
+Plan reference: `Implentation-plan.md` sections 2.1, 2.3 and 2.7. Definitions: `backend/app/services/metric_views.py`; PostgreSQL views: migration `20261115_0035_metric_contract_views.py`.
+
+### View chain
+
+| View | Grain | Notes |
+|---|---|---|
+| `vw_metric_refund_allocations` | settlement match | confirmed (`auto_confirmed`, `user_confirmed`), `matched_amount > 0`, purchase `지출 < 0` and refund `지출 > 0`, both effective and KRW |
+| `vw_metric_transactions` | effective transaction (all currencies) | not deleted/merged/superseded; effective category; loan and installment links; `settlement_refund_total` (received by a purchase), `settlement_allocated_total` (given by a refund), `purchase_net_amount` |
+| `vw_metric_flow_lines` | line (KRW only) | one `transaction` line per row; a refund with confirmed allocations becomes one `refund_allocation` line per allocation (original's classification) plus a `refund_remainder` line for the unallocated part (own classification, omitted when zero). Lines of one transaction always sum to its amount |
+| `vw_monthly_flow` | period × flow row | `amount` (row direction), `signed_amount`, `transaction_count` |
+| `vw_monthly_flow_summary` | period | totals below plus `month_status` |
+| `vw_spend_cube` | period × category major/minor × merchant × payment form × commitment kind × adjustability × flow row | `amount` (net spend), `charge_total`, `refund_total`, `transaction_count` |
+| `vw_metric_as_of` | single row | `transaction_as_of`, `first_transaction_date`, `last_closed_period`, `in_progress_period`, per-kind snapshot as-of dates, `non_krw_transaction_count` |
+| `vw_metric_excluded_currency` | period × currency × type | non-KRW effective rows excluded from every total |
+
+### Mapping from the existing columns (until T056)
+
+Payment form (지급 형태), evaluated in order for `지출` lines:
+
+| Condition | `commitment_kind` | `payment_form` | flow row |
+|---|---|---|---|
+| loan link | `loan` | `committed` | `committed_loan` |
+| installment plan link | `installment` | `committed` | `committed_installment` |
+| `cost_kind='fixed'` and `recurring_payment_kind='not_recurring'` | — | `undetermined` | `undecided` (`mapping_note=fixed_cost_marked_not_recurring`) |
+| `cost_kind='variable'` and `recurring_payment_kind='monthly_recurring'` | — | `undetermined` | `undecided` (`variable_cost_marked_monthly_recurring`) |
+| `recurring_payment_kind='installment'` without a plan link | — | `undetermined` | `undecided` (`installment_kind_without_plan_link`) |
+| `cost_kind='fixed'` | `recurring` | `committed` | `committed_recurring` |
+| `cost_kind` null and `recurring_payment_kind='monthly_recurring'` | `recurring` | `committed` | `committed_recurring` |
+| anything else | — | `ad_hoc` | by adjustability below |
+
+Adjustability (조정 가능성): loan/installment-linked → `protected`. Otherwise the necessity value is `fixed_cost_necessity` (falling back to `spend_necessity`) for `cost_kind='fixed'`, else `spend_necessity`; `essential` → `protected`, `discretionary` → `adjustable`, anything else → `undecided`. For `cost_kind='fixed'`, a set `fixed_cost_necessity` that disagrees with a set `spend_necessity` is `undecided` (`mapping_note=necessity_conflict`). Income and transfers are `not_applicable` and never count as 미정.
+
+Ad hoc lines land in `ad_hoc_protected`, `ad_hoc_adjustable` or `undecided`. Income lands in `income_undetermined` (no column supports the 정기/비정기/이자·소액 split yet); transfers in `transfer_undetermined` (투자·저축 vs other movements is T061). Any other `type` lands in `other_type`.
+
+### Totals (`vw_monthly_flow_summary`, `flow_summary_columns`)
+
+- `income_total = Σ amount` (`수입`)
+- `committed_{loan,installment,recurring}_total`, `committed_total`, `ad_hoc_{protected,adjustable}_total`, `undecided_total = Σ −amount` of `지출` lines in that row/section
+- `total_outflow` (총지급) `= Σ −amount` of all `지출` lines `= committed_total + ad_hoc_protected_total + ad_hoc_adjustable_total + undecided_total`
+- `living_spend` (생활 지출) `= total_outflow − committed_loan_total`
+- `adjustable_spend`, `protected_spend`, `adjustability_undecided_total` split `total_outflow` by adjustability (they sum to it)
+- `residual` (잔여) `= income_total − total_outflow`; `residual_rate` (현금 잔여율) `= residual / income_total`, closed months with positive income only (API)
+- `transfer_net = Σ amount` (`이체`, signed); `transfer_activity_total = Σ |amount|`
+- `refund_total = Σ amount` of positive `지출` lines; `signed_total = Σ amount` of all lines `= income_total − total_outflow + transfer_net + other_type_total`
+- `adjustability_undecided_share = adjustability_undecided_total / total_outflow` (null when `total_outflow ≤ 0`)
+
+Invariant tests: `tests/services/test_metric_flow_invariants.py` (SQLite) and `tests/services/test_metric_views_postgresql.py` (migration-created PostgreSQL views).
+
+### Refund attribution rule (month boundary)
+
+- A refund stays in the month of its own posting date. It reduces spend there.
+- Its classification (category, merchant, payment method, payment form, adjustability) is the original purchase's for the part a confirmed match allocates, and its own for the unallocated remainder. This is how 2.3's "환불은 원래 카테고리에서 차감" is applied without moving money across months.
+- Consequences: a closed month never changes when a later refund is linked; per-month signed totals equal the raw signed sum of effective KRW transactions; a refund posted in a month with little other spend can make that month's net spend negative.
+- Purchase-level economics (`purchase_net.v1`, used only by the recurring/velocity/review detectors) net allocations into the purchase regardless of date. It is a separate, named basis, not a cashflow actual.
+
+### As-of dates and month status
+
+- `transaction_as_of = MAX(date)` over `vw_metric_transactions` (basis `max_effective_transaction_date`).
+- `last_closed_period` is the month of `transaction_as_of` when it is the month's last day, otherwise the previous month. Months up to it are `closed`; the month of `transaction_as_of` after it is `in_progress`.
+- Snapshot as-of dates are `MAX(snapshot_date)` per table (`asset_snapshots`, `loans`, `investments`, `insurance_contracts`, `user_profile_snapshots`), reported separately.
+
+### Exclusions
+
+- Deleted, merged, and superseded rows (T055/F01): an approved replacement counts once.
+- Non-KRW rows (T055/F04): excluded from every total and reported separately. The parser's integer `amount` still truncates fractional foreign amounts at import; that import-contract behavior is unchanged here.
 
 ## Implementation Notes That Matter
 

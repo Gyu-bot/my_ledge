@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.metrics import MetricContract, MonthStatus
+
 
 class MonthlyCashflowItem(BaseModel):
     period: str
@@ -11,10 +13,12 @@ class MonthlyCashflowItem(BaseModel):
     transfer: int
     net_cashflow: int
     savings_rate: float | None
+    month_status: MonthStatus | None = None
 
 
 class MonthlyCashflowResponse(BaseModel):
     items: list[MonthlyCashflowItem]
+    contract: MetricContract | None = None
 
 
 class CategoryMoMItem(BaseModel):
@@ -34,6 +38,7 @@ class CategoryMoMResponse(BaseModel):
     comparison_basis: Literal["same_day_previous_month", "full_previous_month"] = (
         "full_previous_month"
     )
+    contract: MetricContract | None = None
 
 
 class FixedCostSummaryResponse(BaseModel):
@@ -51,6 +56,7 @@ class FixedCostSummaryResponse(BaseModel):
     unclassified_count: int
     necessity_unclassified_total: int = 0
     necessity_unclassified_count: int = 0
+    contract: MetricContract | None = None
 
 
 class FixedCostTrendItem(BaseModel):
@@ -69,10 +75,12 @@ class FixedCostTrendItem(BaseModel):
     necessity_unclassified_total: int = 0
     necessity_unclassified_count: int = 0
     fixed_ratio: float | None
+    month_status: MonthStatus | None = None
 
 
 class FixedCostTrendResponse(BaseModel):
     items: list[FixedCostTrendItem]
+    contract: MetricContract | None = None
 
 
 class MerchantSpendItem(BaseModel):
@@ -85,6 +93,7 @@ class MerchantSpendItem(BaseModel):
 
 class MerchantSpendResponse(BaseModel):
     items: list[MerchantSpendItem]
+    contract: MetricContract | None = None
 
 
 # P1 ── payment-method-patterns
@@ -98,6 +107,7 @@ class PaymentMethodPatternItem(BaseModel):
 
 class PaymentMethodPatternsResponse(BaseModel):
     items: list[PaymentMethodPatternItem]
+    contract: MetricContract | None = None
 
 
 # P1 ── income-stability
@@ -115,6 +125,7 @@ class IncomeStabilityResponse(BaseModel):
     reference_date: date
     is_partial_period: bool
     assumptions: str
+    contract: MetricContract | None = None
 
 
 # P1 ── recurring-payments
@@ -149,6 +160,7 @@ class RecurringPaymentsResponse(BaseModel):
     activity: Literal["all", "active", "history"] = "all"
     recent_days: int = 90
     assumptions: str
+    contract: MetricContract | None = None
 
 
 # P1 ── spending-anomalies
@@ -177,6 +189,7 @@ class SpendingAnomaliesResponse(BaseModel):
     reference_date: date
     is_partial_period: bool
     assumptions: str
+    contract: MetricContract | None = None
 
 
 class DiscretionaryVelocityResponse(BaseModel):
@@ -194,6 +207,7 @@ class DiscretionaryVelocityResponse(BaseModel):
     income_basis: str | None
     reasons: list[str]
     assumptions: list[str]
+    contract: MetricContract | None = None
 
 
 class PurchaseGateCandidateItem(BaseModel):
@@ -233,6 +247,7 @@ class PurchaseGateCandidatesResponse(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     assumptions: list[str]
+    contract: MetricContract | None = None
 
 
 PurchaseGateReviewStatus = Literal[

@@ -21,6 +21,7 @@ from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
+from app.services.metric_views import METRIC_VIEWS
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,8 +256,9 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
     SchemaViewDefinition(
         name="vw_category_monthly_spend",
         description=(
-            "Canonical monthly spend aggregate. Uses effective categories and excludes "
-            "deleted or merged transactions for analytics."
+            "Canonical monthly spend aggregate (signed SUM of 지출, spend negative). "
+            "Reads vw_metric_flow_lines: effective categories, no deleted, merged, "
+            "superseded, or non-KRW rows; refunds stay in their posting month."
         ),
         recommended_for_ai=True,
         columns=(
@@ -412,9 +414,10 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
     SchemaViewDefinition(
         name="vw_transactions_effective",
         description=(
-            "Canonical transaction read model. Prefer this for AI and analysis queries; "
-            "it excludes deleted or merged rows while preserving effective category columns. "
-            "Use raw transactions when auditing import fidelity or low-level mutations."
+            "Canonical transaction read model. It excludes deleted or merged rows while "
+            "preserving effective category columns, but keeps superseded rows and every "
+            "currency for lineage. For totals use vw_metric_flow_lines or the monthly "
+            "views built on it. Use raw transactions when auditing import fidelity."
         ),
         recommended_for_ai=True,
         columns=(
@@ -582,3 +585,58 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         ),
     ),
 )
+
+METRIC_VIEW_DESCRIPTIONS = {
+    "vw_metric_refund_allocations": (
+        "Confirmed settlement allocations (auto_confirmed/user_confirmed) whose "
+        "purchase and refund are both effective KRW 지출 rows."
+    ),
+    "vw_metric_transactions": (
+        "Effective transactions for metrics (유효 거래): excludes deleted, merged, "
+        "and superseded rows; keeps every currency with currency column; adds loan "
+        "and installment links and confirmed refund allocation totals."
+    ),
+    "vw_metric_flow_lines": (
+        "Every won of every effective KRW transaction assigned to exactly one "
+        "monthly-flow row (flow_section/flow_row) with payment form and "
+        "adjustability read from existing classification columns. Refunds stay in "
+        "their posting month; confirmed allocations take the original purchase's "
+        "classification. Prefer this over re-aggregating vw_transactions_effective."
+    ),
+    "vw_metric_as_of": (
+        "Single-row data status: transaction as-of date, last closed and "
+        "in-progress month, and per-kind snapshot as-of dates (never merged)."
+    ),
+    "vw_monthly_flow": "Monthly flow table in long form (period x flow row).",
+    "vw_monthly_flow_summary": (
+        "Monthly flow table totals: income, committed, ad hoc, undecided, "
+        "total_outflow (총지급), living_spend (생활 지출), adjustable_spend, "
+        "residual (잔여), transfer_net, and month_status (closed/in_progress)."
+    ),
+    "vw_spend_cube": (
+        "Spend cube: month x category x merchant x payment form x adjustability "
+        "net spend with charge/refund split."
+    ),
+    "vw_metric_excluded_currency": (
+        "Non-KRW effective transactions excluded from every metric total, by "
+        "period/currency/type. Never summed with KRW."
+    ),
+}
+
+
+def _metric_schema_views() -> tuple[SchemaViewDefinition, ...]:
+    return tuple(
+        SchemaViewDefinition(
+            name=view.name,
+            description=METRIC_VIEW_DESCRIPTIONS[view.name],
+            recommended_for_ai=True,
+            columns=tuple(
+                SchemaColumnDefinition(selected.name, selected.type, nullable=True)
+                for selected in view.definition.selected_columns
+            ),
+        )
+        for view in METRIC_VIEWS
+    )
+
+
+CANONICAL_VIEWS = CANONICAL_VIEWS + _metric_schema_views()

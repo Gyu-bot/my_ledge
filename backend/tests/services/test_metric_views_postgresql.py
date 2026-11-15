@@ -1,0 +1,347 @@
+"""Metric views on real PostgreSQL, created by ``alembic upgrade head``.
+
+Set METRIC_TEST_DATABASE_URL (or REVIEW_TEST_DATABASE_URL) to a disposable
+loopback server, e.g. ``postgresql+asyncpg://user:pass@127.0.0.1:55432/db``.
+A scratch database is created, migrated, and dropped for this module.
+"""
+
+import asyncio
+import os
+import subprocess
+import sys
+from collections import defaultdict
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.core.config import get_settings
+from app.core.database import get_db_session
+from app.main import app
+from app.models import Base
+from app.services.metric_views import (
+    FLOW_LINES_VIEW,
+    MONTHLY_FLOW_SUMMARY_VIEW,
+    SPEND_CUBE_VIEW,
+)
+from app.services.monthly_projection_service import get_monthly_projection
+from metric_synthetic_ledger import (
+    AS_OF,
+    assert_flow_invariants,
+    build_synthetic_ledger,
+)
+import test_amount_conservation as t055
+import test_metric_flow_invariants as invariants
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(scope="module")
+def migrated_url() -> Iterator[str]:
+    admin_url = os.getenv("METRIC_TEST_DATABASE_URL") or os.getenv(
+        "REVIEW_TEST_DATABASE_URL"
+    )
+    if not admin_url:
+        pytest.skip("isolated PostgreSQL METRIC_TEST_DATABASE_URL not supplied")
+    admin = make_url(admin_url)
+    assert admin.host in ("localhost", "127.0.0.1", "::1")
+    database = "metric_views_" + uuid4().hex
+    scratch_url = admin.set(database=database).render_as_string(hide_password=False)
+
+    async def run(statement: str) -> None:
+        engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
+        async with engine.connect() as connection:
+            await connection.execute(text(statement))
+        await engine.dispose()
+
+    asyncio.run(run(f'CREATE DATABASE "{database}"'))
+    try:
+        environment = {
+            **os.environ,
+            "DATABASE_URL": scratch_url,
+            "API_KEY": "test-api-key",
+        }
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=BACKEND_DIR,
+            env=environment,
+            check=True,
+            capture_output=True,
+        )
+        yield scratch_url
+    finally:
+        asyncio.run(run(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)'))
+
+
+@pytest.fixture
+async def pg_session(migrated_url: str) -> AsyncIterator[AsyncSession]:
+    engine = create_async_engine(migrated_url)
+    tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+    async with engine.begin() as connection:
+        await connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+    await engine.dispose()
+
+
+@pytest.fixture
+async def pg_client(
+    pg_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[AsyncClient]:
+    monkeypatch.setenv("API_KEY", "test-api-key")
+    get_settings.cache_clear()
+
+    async def override() -> AsyncIterator[AsyncSession]:
+        yield pg_session
+
+    app.dependency_overrides[get_db_session] = override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+HEADERS = {"X-API-Key": "test-api-key"}
+
+
+async def _summary(session: AsyncSession) -> dict[str, dict]:
+    return {
+        row["period"]: dict(row)
+        for row in (await session.execute(select(MONTHLY_FLOW_SUMMARY_VIEW))).mappings()
+    }
+
+
+async def test_pg_flow_rows_sum_to_effective_transactions(
+    pg_session: AsyncSession,
+) -> None:
+    ledger = await build_synthetic_ledger(pg_session)
+    await assert_flow_invariants(pg_session, ledger)
+
+
+async def test_pg_flow_summary_matches_hand_computed_months(
+    pg_session: AsyncSession,
+) -> None:
+    await invariants.test_flow_summary_matches_hand_computed_months(pg_session)
+
+
+async def test_pg_metric_and_analytics_api_equal_the_views(
+    pg_session: AsyncSession, pg_client: AsyncClient
+) -> None:
+    await build_synthetic_ledger(pg_session)
+    summary = await _summary(pg_session)
+
+    flow = (await pg_client.get("/api/v1/metrics/monthly-flow", headers=HEADERS)).json()
+    assert [item["period"] for item in flow["items"]] == sorted(summary)
+    for item in flow["items"]:
+        for key, value in summary[item["period"]].items():
+            assert item[key] == value, (item["period"], key)
+
+    cashflow = (await pg_client.get("/api/v1/analytics/monthly-cashflow")).json()
+    assert {
+        item["period"]: (
+            item["income"],
+            item["expense"],
+            item["transfer"],
+            item["net_cashflow"],
+        )
+        for item in cashflow["items"]
+    } == {
+        period: (
+            row["income_total"],
+            row["total_outflow"],
+            row["transfer_activity_total"],
+            row["residual"],
+        )
+        for period, row in summary.items()
+    }
+
+    trend = (await pg_client.get("/api/v1/analytics/fixed-cost-trend")).json()
+    assert {item["period"]: item["expense_total"] for item in trend["items"]} == {
+        period: row["total_outflow"] for period, row in summary.items()
+    }
+    fixed_summary = (await pg_client.get("/api/v1/analytics/fixed-cost-summary")).json()
+    assert fixed_summary["expense_total"] == sum(
+        row["total_outflow"] for row in summary.values()
+    )
+
+    income = (
+        await pg_client.get(
+            "/api/v1/analytics/income-stability", params={"end_date": "2026-02-28"}
+        )
+    ).json()
+    assert {item["period"]: item["income"] for item in income["items"]} == {
+        period: row["income_total"]
+        for period, row in summary.items()
+        if period <= "2026-02" and row["income_total"]
+    }
+
+    cube_by_category: dict[str, int] = defaultdict(int)
+    cube_by_merchant: dict[str, int] = defaultdict(int)
+    for row in (
+        await pg_session.execute(
+            select(SPEND_CUBE_VIEW).where(SPEND_CUBE_VIEW.c.period == "2026-02")
+        )
+    ).mappings():
+        cube_by_category[row["effective_category_major"]] += int(row["amount"])
+        cube_by_merchant[row["merchant"]] += int(row["amount"])
+
+    category = (
+        await pg_client.get(
+            "/api/v1/analytics/category-mom", params={"end_date": "2026-02-28"}
+        )
+    ).json()
+    assert {
+        item["category"]: item["current_amount"]
+        for item in category["items"]
+        if item["current_amount"] or item["category"] in cube_by_category
+    } == dict(cube_by_category)
+
+    merchants = (
+        await pg_client.get(
+            "/api/v1/analytics/merchant-spend",
+            params={
+                "start_date": "2026-02-01",
+                "end_date": "2026-02-28",
+                "limit": 200,
+            },
+        )
+    ).json()
+    assert {item["merchant"]: item["amount"] for item in merchants["items"]} == dict(
+        cube_by_merchant
+    )
+
+    methods = (
+        await pg_client.get(
+            "/api/v1/analytics/payment-method-patterns",
+            params={"start_date": "2026-02-01", "end_date": "2026-02-28"},
+        )
+    ).json()
+    assert (
+        sum(item["total_amount"] for item in methods["items"])
+        == summary["2026-02"]["total_outflow"]
+    )
+
+    cube_api = (
+        await pg_client.get(
+            "/api/v1/metrics/spend-cube",
+            params={
+                "start_period": "2026-02",
+                "end_period": "2026-02",
+                "group_by": "effective_category_major",
+            },
+            headers=HEADERS,
+        )
+    ).json()
+    assert {
+        row["effective_category_major"]: row["amount"] for row in cube_api["rows"]
+    } == dict(cube_by_category)
+    assert cube_api["total_amount"] == summary["2026-02"]["total_outflow"]
+
+    projection = await get_monthly_projection(pg_session, reference_date=AS_OF)
+    assert projection.observed_net_expense == summary["2026-03"]["total_outflow"]
+    assert projection.observed_income == summary["2026-03"]["income_total"]
+
+
+async def test_pg_legacy_views_and_dashboard_equal_the_flow(
+    pg_session: AsyncSession, pg_client: AsyncClient
+) -> None:
+    await build_synthetic_ledger(pg_session)
+    summary = await _summary(pg_session)
+
+    async def rows(sql: str) -> list[dict]:
+        return [dict(row) for row in (await pg_session.execute(text(sql))).mappings()]
+
+    for row in await rows("SELECT * FROM vw_monthly_cashflow"):
+        flow = summary[row["period"]]
+        assert row["income_total"] == flow["income_total"]
+        assert row["expense_total"] == flow["total_outflow"]
+        assert row["loan_repayment_total"] == flow["committed_loan_total"]
+        assert row["non_loan_expense_total"] == flow["living_spend"]
+        assert row["transfer_activity_total"] == flow["transfer_activity_total"]
+        assert row["net_cashflow"] == flow["residual"]
+    for row in await rows("SELECT * FROM vw_fixed_cost_monthly_summary"):
+        assert row["expense_total"] == summary[row["period"]]["living_spend"]
+    category_spend: dict[str, int] = defaultdict(int)
+    for row in await rows("SELECT * FROM vw_category_monthly_spend"):
+        category_spend[row["period"]] += row["amount"]
+    assert dict(category_spend) == {
+        period: -row["total_outflow"] for period, row in summary.items()
+    }
+    income_by_category: dict[str, int] = defaultdict(int)
+    for row in await rows("SELECT * FROM vw_income_monthly_by_category"):
+        income_by_category[row["period"]] += row["income_total"]
+    assert dict(income_by_category) == {
+        period: row["income_total"]
+        for period, row in summary.items()
+        if row["income_total"]
+    }
+    loan_by_period: dict[str, int] = defaultdict(int)
+    for row in await rows("SELECT * FROM vw_loan_repayment_monthly"):
+        loan_by_period[row["period"]] += row["repayment_total"]
+    assert dict(loan_by_period) == {
+        period: row["committed_loan_total"]
+        for period, row in summary.items()
+        if row["committed_loan_total"]
+    }
+
+    dashboard = (
+        await pg_client.get(
+            "/api/v1/canonical-views/dashboard",
+            params={"reference_date": AS_OF.isoformat()},
+            headers=HEADERS,
+        )
+    ).json()
+    assert {
+        item["period"]: item["expense_total"] for item in dashboard["monthly_cashflow"]
+    } == {period: row["total_outflow"] for period, row in summary.items()}
+    assert dashboard["data_coverage"]["last_transaction_date"] == AS_OF.isoformat()
+    assert dashboard["metric_as_of"]["last_closed_period"] == "2026-02"
+
+
+async def test_pg_flow_lines_have_no_duplicate_single_lines(
+    pg_session: AsyncSession,
+) -> None:
+    await build_synthetic_ledger(pg_session)
+    lines = FLOW_LINES_VIEW
+    duplicates = (
+        await pg_session.execute(
+            select(lines.c.transaction_id, lines.c.attributed_transaction_id)
+            .group_by(lines.c.transaction_id, lines.c.attributed_transaction_id)
+            .having(func.count() > 1)
+        )
+    ).all()
+    assert duplicates == []
+
+
+# T055 defect scenarios, re-run against the migration-created views.
+async def test_pg_f01_approved_replacement_counts_once(pg_session) -> None:
+    await t055.test_f01_approved_replacement_counts_once(pg_session)
+
+
+async def test_pg_f02_partial_refund_allocation_preserves_signed_net(
+    pg_session,
+) -> None:
+    await t055.test_f02_partial_refund_allocation_preserves_signed_net(pg_session)
+
+
+async def test_pg_f02_multiple_refund_allocation_preserves_signed_net(
+    pg_session,
+) -> None:
+    await t055.test_f02_multiple_refund_allocation_preserves_signed_net(pg_session)
+
+
+async def test_pg_f03_month_boundary_refund_stays_in_posting_month(
+    pg_session,
+) -> None:
+    await t055.test_f03_month_boundary_refund_stays_in_posting_month(pg_session)
+
+
+async def test_pg_f04_non_krw_amounts_are_not_summed_with_krw(pg_session) -> None:
+    await t055.test_f04_non_krw_amounts_are_not_summed_with_krw(pg_session)

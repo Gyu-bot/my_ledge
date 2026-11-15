@@ -9,6 +9,19 @@ from app.models.transaction import Transaction
 from app.services import analytics_service as analytics_service_module
 
 
+def _legacy_shape(payload):
+    """Drop fields added by the T054 metric contract; legacy fields stay exact."""
+    if isinstance(payload, dict):
+        return {
+            key: _legacy_shape(value)
+            for key, value in payload.items()
+            if key not in {"contract", "month_status"}
+        }
+    if isinstance(payload, list):
+        return [_legacy_shape(item) for item in payload]
+    return payload
+
+
 def _transaction(
     *,
     tx_date: date,
@@ -138,7 +151,7 @@ async def test_discretionary_velocity_endpoint_reports_month_progress_against_ba
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "period": "2026-04",
         "as_of_date": "2026-04-15",
         "month_progress_ratio": 0.5,
@@ -522,7 +535,7 @@ async def test_monthly_cashflow_endpoint_returns_monthly_series(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "items": [
             {
                 "period": "2026-01",
@@ -596,16 +609,26 @@ async def test_monthly_cashflow_endpoint_uses_confirmed_settlement_net_amount(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    # T055 (audit F03): a confirmed refund stays in its posting month. The
+    # January purchase is not rewritten retroactively; February nets the refund.
+    assert _legacy_shape(response.json()) == {
         "items": [
             {
                 "period": "2026-01",
                 "income": 1500,
-                "expense": 500,
+                "expense": 600,
                 "transfer": 0,
-                "net_cashflow": 1000,
-                "savings_rate": 0.6667,
-            }
+                "net_cashflow": 900,
+                "savings_rate": 0.6,
+            },
+            {
+                "period": "2026-02",
+                "income": 0,
+                "expense": -100,
+                "transfer": 0,
+                "net_cashflow": 100,
+                "savings_rate": None,
+            },
         ]
     }
 
@@ -655,7 +678,7 @@ async def test_category_mom_endpoint_returns_latest_month_comparison(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "reference_date": "2026-03-31",
         "is_partial_period": False,
         "comparison_basis": "full_previous_month",
@@ -719,16 +742,25 @@ async def test_monthly_cashflow_endpoint_keeps_confirmed_settlement_read_only(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    # T055 (audit F03): posting-month attribution; see docs metric reference.
+    assert _legacy_shape(response.json()) == {
         "items": [
             {
                 "period": "2026-01",
                 "income": 0,
-                "expense": 100000,
+                "expense": 180000,
                 "transfer": 0,
-                "net_cashflow": -100000,
+                "net_cashflow": -180000,
                 "savings_rate": None,
-            }
+            },
+            {
+                "period": "2026-02",
+                "income": 0,
+                "expense": -80000,
+                "transfer": 0,
+                "net_cashflow": 80000,
+                "savings_rate": None,
+            },
         ]
     }
     assert await _settlement_match_count(db_session) == before_count
@@ -795,7 +827,7 @@ async def test_category_mom_endpoint_keeps_rejected_settlement_on_raw_basis(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "reference_date": "2026-03-31",
         "is_partial_period": False,
         "comparison_basis": "full_previous_month",
@@ -862,7 +894,7 @@ async def test_fixed_cost_summary_endpoint_returns_totals_and_unclassified(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "expense_total": 200,
         "fixed_total": 100,
         "variable_total": 70,
@@ -931,7 +963,7 @@ async def test_fixed_cost_trend_endpoint_returns_monthly_totals(
     )
 
     assert response.status_code == 200
-    assert response.json()["items"] == [
+    assert _legacy_shape(response.json()["items"]) == [
         {
             "period": "2026-02",
             "expense_total": 170,
@@ -1023,7 +1055,7 @@ async def test_merchant_spend_endpoint_returns_ranked_merchants(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "items": [
             {
                 "merchant": "쿠팡",
@@ -1109,14 +1141,16 @@ async def test_merchant_spend_endpoint_uses_confirmed_settlement_net_amount(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert _legacy_shape(response.json()) == {
         "items": [
             {
                 "merchant": "쿠팡",
+                # T054: count is distinct transactions (the linked refund
+                # counts too); amount is unchanged.
                 "amount": 80,
-                "count": 1,
-                "avg_amount": 80.0,
-                "last_seen_at": "2026-01-01T10:00:00",
+                "count": 2,
+                "avg_amount": 40.0,
+                "last_seen_at": "2026-01-03T09:00:00",
             },
             {
                 "merchant": "넷플릭스",

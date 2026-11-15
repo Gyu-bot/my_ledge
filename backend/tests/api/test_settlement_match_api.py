@@ -6,6 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.transaction import Transaction
 
 
+def _without_month_status(items: list[dict]) -> list[dict]:
+    """Drop the T054 month_status field; legacy fields stay exact."""
+    return [
+        {key: value for key, value in item.items() if key != "month_status"}
+        for item in items
+    ]
+
+
 def _transaction(
     *,
     tx_date: date,
@@ -101,15 +109,25 @@ async def test_put_settlement_match_requires_api_key_and_preserves_raw_signed_tr
     )
 
     assert analytics_response.status_code == 200
-    assert analytics_response.json()["items"] == [
+    # T055 (audit F03): confirming the link must not rewrite January; the
+    # refund nets in February, exactly as in the rejected case below.
+    assert _without_month_status(analytics_response.json()["items"]) == [
         {
             "period": "2026-01",
             "income": 0,
-            "expense": 100_000,
+            "expense": 180_000,
             "transfer": 0,
-            "net_cashflow": -100_000,
+            "net_cashflow": -180_000,
             "savings_rate": None,
-        }
+        },
+        {
+            "period": "2026-02",
+            "income": 0,
+            "expense": -80_000,
+            "transfer": 0,
+            "net_cashflow": 80_000,
+            "savings_rate": None,
+        },
     ]
 
     transactions_response = await async_client.get(
@@ -177,7 +195,7 @@ async def test_put_settlement_match_rejects_pair_and_keeps_analytics_on_raw_basi
     )
 
     assert analytics_response.status_code == 200
-    assert analytics_response.json()["items"] == [
+    assert _without_month_status(analytics_response.json()["items"]) == [
         {
             "period": "2026-01",
             "income": 0,
