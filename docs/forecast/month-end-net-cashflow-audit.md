@@ -14,7 +14,7 @@
 - 코드를 읽어 찾은 결함과 위험은 16건이다(5절). 그중 11건은 이번에 추가한 합성 시나리오로 재현했고(7절), 2건(F-C5, F-O2)은 기존 테스트가 동작을 덮으며, 3건(F-P1, F-R2, F-V1)은 코드 판독과 요구사항 대비로만 정리했다. F-V1은 실제 자료로 크기를 재야 하는 위험이다. 가장 영향이 큰 것은 **연결되지 않은 대출 상환의 이중 반영(F-C1)**, **지출 기록과 상관없이 스냅샷 월상환액을 더하는 대출 구성요소(F-C4)**, **월말 급여가 한 번 다음 달 1일로 넘어가면 정기 수입이 석 달간 빠지는 문제(F-I1)**, **연 1회 지출 미반영(F-E1)** 이다.
 - 대부분의 결함은 지출을 과대 전망해 월말 순현금흐름을 낮게(비관적으로) 만든다. 반대 방향은 연 1회 지출(F-E1), 이름이 바뀐 급여 입금처(F-I2), 변동 지출의 중앙값 사용(F-V1)이다.
 - 실제 자료의 오차는 아직 재지 않았다. 측정 도구(6절)를 만들었고, 실제 자료 실행은 사용자 쪽에서 한다.
-- 수정은 하지 않았다. 8절의 수정 제안은 승인 대상이다.
+- 점검 단계에서는 수정하지 않았다. 8절의 수정 제안 R1–R12는 두 차례로 나눠 승인됐고, 1차(R3, R9, R10)를 적용했다(8.1절). 1–7절의 `파일:줄`과 "현재" 설명은 점검 기준 커밋의 동작이며, 1차에서 바뀐 곳은 해당 항목에 "1차 수정"으로 적었다.
 
 ## 1. 전망이 나오는 곳
 
@@ -58,6 +58,8 @@
 
 `observed_day` (`:528-533`): 기준월 안에서 **마지막 거래가 있는 날**(종류 무관). 기준월에 거래가 없으면 0. 남은 기간은 이 날의 다음 날부터 말일까지다. 기준일이나 업로드 날짜가 아니다(F-O1).
 
+1차 수정(R10): 기준월 안의 마지막 거래일과 기준일 이하 최신 업로드 날짜(`coverage.latest_upload_date`, 기준월 안일 때만) 중 늦은 날을 쓴다(`_covered_day`). 남은 기간 시작일은 응답의 새 필드 `remaining_period_start`로 나간다(한 달이 다 덮였으면 `null`). 변동 기준선, 반복 지출의 남은 날짜, 지난 예정일 할부 판정이 모두 이 날을 쓴다. 7일 보류 규칙은 그대로 마지막 거래일 기준이다.
+
 ### 2.4 보류 규칙
 
 - 지출 구성요소 하나에 `missing_reasons`가 생기면 그 구성요소의 `expected_remaining`이 `null`이 되고(`:709`), 그러면 `expected_remaining_expense`, `projected_month_expense`, `projected_month_end_net`이 모두 `null`이다(`:822-838`).
@@ -98,6 +100,7 @@
   - 기준액에 쓰인 달이 `P`의 75% 미만이고 직전 세 달이 모두 쓰이지는 않음 → `uncertain` "불연속" (`:304-313`)
   - 입금일 편차가 8일 초과이고 말일 급여가 아님 → `uncertain` (`:314-323`)
 - **늦어진 입금**: 예상 범위가 지났는데도 아직 `expected`/`partial`이면 `late`로 바꾸지만 **남은 액은 그대로 더한다**(`:340-347`).
+- **새 입금처 급여(1차 수정, R9)**: 이번 달에 조회 창 안 이전 입금이 없고 설정에도 없는 입금처의 급여 분류 입금이 있고, 그 합이 기존 출처 예상액의 10% 이상이며, 기존 출처가 이번 달 아직 받은 것이 없는 `expected`/`late`이면, 기존 출처를 `uncertain`/`low`, 남은 액 0으로 두고 사유를 "입금처 이름이 바뀐 같은 급여일 수 있음"으로 바꾼다. 응답 `missing_reasons`에 입금처 이름 변경 확인 사유가 더해진다. 수입 쪽 사유이므로 월말 값은 지우지 않는다(2.4). 새 입금처를 수입 예상 설정에 등록하면 별도 수입으로 본다.
 - **월 수입 전망** = 이번 달 관측 수입 전체(일회성·이자 포함) + 출처별 남은 액 합(`:800`, `:835`).
 - **가정·신뢰도 필드**: 출처마다 `history_periods`(근거 달), `excluded_periods`, `status`, `confidence`, `reason`. 출처가 없으면 사유 "정기 수입을 식별할 … 없음"(`:805-808`).
 
@@ -122,7 +125,7 @@
 `_plan_matches` (`:370-381`), `_expense_components` (`:548-555`, `:588-643`)
 
 - **대상**: 현재 `active`인 계획 중 기준월이 첫 납부월 ~ 마지막 회차 월 안에 있는 것(`:590-597`). 기준월의 회차 번호 = 첫 납부월부터의 달 수 + 1, 예정일 = 첫 납부일을 그만큼 민 날.
-- **이미 관측된 것**: 그 계획의 **바로 그 회차 번호**로 연결된 거래(조회 창 안)가 있으면 그것을 쓴다(`:600-607`). 없으면 연결되지 않은 이번 달 거래 중 금액이 정확히 같고, 정규화한 거래처가 같고, 결제수단이 같으며(계획에 있으면), 예정일 ±7일인 것이 정확히 한 건이면 그것을 쓴다(읽기 전용 대조, `:613-632`). 둘 이상이면 보류.
+- **이미 관측된 것**: 그 계획의 **바로 그 회차 번호**로 연결된 거래(조회 창 안)가 있으면 그것을 쓴다(`:600-607`). 1차 수정(R3) 뒤에는 먼저 그 계획에 연결된 거래 중 **날짜가 이번 달인 것**을 쓰고, 그 연결의 회차 번호가 계산과 다르면 할부 구성요소 `warnings`에 계획 이름을 붙인 경고만 더한다(신뢰도 `low`, 값은 유지). 이번 달 날짜의 연결이 없을 때만 계산한 회차 번호의 연결(조회 창 안 아무 달)을 쓴다. 없으면 연결되지 않은 이번 달 거래 중 금액이 정확히 같고, 정규화한 거래처가 같고, 결제수단이 같으며(계획에 있으면), 예정일 ±7일인 것이 정확히 한 건이면 그것을 쓴다(읽기 전용 대조, `:613-632`). 둘 이상이면 보류.
 - **산식**: 관측이 있으면 max(월 금액 − 관측 합, 0). 관측이 없고 예정일이 `d` 이전이면 보류("예정일이 지난 미연결 할부", `:638-641`). 그 밖에는 월 금액 전체(`:642-643`).
 - **분할 규칙**: 할부 연결이 있거나 어느 활성 계획과 정확히 일치하는 거래, 또는 `recurring_payment_kind = installment`인 거래는 할부 몫으로 분리되어 변동 기준선에서 빠진다(`:548-555`). 연결도 정확한 일치도 없는 할부 결제는 변동 기준선에 남는다(F-C2).
 - **종료월**: 마지막 회차 월까지 더하고, 그 다음 달부터는 더하지 않는다. 연결되었거나 정확히 일치하는 과거 결제는 종료 뒤에도 변동 기준선에 들어가지 않는다(테스트 `test_linked_installment_after_final_month_is_not_assumed`).
@@ -215,12 +218,14 @@
 ### F-C3. 연결된 이번 달 회차를 번호가 다르다는 이유로 다시 더함 — 중간, 과소
 
 - 코드: 연결은 계산한 회차 번호로만 찾는다(`:600-607`). 번호가 다르면 정확 일치 후보에서도 연결된 거래는 빠진다(`:618-621`).
-- 시나리오: 계획의 첫 납부월이 실제 청구월보다 한 달 이르게 입력됨. 7월 8일 결제가 7회차로 연결돼 있지만 전망은 7월을 8회차로 보고 1,000을 더한다. (`test_current_installment_link_number_mismatch_adds_paid_installment_again`, xfail `test_expected_linked_installment_of_this_month_not_added_again`)
+- 시나리오: 계획의 첫 납부월이 실제 청구월보다 한 달 이르게 입력됨. 7월 8일 결제가 7회차로 연결돼 있지만 전망은 7월을 8회차로 보고 1,000을 더한다.
+- **1차 수정(R3)으로 해결.** 이번 달 날짜의 연결 결제를 이번 달 회차로 보고, 번호 차이는 경고로만 남긴다. (`test_installment_link_number_mismatch_only_warns`, `test_expected_linked_installment_of_this_month_not_added_again`, 대조 `test_linked_installment_of_this_month_with_matching_number_has_no_warning`, `test_installment_link_number_mismatch_before_this_month_payment`)
 
 ### F-I2. 이름이 바뀐 급여 입금처의 이중 반영 — 중간, 과대
 
 - 코드: 수입 출처는 정규화한 입금처 문자열로 묶인다(`:81-82`, `:208`).
-- 시나리오: 이번 달 급여가 새 이름으로 15일에 들어옴. 예전 이름 출처는 `expected`로 100,000을 더하고, 새 이름 출처는 이력이 없어 `uncertain`이지만 관측 수입에는 이미 들어 있다. 월 수입 전망이 200,000이 된다. (`test_current_renamed_salary_payer_is_counted_twice`, xfail `test_expected_renamed_salary_payer_not_counted_twice`)
+- 시나리오: 이번 달 급여가 새 이름으로 15일에 들어옴. 예전 이름 출처는 `expected`로 100,000을 더하고, 새 이름 출처는 이력이 없어 `uncertain`이지만 관측 수입에는 이미 들어 있다. 월 수입 전망이 200,000이 된다.
+- **1차 수정(R9)으로 해결.** 예전 이름 출처를 확인 필요(`uncertain`, 남은 액 0)로 보류하고 사유를 단다. 월 수입 전망은 100,000. (`test_renamed_salary_payer_withholds_pending_old_source`, `test_expected_renamed_salary_payer_not_counted_twice`, 대조 `test_second_salary_payer_with_history_is_not_treated_as_rename`, `test_new_payer_registered_in_settings_is_not_treated_as_rename`, `test_tiny_new_salary_category_deposit_does_not_withhold`)
 - 반복 지출 거래처 이름이 바뀐 경우에도 같은 구조로 이중 반영될 수 있다(코드 판독, 테스트 없음).
 
 ### F-I3. 급여 카테고리가 아닌 정기 수입은 전망하지 않음 — 중간, 과소
@@ -232,7 +237,8 @@
 ### F-O1. 업로드가 덮은 조용한 날도 남은 기간으로 봄 — 낮음, 과소
 
 - 코드: 남은 기간은 마지막 거래일 다음 날부터다(`:528-533`). 업로드 날짜는 표시에만 쓴다(`:740-748`).
-- 시나리오: 업로드는 7월 26일까지를 덮지만 마지막 거래는 20일. 26일 기준 전망은 21–26일의 과거 지출(300)까지 더한다(맞는 값 100). (`test_current_quiet_days_after_last_transaction_count_as_unobserved`, xfail `test_expected_quiet_days_inside_export_are_not_assumed_again`)
+- 시나리오: 업로드는 7월 26일까지를 덮지만 마지막 거래는 20일. 26일 기준 전망은 21–26일의 과거 지출(300)까지 더한다(맞는 값 100).
+- **1차 수정(R10)으로 해결.** 남은 기간이 27일부터라 100. (`test_quiet_days_inside_export_are_observed`, `test_expected_quiet_days_inside_export_are_not_assumed_again`, 대조 `test_upload_before_last_transaction_keeps_transaction_day`, `test_upload_after_as_of_or_in_previous_month_is_ignored`, `test_fully_covered_month_has_no_remaining_period`)
 
 ### F-O2. 전망 기준일이 자료 기준일이 아니라 오늘 — 중간, 보류 증가
 
@@ -351,23 +357,25 @@ URL은 출력하지 않는다. PostgreSQL과 SQLite만 받는다. 앱 설정(`AP
 | `test_month_end_salary_is_expected_before_payday` | 월말 급여, 급여일 전 | 현재 동작이 맞음 |
 | `test_current_/expected_month_end_salary_crossing_boundary_*` | 월말 급여가 한 번 다음 달 1일 | 현재 고정 + xfail (F-I1) |
 | `test_current_regular_income_outside_salary_category_is_not_forecast` | 급여 카테고리 아닌 정기 수입 | 현재 고정 (F-I3) |
-| `test_current_/expected_renamed_salary_payer_*` | 이름이 바뀐 급여 입금처 | 현재 고정 + xfail (F-I2) |
+| `test_renamed_salary_payer_withholds_pending_old_source`, `test_expected_renamed_salary_payer_not_counted_twice` 외 대조 3개 | 이름이 바뀐 급여 입금처 | 1차 수정(R9)으로 통과 (F-I2) |
 | `test_current_/expected_annual_expense_*` | 연 1회 지출 | 현재 고정 + xfail (F-E1) |
 | `test_cancelled_explicit_monthly_recurring_is_not_assumed` | 해지된 월 반복 표시 지출 | 현재 동작이 맞음 |
 | `test_current_/expected_cancelled_fixed_cost_*` | 고정비로만 표시된 해지 지출 | 현재 고정 + xfail (F-E2) |
 | `test_recurring_cancelled_this_month_is_still_assumed_before_its_day` | 이번 달 해지 | 한계로 기록 |
-| `test_current_/expected_quiet_days_*` | 업로드가 덮은 조용한 날 | 현재 고정 + xfail (F-O1) |
+| `test_quiet_days_inside_export_are_observed`, `test_expected_quiet_days_inside_export_are_not_assumed_again` 외 대조 3개 | 업로드가 덮은 조용한 날 | 1차 수정(R10)으로 통과 (F-O1) |
 | `test_linked_installment_last_month_and_after_end`, `test_linked_installment_after_final_month_is_not_assumed` | 할부 종료월과 그 다음 달(연결됨) | 현재 동작이 맞음 |
 | `test_current_/expected_unmatched_installment_*` (2쌍) | 미연결·불일치 할부, 종료월과 그 다음 달 | 현재 고정 + xfail (F-C2) |
-| `test_current_/expected_..._installment_link_number_mismatch_*` | 회차 번호 불일치 | 현재 고정 + xfail (F-C3) |
+| `test_installment_link_number_mismatch_only_warns`, `test_expected_linked_installment_of_this_month_not_added_again` 외 대조 2개 | 회차 번호 불일치 | 1차 수정(R3)으로 통과 (F-C3) |
 | `test_current_/expected_unlinked_observed_repayment_*` | 관측된 미연결 상환 | 현재 고정 + xfail (F-C1) |
 | `test_current_/expected_unlinked_repayment_history_*` | 과거 미연결 상환, 상환일 전 | 현재 고정 + xfail (F-C1) |
 | `test_current_/expected_repayment_booked_as_transfer_*` | 이체로 기록된 상환 | 현재 고정 + xfail (F-C4) |
 | `test_expected_projection_reports_undecided_adjustability_share` | 응답의 미정 비중 | xfail (F-R1) |
 
-xfail은 모두 `strict=True`다. 수정되어 통과하기 시작하면 테스트가 실패하므로, 고칠 때 xfail 표시를 함께 지운다.
+xfail은 모두 `strict=True`다. 수정되어 통과하기 시작하면 테스트가 실패하므로, 고칠 때 xfail 표시를 함께 지운다. 1차 수정 뒤 남은 xfail은 9개(F-I1, F-E1, F-E2, F-C2 2개, F-C1 2개, F-C4, F-R1)다.
 
-## 8. 수정 제안 (승인 대상, 구현하지 않음)
+## 8. 수정 제안
+
+R1–R12는 승인됐다(두 차례로 나눔). R13은 승인되지 않았다. 적용 현황은 8.1절.
 
 | # | 대상 | 제안 | 선행 | 되짚기에서 보일 개선 |
 |---|---|---|---|---|
@@ -386,3 +394,15 @@ xfail은 모두 `strict=True`다. 수정되어 통과하기 시작하면 테스�
 | R13 | F-V1 | 실제 자료 되짚기에서 `variable` 부호 오차가 한쪽으로 치우치면 중앙값 대신 다른 대표값(예: 절사 평균)을 비교 실험한다. 결과 없이 바꾸지 않는다. | 실제 자료 되짚기 결과 | `variable` 부호 오차 중앙값이 0에 가까워짐 |
 
 권장 순서: 실제 자료로 되짚기 실행 → 사용자 검토 → R3, R9, R10처럼 선행 없는 것 → `T056` 뒤 R1, R2, R5–R8 → `T057` 뒤 R4, R11 → R12 → 같은 되짚기로 오차 변화 확인.
+
+### 8.1 적용 현황
+
+| # | 상태 | 바뀐 동작 | 응답 변화 |
+|---|---|---|---|
+| R3 | 1차 적용 | 이번 달 회차 = 그 계획에 연결된 거래 중 날짜가 이번 달인 것. 번호가 다르면 경고만 남기고 다시 더하지 않음. 이번 달 날짜의 연결이 없으면 예전처럼 계산한 번호의 연결을 씀 | 할부 구성요소 `warnings`에 경고 문구(계획 이름 접두), 그 구성요소와 전체 `confidence`가 `low` |
+| R9 | 1차 적용 | 새 입금처(창 안 이전 입금·설정 없음)의 급여 분류 입금이 기존 예상액의 10% 이상이고 기존 출처가 이번 달 아직 받은 것이 없으면, 기존 출처를 `uncertain`·남은 액 0으로 보류 | 출처 `reason` 문구, `missing_reasons`에 입금처 이름 변경 확인 사유. 되짚기 사유 코드 `income_source_possible_payer_rename` 추가 |
+| R10 | 1차 적용 | 남은 기간 시작 = max(이번 달 마지막 거래일, 기준일 이하 최신 업로드 날짜)의 다음 날 | 새 필드 `remaining_period_start`(nullable). 기존 필드 이름·형식은 그대로 |
+| R1, R2, R4–R8, R11, R12 | 2차 대상 | 미적용 | — |
+| R13 | 미승인 | — | — |
+
+기존 응답 필드는 지우거나 이름·형식을 바꾸지 않았다. 마이그레이션은 없다.
