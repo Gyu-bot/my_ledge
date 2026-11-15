@@ -14,7 +14,7 @@
   - `POST /api/v1/upload/review/prepare`, `GET /api/v1/upload/review/{operation_id}`, `POST /api/v1/upload/review/{operation_id}/decisions`, `POST /api/v1/upload/review/{operation_id}/apply`
   - `GET /api/v1/upload/rollback-points`, `POST /api/v1/upload/{upload_id}/rollback`
   - `GET /api/v1/upload/logs`
-- 화면(프론트엔드)도 아직 폐기 예정 엔드포인트 일부를 쓴다. `T058` 뒤에는 `canonical-views/dashboard`(월 결산의 월말 전망 `month_projection`, 인박스·데이터 사전·가져오기·수입 예상 설정), `discretionary-velocity`(인박스), `installments/forecast`(할부·자산·부채)가 남았다. `purchase-gate-candidates`·`spending-review-candidates`, `spending-anomalies`, `category-mom`은 화면이 더는 부르지 않는다(지출 분석은 `/read/review-items`와 `/metrics/comparison/contributions`를 읽는다). 남은 것은 `T059`까지 지울 수 없다.
+- 화면(프론트엔드)도 아직 폐기 예정 엔드포인트 일부를 쓴다. `T059` 뒤에는 `canonical-views/dashboard`(월 결산의 월말 전망 `month_projection`, 데이터 사전·가져오기의 관측 범위·수입 예상 설정)와 `installments/forecast`(할부·자산·부채)가 남았다. 작업대의 분류 큐는 `/metrics/spend-cube?adjustability=undecided`를, 약정 현황과 자료 현황은 `/read/commitments`와 `/read/data-status`를 읽으므로 인박스가 쓰던 `canonical-views/dashboard`의 작업 큐와 `discretionary-velocity`는 화면이 더는 부르지 않는다. `purchase-gate-candidates`·`spending-review-candidates`, `spending-anomalies`, `category-mom`도 화면이 부르지 않는다.
 
 ## 2. 새 읽기 표면
 

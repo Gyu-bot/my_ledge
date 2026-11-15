@@ -31,9 +31,12 @@
 | --- | --- |
 | `/` | 월 결산 (첫 화면, T058) |
 | `/analysis` | 지출 분석 (T058) |
+| `/commitments` | 약정 현황 (T059) |
 | `/net-worth` | 자산·부채 |
-| `/data/inbox` | 데이터 인박스 |
-| `/data/transactions` | 거래 작업대 |
+| `/data/inbox` | 작업대 · 분류 (분류 큐, 대출 연결 후보, T059) |
+| `/data/transactions` | 작업대 · 거래 |
+| `/data/nature` | 작업대 · 기본값·정기 지급 (T059) |
+| `/data/status` | 작업대 · 자료 현황 (T059) |
 | `/data/loans` | 대출 관리 |
 | `/data/installments` | 할부 관리 |
 | `/data/assets` | 자산 메타 |
@@ -57,7 +60,8 @@
 | `/operations/asset-settings` | `/data/assets` |
 | `/operations/auto-classification` | `/data/rules` |
 | `/operations/canonical-views` | `/data/reference` |
-| `/operations/recurring-classification` | `/data/transactions?view=groups` |
+| `/operations/recurring-classification` | `/data/nature?tab=recurring` (T059) |
+| `/data/transactions?view=groups` | `/data/nature?tab=recurring` (T059) |
 | `/assets` | `/net-worth` |
 | `/income` | `/` |
 | `/transfers` | `/` |
@@ -67,8 +71,9 @@
 ## App Shell Requirements
 
 - Shell은 `left nav + route content` 구조다.
-- Main nav는 월 결산, 지출 분석, 자산·부채를 노출한다 (T058). 약정 현황·작업대 재편은 T059.
-- Data studio nav는 인박스, 거래, 대출, 할부, 자산 메타, 규칙, 설정, 가져오기, 데이터 사전을 노출한다.
+- Main nav는 월 결산, 지출 분석, 약정 현황, 자산·부채를 노출한다 (T058, T059).
+- 작업대 nav(예전 데이터 메뉴)는 분류, 거래, 기본값·정기 지급, 대출, 할부, 자산 메타, 규칙, 자료 현황, 가져오기, 설정, 데이터 사전을 노출한다 (T059).
+- 뒤로 가기로 돌아오면 보던 스크롤 위치를 되살린다 (T059).
 - Page title, meta, controls는 `PageHeader`에서 처리한다.
 - Route mapping은 `frontend/src/router.tsx`, nav mapping은 `frontend/src/shell/navigation.ts`가 source of truth다.
 
@@ -87,7 +92,7 @@
 
 - 첫 화면은 가장 최근 마감월의 월 흐름표다. 마감월을 고를 수 있다(`?month=`).
 - 흐름표는 수입 − 약정 지급(대출 원리금·할부 회차·정기 지급) − 수시 지출(보호·조정 가능) − 미정 = 총지급, 잔여, 잔여의 행방(투자·저축 / 계좌 간 이동 / 목적 미정), 함께 보는 값(생활 지출, 보호, 조정 가능)을 보인다. 금액은 `/metrics/monthly-flow` 값 그대로다.
-- 흐름표의 모든 금액에서 산식, 포함·제외, 해당 거래 목록이 같은 자리에서 열린다.
+- 흐름표의 모든 금액에서 산식, 포함·제외, 해당 거래 목록이 같은 자리에서 열린다. 거래 목록은 금액과 같은 흐름표 줄 조건(`/transactions`의 `flow_row`·`payment_form`·`adjustability`)으로 거르고 목록 합계가 금액과 같은지 밝힌다 (T059).
 - 최근 12개월 추이는 자료 없는 달과 가져오기 전 달을 0원과 구분한다.
 - 진행월 영역은 관측 누적과 월말 순현금흐름 전망을 다른 카드로 나눈다. 전망은 관측 부분, 남은 기간 가정, 월말 값(또는 보류와 이유), 남은 지출 가정의 미정 비중, 지난 마감월 되짚기 오차를 보인다. 신뢰도는 등급 이름만으로 보이지 않고 권고가 아님을 밝힌다.
 - 진행월에는 비율과 지난달 전체 대비 증감을 내지 않는다. 월말 너머의 전망은 없다.
@@ -98,7 +103,7 @@
 - 카테고리 → 거래처 분해는 카테고리를 유지한다. 같은 거래처라도 카테고리가 다르면 따로 센다. 조정 가능성(보호·조정 가능·미정)으로 거를 수 있다.
 - 기준 대비 변화 기여를 금액 순으로 보이고 전체·보호·조정 가능만으로 나눠 볼 수 있다. 기준 기간, 자료 없는 달, 부분월 처리를 함께 밝힌다.
 - 기존 할부 회차를 뺀 지출(`총지급 − 할부 회차`)과 지급 형태별 구성을 보인다.
-- 사후 검토할 거래(`/read/review-items`)를 올라온 이유와 함께 보이고, 위험도·우선순위·신뢰도 점수는 보이지 않는다. 거래는 `/data/transactions?transaction_id=`로 연결한다.
+- 사후 검토할 거래(`/read/review-items`)를 올라온 이유와 함께 보이고, 위험도·우선순위·신뢰도 점수는 보이지 않는다. 거래는 그 자리에서 거래 고치기 패널로 연다 (T059).
 - 분류를 제안하거나 자동으로 채우지 않는다.
 
 ### Common Data Status (T058)
@@ -112,16 +117,37 @@
 - 순자산 추이, 자산 구성, 유동성 health, 대출, 투자, 보험, 할부 forecast를 제공한다.
 - provenance가 필요한 추정값은 출처/가정을 확인할 수 있어야 한다.
 
-### Data Inbox
+### Shared Transaction Editor (T059)
 
-- 미분류 거래, 반복 분류 승인, 대출 연결 후보, 구매 게이트 후보를 작업 queue로 보여준다.
-- 각 queue는 focused data route로 연결한다.
+- 분석 화면·약정 현황·분류 큐·거래 화면에서 같은 거래 고치기 패널을 연다. 분석 화면에서는 화면을 떠나지 않으므로 고른 달·필터·열어 둔 근거 패널·위치가 그대로다.
+- 거래처·카테고리·메모, 지출의 조정 가능성(거래 단위 값 또는 따로 정하지 않음 — 적용되는 값과 근거 표시), 이체의 목적을 고친다. 예전 고정/변동·필수/재량·반복 입력은 없다.
+- 키보드만으로 열고(Enter), 저장하고(Enter·Ctrl+Enter), 닫는다(Esc). 초점은 패널 안에서 돌고 닫히면 연 버튼으로 돌아간다.
+
+### Commitments (약정 현황, T059)
+
+- 대출·할부·정기 지급 묶음을 한 목록으로(`/read/commitments`): 월 부담과 근거, 주기, 남은 회차와 종료 시점, 조정 가능성.
+- 고른 달의 관측 상태: 관측됨 / 주기상 있어야 하는데 관측 안 됨 / 거래는 있으나 연결 미확인 / 이 달에는 예정 없음 / 판단할 기록 없음. "미납"이라는 말을 쓰지 않고, 전망이 아니라 기록된 속성임을 밝힌다.
+- 연결 미확인·연결된 거래를 펼쳐 고치거나 할부 화면으로 간다. 대출·할부 편집은 기존 화면에 링크로 잇는다.
+
+### Classification (작업대 · 분류, T059)
+
+- 조정 가능성이 미정인 지출을 지출 큐브에서 금액 영향이 큰 묶음(카테고리·소분류·거래처 또는 카테고리)부터 보인다. 반복 여부만 빈 거래와 반복 분류 제안은 큐에 없다.
+- 한 번의 조작으로 카테고리 전체 기본값(`/nature/category-defaults`)을 주거나, 그 거래처의 지금 미정인 거래에 거래 단위 값을 준다. 둘 다 되돌리기를 제공한다. 시스템은 값을 제안하거나 미리 고르지 않는다.
+- 묶음을 정기 지급으로 등록하러 갈 수 있다(거래처·카테고리만 채움). 대출 연결 후보는 따로 된 탭.
+
+### Nature Settings (기본값·정기 지급, T059)
+
+- 카테고리·소분류의 조정 가능성 기본값을 편집하고 지운다.
+- 정기 지급 묶음을 등록·고치기·끝내기(마지막 날)·지우기(확인 문구) 한다. 후보를 자동으로 등록하지 않는다.
+
+### Data Status (자료 현황, T059)
+
+- 무엇을 가져왔는지(최근 가져오기), 거래 기준일과 종류별 스냅샷 기준일, 거래 0건인 달, 달별 상태, 분류 상태(미정·미분류·할부 연결 미확인·주기/조정 가능성 없는 정기 지급)와 고칠 곳을 보인다(`/read/data-status`).
 
 ### Transactions
 
-- row view와 group view를 제공한다.
-- type/source/category/payment method/cost kind/necessity/recurring/deleted/edited 필터를 제공한다.
-- 거래 상세 편집과 bulk update/delete/restore를 제공한다.
+- 조회 조건(유형, 출처, 대분류, 결제수단, 지급 형태, 조정 가능성, 월 흐름표 줄, 기간, 삭제 포함, 고친 것만)을 주소에 남긴다.
+- 거래 고치기 패널과 bulk update(거래처·대분류·조정 가능성)/delete/restore를 제공한다. 예전 그룹 보기는 정기 지급 묶음으로 바뀌었다.
 - bulk delete/restore는 preview와 confirmation 정책을 따른다.
 
 ### Loans
@@ -152,7 +178,8 @@
 ### Import
 
 - BankSalad `.xlsx` 업로드와 snapshot date 입력을 제공한다.
-- 업로드 이력과 reset danger zone을 제공한다.
+- 업로드 이력을 쉬운 상태 말로 보인다.
+- 되돌리기와 초기화는 업로드 흐름과 떨어진, 닫힌 채 시작하는 "위험한 작업" 칸에만 있고 확인 문구를 거친다 (T059).
 
 ### Reference
 
@@ -162,7 +189,8 @@
 
 ### Read APIs
 
-- transactions list, filter options, recurring groups
+- transactions list (T059 줄 필터 `flow_row`, `payment_form`, `adjustability`), filter options
+- read surface `/read/commitments`, `/read/data-status`; nature axes `/nature/*`; transfer purpose per transaction
 - asset snapshots, net worth history, investments, loans, profile, liquidity
 - analytics cashflow, category, recurring, anomaly, purchase gate, discretionary velocity
 - settings defaults/saved/effective
@@ -172,6 +200,7 @@
 ### Write APIs
 
 - transaction update/delete/restore/bulk update
+- category adjustability defaults, recurring commitment bundles, transaction-level adjustability, transaction transfer purpose (T059)
 - bulk delete/restore preview and execute
 - loan transaction link/unlink
 - installment plan and link management
