@@ -34,7 +34,11 @@ from app.schemas.income_projection import (
     income_source_key,
 )
 from app.services.income_expectations_service import save_income_expectations
-from app.models.nature_axes import RecurringCommitment, TransactionNatureOverride
+from app.models.nature_axes import (
+    CategoryAdjustabilityDefault,
+    RecurringCommitment,
+    TransactionNatureOverride,
+)
 from app.services.monthly_projection_service import get_monthly_projection
 from app.services.nature_axes_service import write_through_legacy_classification
 from app.services.settings_service import patch_analytics_settings
@@ -1089,10 +1093,36 @@ async def test_repayment_booked_as_transfer_not_added_to_expense(db_session):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-R1: plan 2.6 asks the forecast to show the undecided "
-    "adjustability share; the response has no such field.",
-)
-def test_expected_projection_reports_undecided_adjustability_share():
-    assert any("undecided" in name for name in MonthlyProjection.model_fields)
+async def test_projection_reports_undecided_adjustability_share(db_session):
+    """T064 R12 (F-R1): the remaining assumption's undecided share, by amount."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference)
+    for month in range(1, 7):
+        db_session.add(
+            tx(
+                date(2031, month, 25),
+                -5_000,
+                "Example Subscription",
+                "생활",
+                cost_kind="fixed",
+                fixed_cost_necessity="essential",
+                recurring_payment_kind="monthly_recurring",
+            )
+        )
+    await db_session.commit()
+    result = await project(db_session, reference_date=reference)
+    share = result.remaining_expense_adjustability
+    # Subscription 5,000 is protected; the grocery tail (300) nobody decided.
+    assert (share.protected_amount, share.adjustable_amount) == (5_000, 0)
+    assert share.undecided_amount == 300
+    assert share.total_amount == result.known_expected_remaining_expense == 5_300
+    assert share.undecided_share_pct == 5.7
+
+    db_session.add(
+        CategoryAdjustabilityDefault(category_major="식비", adjustability="adjustable")
+    )
+    await db_session.commit()
+    decided = await project(db_session, reference_date=reference)
+    share = decided.remaining_expense_adjustability
+    assert (share.adjustable_amount, share.undecided_amount) == (300, 0)
+    assert share.undecided_share_pct == 0.0

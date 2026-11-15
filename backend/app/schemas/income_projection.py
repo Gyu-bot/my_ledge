@@ -167,6 +167,41 @@ class ExpenseProjectionComponent(BaseModel):
     annual_items: list[AnnualExpenseAssumption] = Field(default_factory=list)
 
 
+class ProjectionAdjustabilityShare(BaseModel):
+    """Adjustability of the remaining-period spending assumption (T064 R12)."""
+
+    basis: str
+    protected_amount: int = 0
+    adjustable_amount: int = 0
+    undecided_amount: int = 0
+    total_amount: int = 0
+    undecided_share_pct: float | None = None
+
+
+class ProjectionAccuracyBand(BaseModel):
+    band: Literal["day_01_10", "day_11_20", "day_21_31"]
+    as_of_days: list[int]
+    points: int
+    withheld_points: int
+    evaluated_points: int
+    net_median_signed_error: int | None = None
+    net_median_absolute_error: int | None = None
+    net_median_signed_error_pct_of_income: float | None = None
+    expense_median_signed_error: int | None = None
+
+
+class ProjectionAccuracy(BaseModel):
+    """Recent closed-month replay of this forecast (T064 R12)."""
+
+    definition: str
+    reference_period: str
+    evaluated_periods: list[str] = Field(default_factory=list)
+    as_of_days: list[int] = Field(default_factory=list)
+    current_band: Literal["day_01_10", "day_11_20", "day_21_31"] | None = None
+    bands: list[ProjectionAccuracyBand] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class MonthlyProjection(BaseModel):
     period: str
     as_of_date: date
@@ -200,3 +235,8 @@ class MonthlyProjection(BaseModel):
     as_of_basis: Literal["requested_date", "transaction_as_of", "today_no_data"] = (
         "requested_date"
     )
+    # T064 R12: adjustability of the (known) remaining spending assumption.
+    # The recent closed-month replay error is a separate read-only endpoint
+    # (GET /canonical-views/month-projection/accuracy): replaying the forecast
+    # 15 times is too slow for every dashboard request.
+    remaining_expense_adjustability: ProjectionAdjustabilityShare | None = None

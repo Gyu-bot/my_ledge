@@ -147,6 +147,8 @@ async def test_pre_payday_and_classification_sections(db_session):
     bias = report["special_cases"]["classification_bias"]
     # Grocery rows have no necessity, so their whole amount is undecided.
     assert bias["month_undecided_adjustability_share_pct"]["median"] > 0
+    # Only the grocery tail of the remaining assumption is undecided.
+    assert 0 < bias["forecast_remaining_undecided_share_pct"]["median"] < 100
     assert bias["month_unlinked_commitment_like_share_pct"]["median"] == 0
     assert set(bias["by_unlinked_commitment_like_share"]) == {"0%"}
     codes = {item["code"] for item in report["limitations"]}

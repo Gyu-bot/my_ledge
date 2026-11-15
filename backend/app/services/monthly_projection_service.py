@@ -43,6 +43,7 @@ from app.schemas.income_projection import (
     IncomeExpectation,
     IncomeProjectionSource,
     MonthlyProjection,
+    ProjectionAdjustabilityShare,
     ProjectionCommitmentNotInExpense,
     ProjectionCoverage,
     ProjectionTwelveMonthWindow,
@@ -1012,6 +1013,43 @@ def _yearly_source(
     )
 
 
+ADJUSTABILITY_CLASSES = ("protected", "adjustable", "undecided")
+
+
+def _adjustability_weights(rows: Any) -> dict[str, int]:
+    """Signed spend per adjustability class of flow lines (R12)."""
+    weights: dict[str, int] = defaultdict(int)
+    for row in rows:
+        value = row.get("adjustability")
+        weights[value if value in ADJUSTABILITY_CLASSES else "undecided"] -= row[
+            "amount"
+        ]
+    return weights
+
+
+def _add_share(shares: dict[str, int], amount: int, weights: dict[str, int]) -> None:
+    """Split ``amount`` by positive weights (largest remainder, whole won).
+
+    Without any positive weight the amount is undecided: nothing is guessed.
+    """
+    if amount <= 0:
+        return
+    positive = {key: max(weights.get(key, 0), 0) for key in ADJUSTABILITY_CLASSES}
+    total = sum(positive.values())
+    if total <= 0:
+        shares["undecided"] += amount
+        return
+    raw = {key: amount * value / total for key, value in positive.items()}
+    parts = {key: int(value) for key, value in raw.items()}
+    leftover = amount - sum(parts.values())
+    for key in sorted(raw, key=lambda key: raw[key] - parts[key], reverse=True)[
+        :leftover
+    ]:
+        parts[key] += 1
+    for key, value in parts.items():
+        shares[key] += value
+
+
 def _expense_components(
     lines: list[dict[str, Any]],
     reference: date,
@@ -1022,7 +1060,7 @@ def _expense_components(
     commitments: dict[int, RecurringCommitment],
     loan_rules: list[LoanMerchantRule],
     window: ProjectionTwelveMonthWindow | None = None,
-) -> list[ExpenseProjectionComponent]:
+) -> tuple[list[ExpenseProjectionComponent], ProjectionAdjustabilityShare]:
     """``lines`` cover up to 12 months before the reference month.
 
     Monthly assumptions read the six-month lookback as before; only yearly
@@ -1203,6 +1241,12 @@ def _expense_components(
         else:
             installment_remaining += plan.monthly_amount
 
+    # R12: the known remaining assumption split by the adjustability of the
+    # lines it was read from (loan/installment schedules are protected).
+    shares: dict[str, int] = defaultdict(int)
+    _add_share(shares, loan_remaining, {"protected": 1})
+    _add_share(shares, installment_remaining, {"protected": 1})
+
     recurring_remaining = 0
     recurring_sources = []
     commitment_rows: dict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -1226,6 +1270,15 @@ def _expense_components(
             # baseline, also after it stopped.
             continue
         recurring_sources.append(source)
+        _add_share(
+            shares,
+            source.expected_remaining or 0,
+            _adjustability_weights(
+                row
+                for row in (items if source.cycle == "yearly" else six_items)
+                if row["amount"] < 0
+            ),
+        )
         if source.expected_remaining is None:
             reasons["recurring"].append(
                 f"{source.merchant}: 반복 지출의 총결제 근거가 없어 잔여 지출 추정 불가"
@@ -1243,19 +1296,38 @@ def _expense_components(
     )
     variable_remaining = None
     if len(periods) >= MIN_MONTHS:
+        tail_rows = [
+            row
+            for row in partitions["variable"]
+            if _period(row["date"]) in periods
+            and min(row["date"].day, _month_end(reference).day) > covered_day
+            and _category_key(row) not in annual_keys
+        ]
         tails = [
             sum(
                 -row["amount"]
-                for row in partitions["variable"]
+                for row in tail_rows
                 if _period(row["date"]) == baseline_period
-                and min(row["date"].day, _month_end(reference).day) > covered_day
-                and _category_key(row) not in annual_keys
             )
             for baseline_period in periods
         ]
-        variable_remaining = max(round(median(tails)), 0) + sum(
+        median_part = max(round(median(tails)), 0)
+        variable_remaining = median_part + sum(
             item.expected_remaining for item in annual_items
         )
+        _add_share(shares, median_part, _adjustability_weights(tail_rows))
+        for item in annual_items:
+            _add_share(
+                shares,
+                item.expected_remaining,
+                _adjustability_weights(
+                    row
+                    for row in all_partitions["variable"]
+                    if _category_key(row) == item.category
+                    and _period(row["date"]) == item.last_year_period
+                    and min(row["date"].day, _month_end(reference).day) > covered_day
+                ),
+            )
     else:
         reasons["variable"].append(
             "충분히 관측된 마감월 3개월이 없어 잔여 변동·미분류 지출 추정 불가"
@@ -1286,7 +1358,23 @@ def _expense_components(
         "recurring": recurring_warnings,
     }
     unconfirmed = {"loan": loan_unconfirmed, "installment": installment_unconfirmed}
-    return [
+    total = sum(shares.values())
+    adjustability = ProjectionAdjustabilityShare(
+        basis=(
+            "알려진 남은 지출 가정(known_expected_remaining_expense)을 근거 줄의 조정 가능성 "
+            "금액 비율로 나눔: 대출·할부 일정은 보호, 정기 지급은 그 묶음의 과거 결제 줄, "
+            "변동은 같은 잔여 날짜 구간의 과거 줄(연간성 항목은 작년 같은 달 줄). 미정은 "
+            "사람이 아직 정하지 않은 금액이며 보호나 조정 가능으로 추정하지 않음"
+        ),
+        protected_amount=shares["protected"],
+        adjustable_amount=shares["adjustable"],
+        undecided_amount=shares["undecided"],
+        total_amount=total,
+        undecided_share_pct=round(shares["undecided"] / total * 100, 1)
+        if total > 0
+        else None,
+    )
+    components = [
         ExpenseProjectionComponent(
             kind=kind,
             expected_remaining=None if reasons[kind] else values[kind],
@@ -1310,6 +1398,7 @@ def _expense_components(
         )
         for kind in ("loan", "installment", "recurring", "variable")
     ]
+    return components, adjustability
 
 
 async def _load_expense_lines(
@@ -1486,7 +1575,7 @@ async def get_monthly_projection(
             )
         ).all()
     )
-    components = _expense_components(
+    components, remaining_adjustability = _expense_components(
         expense_lines,
         reference_date,
         coverage,
@@ -1600,4 +1689,5 @@ async def get_monthly_projection(
         expense_components=components,
         coverage=coverage,
         as_of_basis=as_of_basis,  # type: ignore[arg-type]
+        remaining_expense_adjustability=remaining_adjustability,
     )

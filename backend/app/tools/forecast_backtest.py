@@ -664,8 +664,16 @@ def _classification_bias(points: list[EvaluationPoint]) -> dict[str, Any]:
         for point in points
         if point.remaining["expense"] and point.remaining["variable"] is not None
     ]
+    remaining_undecided = [
+        point.projection.remaining_expense_adjustability.undecided_share_pct
+        for point in points
+        if point.projection.remaining_expense_adjustability is not None
+        and point.projection.remaining_expense_adjustability.undecided_share_pct
+        is not None
+    ]
     return {
-        "note": "전망 코드는 조정 가능성을 읽지 않는다. 약정 구분은 흐름표의 commitment_kind(대출·할부 연결, 등록된 정기 지급 묶음)에 사람이 등록한 대출 거래처 규칙·할부 계획 규칙·할부 표시를 더해 줄 단위로 한다.",
+        "forecast_remaining_undecided_share_pct": _stats(remaining_undecided),
+        "note": "전망 코드는 남은 지출 가정의 금액을 조정 가능성으로 정하지 않고, 근거 줄의 조정 가능성 비율로 나눠 미정 비중만 보인다(remaining_expense_adjustability). 약정 구분은 흐름표의 commitment_kind(대출·할부 연결, 등록된 정기 지급 묶음)에 사람이 등록한 대출 거래처 규칙·할부 계획 규칙·할부 표시를 더해 줄 단위로 한다.",
         "month_undecided_adjustability_share_pct": _stats(
             share_values("undecided_share")
         ),
@@ -915,6 +923,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- 월 지출 중 약정처럼 보이나 미연결인 비중 중앙값: {_fmt(bias['month_unlinked_commitment_like_share_pct']['median'])}%",
         f"- 월 지출 중 약정 지급 비중 중앙값: {_fmt(bias['month_committed_share_pct']['median'])}%",
         f"- 전망의 남은 지출 중 변동·미분류 가정 비중 중앙값: {_fmt(bias['variable_share_of_forecast_remaining_expense_pct']['median'])}%",
+        f"- 전망의 남은 지출 가정 중 조정 가능성 미정 비중 중앙값: {_fmt(bias['forecast_remaining_undecided_share_pct']['median'])}%",
         "",
         "| 구분 | 구간 | 점 | 순현금흐름 보류 | 지출 부호 오차/수입 중앙값 % | 순현금흐름 부호 오차/수입 중앙값 % | 알려진 잔여 순현금흐름 부호 오차/수입 중앙값 % |",
         "|---|---|---|---|---|---|---|",
