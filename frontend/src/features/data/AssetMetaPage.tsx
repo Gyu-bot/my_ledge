@@ -80,7 +80,7 @@ export function AssetMetaPage() {
   return (
     <>
       <PageHeader
-        title="데이터 · 자산 메타"
+        title="작업대 · 자산 메타"
         meta={snapshotDate ? <span className="tnum rounded-sm border border-border bg-bg-inset px-2 py-0.5">기준일 {snapshotDate}</span> : undefined}
       />
 
