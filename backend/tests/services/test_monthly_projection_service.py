@@ -2,7 +2,7 @@ from datetime import date, time
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -14,9 +14,42 @@ from app.models import (
     Transaction,
     UploadLog,
 )
-from app.schemas.income_projection import IncomeExpectation, IncomeExpectationsSettings
+from app.models.nature_axes import TransactionNatureOverride
+from app.schemas.income_projection import (
+    IncomeExpectation,
+    IncomeExpectationsSettings,
+    MonthlyProjection,
+)
 from app.services.income_expectations_service import save_income_expectations
 from app.services.monthly_projection_service import get_monthly_projection
+from app.services.nature_axes_service import write_through_legacy_classification
+
+
+async def classify(db: AsyncSession) -> None:
+    """T056 write-through for expense rows nobody classified yet.
+
+    Production reaches the two-axis tables only through this mapping (human
+    edits, human rules, the backfill); tests that set the legacy columns
+    directly run it the same way before projecting.
+    """
+    ids = (
+        await db.scalars(
+            select(Transaction.id).where(
+                Transaction.type == "지출",
+                ~exists().where(
+                    TransactionNatureOverride.transaction_id == Transaction.id
+                ),
+            )
+        )
+    ).all()
+    await write_through_legacy_classification(db, list(ids))
+    await db.commit()
+
+
+async def project(db: AsyncSession, *, reference_date: date) -> MonthlyProjection:
+    await classify(db)
+    return await get_monthly_projection(db, reference_date=reference_date)
+
 
 # Synthetic identities and money; fixed future clock makes scenarios reproducible.
 REFERENCE = date(2031, 7, 20)
@@ -105,7 +138,7 @@ async def test_oneoff_income_never_disables_expected_salary(db_session):
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.observed_income == 900_007
     assert result.expected_remaining_income == 100_000
     assert result.projected_month_income == 1_000_007
@@ -128,7 +161,7 @@ async def test_received_split_or_changed_salary_not_counted_twice(db_session, am
     for amount in amounts:
         db_session.add(tx(date(2031, 7, 28), amount))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 7, 29))
+    result = await project(db_session, reference_date=date(2031, 7, 29))
     assert result.observed_income == sum(amounts)
     assert result.expected_remaining_income == 0
     assert result.projected_month_income == sum(amounts)
@@ -144,7 +177,7 @@ async def test_partial_split_multiple_payers_and_late_salary(db_session):
         )
     db_session.add(tx(date(2031, 7, 15), 40_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     sources = {source.merchant: source for source in result.income_sources}
     assert sources["Example Payer"].remaining_amount == 60_000
     assert sources["Example Payer"].status == "partial"
@@ -163,7 +196,7 @@ async def test_missing_partial_months_and_stopped_source(db_session):
     )
     june.is_deleted = True
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert "2031-02" in result.coverage.missing_periods
     assert "2031-03" in result.coverage.excluded_periods
     assert result.income_sources[0].status == "stopped"
@@ -184,25 +217,25 @@ async def test_manual_amount_day_stop_and_reset(db_session):
         ]
     )
     await save_income_expectations(db_session, payload)
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.expected_remaining_income == 70_000
     assert result.income_sources[0].expected_date == date(2031, 7, 25)
     payload.items[0].stopped = True
     await save_income_expectations(db_session, payload)
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.expected_remaining_income == 0
     assert result.income_sources[0].status == "stopped"
     await save_income_expectations(db_session, IncomeExpectationsSettings())
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.income_sources == []
 
 
 async def test_no_data_and_stale_partial_coverage_withhold_month_end(db_session):
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.projected_month_end_net is None
     db_session.add(tx(date(2031, 6, 25), 100_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.projected_month_end_net is None
     assert result.expected_remaining_expense is None
     assert result.confidence == "unavailable"
@@ -256,7 +289,7 @@ async def test_expenses_partition_and_actual_reconciliation(db_session: AsyncSes
         )
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert {
         item.kind: item.expected_remaining for item in result.expense_components
     } == {"loan": 800, "installment": 0, "recurring": 5_000, "variable": 300}
@@ -287,7 +320,7 @@ async def test_exact_unlinked_installment_is_reconciled_readonly(db_session):
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert (
         next(
             item for item in result.expense_components if item.kind == "installment"
@@ -307,7 +340,7 @@ async def test_outlier_salary_and_user_category_overrides_are_respected(db_sessi
     )
     db_session.add(tx(date(2031, 7, 28), 500_000, is_deleted=True))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 7, 29))
+    result = await project(db_session, reference_date=date(2031, 7, 29))
     source = result.income_sources[0]
     assert source.expected_amount == 100_000
     assert "2031-03" in source.excluded_periods
@@ -316,9 +349,26 @@ async def test_outlier_salary_and_user_category_overrides_are_respected(db_sessi
     assert result.expected_remaining_income == 0
 
 
-async def test_current_recurring_actual_with_changed_classification_is_reconciled(
+async def test_current_recurring_actual_matching_the_commitment_rule_is_reconciled(
     db_session,
 ):
+    """T064 R6: an imported row joins the registered commitment by its rule."""
+    await seed_history(db_session)
+    await classify(db_session)
+    # Imported, not yet classified by anyone: no legacy value, no override.
+    db_session.add(tx(REFERENCE, -5_000, merchant="Example Recurring", category="생활"))
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    recurring = next(
+        item for item in result.expense_components if item.kind == "recurring"
+    )
+    assert recurring.expected_remaining == 0
+    assert recurring.sources[0].observed_payment_amount == 5_000
+    assert result.expected_remaining_expense == 300
+
+
+async def test_row_a_person_excluded_from_the_commitment_is_variable_spend(db_session):
+    """People classify: an explicit exclusion keeps the commitment's own payment."""
     await seed_history(db_session)
     db_session.add(
         tx(
@@ -330,14 +380,42 @@ async def test_current_recurring_actual_with_changed_classification_is_reconcile
         )
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
-    assert (
-        next(
-            item for item in result.expense_components if item.kind == "recurring"
-        ).expected_remaining
-        == 0
+    result = await project(db_session, reference_date=REFERENCE)
+    override = await db_session.scalar(
+        select(TransactionNatureOverride).where(
+            TransactionNatureOverride.excluded_from_commitments.is_(True)
+        )
     )
-    assert result.expected_remaining_expense == 300
+    assert override is not None
+    recurring = next(
+        item for item in result.expense_components if item.kind == "recurring"
+    )
+    assert recurring.sources[0].observed_payment_amount == 0
+    assert recurring.expected_remaining == 5_000
+    assert result.expected_remaining_expense == 5_300
+
+
+async def test_commitment_membership_is_per_row_not_per_merchant(db_session):
+    """T064 R6: same unit as the monthly flow table (row-level commitment)."""
+    await seed_history(db_session)
+    for month in range(1, 7):
+        db_session.add(
+            tx(
+                date(2031, month, 26),
+                -100,
+                merchant="Example Recurring",
+                category="식비",
+            )
+        )
+    await db_session.commit()
+    result = await project(db_session, reference_date=REFERENCE)
+    by_kind = {item.kind: item for item in result.expense_components}
+    assert by_kind["recurring"].expected_remaining == 5_000
+    assert by_kind["recurring"].sources[0].expected_monthly_amount == 5_000
+    assert by_kind["recurring"].sources[0].commitment_id is not None
+    assert by_kind["recurring"].sources[0].cycle == "monthly"
+    # The other category of the same merchant stays in the variable baseline.
+    assert by_kind["variable"].expected_remaining == 400
 
 
 async def test_unstable_fixed_spend_uses_residual_model_and_new_recurring_is_low_confidence(
@@ -354,7 +432,7 @@ async def test_unstable_fixed_spend_uses_residual_model_and_new_recurring_is_low
         )
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.projected_month_end_net is not None
     db_session.add(
         tx(
@@ -366,7 +444,7 @@ async def test_unstable_fixed_spend_uses_residual_model_and_new_recurring_is_low
         )
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.projected_month_end_net == 100_000 - 1_700 - 5_300
     assert result.known_expected_remaining_expense == 5_300
     assert result.net_after_known_remaining_expense == 100_000 - 1_700 - 5_300
@@ -402,7 +480,7 @@ async def test_past_unlinked_installment_and_overlapping_links_are_not_future_ob
     )
     db_session.add(plan)
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     installment = next(
         item for item in result.expense_components if item.kind == "installment"
     )
@@ -414,6 +492,39 @@ async def test_past_unlinked_installment_and_overlapping_links_are_not_future_ob
 async def test_unknown_loan_preserves_known_parts_without_claiming_month_end(
     db_session,
 ):
+    """A loan booked as expense with an unknown monthly payment withholds."""
+    await seed_history(db_session)
+    account = LoanAccount(
+        lender="Example Unknown Bank", product_name="Example Unknown Loan"
+    )
+    repayment = tx(
+        date(2031, 6, 10), -1_000, merchant="Example Unknown Bank", category="금융"
+    )
+    db_session.add_all(
+        [
+            account,
+            repayment,
+            Loan(
+                snapshot_date=REFERENCE,
+                lender="Example Unknown Bank",
+                product_name="Example Unknown Loan",
+                balance=Decimal(10_000),
+            ),
+        ]
+    )
+    await db_session.flush()
+    db_session.add(
+        LoanTransactionLink(transaction_id=repayment.id, loan_account_id=account.id)
+    )
+    await db_session.commit()
+    result = await project(db_session, reference_date=REFERENCE)
+    assert result.projected_month_end_net is None
+    assert result.known_expected_remaining_expense == 5_300
+    assert result.net_after_known_remaining_expense == 94_600
+
+
+async def test_loan_without_expense_lines_is_shown_but_not_added(db_session):
+    """T064 R1: no account or no expense line -> listed, not assumed."""
     await seed_history(db_session)
     db_session.add(
         Loan(
@@ -424,10 +535,16 @@ async def test_unknown_loan_preserves_known_parts_without_claiming_month_end(
         )
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
-    assert result.projected_month_end_net is None
-    assert result.known_expected_remaining_expense == 5_300
-    assert result.net_after_known_remaining_expense == 94_600
+    result = await project(db_session, reference_date=REFERENCE)
+    loan = next(item for item in result.expense_components if item.kind == "loan")
+    assert loan.expected_remaining == 0
+    assert loan.missing_reasons == []
+    assert [item.reason_code for item in loan.not_in_expense_commitments] == [
+        "no_loan_account"
+    ]
+    assert loan.not_in_expense_commitments[0].monthly_amount is None
+    assert loan.confidence == "low"
+    assert result.projected_month_end_net == 100_000 - 100 - 5_300
 
 
 async def test_nonmonthly_income_pattern_is_not_extrapolated_every_month(db_session):
@@ -435,7 +552,7 @@ async def test_nonmonthly_income_pattern_is_not_extrapolated_every_month(db_sess
     for month in (2, 4, 6):
         db_session.add(tx(date(2031, month, 28), 100_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.expected_remaining_income == 0
     assert result.income_sources[0].status == "uncertain"
     assert "불연속" in result.income_sources[0].reason
@@ -468,7 +585,7 @@ async def test_duplicate_loan_installment_mapping_withholds_uncertain_future(
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.projected_month_end_net is None
     installment = next(
         item for item in result.expense_components if item.kind == "installment"
@@ -483,7 +600,7 @@ async def test_holiday_shift_and_ambiguous_large_payment_do_not_add_expected_twi
     await seed_history(db_session)
     db_session.add(tx(date(2031, 7, 25), 160_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 7, 26))
+    result = await project(db_session, reference_date=date(2031, 7, 26))
     assert result.expected_remaining_income == 0
     assert result.income_sources[0].status == "uncertain"
     assert result.income_sources[0].confidence == "low"
@@ -497,7 +614,7 @@ async def test_eighty_percent_first_split_does_not_erase_later_payment(db_sessio
         db_session.add(tx(date(2031, month, 28), 20_000))
     db_session.add(tx(date(2031, 7, 15), 80_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.income_sources[0].status == "partial"
     assert result.income_sources[0].remaining_amount == 20_000
     assert result.projected_month_income == 100_000
@@ -509,7 +626,7 @@ async def test_unlabeled_bonus_in_latest_month_does_not_mark_regular_salary_stop
     await seed_history(db_session)
     db_session.add(tx(date(2031, 6, 28), 800_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = result.income_sources[0]
     assert source.expected_amount == 100_000
     assert source.remaining_amount == 100_000
@@ -545,7 +662,7 @@ async def test_short_month_end_has_no_imaginary_day_31_variable_expenses(db_sess
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 4, 30))
+    result = await project(db_session, reference_date=date(2031, 4, 30))
     assert (
         next(
             item for item in result.expense_components if item.kind == "variable"
@@ -587,7 +704,7 @@ async def test_short_recurring_history_keeps_numeric_month_end_with_warning(
         db_session.add(recurring_payment(date(2031, month, 10), -1_000, merchant))
     db_session.add(recurring_payment(date(2031, 7, 10), -1_000, merchant))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result, merchant)
     assert result.projected_month_end_net == 100_000 - 1_100 - 5_300
     assert result.expected_remaining_expense == 5_300
@@ -618,7 +735,7 @@ async def test_current_recurring_uses_earlier_stable_history_when_latest_month_d
         june.is_deleted = True
     db_session.add(recurring_payment(date(2031, 7, 10), -5_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert source.expected_monthly_amount == 5_000
     assert source.history_periods == [f"2031-{month:02}" for month in range(1, 6)]
@@ -641,7 +758,7 @@ async def test_current_refund_changes_observed_net_but_never_inflates_new_paymen
         db_session.add(recurring_payment(date(2031, 7, 10), -paid))
     db_session.add(recurring_payment(date(2031, 7, 15), refund))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert source.expected_monthly_amount == 5_000
     assert source.observed_payment_amount == paid
@@ -664,7 +781,7 @@ async def test_past_refunds_do_not_remove_gross_monthly_payment_pattern(db_sessi
     for month in (2, 4, 6):
         db_session.add(recurring_payment(date(2031, month, 27), 5_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert source.expected_monthly_amount == source.expected_remaining == 5_000
     assert source.confidence == "medium"
@@ -679,7 +796,7 @@ async def test_early_full_payment_prevents_historical_tail_from_counting_it_agai
     await seed_history(db_session)
     db_session.add(recurring_payment(date(2031, 7, 5), -5_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert source.expected_remaining == 0
     assert source.status == "observed"
@@ -701,7 +818,7 @@ async def test_within_month_split_payment_retains_only_historical_remaining_date
         )
     db_session.add(recurring_payment(date(2031, 7, 10), -3_000, merchant))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result, merchant)
     assert source.expected_monthly_amount == 5_000
     assert source.observed_payment_amount == 3_000
@@ -718,7 +835,7 @@ async def test_small_payment_difference_after_usual_date_is_not_a_future_charge(
     await seed_history(db_session)
     db_session.add(recurring_payment(date(2031, 7, 25), -4_950))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 7, 26))
+    result = await project(db_session, reference_date=date(2031, 7, 26))
     source = recurring_source(result)
     assert source.expected_monthly_amount == 5_000
     assert source.observed_payment_amount == 4_950
@@ -748,7 +865,7 @@ async def test_missing_substantial_split_after_usual_date_is_visible_for_review(
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 7, 26))
+    result = await project(db_session, reference_date=date(2031, 7, 26))
     source = recurring_source(result, merchant)
     assert source.expected_monthly_amount == 5_000
     assert source.observed_payment_amount == 3_000
@@ -766,7 +883,7 @@ async def test_above_baseline_payment_is_observed_not_an_extra_future_obligation
     await seed_history(db_session)
     db_session.add(recurring_payment(date(2031, 7, 5), -8_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert source.observed_payment_amount == 8_000
     assert source.observed_net_expense == 8_000
@@ -790,7 +907,7 @@ async def test_recurring_month_end_dates_clamp_to_short_current_month(
         tx(date(2031, 4, day), -100, merchant="Example Grocer", category="식비")
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=date(2031, 4, day))
+    result = await project(db_session, reference_date=date(2031, 4, day))
     source = recurring_source(result, merchant)
     assert source.expected_remaining == remaining
     assert result.expected_remaining_expense == remaining
@@ -810,7 +927,7 @@ async def test_absent_current_and_latest_month_does_not_revive_old_recurring(
     )
     june.is_deleted = True
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     recurring = next(
         item for item in result.expense_components if item.kind == "recurring"
     )
@@ -833,7 +950,7 @@ async def test_incomplete_previous_month_keeps_last_observed_stable_recurring(
         )
         june.is_deleted = True
         await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert result.coverage.adequately_covered_periods == [
         f"2031-{month:02}" for month in range(1, 6)
@@ -868,7 +985,7 @@ async def test_recent_coverage_gap_does_not_revive_prior_observed_missing_recurr
     for row in recent:
         row.is_deleted = True
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.coverage.adequately_covered_periods[-1] == "2031-05"
     assert "2031-06" in result.coverage.excluded_periods
     recurring = next(
@@ -884,7 +1001,7 @@ async def test_refund_only_new_recurring_remains_truly_unknown(db_session):
     merchant = "Example Refund Only"
     db_session.add(recurring_payment(date(2031, 7, 10), 800, merchant))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result, merchant)
     assert source.expected_monthly_amount is None
     assert source.expected_remaining is None
@@ -906,7 +1023,7 @@ async def test_low_confidence_recurring_does_not_bypass_insufficient_overall_cov
 ):
     db_session.add(recurring_payment(REFERENCE, -1_000))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result)
     assert source.expected_remaining == 0
     assert source.confidence == "low"
@@ -927,7 +1044,7 @@ async def test_incomplete_history_is_not_used_as_a_complete_monthly_baseline(
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     source = recurring_source(result, merchant)
     assert source.expected_monthly_amount == 1_000
     assert source.expected_remaining == 0
@@ -956,7 +1073,7 @@ async def test_ambiguous_installment_matches_still_block_month_end(db_session):
         ]
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    result = await project(db_session, reference_date=REFERENCE)
     assert result.projected_month_end_net is None
     assert result.expected_remaining_expense is None
     assert any("여러 건" in reason for reason in result.missing_reasons)

@@ -13,6 +13,7 @@ from datetime import date, time
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -20,6 +21,8 @@ from app.models import (
     InstallmentTransactionLink,
     Loan,
     LoanAccount,
+    LoanMerchantRule,
+    LoanTransactionLink,
     Transaction,
     UploadLog,
 )
@@ -30,9 +33,39 @@ from app.schemas.income_projection import (
     income_source_key,
 )
 from app.services.income_expectations_service import save_income_expectations
+from app.models.nature_axes import RecurringCommitment, TransactionNatureOverride
 from app.services.monthly_projection_service import get_monthly_projection
+from app.services.nature_axes_service import write_through_legacy_classification
 
 SALARY = 100_000
+
+
+async def classify(db: AsyncSession) -> None:
+    """T056 write-through for expense rows nobody classified yet.
+
+    Production reaches the two-axis tables only through this mapping (human
+    edits, human rules, the backfill); tests that set the legacy columns
+    directly run it the same way before projecting.
+    """
+    ids = (
+        await db.scalars(
+            select(Transaction.id).where(
+                Transaction.type == "지출",
+                ~exists().where(
+                    TransactionNatureOverride.transaction_id == Transaction.id
+                ),
+            )
+        )
+    ).all()
+    await write_through_legacy_classification(db, list(ids))
+    await db.commit()
+
+
+async def project(db: AsyncSession, *, reference_date: date) -> MonthlyProjection:
+    await classify(db)
+    return await get_monthly_projection(db, reference_date=reference_date)
+
+
 GROCERY_DAYS = (2, 5, 9, 13, 17, 21, 25, 28)
 
 
@@ -98,7 +131,7 @@ async def test_month_end_salary_is_expected_before_payday(db_session):
     for year, month in H1:
         db_session.add(tx(month_end(year, month), SALARY, "Example Payer", "급여"))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     source = result.income_sources[0]
     assert source.status == "expected"
     assert source.expected_date == date(2031, 7, 31)
@@ -120,7 +153,7 @@ async def _salary_crossing_month_boundary(db: AsyncSession) -> MonthlyProjection
     ):
         db.add(tx(on, SALARY, "Example Payer", "급여"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_current_month_end_salary_crossing_boundary_drops_regular_income(
@@ -158,7 +191,7 @@ async def test_current_regular_income_outside_salary_category_is_not_forecast(
             tx(date(year, month, 28), SALARY, "Example Contractor", "기타수입")
         )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     # Only salary-category words or a user expectation make a regular source.
     assert result.income_sources == []
     assert result.expected_remaining_income == 0
@@ -171,7 +204,7 @@ async def _renamed_salary_payer(db: AsyncSession) -> MonthlyProjection:
     await seed(db, months=H1, reference=reference)
     db.add(tx(date(2031, 7, 15), SALARY, "Example Payer Renamed", "급여"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_renamed_salary_payer_withholds_pending_old_source(db_session):
@@ -211,7 +244,7 @@ async def test_second_salary_payer_with_history_is_not_treated_as_rename(db_sess
         db_session.add(tx(date(year, month, 15), 50_000, "Example Side Payer", "급여"))
     db_session.add(tx(date(2031, 7, 15), 50_000, "Example Side Payer", "급여"))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     statuses = {source.merchant: source.status for source in result.income_sources}
     assert statuses == {"Example Payer": "expected", "Example Side Payer": "received"}
     assert result.expected_remaining_income == SALARY
@@ -237,7 +270,7 @@ async def test_new_payer_registered_in_settings_is_not_treated_as_rename(db_sess
             ]
         ),
     )
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     statuses = {source.merchant: source.status for source in result.income_sources}
     assert statuses["Example Payer"] == "expected"
     assert result.expected_remaining_income == SALARY
@@ -249,7 +282,7 @@ async def test_tiny_new_salary_category_deposit_does_not_withhold(db_session):
     await seed(db_session, months=H1, reference=reference)
     db_session.add(tx(date(2031, 7, 15), SALARY // 20, "Example Adjuster", "급여"))
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     statuses = {source.merchant: source.status for source in result.income_sources}
     assert statuses["Example Payer"] == "expected"
     assert result.expected_remaining_income == SALARY
@@ -266,7 +299,7 @@ async def _annual_expense(db: AsyncSession) -> MonthlyProjection:
     await seed(db, months=months, reference=reference)
     db.add(tx(date(2030, 7, 15), -50_000, "Example Annual Fee", "보험"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_current_annual_expense_is_not_in_remaining_assumption(db_session):
@@ -309,7 +342,7 @@ async def _cancelled_commitment(
             )
         )
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_cancelled_explicit_monthly_recurring_is_not_assumed(db_session):
@@ -318,25 +351,61 @@ async def test_cancelled_explicit_monthly_recurring_is_not_assumed(db_session):
     assert result.expected_remaining_expense == 300
 
 
-async def test_current_cancelled_fixed_cost_falls_back_to_variable_baseline(
-    db_session,
-):
+async def test_cancelled_fixed_cost_is_not_assumed(db_session):
+    """T064 R5 (F-E2): a stopped commitment's history stays out of variable."""
     result = await _cancelled_commitment(db_session, explicit=False)
     assert component(result, "recurring").sources == []
-    # Four of six baseline months still contain the cancelled payment.
-    assert component(result, "variable").expected_remaining == 5_300
-    assert result.expected_remaining_expense == 5_300
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-E2: a fixed-cost payment that stopped is moved into the "
-    "variable baseline, whose median still contains it while it is in at least "
-    "half of the six months.",
-)
-async def test_expected_cancelled_fixed_cost_is_not_assumed(db_session):
-    result = await _cancelled_commitment(db_session, explicit=False)
+    assert component(result, "variable").expected_remaining == 300
     assert result.expected_remaining_expense == 300
+
+
+async def _registered_commitment_with_end(
+    db: AsyncSession, *, end: date, reference: date
+) -> MonthlyProjection:
+    await seed(db, months=H1, reference=reference)
+    for month in range(1, 7):
+        db.add(
+            tx(
+                date(2031, month, 25),
+                -5_000,
+                "Example Subscription",
+                "생활",
+                cost_kind="fixed",
+                recurring_payment_kind="monthly_recurring",
+            )
+        )
+    await db.commit()
+    await classify(db)
+    commitment = await db.scalar(
+        select(RecurringCommitment).where(
+            RecurringCommitment.merchant == "Example Subscription"
+        )
+    )
+    commitment.end_date = end
+    await db.commit()
+    return await project(db, reference_date=reference)
+
+
+@pytest.mark.parametrize(
+    ("end", "remaining"),
+    [(date(2031, 6, 30), None), (date(2031, 7, 24), 0), (date(2031, 7, 31), 5_000)],
+)
+async def test_commitment_end_date_is_followed(db_session, end, remaining):
+    """T064 R5: a registered end date stops the assumption at that date."""
+    result = await _registered_commitment_with_end(
+        db_session, end=end, reference=date(2031, 7, 20)
+    )
+    recurring = component(result, "recurring")
+    if remaining is None:
+        assert recurring.sources == []
+        assert recurring.expected_remaining == 0
+    else:
+        source = recurring.sources[0]
+        assert source.end_date == end
+        assert source.expected_remaining == remaining
+        assert source.warnings == []
+    # The ended commitment's history never moves into the variable baseline.
+    assert component(result, "variable").expected_remaining == 300
 
 
 async def test_recurring_cancelled_this_month_is_still_assumed_before_its_day(
@@ -357,15 +426,13 @@ async def test_recurring_cancelled_this_month_is_still_assumed_before_its_day(
             )
         )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     assert component(result, "recurring").expected_remaining == 5_000
     db_session.add(
         tx(date(2031, 7, 26), -100, "Example Grocer", "식비", cost_kind="variable")
     )
     await db_session.commit()
-    after_usual_day = await get_monthly_projection(
-        db_session, reference_date=date(2031, 7, 26)
-    )
+    after_usual_day = await project(db_session, reference_date=date(2031, 7, 26))
     # After the usual day the payment is no longer assumed; a warning remains.
     assert component(after_usual_day, "recurring").expected_remaining == 0
     assert component(after_usual_day, "recurring").sources[0].warnings
@@ -377,7 +444,7 @@ async def _quiet_days_after_last_transaction(db: AsyncSession) -> MonthlyProject
     await seed(db, months=H1, reference=date(2031, 7, 20))
     db.add(UploadLog(snapshot_date=reference, status="success", filename="y.xlsx"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_quiet_days_inside_export_are_observed(db_session):
@@ -401,7 +468,7 @@ async def test_upload_before_last_transaction_keeps_transaction_day(db_session):
         UploadLog(snapshot_date=date(2031, 7, 22), status="success", filename="z.xlsx")
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     assert result.observed_through == reference
     assert result.remaining_period_start == date(2031, 7, 27)
     assert component(result, "variable").expected_remaining == 100
@@ -415,12 +482,12 @@ async def test_upload_after_as_of_or_in_previous_month_is_ignored(db_session):
         UploadLog(snapshot_date=date(2031, 7, 26), status="success", filename="f.xlsx")
     )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     assert result.remaining_period_start == date(2031, 7, 21)
     # Day-21 and day-25 grocery tails are still assumed.
     assert component(result, "variable").expected_remaining == 300
 
-    early = await get_monthly_projection(db_session, reference_date=date(2031, 7, 1))
+    early = await project(db_session, reference_date=date(2031, 7, 1))
     # The previous month's upload and last transaction do not cover July.
     assert early.remaining_period_start == date(2031, 7, 1)
 
@@ -428,7 +495,7 @@ async def test_upload_after_as_of_or_in_previous_month_is_ignored(db_session):
 async def test_fully_covered_month_has_no_remaining_period(db_session):
     reference = date(2031, 7, 31)
     await seed(db_session, months=H1, reference=reference)
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     assert result.remaining_period_start is None
     assert component(result, "variable").expected_remaining == 0
 
@@ -445,6 +512,7 @@ async def _installment(
     months: list[tuple[int, int]],
     linked: bool,
     statement_merchant: str = "Example Device",
+    marked: bool = False,
 ) -> MonthlyProjection:
     await seed(db, months=months, reference=reference)
     plan = InstallmentPlan(
@@ -460,7 +528,8 @@ async def _installment(
     for number, (year, month) in enumerate(months, start=1):
         if number > 7:
             break
-        row = tx(date(year, month, 20), -1_000, statement_merchant, "쇼핑")
+        extra = {"recurring_payment_kind": "installment"} if marked else {}
+        row = tx(date(year, month, 20), -1_000, statement_merchant, "쇼핑", **extra)
         db.add(row)
         await db.flush()
         if linked:
@@ -472,7 +541,7 @@ async def _installment(
                 )
             )
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_linked_installment_last_month_and_after_end(db_session):
@@ -509,9 +578,11 @@ async def test_current_unmatched_installment_counted_in_schedule_and_variable(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="T064 F-C2: installment rows that are neither linked nor an exact "
-    "plan match stay in the variable baseline while the plan schedule adds the "
-    "same installment again.",
+    reason="T064 F-C2 (kept after round 2): the rows carry another merchant "
+    "name, no link and no installment mark, so no person-registered rule ties "
+    "them to the plan. Matching by amount and date alone would be inference; a "
+    "person links or marks them (see "
+    "test_installment_marked_by_a_person_leaves_variable_baseline).",
 )
 async def test_expected_unmatched_installment_counted_once(db_session):
     result = await _installment(
@@ -541,8 +612,9 @@ async def test_current_unmatched_installment_after_final_month_still_assumed(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="T064 F-C2: after the final installment, unmatched historical "
-    "installment rows keep the ended plan alive through the variable baseline.",
+    reason="T064 F-C2 (kept after round 2): after the final installment, rows "
+    "no person tied to the plan (other merchant, no link, no mark) stay "
+    "ordinary variable spend; see the marked variant for the fixed behaviour.",
 )
 async def test_expected_unmatched_installment_after_final_month_not_assumed(
     db_session,
@@ -556,6 +628,46 @@ async def test_expected_unmatched_installment_after_final_month_not_assumed(
         statement_merchant="Example Card Installment",
     )
     assert result.expected_remaining_expense == 500
+
+
+@pytest.mark.parametrize(
+    ("reference", "months", "installment", "total"),
+    [
+        (date(2031, 7, 10), H1, 1_000, 1_500),
+        (date(2031, 8, 10), [(2031, month) for month in range(1, 8)], 0, 500),
+    ],
+)
+async def test_installment_marked_by_a_person_leaves_variable_baseline(
+    db_session, reference, months, installment, total
+):
+    """T064 R2/R6: rows a person marked as installment (link unconfirmed) are
+    not variable spend, so the plan schedule is the only assumption."""
+    result = await _installment(
+        db_session,
+        reference=reference,
+        months=months,
+        linked=False,
+        statement_merchant="Example Card Installment",
+        marked=True,
+    )
+    assert component(result, "installment").expected_remaining == installment
+    assert result.expected_remaining_expense == total
+
+
+async def test_unlinked_plan_rule_match_is_shown_as_link_unconfirmed(db_session):
+    """T064 R2: a plan-rule match counts once and is marked unconfirmed."""
+    months = [(2031, month) for month in range(1, 8)]
+    result = await _installment(
+        db_session, reference=date(2031, 7, 25), months=months, linked=False
+    )
+    installment = component(result, "installment")
+    assert installment.expected_remaining == 0
+    assert installment.link_unconfirmed_count == 1
+    assert installment.link_unconfirmed_amount == 1_000
+    assert installment.confidence == "low"
+    assert installment.warnings[0].startswith("Example Plan: ")
+    # Earlier rule matches never reach the variable baseline either.
+    assert component(result, "variable").expected_remaining == 100
 
 
 async def _installment_number_off_by_one(db: AsyncSession) -> MonthlyProjection:
@@ -585,7 +697,7 @@ async def _installment_number_off_by_one(db: AsyncSession) -> MonthlyProjection:
             )
         )
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
 async def test_installment_link_number_mismatch_only_warns(db_session):
@@ -648,7 +760,7 @@ async def test_installment_link_number_mismatch_before_this_month_payment(db_ses
             )
         )
     await db_session.commit()
-    result = await get_monthly_projection(db_session, reference_date=reference)
+    result = await project(db_session, reference_date=reference)
     installment = component(result, "installment")
     assert installment.expected_remaining == 1_000
     assert installment.warnings == []
@@ -679,28 +791,22 @@ async def _unlinked_observed_repayment(db: AsyncSession) -> MonthlyProjection:
     await _loan(db)
     db.add(tx(date(2031, 7, 5), -2_000, "Example Bank", "금융"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
-async def test_current_unlinked_observed_repayment_is_added_again(db_session):
+async def test_unlinked_observed_repayment_not_added_again(db_session):
+    """T064 R1 (F-C1): a loan with no expense line is not assumed again."""
     result = await _unlinked_observed_repayment(db_session)
-    assert component(result, "loan").expected_remaining == 2_000
+    loan = component(result, "loan")
+    assert loan.expected_remaining == 0
     assert result.observed_net_expense == 100 + 2_000
     assert result.projected_month_end_net is not None
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-C1: without a loan link the observed repayment is not "
-    "recognised (only a '대출' category text withholds the forecast), so the "
-    "snapshot monthly payment is added on top of it.",
-)
-async def test_expected_unlinked_observed_repayment_not_added_again(db_session):
-    result = await _unlinked_observed_repayment(db_session)
-    assert (
-        result.projected_month_expense is None
-        or component(result, "loan").expected_remaining == 0
-    )
+    assert [item.reason_code for item in loan.not_in_expense_commitments] == [
+        "no_expense_line_in_recent_month"
+    ]
+    assert loan.not_in_expense_commitments[0].monthly_amount == 2_000
+    assert loan.not_in_expense_commitments[0].checked_periods == ["2031-06", "2031-07"]
+    assert loan.warnings[0].startswith("Example Bank Example Loan: ")
 
 
 async def _unlinked_repayment_history(db: AsyncSession) -> MonthlyProjection:
@@ -710,27 +816,88 @@ async def _unlinked_repayment_history(db: AsyncSession) -> MonthlyProjection:
     for month in range(1, 7):
         db.add(tx(date(2031, month, 25), -2_000, "Example Bank", "대출"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
-async def test_current_unlinked_repayment_history_counts_loan_twice_before_payday(
-    db_session,
-):
+async def test_unlinked_repayment_history_counts_loan_once(db_session):
+    """T064 R1 (F-C1): the unlinked history stays variable, the loan is not added."""
     result = await _unlinked_repayment_history(db_session)
-    assert component(result, "loan").expected_remaining == 2_000
+    assert component(result, "loan").expected_remaining == 0
     assert component(result, "variable").expected_remaining == 2_300
-    assert result.expected_remaining_expense == 4_300
+    assert result.expected_remaining_expense == 2_300
     assert result.missing_reasons == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-C1: unlinked past repayments sit in the variable baseline "
-    "while the loan snapshot adds the same repayment again before payday.",
-)
-async def test_expected_unlinked_repayment_history_counts_loan_once(db_session):
-    result = await _unlinked_repayment_history(db_session)
-    assert result.expected_remaining_expense == 2_300
+async def _loan_rule_history(db: AsyncSession, *, reference: date) -> MonthlyProjection:
+    """A person registered a loan merchant rule but nothing is linked."""
+    await seed(db, months=H1, reference=reference)
+    await _loan(db)
+    await db.flush()
+    account = await db.scalar(select(LoanAccount))
+    db.add(
+        LoanMerchantRule(
+            merchant="Example Bank",
+            match_field="merchant",
+            loan_account_id=account.id,
+            repayment_type="unknown",
+        )
+    )
+    for month in range(1, 8):
+        on = date(2031, month, 15)
+        if on <= reference:
+            db.add(tx(on, -2_000, "Example Bank", "대출"))
+    await db.commit()
+    return await project(db, reference_date=reference)
+
+
+async def test_loan_rule_match_counts_once_before_payday(db_session):
+    """T064 R1: rule-matched history leaves the variable baseline."""
+    result = await _loan_rule_history(db_session, reference=date(2031, 7, 10))
+    loan = component(result, "loan")
+    assert loan.expected_remaining == 2_000
+    assert loan.not_in_expense_commitments == []
+    assert loan.link_unconfirmed_count == 0
+    assert component(result, "variable").expected_remaining == 500
+    assert result.expected_remaining_expense == 2_500
+    assert result.missing_reasons == []
+
+
+async def test_loan_rule_match_this_month_is_the_observed_repayment(db_session):
+    """T064 R1: this month's rule match is observed, marked link unconfirmed."""
+    result = await _loan_rule_history(db_session, reference=date(2031, 7, 20))
+    loan = component(result, "loan")
+    assert loan.expected_remaining == 0
+    assert loan.missing_reasons == []
+    assert loan.link_unconfirmed_count == 1
+    assert loan.link_unconfirmed_amount == 2_000
+    assert loan.confidence == "low"
+    assert any("연결 확인 필요" in warning for warning in loan.warnings)
+    assert component(result, "variable").expected_remaining == 300
+    assert result.projected_month_end_net is not None
+
+
+async def test_unlinked_loan_category_payment_withholds_only_with_an_added_loan(
+    db_session,
+):
+    """A '대출' payment without link or rule may be an added loan's repayment."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference)
+    await _loan(db_session)
+    await db_session.flush()
+    account = await db_session.scalar(select(LoanAccount))
+    for month in range(1, 7):
+        row = tx(date(2031, month, 15), -2_000, "Example Bank", "대출")
+        db_session.add(row)
+        await db_session.flush()
+        db_session.add(
+            LoanTransactionLink(transaction_id=row.id, loan_account_id=account.id)
+        )
+    db_session.add(tx(date(2031, 7, 15), -2_000, "Example Other Lender", "대출"))
+    await db_session.commit()
+    result = await project(db_session, reference_date=reference)
+    assert component(result, "loan").expected_remaining is None
+    assert result.projected_month_end_net is None
+    assert any("계좌 연결이 없어" in reason for reason in result.missing_reasons)
 
 
 async def _repayment_booked_as_transfer(db: AsyncSession) -> MonthlyProjection:
@@ -740,27 +907,18 @@ async def _repayment_booked_as_transfer(db: AsyncSession) -> MonthlyProjection:
     for month in range(1, 7):
         db.add(tx(date(2031, month, 25), -2_000, "Example Bank", "이체", type="이체"))
     await db.commit()
-    return await get_monthly_projection(db, reference_date=reference)
+    return await project(db, reference_date=reference)
 
 
-async def test_current_repayment_booked_as_transfer_is_added_to_expense(db_session):
+async def test_repayment_booked_as_transfer_not_added_to_expense(db_session):
+    """T064 R1 (F-C4): transfers never reach expense, so the loan is not added."""
     result = await _repayment_booked_as_transfer(db_session)
-    # Transfers never reach expense actuals, yet the loan schedule is added.
-    assert component(result, "loan").expected_remaining == 2_000
-    assert result.expected_remaining_expense == 2_300
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-C4: the loan component trusts the snapshot monthly payment "
-    "even when this ledger books the repayments as transfers (or not at all), "
-    "so the forecast unit differs from the monthly-flow actual.",
-)
-async def test_expected_repayment_booked_as_transfer_not_added_to_expense(
-    db_session,
-):
-    result = await _repayment_booked_as_transfer(db_session)
-    assert component(result, "loan").expected_remaining == 0
+    loan = component(result, "loan")
+    assert loan.expected_remaining == 0
+    assert result.expected_remaining_expense == 300
+    assert loan.not_in_expense_commitments[0].reason_code == (
+        "no_expense_line_in_recent_month"
+    )
 
 
 # --------------------------------------------------------------------------

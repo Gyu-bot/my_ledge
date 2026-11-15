@@ -1,7 +1,24 @@
 """Read-only monthly scenarios. Observations are never replaced by estimates.
 
 Coverage is a conservative activity heuristic, not proof of a complete export.
-Loan > installment > recurring > residual spend is an exclusive partition.
+
+Expense partition (T064 R6): the remaining-period assumptions read the same
+``vw_metric_flow_lines`` rows and commitment split as the monthly flow table.
+Each expense line goes to exactly one component, in this order:
+
+1. ``commitment_kind = loan`` (loan link) -> loan
+2. ``commitment_kind = installment`` (installment link) -> installment
+3. unlinked line matching a person-registered loan merchant rule -> loan (R1)
+4. unlinked line matching an active installment plan's rule exactly
+   (amount, merchant, payment method, schedule) -> installment (R2)
+5. ``commitment_kind = recurring`` (T056 recurring commitment) -> recurring
+6. unlinked line a person marked as installment
+   (``mapping_note = installment_link_unconfirmed``) -> installment
+7. everything else (ad hoc protected/adjustable/undecided) -> variable
+
+Rules 3, 4 and 6 only read what a person registered; nothing is inferred or
+linked. Lines of a recurring commitment never fall back into the variable
+baseline, also after the commitment stopped (R5).
 """
 
 import calendar
@@ -13,16 +30,19 @@ from typing import Any
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.auto_classification import LoanMerchantRule
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
+from app.models.nature_axes import RecurringCommitment
 from app.models.upload_log import UploadLog
 from app.schemas.income_projection import (
     ExpenseProjectionComponent,
     IncomeExpectation,
     IncomeProjectionSource,
     MonthlyProjection,
+    ProjectionCommitmentNotInExpense,
     ProjectionCoverage,
     RecurringExpenseProjectionSource,
     income_source_key,
@@ -422,21 +442,41 @@ def _plan_matches(row: dict[str, Any], plan: InstallmentPlan) -> bool:
     )
 
 
+def _commitment_name(
+    commitment: RecurringCommitment | None, items: list[dict[str, Any]]
+) -> str:
+    if commitment is None:
+        return items[0]["merchant"]
+    if commitment.match_scope == "merchant" and commitment.merchant:
+        return commitment.merchant
+    return commitment.label or " / ".join(
+        part for part in (commitment.category_major, commitment.category_minor) if part
+    )
+
+
 def _recurring_source(
     items: list[dict[str, Any]],
     reference: date,
     coverage: ProjectionCoverage,
     observed_day: int,
+    commitment: RecurringCommitment | None = None,
 ) -> RecurringExpenseProjectionSource | None:
     """Separate paid cash and refunds before estimating additional payments.
 
-    A weak current explicit recurrence can yield a low-confidence scenario.
-    Historical-only weak recurrences stay inactive; refunds never reinstate a
-    payment already observed. Income stability rules remain unchanged.
+    ``items`` are the flow lines of one registered recurring commitment
+    (T064 R6). A weak current recurrence registered with a monthly cycle can
+    yield a low-confidence scenario. Historical-only weak recurrences stay
+    inactive; refunds never reinstate a payment already observed. A commitment
+    end date (T056 attribute) caps the remaining days (R5). Income stability
+    rules remain unchanged.
     """
+    explicit_monthly = commitment is not None and commitment.cycle == "monthly"
+    end_date = commitment.end_date if commitment is not None else None
     period = _period(reference)
     periods = coverage.adequately_covered_periods
     current = [row for row in items if _period(row["date"]) == period]
+    if end_date is not None and end_date < reference.replace(day=1) and not current:
+        return None
     payments = [row for row in items if row["amount"] < 0]
     estimate, included, excluded, selected_rows = _stable_history(
         payments, periods, income=False
@@ -462,9 +502,7 @@ def _recurring_source(
             "직전 마감월의 전체 거래 관측이 부족하여 중단 여부를 판단할 수 없음; 마지막 충분히 관측된 월까지의 안정 이력을 사용함"
         )
     elif not stable_recent:
-        if not current or not any(
-            row.get("recurring_payment_kind") == "monthly_recurring" for row in items
-        ):
+        if not current or not explicit_monthly:
             return None
         confidence = "low"
         if estimate is not None:
@@ -507,21 +545,39 @@ def _recurring_source(
             else "총결제 근거가 없어 월 결제 기준액이나 잔여 지출을 추정할 수 없음"
         )
     else:
-        tails = [
-            sum(
-                -row["amount"]
-                for row in selected_rows
-                if _period(row["date"]) == value
-                and min(row["date"].day, _month_end(reference).day) > observed_day
+        # R5: no payment is assumed after a registered commitment end date.
+        last_day = (
+            min(end_date.day, _month_end(reference).day)
+            if end_date is not None and _period(end_date) == period
+            else 0
+            if end_date is not None and end_date < reference.replace(day=1)
+            else _month_end(reference).day
+        )
+
+        def tail_median(through_day: int) -> int:
+            return round(
+                median(
+                    sum(
+                        -row["amount"]
+                        for row in selected_rows
+                        if _period(row["date"]) == value
+                        and observed_day
+                        < min(row["date"].day, _month_end(reference).day)
+                        <= through_day
+                    )
+                    for value in included
+                )
             )
-            for value in included
-        ]
-        remaining = min(max(estimate - paid, 0), round(median(tails)))
+
+        uncapped = min(max(estimate - paid, 0), tail_median(_month_end(reference).day))
+        remaining = min(uncapped, tail_median(last_day))
         basis += "; 월 기준액에서 이미 결제한 금액을 뺀 차액과 과거 동일 잔여 날짜 결제액 중앙값 중 작은 금액만 추가 예상"
+        if end_date is not None and last_day < _month_end(reference).day:
+            basis += f"; 약정 종료일 {end_date.isoformat()} 뒤의 결제는 가정하지 않음"
         # Use the same lower bound as the history stability band. Small FX or
         # billing differences do not imply a missing installment, but a large
         # shortfall after the observed payment dates still needs review.
-        if remaining == 0 and paid < estimate * 0.7:
+        if uncapped == 0 and paid < estimate * 0.7:
             warnings.append(
                 "과거 납부일 이후 이번 달 결제가 관측되지 않아 추가 청구를 가정하지 않음; 결제 누락·중단 여부 확인 필요"
                 if paid == 0
@@ -538,9 +594,10 @@ def _recurring_source(
         )
     if warnings and confidence != "unavailable":
         confidence = "low"
+    name = _commitment_name(commitment, items)
     return RecurringExpenseProjectionSource(
-        source_key="expense:" + " ".join(items[0]["merchant"].lower().split()),
-        merchant=items[0]["merchant"],
+        source_key="expense:" + " ".join(name.lower().split()),
+        merchant=name,
         expected_monthly_amount=estimate,
         observed_payment_amount=paid,
         observed_refund_amount=refunded,
@@ -553,76 +610,190 @@ def _recurring_source(
         history_periods=included,
         excluded_periods=sorted(set(excluded) | set(coverage.excluded_periods)),
         warnings=warnings,
+        commitment_id=commitment.id if commitment is not None else None,
+        cycle=commitment.cycle if commitment is not None else None,  # type: ignore[arg-type]
+        end_date=end_date,
     )
 
 
-def _expense_components(
-    rows: list[dict[str, Any]],
+LOAN_NOT_IN_EXPENSE_REASON = (
+    "최근 충분히 관측된 마감월과 이번 달 흐름표에 이 대출의 지출 줄(연결 또는 대출 "
+    "거래처 규칙)이 없어 지출 가정에 더하지 않음; 상환이 이체로 기록되거나 장부 밖 "
+    "계좌에서 나가거나 연결이 빠졌을 수 있음"
+)
+LOAN_WITHOUT_ACCOUNT_REASON = (
+    "대출 계좌가 등록되지 않아 연결·규칙으로 지출 줄을 찾을 수 없어 지출 가정에 "
+    "더하지 않음"
+)
+
+
+def _loan_name(loan: Loan, account: LoanAccount | None) -> str:
+    if account is not None and account.display_name_user:
+        return account.display_name_user
+    return f"{loan.lender} {loan.product_name}"
+
+
+def _loan_rule_account(
+    row: dict[str, Any], rules: list[LoanMerchantRule]
+) -> int | None:
+    """Loan account of a person-registered loan merchant rule (exact match)."""
+    for rule in rules:
+        value = (
+            row.get("description")
+            if rule.match_field == "description"
+            else (row.get("merchant"))
+        )
+        if value is not None and value == rule.merchant:
+            return rule.loan_account_id
+    return None
+
+
+def _partition_lines(
+    lines: list[dict[str, Any]],
     reference: date,
-    coverage: ProjectionCoverage,
-    loans: list[tuple[Loan, LoanAccount | None]],
     plans: list[InstallmentPlan],
-    links: list[InstallmentTransactionLink],
-) -> list[ExpenseProjectionComponent]:
+    loan_rules: list[LoanMerchantRule],
+    reasons: dict[str, list[str]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Exclusive expense partition of flow lines (T064 R6, module docstring)."""
     period = _period(reference)
-    current_start = reference.replace(day=1)
-    covered_day = _covered_day(coverage, reference)
-    expenses = [row for row in rows if row["type"] == "지출"]
-    by_id = {row["id"]: row for row in expenses}
-    link_map = {link.transaction_id: link for link in links}
     partitions: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    reasons: dict[str, list[str]] = defaultdict(list)
-    recurring_payers = {
-        _payer(row)
-        for row in expenses
-        if row.get("cost_kind") == "fixed"
-        or row.get("recurring_payment_kind") == "monthly_recurring"
-    }
-    for row in expenses:
-        if row.get("loan_account_id") is not None:
+    for row in lines:
+        commitment_kind = row.get("commitment_kind")
+        row["_rule"] = False
+        row["_loan_account"] = row.get("loan_account_id")
+        kind: str
+        if commitment_kind == "loan":
             kind = "loan"
-        elif row["id"] in link_map or any(_plan_matches(row, plan) for plan in plans):
+        elif commitment_kind == "installment":
             kind = "installment"
-        elif row.get("recurring_payment_kind") == "installment":
+        elif (account_id := _loan_rule_account(row, loan_rules)) is not None:
+            kind = "loan"
+            row["_rule"] = True
+            row["_loan_account"] = account_id
+        elif any(_plan_matches(row, plan) for plan in plans):
+            kind = "installment"
+            row["_rule"] = True
+        elif commitment_kind == "recurring":
+            kind = "recurring"
+        elif row.get("mapping_note") == "installment_link_unconfirmed":
             kind = "installment"
             if _period(row["date"]) == period:
                 reasons[kind].append(
                     "할부 분류 거래에 연결된 상환 일정이 없어 잔여 할부 확인 필요"
                 )
-        elif _payer(row) in recurring_payers:
-            kind = "recurring"
         else:
             kind = "variable"
+        row["_part"] = kind
         partitions[kind].append(row)
-        category = str(row.get("effective_category_minor") or "") + str(
-            row.get("effective_category_major") or ""
-        )
-        if (
-            "대출" in category
-            and row.get("loan_account_id") is None
-            and _period(row["date"]) == period
-        ):
-            reasons["loan"].append(
-                "대출 관련 관측 거래에 계좌 연결이 없어 중복 여부 확인 필요"
-            )
+    return partitions
 
+
+def _expense_components(
+    lines: list[dict[str, Any]],
+    reference: date,
+    coverage: ProjectionCoverage,
+    loans: list[tuple[Loan, LoanAccount | None]],
+    plans: list[InstallmentPlan],
+    links: list[InstallmentTransactionLink],
+    commitments: dict[int, RecurringCommitment],
+    loan_rules: list[LoanMerchantRule],
+) -> list[ExpenseProjectionComponent]:
+    period = _period(reference)
+    current_start = reference.replace(day=1)
+    covered_day = _covered_day(coverage, reference)
+    periods = coverage.adequately_covered_periods
+    # Self lines carry the transaction; refund allocation lines only move a
+    # refund's meaning onto the original purchase.
+    by_id = {
+        row["transaction_id"]: row
+        for row in lines
+        if row.get("line_kind") != "refund_allocation"
+    }
+    link_map = {link.transaction_id: link for link in links}
+    reasons: dict[str, list[str]] = defaultdict(list)
+    partitions = _partition_lines(lines, reference, plans, loan_rules, reasons)
+
+    # Loan (R1): registered loan accounts, linked or rule-matched lines.
+    loan_rows: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for row in partitions["loan"]:
+        loan_rows[row["_loan_account"]].append(row)
+    check_periods = sorted(
+        {periods[-1] if periods else _period(_shift_month(current_start, -1)), period}
+    )
     loan_remaining = 0
+    loan_warnings: list[str] = []
+    not_in_expense: list[ProjectionCommitmentNotInExpense] = []
+    loan_unconfirmed: list[dict[str, Any]] = []
+    included_loans = 0
     for loan, account in loans:
         if loan.balance is not None and loan.balance <= 0:
             continue
-        paid = sum(
-            -row["amount"]
-            for row in partitions["loan"]
-            if account
-            and row.get("loan_account_id") == account.id
-            and _period(row["date"]) == period
+        name = _loan_name(loan, account)
+        monthly = (
+            round(loan.monthly_payment) if loan.monthly_payment is not None else None
         )
-        if loan.monthly_payment is None:
+        rows = loan_rows.get(account.id, []) if account is not None else []
+        if not any(
+            row["amount"] < 0 and _period(row["date"]) in check_periods for row in rows
+        ):
+            no_account = account is None
+            not_in_expense.append(
+                ProjectionCommitmentNotInExpense(
+                    name=name,
+                    loan_account_id=account.id if account is not None else None,
+                    monthly_amount=monthly,
+                    checked_periods=check_periods,
+                    reason_code="no_loan_account"
+                    if no_account
+                    else "no_expense_line_in_recent_month",
+                    reason=LOAN_WITHOUT_ACCOUNT_REASON
+                    if no_account
+                    else LOAN_NOT_IN_EXPENSE_REASON,
+                )
+            )
+            loan_warnings.append(
+                f"{name}: "
+                + (
+                    LOAN_WITHOUT_ACCOUNT_REASON
+                    if no_account
+                    else LOAN_NOT_IN_EXPENSE_REASON
+                )
+            )
+            continue
+        included_loans += 1
+        current_rows = [row for row in rows if _period(row["date"]) == period]
+        paid = sum(-row["amount"] for row in current_rows)
+        unconfirmed = [row for row in current_rows if row["_rule"]]
+        if unconfirmed:
+            loan_unconfirmed.extend(unconfirmed)
+            loan_warnings.append(
+                f"{name}: 대출 거래처 규칙에 맞지만 연결되지 않은 이번 달 상환을 관측 상환으로 봄; "
+                "연결 확인 필요"
+            )
+        if monthly is None:
             reasons["loan"].append("월상환액을 확인할 수 없는 대출이 있음")
         else:
-            loan_remaining += max(round(loan.monthly_payment) - paid, 0)
+            loan_remaining += max(monthly - paid, 0)
+    if included_loans:
+        # An unlinked loan-looking payment could be one of the loans added
+        # above; it cannot be told apart without a link or a rule.
+        for row in lines:
+            category = str(row.get("effective_category_minor") or "") + str(
+                row.get("effective_category_major") or ""
+            )
+            if (
+                row["_part"] != "loan"
+                and "대출" in category
+                and _period(row["date"]) == period
+            ):
+                reasons["loan"].append(
+                    "대출 관련 관측 거래에 계좌 연결이 없어 중복 여부 확인 필요"
+                )
+
     installment_remaining = 0
     installment_warnings: list[str] = []
+    installment_unconfirmed: list[dict[str, Any]] = []
     used_actual_ids: set[int] = set()
     for plan in plans:
         offset = (
@@ -659,14 +830,15 @@ def _expense_components(
                 "같은 거래가 대출과 할부에 연결되어 상환 일정 중복 확인 필요"
             )
             continue
-        # Read-only reconciliation: exact plan payer/method, date, and amount.
-        # Never create a mapping automatically.
+        # Read-only reconciliation (R2): exact plan payer/method, date, and
+        # amount. Never create a mapping automatically; show it as unconfirmed.
         if not matched:
             candidates = [
                 row
                 for row in partitions["installment"]
-                if row["id"] not in used_actual_ids
-                and row["id"] not in link_map
+                if row["transaction_id"] not in used_actual_ids
+                and row["transaction_id"] not in link_map
+                and row.get("line_kind") != "refund_allocation"
                 and _plan_matches(row, plan)
                 and _period(row["date"]) == period
                 and abs((row["date"] - due).days) <= 7
@@ -674,12 +846,17 @@ def _expense_components(
             ]
             if len(candidates) == 1:
                 matched = candidates
+                installment_unconfirmed.extend(candidates)
+                installment_warnings.append(
+                    f"{plan.display_name}: 연결되지 않은 이번 달 결제를 계획 규칙(금액·거래처·"
+                    "결제수단·예정일) 일치로 이번 달 회차로 봄; 연결 확인 필요"
+                )
             elif len(candidates) > 1:
                 reasons["installment"].append(
                     "할부 예정액과 일치하는 실제 거래가 여러 건이어서 연결 확인 필요"
                 )
                 continue
-        used_actual_ids.update(row["id"] for row in matched)
+        used_actual_ids.update(row["transaction_id"] for row in matched)
         if matched:
             installment_remaining += max(
                 plan.monthly_amount - sum(-row["amount"] for row in matched), 0
@@ -693,20 +870,16 @@ def _expense_components(
 
     recurring_remaining = 0
     recurring_sources = []
-    merchant_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    commitment_rows: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row in partitions["recurring"]:
-        merchant_rows[_payer(row)].append(row)
-    for _, items in sorted(merchant_rows.items()):
-        source = _recurring_source(items, reference, coverage, covered_day)
+        commitment_rows[row["recurring_commitment_id"]].append(row)
+    for commitment_id, items in sorted(commitment_rows.items()):
+        source = _recurring_source(
+            items, reference, coverage, covered_day, commitments.get(commitment_id)
+        )
         if source is None:
-            explicit_recurring = any(
-                row.get("recurring_payment_kind") == "monthly_recurring"
-                for row in items
-            )
-            if not explicit_recurring:
-                # One-off or variable fixed classifications must not invalidate
-                # all forecasts; estimate their residual days with other spend.
-                partitions["variable"].extend(items)
+            # R5: a commitment's history never falls back into the variable
+            # baseline, also after it stopped.
             continue
         recurring_sources.append(source)
         if source.expected_remaining is None:
@@ -715,9 +888,14 @@ def _expense_components(
             )
         else:
             recurring_remaining += source.expected_remaining
+    seen_keys: set[str] = set()
+    for source in recurring_sources:
+        if source.source_key in seen_keys:
+            source.source_key += f"#{source.commitment_id}"
+        seen_keys.add(source.source_key)
 
     variable_remaining = None
-    if len(coverage.adequately_covered_periods) >= MIN_MONTHS:
+    if len(periods) >= MIN_MONTHS:
         tails = [
             sum(
                 -row["amount"]
@@ -725,7 +903,7 @@ def _expense_components(
                 if _period(row["date"]) == baseline_period
                 and min(row["date"].day, _month_end(reference).day) > covered_day
             )
-            for baseline_period in coverage.adequately_covered_periods
+            for baseline_period in periods
         ]
         variable_remaining = max(round(median(tails)), 0)
     else:
@@ -740,10 +918,10 @@ def _expense_components(
     }
     snapshot_dates = sorted({loan.snapshot_date.isoformat() for loan, _ in loans})
     bases = {
-        "loan": f"대출 스냅샷 {', '.join(snapshot_dates) or '없음'}의 월상환액 - 이번 달 해당 계좌에 연결된 실제 상환; 상환일 정보는 없음",
-        "installment": "활성 할부 일정의 이번 달 예정액 - 실제 연결 또는 금액·입금처·일정 일치 결제; 지난 미연결 회차는 확인 필요",
-        "recurring": "거래처별 과거 총결제액과 이미 결제한 금액, 동일 잔여 날짜 결제 패턴으로 추가 지출 추정. 환급은 관측 순지출에만 반영; 이력 부족은 항목별 낮은 신뢰도로 표시",
-        "variable": "대출·할부·안정적 반복 지출을 제외한 변동·미분류·비정기 고정 지출의 동일 잔여 일자 구간 중앙값; 환급 포함",
+        "loan": f"대출 스냅샷 {', '.join(snapshot_dates) or '없음'}의 월상환액 - 이번 달 그 대출 계좌에 연결되거나 사람이 등록한 대출 거래처 규칙에 맞는 실제 상환. 최근 충분히 관측된 마감월과 이번 달 흐름표에 지출 줄이 없는 대출은 더하지 않고 따로 보임; 상환일 정보는 없음",
+        "installment": "활성 할부 일정의 이번 달 예정액 - 실제 연결 또는 계획 규칙(금액·거래처·결제수단·일정) 일치 결제(연결 미확인); 지난 미연결 회차는 확인 필요",
+        "recurring": "등록된 정기 지급 묶음(흐름표 committed_recurring 줄)별 과거 총결제액과 이미 결제한 금액, 동일 잔여 날짜 결제 패턴으로 추가 지출 추정. 끝난 묶음의 이력은 변동 기준선에 넣지 않음. 환급은 관측 순지출에만 반영; 이력 부족은 항목별 낮은 신뢰도로 표시",
+        "variable": "흐름표의 약정 아닌 지출 줄(보호·조정 가능·미정) 중 대출 거래처 규칙·할부 계획 규칙·할부 표시에 맞는 결제를 뺀 나머지의 동일 잔여 일자 구간 중앙값; 환급 포함",
     }
     recurring_warnings = sorted(
         {
@@ -753,9 +931,11 @@ def _expense_components(
         }
     )
     component_warnings = {
+        "loan": sorted(set(loan_warnings)),
         "installment": sorted(set(installment_warnings)),
         "recurring": recurring_warnings,
     }
+    unconfirmed = {"loan": loan_unconfirmed, "installment": installment_unconfirmed}
     return [
         ExpenseProjectionComponent(
             kind=kind,
@@ -770,9 +950,45 @@ def _expense_components(
             else "medium",
             warnings=component_warnings.get(kind, []),
             sources=recurring_sources if kind == "recurring" else [],
+            link_unconfirmed_count=len(unconfirmed.get(kind, [])),
+            link_unconfirmed_amount=sum(
+                -row["amount"] for row in unconfirmed.get(kind, [])
+            ),
+            not_in_expense_commitments=not_in_expense if kind == "loan" else [],
         )
         for kind in ("loan", "installment", "recurring", "variable")
     ]
+
+
+async def _load_expense_lines(
+    db_session: AsyncSession, start: date, reference: date
+) -> list[dict[str, Any]]:
+    """Expense rows of ``vw_metric_flow_lines`` (KRW) in ``[start, reference]``."""
+    lines = FLOW_LINES_VIEW
+    result = await db_session.execute(
+        select(
+            lines.c.transaction_id,
+            lines.c.attributed_transaction_id,
+            lines.c.line_kind,
+            lines.c.date,
+            lines.c.amount,
+            lines.c.merchant,
+            lines.c.description,
+            lines.c.payment_method,
+            lines.c.effective_category_major,
+            lines.c.effective_category_minor,
+            lines.c.loan_account_id,
+            lines.c.installment_plan_id,
+            lines.c.commitment_kind,
+            lines.c.adjustability,
+            lines.c.recurring_commitment_id,
+            lines.c.mapping_note,
+        )
+        .where(lines.c.type == EXPENSE, lines.c.date >= start)
+        .where(lines.c.date <= reference)
+        .order_by(lines.c.date, lines.c.time, lines.c.transaction_id, lines.c.line_kind)
+    )
+    return [_normalize_row(dict(row)) for row in result.mappings()]
 
 
 async def get_monthly_projection(
@@ -828,8 +1044,42 @@ async def get_monthly_projection(
         ).all()
     )
     links = list((await db_session.scalars(select(InstallmentTransactionLink))).all())
+    expense_lines = await _load_expense_lines(db_session, start, reference_date)
+    commitment_ids = {
+        row["recurring_commitment_id"]
+        for row in expense_lines
+        if row.get("recurring_commitment_id") is not None
+    }
+    commitments = (
+        {
+            item.id: item
+            for item in (
+                await db_session.scalars(
+                    select(RecurringCommitment).where(
+                        RecurringCommitment.id.in_(commitment_ids)
+                    )
+                )
+            ).all()
+        }
+        if commitment_ids
+        else {}
+    )
+    loan_rules = list(
+        (
+            await db_session.scalars(
+                select(LoanMerchantRule).order_by(LoanMerchantRule.id)
+            )
+        ).all()
+    )
     components = _expense_components(
-        rows, reference_date, coverage, list(latest_loans.values()), plans, links
+        expense_lines,
+        reference_date,
+        coverage,
+        list(latest_loans.values()),
+        plans,
+        links,
+        commitments,
+        loan_rules,
     )
     lines = FLOW_LINES_VIEW
     observed = (

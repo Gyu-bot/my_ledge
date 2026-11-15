@@ -88,6 +88,22 @@ class RecurringExpenseProjectionSource(BaseModel):
     history_periods: list[str] = Field(default_factory=list)
     excluded_periods: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # T064 R6: one source per registered recurring commitment (T056 bundle).
+    commitment_id: int | None = None
+    cycle: Literal["monthly", "yearly", "n_times"] | None = None
+    end_date: date | None = None
+
+
+class ProjectionCommitmentNotInExpense(BaseModel):
+    """A registered commitment the expense assumption leaves out (T064 R1)."""
+
+    kind: Literal["loan"] = "loan"
+    name: str
+    loan_account_id: int | None = None
+    monthly_amount: int | None = None
+    checked_periods: list[str] = Field(default_factory=list)
+    reason_code: Literal["no_expense_line_in_recent_month", "no_loan_account"]
+    reason: str
 
 
 class ExpenseProjectionComponent(BaseModel):
@@ -99,6 +115,16 @@ class ExpenseProjectionComponent(BaseModel):
     confidence: Confidence = "medium"
     warnings: list[str] = Field(default_factory=list)
     sources: list[RecurringExpenseProjectionSource] = Field(default_factory=list)
+    # T064 R1/R2: this month's payments counted for a loan or installment plan
+    # by a person-registered rule (loan merchant rule, installment plan rule)
+    # without a link ("연결 미확인").
+    link_unconfirmed_count: int = 0
+    link_unconfirmed_amount: int = 0
+    # T064 R1 (loan only): registered loans not added to the expense
+    # assumption because they do not appear as expense lines in this ledger.
+    not_in_expense_commitments: list[ProjectionCommitmentNotInExpense] = Field(
+        default_factory=list
+    )
 
 
 class MonthlyProjection(BaseModel):
