@@ -48,6 +48,23 @@ RAW_TABLE_DESCRIPTIONS = {
         "principal/interest/mixed repayment type."
     ),
     "upload_logs": "Upload execution history and import result counters.",
+    "recurring_commitments": (
+        "T056 human-registered recurring-payment bundles (정기 지급). A 지출 "
+        "belongs when merchant (merchant scope) and effective category match and "
+        "its date is within start_date..end_date. Cycle, amount kind (fixed/"
+        "variable), adjustability, and end are bundle attributes. Read resolved "
+        "membership from vw_transaction_nature; write only via /api/v1/nature."
+    ),
+    "category_adjustability_defaults": (
+        "T056 per-category adjustability default (protected/adjustable); a null "
+        "category_minor covers the whole major category. Lowest precedence."
+    ),
+    "transaction_nature_overrides": (
+        "T056 per-transaction inputs: adjustability (highest precedence), explicit "
+        "bundle membership or exclusion, and migration flags "
+        "(installment_link_unconfirmed, necessity_conflict). Not a resolved value; "
+        "read vw_transaction_nature for the result."
+    ),
 }
 
 

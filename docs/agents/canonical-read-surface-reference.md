@@ -20,6 +20,8 @@
 | 지출 정규화 | 지출 집계에서는 `-amount`를 사용한다. `지출`인데 양수인 건은 환불/취소로 보고 지출 합계에서 차감된다. |
 | settlement canonical | 월 집계(현금흐름·카테고리·거래처·대시보드 view)에서 환불은 게시월에 남는다. 확정 settlement는 배분된 부분의 분류(카테고리·거래처 등)만 원거래로 옮긴다. 구매 단위 검토 후보만 `purchase_net.v1`로 원거래에 차감한다. 상세: [backend-api-and-metrics-reference.md](../backend-api-and-metrics-reference.md#metric-contract-t054t055). |
 | 집계 기준 | 삭제·병합·대체(superseded) 행 제외, KRW만 합산. 원화 외 통화는 합산하지 않고 `vw_metric_excluded_currency`로 따로 보인다. |
+| 성격 두 축 (T056) | **지급 형태** `payment_form`: `committed`(대출 연결·할부 연결·사람이 등록한 정기 지급 묶음 `recurring_commitments`의 거래, `commitment_kind`=`loan`/`installment`/`recurring`) 또는 `ad_hoc`(수시). **조정 가능성** `adjustability`: `protected`(보호)/`adjustable`(조정 가능)/`undecided`(미정). 지출에만 있다. 수입·이체는 `not_applicable`이며 미정이나 분류 큐에 들어가지 않는다. 우선순위: 대출·할부 연결(보호 고정) > 거래 지정 > 약정(묶음) 지정 > 카테고리 기본값 > 미정. 어느 단계가 값을 줬는지는 `adjustability_source`로 읽는다. 값은 사람이 정한 것이며 시스템이 추천하거나 채우지 않는다. |
+| 기존 분류 컬럼 | `cost_kind`, `fixed_cost_necessity`, `spend_necessity`, `recurring_payment_kind`는 남아 있고 기존 API 필드·legacy view(`vw_monthly_cashflow`의 `fixed_total` 등)에 그대로 쓰인다. 월 흐름표·지출 큐브·비교는 이 컬럼이 아니라 `vw_transaction_nature`를 읽는다. 기존 컬럼을 고치면 같은 대응표로 새 축에 반영되고(write-through), 새 API로 고친 값은 기존 컬럼에 반영되지 않으므로 둘이 다르면 새 축이 기준이다. |
 | `type='이체'` | 수입/지출 분석에서 제외한다. `transfer_activity_total`처럼 별도 활동량으로만 본다. |
 | `effective_category_*` | 사용자 수정 카테고리가 있으면 사용자 값을, 없으면 원본 import 카테고리를 쓴다. |
 | 삭제/병합 거래 | canonical transaction surface는 기본적으로 `is_deleted=false`, `merged_into_id is null`만 노출한다. 감사성 조회는 raw table 또는 transaction API의 include flag를 쓴다. |
@@ -75,6 +77,8 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
 | 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
 | 분류 품질 개선 대상 | `vw_unclassified_work_queue` 또는 dashboard `unclassified_work_queue[]` | operations APIs. `issue_types[]`와 `recurrence_signal`을 보고 정리 작업을 고르며, 재무 위험 우선순위로 말하지 않는다. |
+| 거래 한 건의 지급 형태·조정 가능성과 그 근거 | `GET /api/v1/nature/transactions/{id}` 또는 `vw_transaction_nature` | `GET /api/v1/nature/recurring-commitments`(정기 지급 묶음과 주기·금액 고정/변동·종료), `GET /api/v1/nature/category-defaults`. 모두 `X-API-Key` 필요. 에이전트는 쓰기 API를 쓰지 않는다. |
+| 약정 지급·수시·미정 월 합계 | `GET /api/v1/metrics/monthly-flow` 또는 `vw_monthly_flow_summary` | `GET /api/v1/metrics/spend-cube`(`group_by=payment_form,adjustability` 등) |
 | 자산/부채 snapshot 표준값 | `vw_asset_snapshot_canonical` | `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health` |
 | 유동성/부채 health | `GET /api/v1/analytics/liquidity-health` | `GET /api/v1/analytics/net-worth-breakdown`. 기본 호출은 closed-month spend/income을 산출하고 source metadata를 함께 반환한다. health라는 이름은 계산 묶음 이름이며 최종 상태 판정이 아니다. |
 | schema 탐색 | `GET /api/v1/schema` | 이 문서와 backend reference |
@@ -96,7 +100,7 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 | `merchant_limit` | 거래처 baseline/반복분류 row 상한. 기본 `10`, 범위 `1..50`. |
 | `queue_limit`, `queue_page` | queue 페이지 크기(기본 10, 1–100), 페이지(기본 1). |
 | `search` | queue 거래처/effective category 검색, 최대 200자. |
-| `issue_types` | `cost_kind,spend_necessity,recurring_kind,loan_link` 중 쉼표로 구분한 OR 필터. |
+| `issue_types` | `cost_kind,spend_necessity,recurring_kind,loan_link` 중 쉼표로 구분한 OR 필터. T056부터 `recurring_kind`는 항상 빈 결과다. |
 | `period_from`, `period_to`, `current_only` | queue 월 범위(`YYYY-MM`), 또는 기준일이 속한 월만 선택. |
 | `reference_date` | 전망과 현재 월 필터의 기준일. 기본 서버 날짜. canonical 전체를 과거 시점으로 복원하는 옵션은 아니다. |
 
@@ -355,22 +359,34 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 
 ### `vw_unclassified_work_queue`
 
-분류 품질 개선이 필요한 거래 queue다. “분석 결과”라기보다 “다음에 정리하면 좋은 데이터 품질 작업”으로 해석한다.
+분류 품질 개선이 필요한 거래 queue다. “분석 결과”라기보다 “다음에 정리하면 좋은 데이터 품질 작업”으로 해석한다. T056부터 조정 가능성이 `undecided`(미정)인 지출과 대출 연결 검토 대상만 올린다. 컬럼 구성은 그대로다.
 
 | 컬럼 | 의미/계산 |
 |---|---|
-| `transaction_id`, `date`, `type`, `merchant`, `effective_category_*`, `amount` | 후보 거래 기본 정보. |
+| `transaction_id`, `date`, `type`, `merchant`, `effective_category_*`, `amount` | 후보 거래 기본 정보. 유효 지출만이며 대체(superseded)·대출 연결·할부 연결 거래는 없다. 수입·이체는 올라오지 않는다. |
 | `amount_abs` | `abs(amount)`. 우선순위 점수에 사용한다. |
-| `needs_cost_kind` | 일반 지출인데 `cost_kind`가 비어 있음. |
-| `needs_fixed_cost_necessity` | `cost_kind='fixed'`인데 `fixed_cost_necessity`가 비어 있음. |
-| `needs_spend_necessity` | 일반 지출인데 `spend_necessity`가 비어 있음. |
-| `needs_recurring_payment_kind` | 반복/고정 성격인데 `recurring_payment_kind`가 비어 있음. 현재 반복 후보는 최소 2개 월, 최소 2개 거래일, 거래처 금액 CV `<= 0.5` 또는 fixed cost 조건을 본다. |
-| `needs_loan_link_review` | 금융/대출/상환/이자/원리금 키워드 또는 금융 카테고리인데 대출 연결 검토가 필요한 일반 지출. |
-| `merchant_expense_count` | 같은 거래처의 일반 지출 건수. |
-| `priority_score` | `min(amount_abs, 1000000)`에 loan/cost/fixed/recurring/repeat 보너스를 더한 정렬 점수. |
-| `priority_reason` | 최우선 사유. `loan_link_review`, `missing_cost_kind`, `missing_fixed_necessity`, `missing_recurring_kind`, `review`. |
+| `needs_spend_necessity` | 조정 가능성이 미정. 거래·약정·카테고리 기본값 어디에도 값이 없다. |
+| `needs_cost_kind` | 미정이면서 기존 `cost_kind`도 비어 있음. |
+| `needs_fixed_cost_necessity` | 미정이면서 기존 `cost_kind='fixed'`. |
+| `needs_recurring_payment_kind` | 항상 `false`. 거래 단위 반복 여부는 더 묻지 않는다(주기는 정기 지급 묶음의 속성). |
+| `needs_loan_link_review` | 금융/대출/상환 키워드 또는 금융 카테고리인데 대출 연결이 없는 지출. |
+| `merchant_expense_count` | 같은 거래처의 queue 기반 지출 건수. |
+| `priority_score` | `min(amount_abs, 1000000)`에 loan/cost/fixed/necessity/repeat 보너스를 더한 정렬 점수. |
+| `priority_reason` | 최우선 사유. `loan_link_review`, `missing_cost_kind`, `missing_fixed_necessity`, `missing_spend_necessity`, `review`. |
 
-DB queue의 `needs_recurring_payment_kind`는 검토 필요 신호다. 실제 반복규칙 승인 가능 여부는 별도의 dry-run에서 effective 설정·cadence·confidence를 평가하므로 queue flag를 승인 대상으로 그대로 변환하지 않는다.
+### `vw_transaction_nature` (T056)
+
+유효 거래 한 건마다 두 축과 근거를 준다. 월 흐름표·지출 큐브는 이 view를 거래(환불 배분분은 원거래) 기준으로 읽는다.
+
+| 컬럼 | 의미 |
+|---|---|
+| `payment_form` | `committed`, `ad_hoc`, `not_applicable`(수입·이체 등). |
+| `commitment_kind` | `loan`, `installment`, `recurring`, 또는 `null`. |
+| `recurring_commitment_id`, `commitment_match` | 속한 정기 지급 묶음과 연결 방식(`rule`: 거래처·카테고리·기간 규칙, `explicit`: 이행·재가져오기에서 고정된 소속). |
+| `adjustability`, `adjustability_source` | 해석된 조정 가능성과 그 값을 준 단계(`fixed_loan`, `fixed_installment`, `transaction`, `commitment`, `category_default`, `none`, `not_applicable`). |
+| `transaction_adjustability`, `commitment_adjustability`, `category_default_adjustability` | 단계별로 사람이 정한 값. |
+| `installment_link_unconfirmed` | 기존에 할부로 표시됐지만 할부 계획에 연결되지 않은 지출(연결 미확인). 수시로 집계된다. |
+| `necessity_conflict` | 기존 고정비 행의 두 필요성 값이 서로 달라 미정으로 둔 행. |
 
 ### `vw_category_monthly_spend`
 

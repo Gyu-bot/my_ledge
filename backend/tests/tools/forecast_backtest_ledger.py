@@ -8,6 +8,7 @@ to prove that the default report never prints a won amount.
 from datetime import date, time
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -19,6 +20,7 @@ from app.models import (
     Transaction,
     UploadLog,
 )
+from app.services.nature_axes_service import write_through_legacy_classification
 
 SALARY = 123_457
 SUBSCRIPTION = 4_321
@@ -131,4 +133,10 @@ async def build_backtest_ledger(
     session.add(
         UploadLog(snapshot_date=date(2031, 11, 2), status="success", filename="x.xlsx")
     )
+    await session.flush()
+    # T056: legacy classification reaches the metric views through the two-axis tables.
+    transaction_ids = list(
+        (await session.execute(select(Transaction.id))).scalars().all()
+    )
+    await write_through_legacy_classification(session, transaction_ids)
     await session.commit()

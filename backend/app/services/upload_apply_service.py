@@ -43,6 +43,7 @@ from app.services.loan_mapping_service import (
     apply_loan_repayment_estimates_for_latest_snapshots,
 )
 from app.services.upload_service import persist_original_upload, replace_snapshots
+from app.services.nature_axes_service import move_nature_override
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +383,12 @@ async def _move_transaction_relationships(
     for review in reviews:
         review.transaction_id = new_transaction_id
         review.candidate_key = f"transaction:{new_transaction_id}"
+    # T056: the two-axis classification follows the replacement like the links.
+    await move_nature_override(
+        db_session,
+        old_transaction_id=old_transaction_id,
+        new_transaction_id=new_transaction_id,
+    )
 
 
 def _lifecycle_touch(

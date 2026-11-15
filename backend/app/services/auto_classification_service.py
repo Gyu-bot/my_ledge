@@ -21,6 +21,7 @@ from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.settings import RecurringDryRunSettings
 from app.services.canonical_views import build_transactions_effective_select
+from app.services.nature_axes_service import write_through_legacy_classification
 from app.services.recurring_configuration_lock import lock_recurring_configuration
 from app.services.settings_service import (
     get_analytics_settings,
@@ -181,7 +182,7 @@ async def apply_category_classification_rules(
             )
         )
     )
-    updated = 0
+    updated_ids: list[int] = []
     for transaction in result.scalars().all():
         rule = _match_category_rule(transaction, rules)
         if rule is None:
@@ -197,10 +198,11 @@ async def apply_category_classification_rules(
         transaction.fixed_cost_necessity = rule.fixed_cost_necessity
         transaction.spend_necessity = rule.spend_necessity
         transaction.cost_classification_source = "auto"
-        updated += 1
+        updated_ids.append(transaction.id)
 
+    await write_through_legacy_classification(db_session, updated_ids)
     await db_session.commit()
-    return ApplyResult(updated=updated)
+    return ApplyResult(updated=len(updated_ids))
 
 
 async def list_merchant_alias_rules(
@@ -484,13 +486,14 @@ async def apply_recurring_category_rules(
     if require_upload_enabled and not settings.upload_auto_apply:
         await db_session.commit()
         return ApplyResult(updated=0)
-    updated = 0
+    updated_ids: list[int] = []
     for item, rows in candidates:
         for transaction in rows:
             transaction.recurring_payment_kind = item.proposed_kind
-            updated += 1
+            updated_ids.append(transaction.id)
+    await write_through_legacy_classification(db_session, updated_ids)
     await db_session.commit()
-    return ApplyResult(updated=updated)
+    return ApplyResult(updated=len(updated_ids))
 
 
 async def dry_run_recurring_category_rules(
@@ -540,6 +543,7 @@ async def apply_recurring_dry_run(
     for row in rows:
         if row.id in selected_ids:
             row.recurring_payment_kind = payload.proposed_kind
+    await write_through_legacy_classification(db_session, selected_ids)
     await db_session.commit()
     return ApplyResult(updated=len(selected_ids))
 

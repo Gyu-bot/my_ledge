@@ -13,6 +13,7 @@ from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.installments import router as installments_router
 from app.api.v1.endpoints.loan_mapping import router as loan_mapping_router
 from app.api.v1.endpoints.metrics import router as metrics_router
+from app.api.v1.endpoints.nature_axes import router as nature_axes_router
 from app.api.v1.endpoints.profile import router as profile_router
 from app.api.v1.endpoints.schema import router as schema_router
 from app.api.v1.endpoints.settlement_matches import router as settlement_matches_router
@@ -31,6 +32,7 @@ api_router.include_router(settings_router)
 api_router.include_router(auto_classification_router)
 api_router.include_router(analytics_router)
 api_router.include_router(metrics_router)
+api_router.include_router(nature_axes_router)
 api_router.include_router(assets_router)
 api_router.include_router(asset_sources_router)
 api_router.include_router(profile_router)

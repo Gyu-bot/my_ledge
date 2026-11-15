@@ -60,6 +60,7 @@
 - `GET /api/v1/canonical-views/dashboard`
 - `GET /api/v1/metrics/monthly-flow`, `GET /api/v1/metrics/spend-cube`, `GET /api/v1/metrics/data-status`
 - `GET /api/v1/metrics/comparison/monthly-flow`, `GET /api/v1/metrics/comparison/contributions` (T057)
+- every `/api/v1/nature/*` route (T056: category defaults, recurring commitments, transaction adjustability and explanation; reads included)
 - `GET /api/v1/settings/analytics`
 - `PATCH /api/v1/settings/analytics`
 - `GET /api/v1/settings/income-expectations`
@@ -1890,7 +1891,7 @@ Source: `app.services.analytics_service.get_spending_anomalies`
 
 ## Metric Contract (T054/T055)
 
-Plan reference: `Implentation-plan.md` sections 2.1, 2.3 and 2.7. Definitions: `backend/app/services/metric_views.py`; PostgreSQL views: migration `20261115_0035_metric_contract_views.py`.
+Plan reference: `Implentation-plan.md` sections 2.1, 2.3 and 2.7. Definitions: `backend/app/services/metric_views.py`; PostgreSQL views: migration `20261115_0035_metric_contract_views.py`, recreated on the two axes by `20261115_0038_nature_axes_metric_views.py` (T056; downgrade restores 0035 exactly).
 
 ### View chain
 
@@ -1898,6 +1899,7 @@ Plan reference: `Implentation-plan.md` sections 2.1, 2.3 and 2.7. Definitions: `
 |---|---|---|
 | `vw_metric_refund_allocations` | settlement match | confirmed (`auto_confirmed`, `user_confirmed`), `matched_amount > 0`, purchase `지출 < 0` and refund `지출 > 0`, both effective and KRW |
 | `vw_metric_transactions` | effective transaction (all currencies) | not deleted/merged/superseded; effective category; loan and installment links; `settlement_refund_total` (received by a purchase), `settlement_allocated_total` (given by a refund), `purchase_net_amount` |
+| `vw_transaction_nature` | effective transaction (all currencies) | T056 two axes: `payment_form`, `commitment_kind`, `recurring_commitment_id`, `commitment_match`, `adjustability`, `adjustability_source`, the value at each level (`transaction_adjustability`, `commitment_adjustability`, `category_default_adjustability`), `excluded_from_commitments`, `installment_link_unconfirmed`, `necessity_conflict` |
 | `vw_metric_flow_lines` | line (KRW only) | one `transaction` line per row; a refund with confirmed allocations becomes one `refund_allocation` line per allocation (original's classification) plus a `refund_remainder` line for the unallocated part (own classification, omitted when zero). Lines of one transaction always sum to its amount |
 | `vw_monthly_flow` | period × flow row | `amount` (row direction), `signed_amount`, `transaction_count` |
 | `vw_monthly_flow_summary` | period | totals below plus `month_status` |
@@ -1905,24 +1907,20 @@ Plan reference: `Implentation-plan.md` sections 2.1, 2.3 and 2.7. Definitions: `
 | `vw_metric_as_of` | single row | `transaction_as_of`, `first_transaction_date`, `last_closed_period`, `in_progress_period`, per-kind snapshot as-of dates, `non_krw_transaction_count` |
 | `vw_metric_excluded_currency` | period × currency × type | non-KRW effective rows excluded from every total |
 
-### Mapping from the existing columns (until T056)
+### Payment form and adjustability (from T056)
 
-Payment form (지급 형태), evaluated in order for `지출` lines:
+Each line takes the axes of `vw_transaction_nature` for its `attributed_transaction_id` (the original purchase for an allocated refund part). For `지출` lines:
 
-| Condition | `commitment_kind` | `payment_form` | flow row |
-|---|---|---|---|
-| loan link | `loan` | `committed` | `committed_loan` |
-| installment plan link | `installment` | `committed` | `committed_installment` |
-| `cost_kind='fixed'` and `recurring_payment_kind='not_recurring'` | — | `undetermined` | `undecided` (`mapping_note=fixed_cost_marked_not_recurring`) |
-| `cost_kind='variable'` and `recurring_payment_kind='monthly_recurring'` | — | `undetermined` | `undecided` (`variable_cost_marked_monthly_recurring`) |
-| `recurring_payment_kind='installment'` without a plan link | — | `undetermined` | `undecided` (`installment_kind_without_plan_link`) |
-| `cost_kind='fixed'` | `recurring` | `committed` | `committed_recurring` |
-| `cost_kind` null and `recurring_payment_kind='monthly_recurring'` | `recurring` | `committed` | `committed_recurring` |
-| anything else | — | `ad_hoc` | by adjustability below |
+| `commitment_kind` | `payment_form` | flow row |
+|---|---|---|
+| `loan` (loan link) | `committed` | `committed_loan` |
+| `installment` (installment plan link) | `committed` | `committed_installment` |
+| `recurring` (member of a `recurring_commitments` bundle) | `committed` | `committed_recurring` |
+| — | `ad_hoc` | `ad_hoc_protected` / `ad_hoc_adjustable` / `undecided` by adjustability |
 
-Adjustability (조정 가능성): loan/installment-linked → `protected`. Otherwise the necessity value is `fixed_cost_necessity` (falling back to `spend_necessity`) for `cost_kind='fixed'`, else `spend_necessity`; `essential` → `protected`, `discretionary` → `adjustable`, anything else → `undecided`. For `cost_kind='fixed'`, a set `fixed_cost_necessity` that disagrees with a set `spend_necessity` is `undecided` (`mapping_note=necessity_conflict`). Income and transfers are `not_applicable` and never count as 미정.
+Adjustability precedence and the migration mapping are in [Two-Axis Nature (T056)](#two-axis-nature-t056). Income and transfers are `not_applicable` and never count as 미정. `mapping_note` is `installment_link_unconfirmed` (legacy installment kind without a plan link) or `necessity_conflict` (only while adjustability is `undecided`). The T054 mapping from the old columns (with `payment_form='undetermined'`) is retired; it is preserved in migration 0035.
 
-Ad hoc lines land in `ad_hoc_protected`, `ad_hoc_adjustable` or `undecided`. Income lands in `income_undetermined` (no column supports the 정기/비정기/이자·소액 split yet); transfers in `transfer_undetermined` (투자·저축 vs other movements is T061). Any other `type` lands in `other_type`.
+Income lands in `income_undetermined` (no column supports the 정기/비정기/이자·소액 split yet); transfers in `transfer_undetermined` (투자·저축 vs other movements is T061). Any other `type` lands in `other_type`.
 
 ### Totals (`vw_monthly_flow_summary`, `flow_summary_columns`)
 
@@ -1955,6 +1953,76 @@ Invariant tests: `tests/services/test_metric_flow_invariants.py` (SQLite) and `t
 
 - Deleted, merged, and superseded rows (T055/F01): an approved replacement counts once.
 - Non-KRW rows (T055/F04): excluded from every total and reported separately. The parser's integer `amount` still truncates fractional foreign amounts at import; that import-contract behavior is unchanged here.
+
+## Two-Axis Nature (T056)
+
+Plan reference: `Implentation-plan.md` section 2.2 and task `T056`. Code: `backend/app/models/nature_axes.py`, `backend/app/services/nature_axes_mapping.py` (mapping), `backend/app/services/nature_axes_service.py` (API, write-through, re-import), `backend/app/services/metric_views.py` (`vw_transaction_nature`). Migrations: `20261115_0036` (tables), `20261115_0037` (backfill), `20261115_0038` (views, work queue).
+
+### Tables
+
+| Table | Grain | Meaning |
+|---|---|---|
+| `recurring_commitments` | bundle | 정기 지급 묶음: `match_scope` (`merchant`/`category`), `merchant`, `category_major`, `category_minor`, `cycle` (`monthly`/`yearly`/`n_times`/null), `total_count`, `amount_kind` (`fixed`/`variable`/null), `adjustability` (null = 미정), `start_date`, `end_date`, `origin` (`migration`/`user`/`legacy_edit`), `label`, `memo` |
+| `category_adjustability_defaults` | category key | `adjustability` default; `category_minor=null` covers the whole major |
+| `transaction_nature_overrides` | transaction | `adjustability` (transaction level), `commitment_id` (explicit membership), `excluded_from_commitments`, `installment_link_unconfirmed`, `necessity_conflict`, `source` |
+
+### Resolution (`vw_transaction_nature`)
+
+- Membership: no membership for non-`지출`, loan/installment-linked or excluded rows; else explicit `commitment_id`, else the first bundle whose rule matches — same effective category (`category_major` equal, `category_minor IS NOT DISTINCT FROM`), same `merchant` for `match_scope='merchant'`, `start_date <= date <= end_date` with open ends — ordered merchant scope first, then lowest id.
+- Adjustability: `not_applicable` for non-`지출`; `protected` while a loan or installment link exists; else `COALESCE(transaction, commitment, category default, 'undecided')`. Category default = exact `(major, minor)` row, else the `(major, NULL)` row. `adjustability_source` names the level that supplied the value.
+- `GET /api/v1/nature/transactions/{id}` returns the same values (tested equal to the view) plus the legacy columns.
+
+### Mapping of the existing human classification (user decision 2026-11-15)
+
+essential → `protected`, discretionary → `adjustable`, empty → `undecided`. For `cost_kind='fixed'` the necessity is `fixed_cost_necessity` first, then `spend_necessity`; when both are set and disagree the row stays `undecided` and is flagged `necessity_conflict`. Other rows read `spend_necessity`. Evaluated in this order:
+
+| `mapping_row` (report) | Existing | New |
+|---|---|---|
+| `loan_linked` | loan link | committed (loan) · protected |
+| `installment_linked` | installment plan link | committed (installment) · protected |
+| `installment_kind_unlinked` | `recurring_payment_kind='installment'`, no plan link | ad hoc, `installment_link_unconfirmed` (연결 미확인) · necessity |
+| `fixed_not_recurring` | `cost_kind='fixed'` + `not_recurring` | ad hoc · necessity |
+| `fixed_essential` / `fixed_discretionary` / `fixed_necessity_empty` / `fixed_necessity_conflict` | `cost_kind='fixed'` (+ monthly or empty kind) | committed (recurring) · protected / adjustable / undecided / undecided |
+| `variable_monthly_recurring` | `cost_kind='variable'` + `monthly_recurring` (variable-amount recurring payment) | committed (recurring) · necessity |
+| `variable_essential` / `variable_discretionary` / `variable_necessity_empty` | `cost_kind='variable'` | ad hoc · protected / adjustable / undecided |
+| `monthly_recurring_no_cost_kind` | `monthly_recurring`, no `cost_kind` | committed (recurring) · necessity (undecided when empty) |
+| `no_cost_kind_with_necessity` | no `cost_kind`, necessity set | ad hoc · necessity (same as the T054 view) |
+| `unclassified` | nothing set | ad hoc · undecided |
+
+Backfill (`20261115_0037`): scope = non-merged, non-superseded `지출` rows, deleted rows included (they can be restored). Committed (recurring) rows are grouped by `merchant` + effective category into one `origin='migration'`, `match_scope='merchant'` bundle per group: `start_date` = earliest member, no end; `cycle='monthly'` only when every member was `monthly_recurring`, else null; `amount_kind` = the members' common `cost_kind` (`fixed`/`variable`), else null; `adjustability` = the members' common mapped value, else null. A member whose value equals the bundle's stores no transaction-level value (bundle edits then apply to it); other members and every ad hoc row with a decided necessity store a transaction-level value. Ad hoc rows whose key has a bundle are excluded from it. Category defaults are not created (existing category rules keep working through the write-through). Re-running creates nothing new (bundles matched by key among `origin='migration'`; `ON CONFLICT DO NOTHING`). Downgrade deletes `origin='migration'` bundles and `source='migration'` rows only; the old columns are never written.
+
+### Old columns and the write-through rule
+
+The old columns stay, keep every existing endpoint field and filter, and still feed the legacy aggregate views and legacy analytics breakdowns (`fixed_total`, `essential_*`, `vw_recurring_merchant_monthly` …). The current frontend classifies through `PATCH /transactions/{id}`, `PATCH /transactions/bulk-update`, category/recurring rule apply and recurring dry-run approval (`frontend/src/features/data/InboxPage.tsx`, `TransactionsPage.tsx`, `RulesPage.tsx`, `frontend/src/api/transactions.ts`). Making the new tables authoritative without a bridge would silently stop those edits from reaching the metric views, so every old-column write is written through (`write_through_legacy_classification`) with the mapping above:
+
+- transaction-level adjustability := mapped necessity (null when empty, so the commitment or category default applies);
+- committed (recurring): keep a valid explicit membership; else the matching bundle (rule); else the newest bundle with exactly that merchant/category key (explicit membership); else register a new bundle for the key (`origin='legacy_edit'`, `start_date` = the transaction date, `cycle='monthly'` for `monthly_recurring`, `amount_kind` from `cost_kind`, adjustability null);
+- ad hoc with a payment-form signal (`cost_kind` or `recurring_payment_kind` set): excluded from a matching bundle; a necessity-only edit keeps the current membership;
+- flags `installment_link_unconfirmed` and `necessity_conflict` follow the mapping.
+
+Writes through the new API never touch the old columns; the two can diverge and the new tables win. The old columns are therefore not read-only yet (plan criterion "읽기 전용으로 남고" is only partly met until T059 replaces the frontend workflow).
+
+### Work queue (`vw_unclassified_work_queue`, 0038)
+
+Same columns and API fields. Rows: effective, non-superseded `지출` without a loan or installment link whose resolved adjustability is `undecided`, or that need a loan-link review. `needs_spend_necessity = undecided`; `needs_cost_kind = undecided AND cost_kind IS NULL`; `needs_fixed_cost_necessity = undecided AND cost_kind='fixed'`; `needs_recurring_payment_kind = false` always (the recurring-kind queue is gone). Priority formula unchanged; `merchant_expense_count` now counts the rows of this narrower base.
+
+### Import contract and rollback impact
+
+Checked before the design (code evidence, this branch):
+
+- Rollback points capture and fingerprint every table in `Base.metadata` except `upload_logs`, `upload_review_operations`, `upload_rollback_points` (`upload_rollback_service.py:25`, `:39` `scope_tables`, `:85` `fingerprint`, `:106` `begin_point`); `tests/services/test_upload_rollback_postgresql.py:109` requires every database table to be in that scope. A rollback refuses with `schema_changed` when a captured snapshot lacks a current table (`upload_rollback_service.py:258`).
+- Reviewed imports digest and lock every table in `Base.metadata` except two (`upload_review_service.py:117` `finance_tables`, `:128` `lock_state`, `:160` `state_digest`); a changed digest makes a prepared plan `stale_plan` (`:464`).
+- The safe-apply replacement path copies the old columns to the new row and moves loan/installment links and purchase reviews (`upload_apply_service.py:306`, `:341` `_copy_user_managed_fields`, `:362` `_move_transaction_relationships`). `preserved_user_fields` in preview responses lists only categories, memo, merchant override, deleted, merged (`upload_preview_change_builder.py:178`).
+
+Choice: new tables only. Adding columns to `transactions` would change its `to_jsonb` row text, i.e. every rollback/state fingerprint of that table and any structure fingerprint of it, and would add values to `preserved_user_fields` if listed. With new tables:
+
+- No request/response shape, status value or existing table changes. `preserved_user_fields` is unchanged. The replacement path additionally moves the `transaction_nature_overrides` row (and pins bundle membership if the replacement's merchant/category no longer matches) inside `_move_transaction_relationships`; this is captured by the same rollback point (tested: `tests/migrations/test_nature_axes_migration_postgresql.py::test_rollback_restores_override_moved_by_reimport`). Reviewed apply updates rows in place, so overrides stay on the same id.
+- Rollback `restored_counts` / `changed_tables` and the review state digest now include the three new tables (values, not shape). A rollback point captured before migration 0036 is refused with `schema_changed` (no silent loss). A prepared review from before the migration becomes `stale_plan` and must be prepared again.
+- External rollback helper: it is not in this repository. If it fingerprints the structure of specific existing tables (`pg_dump --schema-only -t <table>`-style), nothing changes: no column, index or constraint is added to an existing table (the new foreign keys are owned by `transaction_nature_overrides`). If it restores `transactions` with `TRUNCATE … CASCADE` or deletes rows, the cascade also clears `transaction_nature_overrides` (`ON DELETE CASCADE`), so the helper must add the three new tables to its snapshot list to keep the new classification.
+
+### Dry-run report
+
+`DATABASE_URL=<url> uv run python -m app.tools.nature_axes_migration_report [--show-amounts] [--json]` (from `backend/`). One read-only transaction (`SET TRANSACTION READ ONLY` on PostgreSQL). Before migration: per `mapping_row` count and share of the net 지출 total of effective KRW rows, predicted new-axis combinations, bundles the backfill would create (with unanimous adjustability, monthly cycle), necessity disagreement count, unconfirmed installment-link count, and a conservation check. After migration: actual combinations from `vw_transaction_nature`, rows whose actual combination differs from the mapping, bundles by origin, category default count, and checks that every effective 지출 is in exactly one combination and that the combination total and the flow-lines 지출 total equal the transaction total. Amounts in won appear only with `--show-amounts`. Exit code 1 when a check fails.
 
 ## Comparison Contract (T057)
 
