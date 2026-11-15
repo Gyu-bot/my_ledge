@@ -71,6 +71,14 @@ class IncomeProjectionSource(BaseModel):
     excluded_periods: list[str] = Field(default_factory=list)
     matched_transaction_ids: list[int] = Field(default_factory=list)
     reason: str
+    # T064 R7: deposits are grouped by pay cycle, not calendar month. A payer
+    # whose deposits sit on the month boundary is anchored to the month end
+    # (a deposit in the first days of a month belongs to the previous cycle)
+    # or to the month start (a deposit in the last days belongs to the next).
+    cycle_anchor: Literal["calendar_month", "month_end", "month_start"] = (
+        "calendar_month"
+    )
+    cycle_reassigned_transaction_ids: list[int] = Field(default_factory=list)
 
 
 class RecurringExpenseProjectionSource(BaseModel):
@@ -88,6 +96,51 @@ class RecurringExpenseProjectionSource(BaseModel):
     history_periods: list[str] = Field(default_factory=list)
     excluded_periods: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # T064 R6: one source per registered recurring commitment (T056 bundle).
+    commitment_id: int | None = None
+    cycle: Literal["monthly", "yearly", "n_times"] | None = None
+    end_date: date | None = None
+
+
+class ProjectionCommitmentNotInExpense(BaseModel):
+    """A registered commitment the expense assumption leaves out (T064 R1)."""
+
+    kind: Literal["loan"] = "loan"
+    name: str
+    loan_account_id: int | None = None
+    monthly_amount: int | None = None
+    checked_periods: list[str] = Field(default_factory=list)
+    reason_code: Literal["no_expense_line_in_recent_month", "no_loan_account"]
+    reason: str
+
+
+class AnnualExpenseAssumption(BaseModel):
+    """Spending seen in only one or two of the last 12 months (T064 R4)."""
+
+    category: str
+    active_months_in_window: int
+    last_year_period: str
+    last_year_same_month_amount: int
+    observed_this_month: int
+    expected_remaining: int
+    basis: str
+
+
+class ProjectionTwelveMonthWindow(BaseModel):
+    """The 12 closed months before the reference month (comparison contract)."""
+
+    rule: str = (
+        "12개월 창의 12개월이 모두 자료가 있는 달이고 자료 시작 뒤(월중 시작 첫 달 "
+        "제외), 기준 구간 시작일 뒤일 때만 연간성(12개월 중 1–2개월에만 지출이 있는 "
+        "카테고리)을 판정한다. 연간성 카테고리는 6개월 중앙값 기준선에서 빼고, 작년 "
+        "같은 달의 남은 날짜 금액을 가정한다."
+    )
+    start_period: str
+    end_period: str
+    available: bool
+    unavailable_reason: (
+        Literal["no_data", "data_start", "baseline_start_date"] | None
+    ) = None
 
 
 class ExpenseProjectionComponent(BaseModel):
@@ -99,6 +152,54 @@ class ExpenseProjectionComponent(BaseModel):
     confidence: Confidence = "medium"
     warnings: list[str] = Field(default_factory=list)
     sources: list[RecurringExpenseProjectionSource] = Field(default_factory=list)
+    # T064 R1/R2: this month's payments counted for a loan or installment plan
+    # by a person-registered rule (loan merchant rule, installment plan rule)
+    # without a link ("연결 미확인").
+    link_unconfirmed_count: int = 0
+    link_unconfirmed_amount: int = 0
+    # T064 R1 (loan only): registered loans not added to the expense
+    # assumption because they do not appear as expense lines in this ledger.
+    not_in_expense_commitments: list[ProjectionCommitmentNotInExpense] = Field(
+        default_factory=list
+    )
+    # T064 R4 (variable only).
+    twelve_month_window: ProjectionTwelveMonthWindow | None = None
+    annual_items: list[AnnualExpenseAssumption] = Field(default_factory=list)
+
+
+class ProjectionAdjustabilityShare(BaseModel):
+    """Adjustability of the remaining-period spending assumption (T064 R12)."""
+
+    basis: str
+    protected_amount: int = 0
+    adjustable_amount: int = 0
+    undecided_amount: int = 0
+    total_amount: int = 0
+    undecided_share_pct: float | None = None
+
+
+class ProjectionAccuracyBand(BaseModel):
+    band: Literal["day_01_10", "day_11_20", "day_21_31"]
+    as_of_days: list[int]
+    points: int
+    withheld_points: int
+    evaluated_points: int
+    net_median_signed_error: int | None = None
+    net_median_absolute_error: int | None = None
+    net_median_signed_error_pct_of_income: float | None = None
+    expense_median_signed_error: int | None = None
+
+
+class ProjectionAccuracy(BaseModel):
+    """Recent closed-month replay of this forecast (T064 R12)."""
+
+    definition: str
+    reference_period: str
+    evaluated_periods: list[str] = Field(default_factory=list)
+    as_of_days: list[int] = Field(default_factory=list)
+    current_band: Literal["day_01_10", "day_11_20", "day_21_31"] | None = None
+    bands: list[ProjectionAccuracyBand] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
 
 
 class MonthlyProjection(BaseModel):
@@ -128,3 +229,14 @@ class MonthlyProjection(BaseModel):
     income_sources: list[IncomeProjectionSource]
     expense_components: list[ExpenseProjectionComponent]
     coverage: ProjectionCoverage
+    # T064 R11: how as_of_date was chosen. "requested_date" when the caller
+    # passed it, "transaction_as_of" when the dashboard used the transaction
+    # as-of date (plan 2.1 in-progress month), "today_no_data" without data.
+    as_of_basis: Literal["requested_date", "transaction_as_of", "today_no_data"] = (
+        "requested_date"
+    )
+    # T064 R12: adjustability of the (known) remaining spending assumption.
+    # The recent closed-month replay error is a separate read-only endpoint
+    # (GET /canonical-views/month-projection/accuracy): replaying the forecast
+    # 15 times is too slow for every dashboard request.
+    remaining_expense_adjustability: ProjectionAdjustabilityShare | None = None

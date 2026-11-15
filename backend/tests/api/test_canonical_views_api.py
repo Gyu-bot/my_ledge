@@ -515,3 +515,109 @@ async def test_historical_month_coverage_is_independent_of_projection_lookback(
         assert months["2026-01"]["is_complete_month"] is False
         assert months["2025-11"]["savings_rate_basis"] == "observed_closed_month"
     assert "2025-11" not in responses[-1]["month_projection"]["included_periods"]
+
+
+async def test_dashboard_forecast_defaults_to_the_transaction_as_of_date(
+    async_client, api_headers, db_session
+):
+    """T064 R11: without reference_date the forecast follows the data, not today."""
+    from datetime import date, time
+    from app.models import Transaction, UploadLog
+
+    await _create_sample_canonical_views(db_session)
+    empty = (
+        await async_client.get("/api/v1/canonical-views/dashboard", headers=api_headers)
+    ).json()["month_projection"]
+    assert empty["as_of_basis"] == "today_no_data"
+
+    for day in (2, 5, 9, 13, 18):
+        db_session.add(
+            Transaction(
+                date=date(2031, 7, day),
+                time=time(12),
+                type="지출",
+                category_major="예시",
+                merchant="Example Activity",
+                description="Example Activity",
+                amount=-100,
+            )
+        )
+    db_session.add(
+        UploadLog(snapshot_date=date(2031, 7, 22), status="success", filename="x.xlsx")
+    )
+    await db_session.commit()
+    projection = (
+        await async_client.get("/api/v1/canonical-views/dashboard", headers=api_headers)
+    ).json()["month_projection"]
+    assert projection["as_of_basis"] == "transaction_as_of"
+    assert projection["period"] == "2031-07"
+    assert projection["as_of_date"] == "2031-07-22"
+    assert projection["observed_through"] == "2031-07-18"
+    assert projection["remaining_period_start"] == "2031-07-23"
+    # Seven or fewer days behind the data: not withheld as stale.
+    assert not any("7일 이상" in reason for reason in projection["missing_reasons"])
+
+    # An upload that reaches into the next month does not move the month.
+    db_session.add(
+        UploadLog(snapshot_date=date(2031, 8, 2), status="success", filename="y.xlsx")
+    )
+    await db_session.commit()
+    later = (
+        await async_client.get("/api/v1/canonical-views/dashboard", headers=api_headers)
+    ).json()["month_projection"]
+    assert later["period"] == "2031-07"
+    assert later["as_of_date"] == "2031-07-18"
+
+    requested = (
+        await async_client.get(
+            "/api/v1/canonical-views/dashboard",
+            headers=api_headers,
+            params={"reference_date": "2031-07-10"},
+        )
+    ).json()["month_projection"]
+    assert requested["as_of_basis"] == "requested_date"
+    assert requested["as_of_date"] == "2031-07-10"
+
+
+async def test_month_projection_accuracy_endpoint_is_read_only_and_banded(
+    async_client, api_headers, db_session
+):
+    """T064 R12: recent closed-month replay error by as-of day band."""
+    import sys
+    from pathlib import Path
+
+    from sqlalchemy import func, select
+
+    from app.models import AppSetting, Transaction
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from forecast_backtest_ledger import build_backtest_ledger
+
+    await build_backtest_ledger(db_session)
+    endpoint = "/api/v1/canonical-views/month-projection/accuracy"
+    assert (await async_client.get(endpoint)).status_code == 401
+    before = await db_session.scalar(select(func.count()).select_from(Transaction))
+    response = await async_client.get(
+        endpoint, headers=api_headers, params={"reference_date": "2031-11-02"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reference_period"] == "2031-11"
+    assert body["evaluated_periods"] == ["2031-08", "2031-09", "2031-10"]
+    assert body["current_band"] == "day_01_10"
+    bands = {item["band"]: item for item in body["bands"]}
+    assert bands["day_01_10"]["as_of_days"] == [5, 10]
+    assert bands["day_01_10"]["points"] == 6
+    assert bands["day_21_31"]["points"] == 3
+    for item in bands.values():
+        # The synthetic ledger repeats every month: no replay error.
+        assert item["withheld_points"] == 0
+        assert item["net_median_signed_error"] == 0
+        assert item["net_median_absolute_error"] == 0
+    # Default reference: the transaction as-of date (same as the dashboard).
+    default = (await async_client.get(endpoint, headers=api_headers)).json()
+    assert default["reference_period"] == "2031-11"
+    assert await db_session.scalar(select(func.count()).select_from(Transaction)) == (
+        before
+    )
+    assert await db_session.scalar(select(func.count()).select_from(AppSetting)) == 0

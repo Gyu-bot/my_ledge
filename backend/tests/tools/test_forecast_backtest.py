@@ -58,6 +58,7 @@ async def test_regular_ledger_is_reproduced_exactly_at_every_as_of_day(db_sessio
             assert item["over"] == item["under"] == 0, (component, day)
             assert item["exact"] == item["evaluated"] == item["points"]
     assert report["consistency"]["observed_mismatch_points"] == 0
+    assert report["consistency"]["component_sum_mismatch_points"] == 0
     double = report["special_cases"]["double_counting"]
     for kind in ("loan", "installment", "recurring"):
         assert double[kind]["all"]["observed_then_added_again"] == 0
@@ -120,21 +121,19 @@ async def test_default_report_prints_no_amounts_or_names(db_session):
         assert name not in render_markdown(shown)
 
 
-async def test_unlinked_loan_repayments_show_up_as_added_without_linked_actual(
-    db_session,
-):
+async def test_unlinked_loan_repayments_are_counted_once(db_session):
+    """T064 R1: an unlinked loan is not added on top of its variable history."""
     await build_backtest_ledger(db_session, link_loans=False)
     report = await run_backtest(db_session, BacktestConfig())
     loan = report["special_cases"]["double_counting"]["loan"]
-    # Before payday (days 5, 10) the snapshot payment is added although the
-    # repayments are unlinked rows already inside the variable baseline.
-    assert loan["5"]["remaining_without_any_linked_actual_in_month"] == 7
-    assert loan["10"]["remaining_without_any_linked_actual_in_month"] == 7
-    assert loan["15"]["unavailable"] == 7
-    assert report["accuracy"]["net"]["5"]["under"] == 7
-    assert report["accuracy"]["net"]["5"]["signed_pct_error"]["median"] < 0
-    assert report["withheld_reasons"]["15"] == {"loan_observed_without_account_link": 7}
-    assert report["accuracy"]["net"]["all"]["withheld"] == 21
+    for day in ("5", "10", "15", "20", "25"):
+        assert loan[day]["remaining_without_any_linked_actual_in_month"] == 0
+        assert loan[day]["unavailable"] == 0
+        assert loan[day]["not_in_expense_points"] == 7
+        assert report["accuracy"]["net"][day]["exact"] == 7
+    assert report["withheld_reasons"]["all"] == {}
+    assert report["accuracy"]["net"]["all"]["withheld"] == 0
+    assert report["consistency"]["component_sum_mismatch_points"] == 0
 
 
 async def test_pre_payday_and_classification_sections(db_session):
@@ -148,6 +147,8 @@ async def test_pre_payday_and_classification_sections(db_session):
     bias = report["special_cases"]["classification_bias"]
     # Grocery rows have no necessity, so their whole amount is undecided.
     assert bias["month_undecided_adjustability_share_pct"]["median"] > 0
+    # Only the grocery tail of the remaining assumption is undecided.
+    assert 0 < bias["forecast_remaining_undecided_share_pct"]["median"] < 100
     assert bias["month_unlinked_commitment_like_share_pct"]["median"] == 0
     assert set(bias["by_unlinked_commitment_like_share"]) == {"0%"}
     codes = {item["code"] for item in report["limitations"]}

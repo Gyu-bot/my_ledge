@@ -587,6 +587,10 @@ def _double_counting(points: list[EvaluationPoint], kind: str) -> dict[str, Any]
                     / point.actual["expense"]
                     * 100
                 )
+    components = [
+        next(item for item in point.projection.expense_components if item.kind == kind)
+        for point in points
+    ]
     return {
         "points": len(points),
         "unavailable": len(points) - len(available),
@@ -594,6 +598,15 @@ def _double_counting(points: list[EvaluationPoint], kind: str) -> dict[str, Any]
         "remaining_over_forecast": over,
         "remaining_without_any_linked_actual_in_month": without_ledger_rows,
         "excess_pct_of_month_expense": _stats(excess),
+        # T064 R1/R2: payments counted by a person-registered rule without a
+        # link, and registered loans left out because the ledger has no
+        # expense line for them.
+        "link_unconfirmed_points": sum(
+            1 for item in components if item.link_unconfirmed_count
+        ),
+        "not_in_expense_points": sum(
+            1 for item in components if item.not_in_expense_commitments
+        ),
     }
 
 
@@ -651,8 +664,16 @@ def _classification_bias(points: list[EvaluationPoint]) -> dict[str, Any]:
         for point in points
         if point.remaining["expense"] and point.remaining["variable"] is not None
     ]
+    remaining_undecided = [
+        point.projection.remaining_expense_adjustability.undecided_share_pct
+        for point in points
+        if point.projection.remaining_expense_adjustability is not None
+        and point.projection.remaining_expense_adjustability.undecided_share_pct
+        is not None
+    ]
     return {
-        "note": "전망 코드는 조정 가능성을 읽지 않는다. 약정 구분은 대출·할부 연결, 할부 계획 일치, 거래처 단위 cost_kind/recurring_payment_kind로 한다.",
+        "forecast_remaining_undecided_share_pct": _stats(remaining_undecided),
+        "note": "전망 코드는 남은 지출 가정의 금액을 조정 가능성으로 정하지 않고, 근거 줄의 조정 가능성 비율로 나눠 미정 비중만 보인다(remaining_expense_adjustability). 약정 구분은 흐름표의 commitment_kind(대출·할부 연결, 등록된 정기 지급 묶음)에 사람이 등록한 대출 거래처 규칙·할부 계획 규칙·할부 표시를 더해 줄 단위로 한다.",
         "month_undecided_adjustability_share_pct": _stats(
             share_values("undecided_share")
         ),
@@ -680,6 +701,15 @@ def summarize(
         for point in points
         if point.projection.observed_income != point.observed["income"]
         or point.projection.observed_net_expense != point.observed["expense"]
+    )
+    # T064 R6: component forecasts (flow-table observed line + remaining
+    # assumption) must add up to the total expense forecast.
+    component_sum_mismatch = sum(
+        1
+        for point in points
+        if point.forecast["expense"] is not None
+        and sum(int(point.forecast[kind] or 0) for kind in EXPENSE_KINDS)
+        != point.forecast["expense"]
     )
     report: dict[str, Any] = {
         "tool": "forecast_backtest",
@@ -740,7 +770,8 @@ def summarize(
         },
         "consistency": {
             "observed_mismatch_points": consistency,
-            "detail": "전망 응답의 관측 수입·지출과 흐름표 as-of 합계가 다른 점의 수. 0이어야 한다.",
+            "component_sum_mismatch_points": component_sum_mismatch,
+            "detail": "전망 응답의 관측 수입·지출과 흐름표 as-of 합계가 다른 점의 수, 구성요소 전망의 합이 총지급 전망과 다른 점의 수. 둘 다 0이어야 한다.",
         },
         "limitations": limitations or [],
     }
@@ -868,8 +899,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"정의: {double['definition']}",
         "",
-        "| 구성 | as-of 일 | 점 | 계산 불가 | 관측 후 재가산 | 남은 금액 과대 | 연결된 실제 없이 가산 | 초과분/월 지출 중앙값 % |",
-        "|---|---|---|---|---|---|---|---|",
+        "| 구성 | as-of 일 | 점 | 계산 불가 | 관측 후 재가산 | 남은 금액 과대 | 연결된 실제 없이 가산 | 초과분/월 지출 중앙값 % | 연결 미확인 점 | 지출 줄 없어 제외한 점 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for kind in COMMITMENT_KINDS:
         for day in days:
@@ -878,7 +909,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"| {kind} | {day} | {item['points']} | {item['unavailable']} | "
                 f"{item['observed_then_added_again']} | {item['remaining_over_forecast']} | "
                 f"{item['remaining_without_any_linked_actual_in_month']} | "
-                f"{_fmt(item['excess_pct_of_month_expense']['median'])} |"
+                f"{_fmt(item['excess_pct_of_month_expense']['median'])} | "
+                f"{item['link_unconfirmed_points']} | {item['not_in_expense_points']} |"
             )
     bias = special["classification_bias"]
     lines += [
@@ -891,6 +923,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- 월 지출 중 약정처럼 보이나 미연결인 비중 중앙값: {_fmt(bias['month_unlinked_commitment_like_share_pct']['median'])}%",
         f"- 월 지출 중 약정 지급 비중 중앙값: {_fmt(bias['month_committed_share_pct']['median'])}%",
         f"- 전망의 남은 지출 중 변동·미분류 가정 비중 중앙값: {_fmt(bias['variable_share_of_forecast_remaining_expense_pct']['median'])}%",
+        f"- 전망의 남은 지출 가정 중 조정 가능성 미정 비중 중앙값: {_fmt(bias['forecast_remaining_undecided_share_pct']['median'])}%",
         "",
         "| 구분 | 구간 | 점 | 순현금흐름 보류 | 지출 부호 오차/수입 중앙값 % | 순현금흐름 부호 오차/수입 중앙값 % | 알려진 잔여 순현금흐름 부호 오차/수입 중앙값 % |",
         "|---|---|---|---|---|---|---|",
@@ -910,7 +943,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## 정합성",
         "",
-        f"- 관측값 불일치 점: {report['consistency']['observed_mismatch_points']} ({report['consistency']['detail']})",
+        f"- 관측값 불일치 점: {report['consistency']['observed_mismatch_points']}, 구성요소 합 불일치 점: {report['consistency']['component_sum_mismatch_points']} ({report['consistency']['detail']})",
         "",
         "## 재생의 한계",
         "",

@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.canonical_views import CanonicalViewsDashboardResponse
-from app.schemas.income_projection import IncomeExpectationsSettings
+from app.schemas.income_projection import (
+    IncomeExpectationsSettings,
+    ProjectionAccuracy,
+)
 from app.services.income_expectations_service import (
     get_income_expectations,
     save_income_expectations,
@@ -14,6 +17,10 @@ from app.services.income_expectations_service import (
 from app.services.canonical_views_dashboard_service import (
     get_canonical_views_dashboard,
 )
+from app.services.monthly_projection_service import (
+    resolve_projection_reference_date,
+)
+from app.services.projection_accuracy_service import get_projection_accuracy
 
 router = APIRouter()
 
@@ -53,6 +60,21 @@ async def get_canonical_dashboard(
         current_only=current_only,
         reference_date=reference_date,
     )
+
+
+@router.get(
+    "/canonical-views/month-projection/accuracy",
+    response_model=ProjectionAccuracy,
+    dependencies=[Depends(require_api_key)],
+)
+async def get_month_projection_accuracy(
+    reference_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> ProjectionAccuracy:
+    """Read-only replay error of the month-end forecast (T064 R12)."""
+    if reference_date is None:
+        reference_date, _ = await resolve_projection_reference_date(db_session)
+    return await get_projection_accuracy(db_session, reference_date=reference_date)
 
 
 @router.get(
