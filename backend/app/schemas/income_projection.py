@@ -106,6 +106,35 @@ class ProjectionCommitmentNotInExpense(BaseModel):
     reason: str
 
 
+class AnnualExpenseAssumption(BaseModel):
+    """Spending seen in only one or two of the last 12 months (T064 R4)."""
+
+    category: str
+    active_months_in_window: int
+    last_year_period: str
+    last_year_same_month_amount: int
+    observed_this_month: int
+    expected_remaining: int
+    basis: str
+
+
+class ProjectionTwelveMonthWindow(BaseModel):
+    """The 12 closed months before the reference month (comparison contract)."""
+
+    rule: str = (
+        "12개월 창의 12개월이 모두 자료가 있는 달이고 자료 시작 뒤(월중 시작 첫 달 "
+        "제외), 기준 구간 시작일 뒤일 때만 연간성(12개월 중 1–2개월에만 지출이 있는 "
+        "카테고리)을 판정한다. 연간성 카테고리는 6개월 중앙값 기준선에서 빼고, 작년 "
+        "같은 달의 남은 날짜 금액을 가정한다."
+    )
+    start_period: str
+    end_period: str
+    available: bool
+    unavailable_reason: (
+        Literal["no_data", "data_start", "baseline_start_date"] | None
+    ) = None
+
+
 class ExpenseProjectionComponent(BaseModel):
     kind: Literal["loan", "installment", "recurring", "variable"]
     expected_remaining: int | None
@@ -125,6 +154,9 @@ class ExpenseProjectionComponent(BaseModel):
     not_in_expense_commitments: list[ProjectionCommitmentNotInExpense] = Field(
         default_factory=list
     )
+    # T064 R4 (variable only).
+    twelve_month_window: ProjectionTwelveMonthWindow | None = None
+    annual_items: list[AnnualExpenseAssumption] = Field(default_factory=list)
 
 
 class MonthlyProjection(BaseModel):

@@ -38,16 +38,22 @@ from app.models.loan_account import LoanAccount
 from app.models.nature_axes import RecurringCommitment
 from app.models.upload_log import UploadLog
 from app.schemas.income_projection import (
+    AnnualExpenseAssumption,
     ExpenseProjectionComponent,
     IncomeExpectation,
     IncomeProjectionSource,
     MonthlyProjection,
     ProjectionCommitmentNotInExpense,
     ProjectionCoverage,
+    ProjectionTwelveMonthWindow,
     RecurringExpenseProjectionSource,
     income_source_key,
 )
 from app.services.income_expectations_service import get_income_expectations
+from app.services.settings_service import (
+    baseline_start_period,
+    get_comparison_settings,
+)
 from app.services.metric_views import (
     EXPENSE,
     FLOW_LINES_VIEW,
@@ -58,6 +64,10 @@ from app.services.metric_views import (
 
 LOOKBACK = 6
 MIN_MONTHS = 3
+# T064 R4: once- or twice-a-year spending is read over 12 closed months, the
+# same rule as the comparison contract (T057, comparison_service).
+TWELVE_MONTHS = 12
+UNCLASSIFIED = "미분류"
 ONEOFF_WORDS = (
     "보너스",
     "상여",
@@ -79,6 +89,12 @@ RENAMED_PAYER_MISSING_REASON = (
     "처음 보는 입금처의 급여 입금과 아직 입금되지 않은 기존 급여 출처가 함께 있어 "
     "기존 출처의 예상액을 보류함; 입금처 이름 변경 여부 확인 필요"
 )
+
+
+def _as_date(value: object) -> date | None:
+    if value is None or isinstance(value, date):
+        return value  # type: ignore[return-value]
+    return date.fromisoformat(str(value)[:10])
 
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -689,6 +705,215 @@ def _partition_lines(
     return partitions
 
 
+def _category_key(row: dict[str, Any]) -> str:
+    """Same item key as the comparison contract's category level."""
+    return row.get("effective_category_major") or UNCLASSIFIED
+
+
+def twelve_month_window(
+    reference: date,
+    *,
+    periods_with_data: set[str],
+    first_transaction_date: date | None,
+    baseline_start_period: str | None,
+) -> ProjectionTwelveMonthWindow:
+    """The 12 closed months before the reference month (T064 R4).
+
+    Same completeness rule as the comparison contract: every month has data,
+    the window starts on or after the first full data month (a first month
+    whose data starts mid-month does not count), and on or after the
+    user's baseline start date.
+    """
+    month_start = reference.replace(day=1)
+    start = _period(_shift_month(month_start, -TWELVE_MONTHS))
+    end = _period(_shift_month(month_start, -1))
+    window = [
+        _period(_shift_month(month_start, -offset))
+        for offset in range(TWELVE_MONTHS, 0, -1)
+    ]
+    reason: str | None = None
+    if first_transaction_date is None:
+        reason = "data_start"
+    else:
+        first = first_transaction_date.replace(day=1)
+        first_full = _period(
+            first if first_transaction_date.day == 1 else _shift_month(first, 1)
+        )
+        if start < first_full:
+            reason = "data_start"
+        elif baseline_start_period is not None and start < baseline_start_period:
+            reason = "baseline_start_date"
+        elif not all(value in periods_with_data for value in window):
+            reason = "no_data"
+    return ProjectionTwelveMonthWindow(
+        start_period=start,
+        end_period=end,
+        available=reason is None,
+        unavailable_reason=reason,  # type: ignore[arg-type]
+    )
+
+
+def _annual_like_items(
+    rows: list[dict[str, Any]],
+    reference: date,
+    covered_day: int,
+    window: ProjectionTwelveMonthWindow | None,
+) -> tuple[list[AnnualExpenseAssumption], set[str]]:
+    """Variable spending seen in only one or two of the last 12 months (R4).
+
+    Such a category is read over the 12-month window instead of the six-month
+    median: last year's same month, from the remaining-period start on, is
+    assumed unless the category already has spending this month. Nothing is
+    registered or inferred; the comparison contract's window rule decides.
+    """
+    if window is None or not window.available:
+        return [], set()
+    period = _period(reference)
+    month_start = reference.replace(day=1)
+    window_periods = {
+        _period(_shift_month(month_start, -offset))
+        for offset in range(TWELVE_MONTHS, 0, -1)
+    }
+    monthly: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    current: dict[str, int] = defaultdict(int)
+    for row in rows:
+        row_period = _period(row["date"])
+        if row_period in window_periods:
+            monthly[_category_key(row)][row_period] -= row["amount"]
+        elif row_period == period:
+            current[_category_key(row)] -= row["amount"]
+    items: list[AnnualExpenseAssumption] = []
+    last_year = window.start_period
+    last_day = _month_end(reference).day
+    for key in sorted(monthly):
+        active = sum(1 for value in monthly[key].values() if value > 0)
+        if not 1 <= active <= 2:
+            continue
+        last_year_amount = monthly[key].get(last_year, 0)
+        observed = current.get(key, 0)
+        tail = sum(
+            -row["amount"]
+            for row in rows
+            if _category_key(row) == key
+            and _period(row["date"]) == last_year
+            and min(row["date"].day, last_day) > covered_day
+        )
+        expected = 0 if observed > 0 else max(tail, 0)
+        items.append(
+            AnnualExpenseAssumption(
+                category=key,
+                active_months_in_window=active,
+                last_year_period=last_year,
+                last_year_same_month_amount=last_year_amount,
+                observed_this_month=observed,
+                expected_remaining=expected,
+                basis=(
+                    f"12개월({window.start_period}~{window.end_period}) 중 {active}개월에만 "
+                    "지출이 있어 6개월 중앙값 대신 작년 같은 달을 봄. "
+                    + (
+                        "이번 달 같은 카테고리 지출이 이미 있어 더하지 않음"
+                        if observed > 0
+                        else f"작년 같은 달({last_year})의 남은 날짜 금액을 가정"
+                        if expected
+                        else f"작년 같은 달({last_year})의 남은 날짜에는 지출이 없어 더하지 않음"
+                    )
+                ),
+            )
+        )
+    return items, {item.category for item in items}
+
+
+def _yearly_source(
+    items: list[dict[str, Any]],
+    reference: date,
+    covered_day: int,
+    commitment: RecurringCommitment,
+) -> RecurringExpenseProjectionSource | None:
+    """A commitment registered with a yearly cycle (T064 R4).
+
+    Due this month when it was paid in the same month last year; that month's
+    payment total is the estimate. Otherwise it is not assumed this month.
+    """
+    period = _period(reference)
+    month_start = reference.replace(day=1)
+    last_year = _period(_shift_month(month_start, -TWELVE_MONTHS))
+    month_last = _month_end(reference).day
+    current = [row for row in items if _period(row["date"]) == period]
+    last_year_payments = [
+        row for row in items if _period(row["date"]) == last_year and row["amount"] < 0
+    ]
+    if not current and not last_year_payments:
+        return None
+    paid = sum(-row["amount"] for row in current if row["amount"] < 0)
+    refunded = sum(row["amount"] for row in current if row["amount"] > 0)
+    end_date = commitment.end_date
+    last_day = (
+        min(end_date.day, month_last)
+        if end_date is not None and _period(end_date) == period
+        else 0
+        if end_date is not None and end_date < month_start
+        else month_last
+    )
+    warnings: list[str] = []
+    if last_year_payments:
+        estimate = sum(-row["amount"] for row in last_year_payments)
+
+        def tail(through_day: int) -> int:
+            return sum(
+                -row["amount"]
+                for row in last_year_payments
+                if covered_day < min(row["date"].day, month_last) <= through_day
+            )
+
+        uncapped = min(max(estimate - paid, 0), tail(month_last))
+        remaining = min(uncapped, tail(last_day))
+        basis = (
+            f"연 주기로 등록된 정기 지급: 작년 같은 달({last_year}) 총결제액을 이번 달 "
+            "기준액으로 보고, 이미 결제한 금액과 작년 남은 날짜 결제액 중 작은 금액만 추가 예상"
+        )
+        if uncapped == 0 and paid < estimate * 0.7:
+            warnings.append(
+                "작년 같은 달 납부일 이후 이번 달 결제가 관측되지 않아 추가 청구를 가정하지 않음; "
+                "결제 누락·중단 여부 확인 필요"
+            )
+    else:
+        estimate = paid
+        remaining = 0
+        basis = (
+            "연 주기로 등록된 정기 지급: 작년 같은 달 결제가 없어 이번 달 관측 결제만 반영; "
+            "추가 결제는 가정하지 않음"
+        )
+    if refunded:
+        warnings.append(
+            "이번 달 환급은 관측 순지출에 반영했으며 새로운 납부 의무로 가정하지 않음; 재청구 여부 확인 필요"
+        )
+    additional = max(paid - estimate, 0)
+    if additional:
+        warnings.append(
+            "월 기준을 초과한 결제는 관측 지출에 포함됨; 추가 청구·금액 변경 여부 확인 필요"
+        )
+    name = _commitment_name(commitment, items)
+    return RecurringExpenseProjectionSource(
+        source_key="expense:" + " ".join(name.lower().split()),
+        merchant=name,
+        expected_monthly_amount=estimate,
+        observed_payment_amount=paid,
+        observed_refund_amount=refunded,
+        observed_net_expense=paid - refunded,
+        expected_remaining=remaining,
+        additional_observed_amount=additional,
+        confidence="low" if warnings else "medium",
+        status="review" if warnings else "expected" if remaining else "observed",
+        basis=basis,
+        history_periods=[last_year] if last_year_payments else [],
+        excluded_periods=[],
+        warnings=warnings,
+        commitment_id=commitment.id,
+        cycle="yearly",
+        end_date=end_date,
+    )
+
+
 def _expense_components(
     lines: list[dict[str, Any]],
     reference: date,
@@ -698,9 +923,16 @@ def _expense_components(
     links: list[InstallmentTransactionLink],
     commitments: dict[int, RecurringCommitment],
     loan_rules: list[LoanMerchantRule],
+    window: ProjectionTwelveMonthWindow | None = None,
 ) -> list[ExpenseProjectionComponent]:
+    """``lines`` cover up to 12 months before the reference month.
+
+    Monthly assumptions read the six-month lookback as before; only yearly
+    commitments and annual-like spending (R4) read the 12-month window.
+    """
     period = _period(reference)
     current_start = reference.replace(day=1)
+    six_start = _shift_month(current_start, -LOOKBACK)
     covered_day = _covered_day(coverage, reference)
     periods = coverage.adequately_covered_periods
     # Self lines carry the transaction; refund allocation lines only move a
@@ -708,11 +940,16 @@ def _expense_components(
     by_id = {
         row["transaction_id"]: row
         for row in lines
-        if row.get("line_kind") != "refund_allocation"
+        if row.get("line_kind") != "refund_allocation" and row["date"] >= six_start
     }
     link_map = {link.transaction_id: link for link in links}
     reasons: dict[str, list[str]] = defaultdict(list)
-    partitions = _partition_lines(lines, reference, plans, loan_rules, reasons)
+    all_partitions = _partition_lines(lines, reference, plans, loan_rules, reasons)
+    partitions = {
+        kind: [row for row in rows if row["date"] >= six_start]
+        for kind, rows in all_partitions.items()
+    }
+    partitions = defaultdict(list, partitions)
 
     # Loan (R1): registered loan accounts, linked or rule-matched lines.
     loan_rows: dict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -871,12 +1108,21 @@ def _expense_components(
     recurring_remaining = 0
     recurring_sources = []
     commitment_rows: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for row in partitions["recurring"]:
+    for row in all_partitions["recurring"]:
         commitment_rows[row["recurring_commitment_id"]].append(row)
     for commitment_id, items in sorted(commitment_rows.items()):
-        source = _recurring_source(
-            items, reference, coverage, covered_day, commitments.get(commitment_id)
-        )
+        commitment = commitments.get(commitment_id)
+        if commitment is not None and commitment.cycle == "yearly":
+            source = _yearly_source(items, reference, covered_day, commitment)
+        else:
+            six_items = [row for row in items if row["date"] >= six_start]
+            source = (
+                _recurring_source(
+                    six_items, reference, coverage, covered_day, commitment
+                )
+                if six_items
+                else None
+            )
         if source is None:
             # R5: a commitment's history never falls back into the variable
             # baseline, also after it stopped.
@@ -894,6 +1140,9 @@ def _expense_components(
             source.source_key += f"#{source.commitment_id}"
         seen_keys.add(source.source_key)
 
+    annual_items, annual_keys = _annual_like_items(
+        all_partitions["variable"], reference, covered_day, window
+    )
     variable_remaining = None
     if len(periods) >= MIN_MONTHS:
         tails = [
@@ -902,10 +1151,13 @@ def _expense_components(
                 for row in partitions["variable"]
                 if _period(row["date"]) == baseline_period
                 and min(row["date"].day, _month_end(reference).day) > covered_day
+                and _category_key(row) not in annual_keys
             )
             for baseline_period in periods
         ]
-        variable_remaining = max(round(median(tails)), 0)
+        variable_remaining = max(round(median(tails)), 0) + sum(
+            item.expected_remaining for item in annual_items
+        )
     else:
         reasons["variable"].append(
             "충분히 관측된 마감월 3개월이 없어 잔여 변동·미분류 지출 추정 불가"
@@ -921,7 +1173,7 @@ def _expense_components(
         "loan": f"대출 스냅샷 {', '.join(snapshot_dates) or '없음'}의 월상환액 - 이번 달 그 대출 계좌에 연결되거나 사람이 등록한 대출 거래처 규칙에 맞는 실제 상환. 최근 충분히 관측된 마감월과 이번 달 흐름표에 지출 줄이 없는 대출은 더하지 않고 따로 보임; 상환일 정보는 없음",
         "installment": "활성 할부 일정의 이번 달 예정액 - 실제 연결 또는 계획 규칙(금액·거래처·결제수단·일정) 일치 결제(연결 미확인); 지난 미연결 회차는 확인 필요",
         "recurring": "등록된 정기 지급 묶음(흐름표 committed_recurring 줄)별 과거 총결제액과 이미 결제한 금액, 동일 잔여 날짜 결제 패턴으로 추가 지출 추정. 끝난 묶음의 이력은 변동 기준선에 넣지 않음. 환급은 관측 순지출에만 반영; 이력 부족은 항목별 낮은 신뢰도로 표시",
-        "variable": "흐름표의 약정 아닌 지출 줄(보호·조정 가능·미정) 중 대출 거래처 규칙·할부 계획 규칙·할부 표시에 맞는 결제를 뺀 나머지의 동일 잔여 일자 구간 중앙값; 환급 포함",
+        "variable": "흐름표의 약정 아닌 지출 줄(보호·조정 가능·미정) 중 대출 거래처 규칙·할부 계획 규칙·할부 표시에 맞는 결제를 뺀 나머지의 동일 잔여 일자 구간 중앙값; 환급 포함. 12개월 창을 쓸 수 있으면 12개월 중 1–2개월에만 있는 카테고리는 중앙값에서 빼고 작년 같은 달의 남은 날짜 금액을 더함(annual_items)",
     }
     recurring_warnings = sorted(
         {
@@ -955,6 +1207,8 @@ def _expense_components(
                 -row["amount"] for row in unconfirmed.get(kind, [])
             ),
             not_in_expense_commitments=not_in_expense if kind == "loan" else [],
+            twelve_month_window=window if kind == "variable" else None,
+            annual_items=annual_items if kind == "variable" else [],
         )
         for kind in ("loan", "installment", "recurring", "variable")
     ]
@@ -1044,7 +1298,32 @@ async def get_monthly_projection(
         ).all()
     )
     links = list((await db_session.scalars(select(InstallmentTransactionLink))).all())
-    expense_lines = await _load_expense_lines(db_session, start, reference_date)
+    twelve_start = _shift_month(month_start, -TWELVE_MONTHS)
+    expense_lines = await _load_expense_lines(db_session, twelve_start, reference_date)
+    window = twelve_month_window(
+        reference_date,
+        periods_with_data={
+            str(value)
+            for value in await db_session.scalars(
+                select(FLOW_LINES_VIEW.c.period)
+                .where(
+                    FLOW_LINES_VIEW.c.date >= twelve_start,
+                    FLOW_LINES_VIEW.c.date < month_start,
+                )
+                .distinct()
+            )
+        },
+        first_transaction_date=_as_date(
+            await db_session.scalar(
+                select(func.min(METRIC_TRANSACTIONS_VIEW.c.date)).where(
+                    METRIC_TRANSACTIONS_VIEW.c.date <= reference_date
+                )
+            )
+        ),
+        baseline_start_period=baseline_start_period(
+            (await get_comparison_settings(db_session)).baseline_start_date
+        ),
+    )
     commitment_ids = {
         row["recurring_commitment_id"]
         for row in expense_lines
@@ -1080,6 +1359,7 @@ async def get_monthly_projection(
         links,
         commitments,
         loan_rules,
+        window,
     )
     lines = FLOW_LINES_VIEW
     observed = (

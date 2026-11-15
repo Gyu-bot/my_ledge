@@ -36,6 +36,7 @@ from app.services.income_expectations_service import save_income_expectations
 from app.models.nature_axes import RecurringCommitment, TransactionNatureOverride
 from app.services.monthly_projection_service import get_monthly_projection
 from app.services.nature_axes_service import write_through_legacy_classification
+from app.services.settings_service import patch_analytics_settings
 
 SALARY = 100_000
 
@@ -293,30 +294,120 @@ async def test_tiny_new_salary_category_deposit_does_not_withhold(db_session):
 # --------------------------------------------------------------------------
 
 
-async def _annual_expense(db: AsyncSession) -> MonthlyProjection:
-    reference = date(2031, 7, 10)
-    months = [(2030, month) for month in range(7, 13)] + H1
+THIRTEEN_MONTHS = [(2030, month) for month in range(6, 13)] + H1
+
+
+async def _annual_expense(
+    db: AsyncSession,
+    *,
+    months: list[tuple[int, int]] = THIRTEEN_MONTHS,
+    reference: date = date(2031, 7, 10),
+    this_month: bool = False,
+) -> MonthlyProjection:
     await seed(db, months=months, reference=reference)
     db.add(tx(date(2030, 7, 15), -50_000, "Example Annual Fee", "보험"))
+    if this_month:
+        db.add(tx(date(2031, 7, 3), -48_000, "Example Annual Fee", "보험"))
     await db.commit()
     return await project(db, reference_date=reference)
 
 
-async def test_current_annual_expense_is_not_in_remaining_assumption(db_session):
+async def test_annual_expense_is_in_remaining_assumption(db_session):
+    """T064 R4 (F-E1): last year's same-month fee is assumed (12-month window)."""
     result = await _annual_expense(db_session)
-    # Only the six-month window is read; last year's same-month fee is ignored.
-    assert result.expected_remaining_expense == 500
-    assert component(result, "variable").expected_remaining == 500
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-E1: the forecast reads only six months, so a fee paid once a "
-    "year in this month is never assumed (plan 2.4 asks for a 12-month window).",
-)
-async def test_expected_annual_expense_is_in_remaining_assumption(db_session):
-    result = await _annual_expense(db_session)
+    variable = component(result, "variable")
     assert result.expected_remaining_expense == 50_500
+    assert variable.expected_remaining == 50_500
+    assert variable.twelve_month_window.available is True
+    assert variable.twelve_month_window.start_period == "2030-07"
+    assert variable.twelve_month_window.end_period == "2031-06"
+    [item] = variable.annual_items
+    assert item.category == "보험"
+    assert item.active_months_in_window == 1
+    assert item.last_year_period == "2030-07"
+    assert item.last_year_same_month_amount == 50_000
+    assert item.expected_remaining == 50_000
+
+
+async def test_annual_expense_already_paid_this_month_is_not_added(db_session):
+    result = await _annual_expense(db_session, this_month=True)
+    [item] = component(result, "variable").annual_items
+    assert item.observed_this_month == 48_000
+    assert item.expected_remaining == 0
+    assert result.expected_remaining_expense == 500
+
+
+async def test_annual_expense_after_its_day_last_year_is_not_added(db_session):
+    result = await _annual_expense(db_session, reference=date(2031, 7, 20))
+    [item] = component(result, "variable").annual_items
+    assert item.expected_remaining == 0
+    assert result.expected_remaining_expense == 300
+
+
+async def test_annual_window_needs_twelve_full_months(db_session):
+    """Data starting mid-month 2030-07 leaves the 12-month window incomplete."""
+    months = [(2030, month) for month in range(7, 13)] + H1
+    result = await _annual_expense(db_session, months=months)
+    variable = component(result, "variable")
+    assert variable.twelve_month_window.available is False
+    assert variable.twelve_month_window.unavailable_reason == "data_start"
+    assert variable.annual_items == []
+    assert result.expected_remaining_expense == 500
+
+
+async def test_annual_window_respects_baseline_start_date(db_session):
+    await patch_analytics_settings(
+        db_session,
+        spending_anomalies={},
+        comparison={"baseline_start_date": date(2030, 9, 1)},
+    )
+    result = await _annual_expense(db_session)
+    variable = component(result, "variable")
+    assert variable.twelve_month_window.unavailable_reason == "baseline_start_date"
+    assert result.expected_remaining_expense == 500
+
+
+async def _yearly_commitment(db: AsyncSession, *, reference: date) -> MonthlyProjection:
+    await seed(db, months=THIRTEEN_MONTHS, reference=reference)
+    db.add(
+        tx(
+            date(2030, 7, 15),
+            -30_000,
+            "Example Yearly Membership",
+            "생활",
+            cost_kind="fixed",
+        )
+    )
+    await db.commit()
+    await classify(db)
+    commitment = await db.scalar(
+        select(RecurringCommitment).where(
+            RecurringCommitment.merchant == "Example Yearly Membership"
+        )
+    )
+    commitment.cycle = "yearly"
+    await db.commit()
+    return await project(db, reference_date=reference)
+
+
+async def test_yearly_commitment_is_added_in_its_month(db_session):
+    """T064 R4: a commitment a person registered as yearly is assumed in the
+    month it was paid last year."""
+    result = await _yearly_commitment(db_session, reference=date(2031, 7, 10))
+    [source] = component(result, "recurring").sources
+    assert source.cycle == "yearly"
+    assert source.expected_monthly_amount == 30_000
+    assert source.expected_remaining == 30_000
+    assert source.history_periods == ["2030-07"]
+    assert result.expected_remaining_expense == 30_500
+
+
+async def test_yearly_commitment_is_not_assumed_in_other_months(db_session):
+    result = await _yearly_commitment(db_session, reference=date(2031, 7, 10))
+    assert component(result, "variable").annual_items == []
+    later = await project(db_session, reference_date=date(2031, 6, 10))
+    assert component(later, "recurring").sources == []
+    assert later.expected_remaining_expense == 500
 
 
 # --------------------------------------------------------------------------
