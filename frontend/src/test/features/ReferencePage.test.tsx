@@ -75,7 +75,7 @@ describe('ReferencePage projection and completeness', () => {
     fireEvent.click(summary)
     expect(summary.closest('details')).toHaveAttribute('open')
     expect(screen.getByText('샘플 보험: 안정적인 이력이 2개월뿐이어서 추정 신뢰도가 낮습니다.')).toBeVisible()
-    expect(screen.getByRole('link', { name: '홈에서 입금 일정과 반복결제 거래처별 전망 근거 보기' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: '월 결산에서 입금 일정과 정기 지급별 전망 근거 보기' })).toHaveAttribute('href', '/')
     expect(screen.queryByText('산출 불가')).not.toBeInTheDocument()
   })
   it('필수 입력이 없으면 월말 전망을 산출 불가로 유지하고 부분 추정 차액을 구분한다', () => {

@@ -104,7 +104,7 @@ export function ReferencePage() {
               <ul className="mt-2 list-inside list-disc">{projection.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
             </details> : null}
             {projection.limitations.length > 0 ? <p className="mt-2 text-caption text-text-muted">{projection.limitations.join(' · ')}</p> : null}
-            <Link to="/" className="mt-2 inline-block text-caption text-transfer hover:underline">홈에서 입금 일정과 반복결제 거래처별 전망 근거 보기</Link>
+            <Link to="/" className="mt-2 inline-block text-caption text-transfer hover:underline">월 결산에서 입금 일정과 정기 지급별 전망 근거 보기</Link>
           </> : <EmptyState message="월간 전망 데이터가 없습니다" />}
         </Card>
 
