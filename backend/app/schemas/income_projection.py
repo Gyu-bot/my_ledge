@@ -71,6 +71,14 @@ class IncomeProjectionSource(BaseModel):
     excluded_periods: list[str] = Field(default_factory=list)
     matched_transaction_ids: list[int] = Field(default_factory=list)
     reason: str
+    # T064 R7: deposits are grouped by pay cycle, not calendar month. A payer
+    # whose deposits sit on the month boundary is anchored to the month end
+    # (a deposit in the first days of a month belongs to the previous cycle)
+    # or to the month start (a deposit in the last days belongs to the next).
+    cycle_anchor: Literal["calendar_month", "month_end", "month_start"] = (
+        "calendar_month"
+    )
+    cycle_reassigned_transaction_ids: list[int] = Field(default_factory=list)
 
 
 class RecurringExpenseProjectionSource(BaseModel):

@@ -4,8 +4,9 @@ Each scenario pins what ``get_monthly_projection`` returns. Where the result
 is still wrong, a separate ``xfail(strict=True)`` test states the
 expected-correct result, so the defect stays recorded and an accidental fix
 (or regression of the recorded behavior) is noticed. Round 1 fixes (R3, R9,
-R10) turned their xfails into normal tests. Synthetic identities and amounts
-only.
+R10) and round 2 fixes (R1, R2, R4, R5, R6, R7, R12) turned their xfails into
+normal tests; the two F-C2 xfails stay (see their reasons). Synthetic
+identities and amounts only.
 """
 
 import calendar
@@ -157,29 +158,71 @@ async def _salary_crossing_month_boundary(db: AsyncSession) -> MonthlyProjection
     return await project(db, reference_date=reference)
 
 
-async def test_current_month_end_salary_crossing_boundary_drops_regular_income(
-    db_session,
-):
+async def test_month_end_salary_crossing_boundary_keeps_regular_income(db_session):
+    """T064 R7 (F-I1): the 1 June deposit is May's pay cycle."""
     result = await _salary_crossing_month_boundary(db_session)
     source = result.income_sources[0]
-    assert source.expected_amount == SALARY
-    assert source.history_periods == ["2031-01", "2031-02", "2031-03", "2031-04"]
-    assert source.status == "uncertain"
-    assert "불연속" in source.reason
-    assert result.expected_remaining_income == 0
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="T064 F-I1: one month-end salary posted on the 1st of the next month "
-    "makes May empty and June double, and the continuity rule then drops the "
-    "regular salary for about three months.",
-)
-async def test_expected_month_end_salary_crossing_boundary_keeps_regular_income(
-    db_session,
-):
-    result = await _salary_crossing_month_boundary(db_session)
+    assert source.cycle_anchor == "month_end"
+    assert len(source.cycle_reassigned_transaction_ids) == 1
+    assert source.history_periods == [f"2031-{month:02}" for month in range(1, 7)]
+    assert source.status == "expected"
+    assert source.expected_date == date(2031, 7, 31)
     assert result.expected_remaining_income == SALARY
+
+
+async def test_late_month_end_salary_this_month_is_last_cycle(db_session):
+    """A month-end salary that slid to 1 July is June's, not July's."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference, salary_day=None)
+    for year, month in H1:
+        db_session.add(tx(month_end(year, month), SALARY, "Example Payer", "급여"))
+    # June's salary posts on 1 July instead of 30 June.
+    june = await db_session.scalar(
+        select(Transaction).where(
+            Transaction.date == date(2031, 6, 30), Transaction.type == "수입"
+        )
+    )
+    june.date = date(2031, 7, 1)
+    await db_session.commit()
+    result = await project(db_session, reference_date=reference)
+    source = result.income_sources[0]
+    assert source.observed_amount == 0
+    assert source.remaining_amount == SALARY
+    # Observed income still holds the late June salary (monthly flow actual).
+    assert result.observed_income == SALARY
+    assert result.projected_month_income == 2 * SALARY
+
+
+async def _month_start_salary(
+    db: AsyncSession, *, reference: date
+) -> MonthlyProjection:
+    """Paid on the 1st/2nd; June's salary arrived early on 30 May."""
+    await seed(db, months=H1, reference=reference, salary_day=None)
+    for month in range(1, 6):
+        db.add(tx(date(2031, month, 2), SALARY, "Example Payer", "급여"))
+    db.add(tx(date(2031, 5, 30), SALARY, "Example Payer", "급여"))
+    await db.commit()
+    return await project(db, reference_date=reference)
+
+
+async def test_early_month_start_salary_counts_for_its_own_cycle(db_session):
+    result = await _month_start_salary(db_session, reference=date(2031, 6, 20))
+    source = result.income_sources[0]
+    assert source.cycle_anchor == "month_start"
+    # June's cycle was already paid on 30 May: nothing more lands in June.
+    assert source.status == "received"
+    assert source.observed_amount == SALARY
+    assert source.remaining_amount == 0
+    assert result.observed_income == 0
+    assert result.projected_month_income == 0
+
+
+async def test_month_start_salary_history_stays_continuous(db_session):
+    reference = date(2031, 7, 20)
+    result = await _month_start_salary(db_session, reference=reference)
+    source = result.income_sources[0]
+    assert source.history_periods == [f"2031-{month:02}" for month in range(1, 7)]
+    assert source.status != "uncertain"
 
 
 async def test_current_regular_income_outside_salary_category_is_not_forecast(
@@ -197,6 +240,35 @@ async def test_current_regular_income_outside_salary_category_is_not_forecast(
     assert result.income_sources == []
     assert result.expected_remaining_income == 0
     assert any("정기 수입을 식별할" in reason for reason in result.missing_reasons)
+
+
+async def test_regular_income_registered_by_a_person_is_forecast(db_session):
+    """T064 R8 (partial): a payer a person registered in the income
+    expectations is regular income whatever its category; nothing suggests it."""
+    reference = date(2031, 7, 20)
+    await seed(db_session, months=H1, reference=reference, salary_day=None)
+    for year, month in H1:
+        db_session.add(
+            tx(date(year, month, 28), SALARY, "Example Contractor", "기타수입")
+        )
+    await db_session.commit()
+    await save_income_expectations(
+        db_session,
+        IncomeExpectationsSettings(
+            items=[
+                IncomeExpectation(
+                    source_key=income_source_key("Example Contractor"),
+                    merchant="Example Contractor",
+                    expected_amount=SALARY,
+                    expected_day=28,
+                )
+            ]
+        ),
+    )
+    result = await project(db_session, reference_date=reference)
+    [source] = result.income_sources
+    assert source.status == "expected"
+    assert result.expected_remaining_income == SALARY
 
 
 async def _renamed_salary_payer(db: AsyncSession) -> MonthlyProjection:

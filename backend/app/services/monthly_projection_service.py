@@ -211,13 +211,67 @@ def _covered_day(coverage: ProjectionCoverage, reference: date) -> int:
     return max(covered).day if covered else 0
 
 
+def _row_period(row: dict[str, Any]) -> str:
+    """Pay cycle of an income row (T064 R7), otherwise its calendar month."""
+    return row.get("cycle") or _period(row["date"])
+
+
+INCOME_BOUNDARY_DAYS = 4
+
+
+def _cycle_anchor(rows: list[dict[str, Any]]) -> str:
+    """Where a payer's pay cycle sits relative to the month boundary (R7).
+
+    ``month_end`` when most salary-sized deposits land in the last
+    ``INCOME_BOUNDARY_DAYS`` + 1 days of a month, ``month_start`` when most land
+    in the first ``INCOME_BOUNDARY_DAYS`` days, otherwise ``calendar_month``.
+    Read only from the payer's own past deposits; nothing is classified.
+    """
+    monthly_max: dict[str, int] = defaultdict(int)
+    for row in rows:
+        key = _period(row["date"])
+        monthly_max[key] = max(monthly_max[key], row["amount"])
+    if not monthly_max:
+        return "calendar_month"
+    floor = median(monthly_max.values()) * 0.1
+    deposits = [row["date"] for row in rows if row["amount"] >= floor]
+    near_end = sum(
+        1
+        for value in deposits
+        if (_month_end(value) - value).days <= INCOME_BOUNDARY_DAYS
+    )
+    near_start = sum(1 for value in deposits if value.day <= INCOME_BOUNDARY_DAYS)
+    if near_end * 2 > len(deposits) and near_start < near_end:
+        return "month_end"
+    if near_start * 2 > len(deposits) and near_end < near_start:
+        return "month_start"
+    return "calendar_month"
+
+
+def _cycle_of(value: date, anchor: str) -> str:
+    """Nearest pay cycle: a boundary deposit belongs to the adjacent month."""
+    if anchor == "month_end" and value.day <= INCOME_BOUNDARY_DAYS:
+        return _period(_shift_month(value.replace(day=1), -1))
+    if (
+        anchor == "month_start"
+        and (_month_end(value) - value).days <= INCOME_BOUNDARY_DAYS
+    ):
+        return _period(_shift_month(value.replace(day=1), 1))
+    return _period(value)
+
+
+def _cycle_day(value: date, cycle: str) -> int:
+    """Day position of a deposit inside its cycle month (may fall outside 1–31)."""
+    return (value - date.fromisoformat(f"{cycle}-01")).days + 1
+
+
 def _stable_history(
     rows: list[dict[str, Any]], periods: list[str], *, income: bool
 ) -> tuple[int | None, list[str], list[str], list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        if _period(row["date"]) in periods:
-            grouped[_period(row["date"])].append(row)
+        if _row_period(row) in periods:
+            grouped[_row_period(row)].append(row)
     # Tiny salary adjustments cannot become a second monthly salary event.
     positive_maxima = (
         [max(row["amount"] for row in items) for items in grouped.values()]
@@ -261,27 +315,54 @@ def _income_sources(
 ) -> list[IncomeProjectionSource]:
     period = _period(reference)
     periods = coverage.adequately_covered_periods
+    window_start = _period(_shift_month(reference.replace(day=1), -LOOKBACK))
     settings = {item.source_key: item for item in overrides}
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    current: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         if row["type"] != "수입" or row["amount"] <= 0 or _oneoff(row):
             continue
         key = _payer(row)
         if not (_salary(row) or key in settings):
             continue
-        if _period(row["date"]) == period:
-            current[key].append(row)
-        else:
-            grouped[key].append(row)
+        candidates[key].append(dict(row))
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    current: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    calendar_history: set[str] = set()
+    anchors: dict[str, str] = {}
+    reassigned: dict[str, list[int]] = defaultdict(list)
+    for key, payer_rows in candidates.items():
+        # R7: continuity is judged per pay cycle, so a boundary deposit counts
+        # for the cycle it belongs to instead of emptying one month and
+        # doubling the next.
+        anchor = _cycle_anchor(
+            [row for row in payer_rows if window_start <= _period(row["date"]) < period]
+        )
+        anchors[key] = anchor
+        for row in payer_rows:
+            row["cycle"] = _cycle_of(row["date"], anchor)
+            if window_start <= _period(row["date"]) < period:
+                calendar_history.add(key)
+            if row["cycle"] < window_start or row["cycle"] > period:
+                continue
+            if row["cycle"] != _period(row["date"]):
+                reassigned[key].append(row["id"])
+            if row["cycle"] == period:
+                current[key].append(row)
+            else:
+                grouped[key].append(row)
     # Salary-category payers seen for the first time this month (no earlier
     # deposit in the window, no user expectation).
-    new_payers = {key for key in current if key not in grouped and key not in settings}
+    new_payers = {
+        key
+        for key in current
+        if key not in calendar_history and key not in grouped and key not in settings
+    }
     new_salary_amount = sum(row["amount"] for key in new_payers for row in current[key])
     sources = []
     for key in sorted(set(grouped) | set(settings) | set(current)):
         history = grouped[key]
         override = settings.get(key)
+        anchor = anchors.get(key, "calendar_month")
         estimate, included, excluded, history_rows = _stable_history(
             history, periods, income=True
         )
@@ -291,10 +372,15 @@ def _income_sources(
         expected_amount = override.expected_amount if override else estimate or 0
         monthly_dates: dict[str, list[date]] = defaultdict(list)
         for row in history_rows:
-            monthly_dates[_period(row["date"])].append(row["date"])
-        last_dates = [max(dates) for dates in monthly_dates.values()]
-        eom = bool(last_dates) and all(
-            (_month_end(value) - value).days <= 4 for value in last_dates
+            monthly_dates[_row_period(row)].append(row["date"])
+        # Days are measured inside each pay cycle (R7), so a deposit that slid
+        # past the month boundary keeps its position (e.g. day 32).
+        last_days = [
+            _cycle_day(max(dates), cycle) for cycle, dates in monthly_dates.items()
+        ]
+        eom = bool(last_days) and all(
+            abs((max(dates) - _month_end(date.fromisoformat(f"{cycle}-01"))).days) <= 4
+            for cycle, dates in monthly_dates.items()
         )
         day = (
             override.expected_day
@@ -302,18 +388,29 @@ def _income_sources(
             else (
                 31
                 if eom
-                else round(median(value.day for value in last_dates))
-                if last_dates
+                else min(max(round(median(last_days)), 1), 31)
+                if last_days
                 else 1
             )
         )
         due = _due(reference, day) if (estimate is not None or override) else None
         # Split payments can span multiple expected days; keep a visible range.
-        first_days = [min(dates).day for dates in monthly_dates.values()]
-        first_day = round(median(first_days)) if first_days and not override else day
+        first_days = [
+            _cycle_day(min(dates), cycle) for cycle, dates in monthly_dates.items()
+        ]
+        first_day = (
+            min(max(round(median(first_days)), 1), 31)
+            if first_days and not override
+            else day
+        )
         date_from = (
-            max(
-                reference.replace(day=1), _due(reference, first_day) - timedelta(days=4)
+            (
+                _due(reference, first_day) - timedelta(days=4)
+                if anchor == "month_start"
+                else max(
+                    reference.replace(day=1),
+                    _due(reference, first_day) - timedelta(days=4),
+                )
             )
             if due
             else None
@@ -334,7 +431,7 @@ def _income_sources(
         if override:
             reason = "사용자가 확인한 입금처·금액·예정일"
         recent_receipts = [
-            row for row in history if periods and _period(row["date"]) == periods[-1]
+            row for row in history if periods and _row_period(row) == periods[-1]
         ]
         recent_regular_total = sum(
             row["amount"]
@@ -379,10 +476,8 @@ def _income_sources(
             reason = "매월 반복되는 수입으로 보기에는 관측 월이 불연속적임; 분기·비정기 입금 여부 확인 필요"
         elif (
             not override
-            and last_dates
-            and max(value.day for value in last_dates)
-            - min(value.day for value in last_dates)
-            > 8
+            and last_days
+            and max(last_days) - min(last_days) > 8
             and not eom
         ):
             state, remaining, confidence = "uncertain", 0, "low"
@@ -439,6 +534,8 @@ def _income_sources(
                 excluded_periods=excluded,
                 matched_transaction_ids=[row["id"] for row in observed_rows],
                 reason=reason,
+                cycle_anchor=anchor,  # type: ignore[arg-type]
+                cycle_reassigned_transaction_ids=reassigned.get(key, []),
             )
         )
     return sources
@@ -1256,10 +1353,16 @@ async def get_monthly_projection(
     result = await db_session.execute(
         select(effective)
         .where(func.upper(effective.c.currency) == METRIC_CURRENCY)
-        .where(effective.c.date >= start, effective.c.date <= reference_date)
+        # A few days before the window so a boundary deposit can join the
+        # first cycle of the window (R7); coverage still starts at ``start``.
+        .where(
+            effective.c.date >= start - timedelta(days=INCOME_BOUNDARY_DAYS),
+            effective.c.date <= reference_date,
+        )
         .order_by(effective.c.date, effective.c.time, effective.c.id)
     )
-    rows = [_normalize_row(dict(row)) for row in result.mappings()]
+    income_rows = [_normalize_row(dict(row)) for row in result.mappings()]
+    rows = [row for row in income_rows if row["date"] >= start]
     upload = await db_session.scalar(
         select(UploadLog.snapshot_date)
         .where(
@@ -1271,7 +1374,7 @@ async def get_monthly_projection(
     )
     coverage = _coverage(rows, reference_date, upload)
     overrides = await get_income_expectations(db_session)
-    sources = _income_sources(rows, reference_date, coverage, overrides.items)
+    sources = _income_sources(income_rows, reference_date, coverage, overrides.items)
     loan_result = await db_session.execute(
         select(Loan, LoanAccount)
         .outerjoin(
