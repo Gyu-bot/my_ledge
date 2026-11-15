@@ -25,6 +25,7 @@ from app.schemas.metrics import (
     SnapshotAsOf,
     SpendCubeResponse,
     SpendCubeRow,
+    TransferFlowRow,
 )
 from app.services.metric_views import (
     AS_OF_VIEW,
@@ -57,7 +58,10 @@ REFUND_RULE = (
 )
 TRANSFER_RULE = (
     "이체 is excluded from income and spend; it appears only as transfer_net "
-    "(signed) and transfer_activity_total (gross)."
+    "(signed) and transfer_activity_total (gross). T061: transfer_net is split "
+    "by the human-set purpose (investment, savings, internal_move, undecided); "
+    "legs are summed with their sign, so both legs of a move between ledger "
+    "accounts net out inside internal_move."
 )
 LOAN_RULE = (
     "Loan-linked 지출 is committed_loan (full 원리금, no principal/interest split) "
@@ -263,6 +267,11 @@ async def get_monthly_flow(
                     else None
                 ),
                 rows=rows_by_period[row["period"]],
+                transfer_undecided_share=ratio(
+                    values["transfer_undecided_activity_total"],
+                    values["transfer_activity_total"],
+                ),
+                transfer_rows=transfer_rows(values),
             )
         )
     start_date = _period_start(start_period) if start_period else None
@@ -296,8 +305,34 @@ FLOW_FIELD_SCOPES = {
     "adjustable_spend": "조정 가능 지출 = 조정 가능성 adjustable 지출 합 (수시 + 약정)",
     "residual": "잔여 = income_total − total_outflow",
     "residual_rate": "현금 잔여율 = residual ÷ income_total, 마감월만",
-    "transfer_net": "잔여의 행방: 이체 순액 (투자·저축 구분은 T061)",
+    "transfer_net": "잔여의 행방: 이체 순액 전체 (목적별 나눔은 transfer_rows)",
+    "transfer_rows": (
+        "잔여의 행방 (T061): 투자·저축 이체 / 그 밖의 계좌 간 이동 / 목적 미정 이체. "
+        "목적은 사람이 정한다(거래 > 거래처 규칙 > 카테고리 규칙). 합 = transfer_net"
+    ),
 }
+
+
+def transfer_rows(values: dict[str, int]) -> list[TransferFlowRow]:
+    """T061 잔여의 행방 rows from the summary columns (no re-aggregation)."""
+    return [
+        TransferFlowRow(
+            row="transfer_investment_savings",
+            label="투자·저축 이체",
+            signed_amount=values["transfer_investment_savings_net"],
+        ),
+        TransferFlowRow(
+            row="transfer_internal_move",
+            label="그 밖의 계좌 간 이동",
+            signed_amount=values["transfer_internal_move_net"],
+        ),
+        TransferFlowRow(
+            row="transfer_undecided",
+            label="목적 미정 이체",
+            signed_amount=values["transfer_undecided_net"],
+        ),
+    ]
+
 
 _MONTH_INT_FIELDS = (
     "income_total",
@@ -320,6 +355,12 @@ _MONTH_INT_FIELDS = (
     "refund_total",
     "signed_total",
     "transaction_count",
+    "transfer_investment_net",
+    "transfer_savings_net",
+    "transfer_investment_savings_net",
+    "transfer_internal_move_net",
+    "transfer_undecided_net",
+    "transfer_undecided_activity_total",
 )
 
 

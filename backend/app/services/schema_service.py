@@ -65,6 +65,16 @@ RAW_TABLE_DESCRIPTIONS = {
         "(installment_link_unconfirmed, necessity_conflict). Not a resolved value; "
         "read vw_transaction_nature for the result."
     ),
+    "transfer_purpose_rules": (
+        "T061 human-registered transfer purpose defaults: match_scope merchant "
+        "(exact merchant) or category (effective major, optional minor). purpose "
+        "investment/savings/internal_move. Read the resolved value from "
+        "vw_transfer_purpose; write only via /api/v1/transfer-purposes."
+    ),
+    "transfer_purpose_overrides": (
+        "T061 per-transaction transfer purpose set by a human (highest "
+        "precedence). Not a resolved value; read vw_transfer_purpose."
+    ),
 }
 
 

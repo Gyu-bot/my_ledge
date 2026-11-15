@@ -605,6 +605,13 @@ METRIC_VIEW_DESCRIPTIONS = {
         "commitment/category_default/none) and the value at each level. 수입·이체 "
         "are not_applicable and never undecided."
     ),
+    "vw_transfer_purpose": (
+        "T061 human-set purpose per effective 이체: investment (to/from a holding "
+        "in the investments snapshot), savings (to/from a savings deposit that is "
+        "not an investments row), internal_move (other own-account move), or "
+        "undecided (nothing set). Precedence transaction > merchant rule > "
+        "category rule; purpose_source says which applied. Never inferred."
+    ),
     "vw_metric_flow_lines": (
         "Every won of every effective KRW transaction assigned to exactly one "
         "monthly-flow row (flow_section/flow_row) with payment form and "
@@ -612,7 +619,9 @@ METRIC_VIEW_DESCRIPTIONS = {
         "stay in their posting month; confirmed allocations take the original "
         "purchase's classification. Legacy cost_kind/necessity/recurring columns "
         "are carried only for the legacy aggregate views. Prefer this over "
-        "re-aggregating vw_transactions_effective."
+        "re-aggregating vw_transactions_effective. T061: 이체 lines carry "
+        "transfer_purpose (investment/savings/internal_move/undecided) and "
+        "transfer_purpose_source from vw_transfer_purpose; null otherwise."
     ),
     "vw_metric_as_of": (
         "Single-row data status: transaction as-of date, last closed and "
@@ -622,7 +631,11 @@ METRIC_VIEW_DESCRIPTIONS = {
     "vw_monthly_flow_summary": (
         "Monthly flow table totals: income, committed, ad hoc, undecided, "
         "total_outflow (총지급), living_spend (생활 지출), adjustable_spend, "
-        "residual (잔여), transfer_net, and month_status (closed/in_progress)."
+        "residual (잔여), transfer_net, and month_status (closed/in_progress). "
+        "T061: transfer_net split by human-set purpose (transfer_investment_net, "
+        "transfer_savings_net, transfer_investment_savings_net, "
+        "transfer_internal_move_net, transfer_undecided_net) plus "
+        "transfer_undecided_activity_total."
     ),
     "vw_spend_cube": (
         "Spend cube: month x category x merchant x payment form x adjustability "
@@ -650,4 +663,24 @@ def _metric_schema_views() -> tuple[SchemaViewDefinition, ...]:
     )
 
 
-CANONICAL_VIEWS = CANONICAL_VIEWS + _metric_schema_views()
+def _net_worth_schema_views() -> tuple[SchemaViewDefinition, ...]:
+    from app.services.net_worth_views import (
+        NET_WORTH_VIEW_DESCRIPTIONS,
+        NET_WORTH_VIEWS,
+    )
+
+    return tuple(
+        SchemaViewDefinition(
+            name=view.name,
+            description=NET_WORTH_VIEW_DESCRIPTIONS[view.name],
+            recommended_for_ai=True,
+            columns=tuple(
+                SchemaColumnDefinition(selected.name, selected.type, nullable=True)
+                for selected in view.definition.selected_columns
+            ),
+        )
+        for view in NET_WORTH_VIEWS
+    )
+
+
+CANONICAL_VIEWS = CANONICAL_VIEWS + _metric_schema_views() + _net_worth_schema_views()

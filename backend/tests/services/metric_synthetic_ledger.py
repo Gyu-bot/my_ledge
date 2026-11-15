@@ -433,6 +433,23 @@ async def assert_flow_invariants(
         )
         assert row["living_spend"] == row["total_outflow"] - row["committed_loan_total"]
         assert row["residual"] == row["income_total"] - row["total_outflow"]
+        # T061: the transfer row splits by purpose without losing a won.
+        assert row["transfer_net"] == (
+            row["transfer_investment_net"]
+            + row["transfer_savings_net"]
+            + row["transfer_internal_move_net"]
+            + row["transfer_undecided_net"]
+        )
+        assert row["transfer_investment_savings_net"] == (
+            row["transfer_investment_net"] + row["transfer_savings_net"]
+        )
+        assert (
+            row["transfer_undecided_activity_total"] <= row["transfer_activity_total"]
+        )
+
+    # T061: every 이체 line carries exactly one purpose; no other line does.
+    for line in lines:
+        assert (line["transfer_purpose"] is not None) == (line["type"] == "이체")
 
     # (4) Single-row transactions land in the expected flow row.
     for key, expected_row in ledger.expected_row_by_key.items():

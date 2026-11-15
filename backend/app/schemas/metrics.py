@@ -104,6 +104,24 @@ class MonthlyFlowRow(BaseModel):
     transaction_count: int
 
 
+TransferFlowRowKey = Literal[
+    "transfer_investment_savings", "transfer_internal_move", "transfer_undecided"
+]
+
+
+class TransferFlowRow(BaseModel):
+    """T061 잔여의 행방: the transfer row split by the human-set purpose.
+
+    The three rows partition the ``transfer_undetermined`` row of ``rows``
+    (whose key is kept for compatibility and still means "all transfers"):
+    their ``signed_amount`` sum equals ``transfer_net``.
+    """
+
+    row: TransferFlowRowKey
+    label: str
+    signed_amount: int
+
+
 class MonthlyFlowMonth(BaseModel):
     period: str
     month_status: MonthStatus
@@ -132,6 +150,26 @@ class MonthlyFlowMonth(BaseModel):
     signed_total: int
     transaction_count: int
     rows: list[MonthlyFlowRow]
+    transfer_investment_net: int = Field(
+        description="T061: signed 이체 a human marked investment."
+    )
+    transfer_savings_net: int = Field(description="T061: signed 이체 marked savings.")
+    transfer_investment_savings_net: int = Field(
+        description="T061 투자·저축 이체 = investment + savings."
+    )
+    transfer_internal_move_net: int = Field(
+        description="T061 그 밖의 계좌 간 이동 (internal_move); both legs net out."
+    )
+    transfer_undecided_net: int = Field(
+        description="T061: signed 이체 with no purpose."
+    )
+    transfer_undecided_activity_total: int = Field(
+        description="T061: Σ|amount| of undecided 이체."
+    )
+    transfer_undecided_share: float | None = Field(
+        description="transfer_undecided_activity_total ÷ transfer_activity_total."
+    )
+    transfer_rows: list[TransferFlowRow]
 
 
 class MonthlyFlowResponse(BaseModel):
