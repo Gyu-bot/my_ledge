@@ -298,7 +298,7 @@ function RowsView() {
          list.error ? <ErrorState message={loadErrorMessage(list.error)} onRetry={() => void list.refetch()} /> :
          rows.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-label">
+            <table className="w-full min-w-[620px] border-collapse text-label">
               <thead className="bg-bg-inset">
                 <tr>
                   <th className="px-3 py-2">
@@ -319,7 +319,7 @@ function RowsView() {
                     <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       {(!tx.is_deleted || includeDeleted) && <input type="checkbox" aria-label={`${tx.merchant} 선택`} checked={selected.has(tx.id)} onChange={() => toggleRow(tx.id)} className="h-3 w-3 accent-[var(--ds-accent-fg)]" />}
                     </td>
-                    <td className="tnum px-3 py-2 text-text-faint">{tx.date.slice(5)}</td>
+                    <td className="tnum whitespace-nowrap px-3 py-2 text-text-faint">{tx.date.slice(5)}</td>
                     <td className="max-w-[180px] px-3 py-2">
                       <button
                         type="button"
@@ -331,8 +331,8 @@ function RowsView() {
                       </button>
                     </td>
                     <td className="px-3 py-2 text-text-muted">{tx.effective_category_major}{tx.effective_category_minor ? ` / ${tx.effective_category_minor}` : ''}</td>
-                    <td className="px-3 py-2 text-caption text-text-muted">{tx.type}</td>
-                    <td className="px-3 py-2"><Badge variant={tx.is_deleted ? 'expense' : tx.is_edited ? 'accent' : 'neutral'}>{tx.is_deleted ? '삭제됨' : tx.is_edited ? '고침' : '원본'}</Badge></td>
+                    <td className="whitespace-nowrap px-3 py-2 text-caption text-text-muted">{tx.type}</td>
+                    <td className="whitespace-nowrap px-3 py-2"><Badge variant={tx.is_deleted ? 'expense' : tx.is_edited ? 'accent' : 'neutral'}>{tx.is_deleted ? '삭제됨' : tx.is_edited ? '고침' : '원본'}</Badge></td>
                     <td className={`tnum px-3 py-2 text-right font-semibold ${tx.amount < 0 ? 'text-expense' : 'text-income'}`}>{formatSignedWon(tx.amount)}</td>
                   </tr>
                 ))}

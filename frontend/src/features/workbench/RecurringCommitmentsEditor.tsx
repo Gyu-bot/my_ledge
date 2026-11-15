@@ -282,7 +282,7 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
             {categoryText(item.category_major, item.category_minor)}
             {' · '}주기 {item.cycle ? CYCLE_TEXT[item.cycle] : '미정'}
             {item.cycle === 'n_times' && item.total_count != null ? ` (${item.total_count}회)` : ''}
-            {' · '}금액 {item.amount_kind ? AMOUNT_KIND_TEXT[item.amount_kind] : '미정'}
+            {' · '}{item.amount_kind ? AMOUNT_KIND_TEXT[item.amount_kind] : '금액 미정'}
             {' · '}조정 가능성 {item.adjustability ? ADJUSTABILITY_TEXT[item.adjustability] : '미정'}
           </p>
           <p className="tnum text-caption text-text-muted">

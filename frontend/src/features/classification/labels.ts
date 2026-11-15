@@ -47,8 +47,8 @@ export const CYCLE_TEXT: Record<CommitmentCycle, string> = {
 }
 
 export const AMOUNT_KIND_TEXT: Record<CommitmentAmountKind, string> = {
-  fixed: '금액 같음',
-  variable: '금액 달라짐',
+  fixed: '매번 같은 금액',
+  variable: '금액이 달라짐',
 }
 
 export const SCOPE_TEXT: Record<CommitmentScope, string> = {

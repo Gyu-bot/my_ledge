@@ -100,7 +100,7 @@ describe('NatureSettingsPage — 정기 지급 묶음', () => {
     renderPage('/data/nature?tab=recurring')
     const list = screen.getByRole('list', { name: '정기 지급 묶음' })
     expect(within(list).getAllByRole('listitem')).toHaveLength(2)
-    expect(within(list).getByText(/주기 매월 · 금액 금액 같음 · 조정 가능성 조정 가능/)).toBeInTheDocument()
+    expect(within(list).getByText(/주기 매월 · 매번 같은 금액 · 조정 가능성 조정 가능/)).toBeInTheDocument()
     expect(within(list).getByText('예전 분류에서 옮김')).toBeInTheDocument()
     expect(within(list).getByText(/주기 미정 · 금액 미정 · 조정 가능성 미정/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: '끝난 것' }))

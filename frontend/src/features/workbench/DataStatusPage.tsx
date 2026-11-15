@@ -21,6 +21,12 @@ const SNAPSHOT_TEXT: Record<string, string> = {
   profile: '프로필',
 }
 
+function reasonPeriods(periods: string[]): string {
+  if (periods.length === 0) return ''
+  if (periods.length <= 3) return ` (${periods.map(formatPeriodKo).join(', ')})`
+  return ` (${formatPeriodKo(periods[0])} 등 ${periods.length}개월 — 아래 달별 상태 참고)`
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="min-w-0">
@@ -235,7 +241,7 @@ export function DataStatusPage() {
               <p className="font-medium">{status.data.status_label}</p>
               <ul className="mt-0.5 list-inside list-disc">
                 {status.data.status_reasons.map((reason) => (
-                  <li key={reason.code}>{reason.label}{reason.periods.length > 0 ? ` (${reason.periods.map(formatPeriodKo).join(', ')})` : ''}</li>
+                  <li key={reason.code}>{reason.label}{reasonPeriods(reason.periods)}</li>
                 ))}
               </ul>
             </div>
