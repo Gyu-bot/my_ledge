@@ -158,6 +158,40 @@ async def test_current_regular_income_outside_salary_category_is_not_forecast(
     assert any("정기 수입을 식별할" in reason for reason in result.missing_reasons)
 
 
+async def _renamed_salary_payer(db: AsyncSession) -> MonthlyProjection:
+    """This month's salary arrives under a new payer name before the as-of."""
+    reference = date(2031, 7, 20)
+    await seed(db, months=H1, reference=reference)
+    db.add(tx(date(2031, 7, 15), SALARY, "Example Payer Renamed", "급여"))
+    await db.commit()
+    return await get_monthly_projection(db, reference_date=reference)
+
+
+async def test_current_renamed_salary_payer_is_counted_twice(db_session):
+    result = await _renamed_salary_payer(db_session)
+    statuses = {source.merchant: source.status for source in result.income_sources}
+    assert statuses == {
+        "Example Payer": "expected",
+        "Example Payer Renamed": "uncertain",
+    }
+    assert result.observed_income == SALARY
+    assert result.expected_remaining_income == SALARY
+    assert result.projected_month_income == 2 * SALARY
+    assert result.projected_month_end_net is not None
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="T064 F-I2: income sources are keyed by payer text; a salary received "
+    "under a new payer name does not settle the old payer's expected salary.",
+)
+async def test_expected_renamed_salary_payer_not_counted_twice(db_session):
+    result = await _renamed_salary_payer(db_session)
+    assert (
+        result.projected_month_end_net is None or result.expected_remaining_income == 0
+    )
+
+
 # --------------------------------------------------------------------------
 # Once-a-year expense (plan scenario).
 # --------------------------------------------------------------------------
