@@ -59,6 +59,20 @@ export function useProjectionAccuracy(enabled = true) {
   })
 }
 
+export function useCommitments(period: string | null) {
+  return useQuery({
+    queryKey: ['read', 'commitments', period],
+    queryFn: () => metricsApi.commitments(period ?? undefined),
+  })
+}
+
+export function useReadDataStatus() {
+  return useQuery({
+    queryKey: ['read', 'data-status'],
+    queryFn: () => metricsApi.readDataStatus(),
+  })
+}
+
 export function useTransferTransactions(
   params: { start_date: string; end_date: string; purpose?: TransferPurpose } | null,
 ) {
