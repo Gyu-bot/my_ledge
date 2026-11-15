@@ -125,6 +125,43 @@ async def scenario_even_median_fewer_than_six(
 
 
 # --------------------------------------------------------------------------
+# Scenario: a first data month that starts mid-month is not a baseline month.
+# --------------------------------------------------------------------------
+
+
+async def scenario_partial_first_month_excluded(
+    session: AsyncSession, client: AsyncClient
+) -> None:
+    await add(
+        session,
+        [
+            tx(date(2026, 1, 12), -900_000),
+            tx(date(2026, 2, 3), -300_000),
+            tx(date(2026, 3, 3), -200_000),
+            tx(date(2026, 4, 3), -400_000),
+            tx(date(2026, 4, 30), -1, category="category-z"),
+        ],
+    )
+    payload = await get(client, "/metrics/comparison/monthly-flow")
+    basis = payload["comparison"]
+    assert basis["target_period"] == "2026-04"
+    assert basis["first_data_period"] == "2026-01"
+    assert basis["first_data_period_starts_mid_month"] is True
+    assert basis["baseline_periods"] == ["2026-02", "2026-03"]
+    assert basis["baseline_status"] == "fewer_than_requested"
+    assert basis["baseline_limited_by"] == "data_start"
+    assert "2026-01" not in (basis["partial_month_note"] or "")
+    outflow = measure(payload, "total_outflow")
+    assert outflow["baseline_amount"] == 250_000
+
+    # The month right after the partial first month has no baseline at all.
+    second = await get(client, "/metrics/comparison/monthly-flow", period="2026-02")
+    assert second["comparison"]["baseline_periods"] == []
+    assert second["comparison"]["baseline_status"] == "none"
+    assert measure(second, "total_outflow")["baseline_amount"] is None
+
+
+# --------------------------------------------------------------------------
 # Scenario: in-progress month (same elapsed days, no ratio, no full-month
 # delta) across the new surface and the legacy analytics.
 # --------------------------------------------------------------------------

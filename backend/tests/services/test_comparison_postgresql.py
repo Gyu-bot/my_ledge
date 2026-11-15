@@ -22,6 +22,7 @@ from test_metric_views_postgresql import (  # noqa: F401 - pytest fixtures
     "scenario",
     [
         scenarios.scenario_even_median_fewer_than_six,
+        scenarios.scenario_partial_first_month_excluded,
         scenarios.scenario_in_progress_month,
         scenarios.scenario_no_data_vs_zero,
         scenarios.scenario_baseline_start_date,

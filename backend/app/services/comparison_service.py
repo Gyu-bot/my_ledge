@@ -91,6 +91,7 @@ class ComparisonWindow:
     baseline_start_period: str | None
     first_data_period: str | None
     first_data_mid_month: bool
+    first_full_period: str | None = None
     periods_with_data: frozenset[str] = field(default_factory=frozenset)
 
     @property
@@ -203,6 +204,12 @@ async def resolve_comparison_window(
 
     periods_with_data = await load_periods_with_data(db_session)
     first_period = period_of(as_of.first_transaction_date)
+    first_mid_month = as_of.first_transaction_date.day != 1
+    # A first month whose data starts mid-month is not a full month, so it is
+    # never used as a median baseline month or inside a 12-month window.
+    first_full_period = (
+        shift_period(first_period, 1) if first_mid_month else first_period
+    )
     as_of_period = period_of(as_of.transaction_as_of)
     if target_period is None:
         closed = as_of.last_closed_period
@@ -233,7 +240,7 @@ async def resolve_comparison_window(
     limited_by: str | None = None
     candidate = shift_period(target_period, -1)
     while len(baseline) < requested:
-        if candidate < first_period:
+        if candidate < first_full_period:
             limited_by = "data_start"
             break
         if start_period is not None and candidate < start_period:
@@ -260,7 +267,8 @@ async def resolve_comparison_window(
         baseline_start_date=start_date,
         baseline_start_period=start_period,
         first_data_period=first_period,
-        first_data_mid_month=as_of.first_transaction_date.day != 1,
+        first_data_mid_month=first_mid_month,
+        first_full_period=first_full_period,
         periods_with_data=periods_with_data,
     )
 
@@ -689,7 +697,7 @@ async def _twelve_month_amounts(
     baseline_start = shift_period(baseline_end, -(TWELVE_MONTHS - 1))
     target_window = period_range(target_start, target_period)
     baseline_window = period_range(baseline_start, baseline_end)
-    first_period = window.first_data_period or target_period
+    first_period = window.first_full_period or target_period
     target_complete = target_start >= first_period and all(
         period in window.periods_with_data for period in target_window
     )

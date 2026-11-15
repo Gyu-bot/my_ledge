@@ -2036,7 +2036,7 @@ Plan reference: `Implentation-plan.md` section 2.4. Code: `backend/app/services/
 - Baseline months: walk back from the month before the target. Stop at the first data month (`baseline_limited_by=data_start`) or before `baseline_start_period` (`baseline_limited_by=baseline_start_date`). Skip months without data (`skipped_periods`, reason `no_data`) and keep walking. Collect up to `baseline_months_requested` (6 by default; `spending-anomalies` passes its own `baseline_months`).
 - `baseline_start_period`: month of `baseline_start_date` when it is the 1st, otherwise the next month.
 - Day cut: when `elapsed_day` is set, all lines in scope satisfy `day_of_month(date) <= elapsed_day` (target and baseline months alike).
-- The first data month counts as closed by the 2.1 definition even when the data starts mid-month; `first_data_period_starts_mid_month` and `partial_month_note` say so when that month is in the baseline. (Open question for the plan owner: whether to exclude it.)
+- A first data month whose data starts mid-month (`first_data_period_starts_mid_month`) is not a full month: the median baseline and the 12-month windows stop before it (`baseline_limited_by=data_start`). It can still be a target month or the explicit previous month of a previous-month comparison, where `partial_month_note` says so. (Decided 2026-11-15.)
 
 ### Median
 

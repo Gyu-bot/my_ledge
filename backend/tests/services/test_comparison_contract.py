@@ -66,6 +66,12 @@ async def test_even_median_with_fewer_than_six_closed_months(
     await scenarios.scenario_even_median_fewer_than_six(db_session, async_client)
 
 
+async def test_partial_first_month_is_not_a_baseline_month(
+    db_session: AsyncSession, async_client: AsyncClient
+) -> None:
+    await scenarios.scenario_partial_first_month_excluded(db_session, async_client)
+
+
 async def test_in_progress_month_uses_same_elapsed_days(
     db_session: AsyncSession, async_client: AsyncClient
 ) -> None:

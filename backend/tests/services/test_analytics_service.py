@@ -1589,7 +1589,7 @@ async def test_get_spending_anomalies_filters_on_anomaly_score(
     db_session.add_all(
         [
             _transaction(
-                tx_date=date(2026, 1, 15),
+                tx_date=date(2026, 1, 1),
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="금융",
@@ -1643,7 +1643,7 @@ async def test_get_spending_anomalies_filters_small_absolute_deltas_by_default(
     db_session.add_all(
         [
             _transaction(
-                tx_date=date(2026, 1, 15),
+                tx_date=date(2026, 1, 1),
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="금융",
