@@ -14,7 +14,7 @@
   - `POST /api/v1/upload/review/prepare`, `GET /api/v1/upload/review/{operation_id}`, `POST /api/v1/upload/review/{operation_id}/decisions`, `POST /api/v1/upload/review/{operation_id}/apply`
   - `GET /api/v1/upload/rollback-points`, `POST /api/v1/upload/{upload_id}/rollback`
   - `GET /api/v1/upload/logs`
-- 화면(프론트엔드)도 아직 폐기 예정 엔드포인트 일부를 쓴다(`canonical-views/dashboard`, `discretionary-velocity`, `purchase-gate-candidates`·`spending-review-candidates`, `spending-anomalies`, `category-mom`, `installments/forecast`). 화면 재편(`T058`, `T059`)이 끝나기 전에는 지울 수 없다.
+- 화면(프론트엔드)도 아직 폐기 예정 엔드포인트 일부를 쓴다. `T058` 뒤에는 `canonical-views/dashboard`(월 결산의 월말 전망 `month_projection`, 인박스·데이터 사전·가져오기·수입 예상 설정), `discretionary-velocity`(인박스), `installments/forecast`(할부·자산·부채)가 남았다. `purchase-gate-candidates`·`spending-review-candidates`, `spending-anomalies`, `category-mom`은 화면이 더는 부르지 않는다(지출 분석은 `/read/review-items`와 `/metrics/comparison/contributions`를 읽는다). 남은 것은 `T059`까지 지울 수 없다.
 
 ## 2. 새 읽기 표면
 
