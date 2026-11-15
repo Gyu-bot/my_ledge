@@ -86,8 +86,9 @@ class ComparisonBasis(BaseModel):
     first_data_period_starts_mid_month: bool = Field(
         default=False,
         description=(
-            "첫 거래일이 1일이 아님. 그 달은 2.1의 정의상 마감월이지만 월초 자료가 "
-            "없을 수 있다. 기준 기간에 들어가면 이 플래그로 드러낸다."
+            "첫 거래일이 1일이 아님. 그 달은 월초 자료가 없어 중앙값 기준 기간과 "
+            "12개월 구간에 넣지 않는다(baseline_limited_by=data_start). 전월 비교의 "
+            "기준이 그 달이면 partial_month_note가 알린다."
         ),
     )
     skipped_periods: list[ComparisonSkippedMonth] = Field(default_factory=list)

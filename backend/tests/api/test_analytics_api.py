@@ -1664,7 +1664,7 @@ async def test_spending_anomalies_endpoint_documents_anomaly_score_threshold(
     db_session.add_all(
         [
             _transaction(
-                tx_date=date(2026, 1, 15),
+                tx_date=date(2026, 1, 1),
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="금융",
@@ -1721,7 +1721,7 @@ async def test_spending_anomalies_endpoint_filters_small_absolute_deltas_by_defa
     db_session.add_all(
         [
             _transaction(
-                tx_date=date(2026, 1, 15),
+                tx_date=date(2026, 1, 1),
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="금융",
@@ -1942,7 +1942,7 @@ async def test_spending_anomalies_separate_raw_sparse_delta_from_display_reason(
     db_session.add_all(
         [
             _transaction(
-                tx_date=date(2026, 2, 5),
+                tx_date=date(2026, 2, 1),
                 tx_time=time(9, 0),
                 tx_type="지출",
                 category_major="취미",
