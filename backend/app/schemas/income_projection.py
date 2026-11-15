@@ -194,3 +194,9 @@ class MonthlyProjection(BaseModel):
     income_sources: list[IncomeProjectionSource]
     expense_components: list[ExpenseProjectionComponent]
     coverage: ProjectionCoverage
+    # T064 R11: how as_of_date was chosen. "requested_date" when the caller
+    # passed it, "transaction_as_of" when the dashboard used the transaction
+    # as-of date (plan 2.1 in-progress month), "today_no_data" without data.
+    as_of_basis: Literal["requested_date", "transaction_as_of", "today_no_data"] = (
+        "requested_date"
+    )

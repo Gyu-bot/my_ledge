@@ -55,6 +55,7 @@ from app.services.settings_service import (
     get_comparison_settings,
 )
 from app.services.metric_views import (
+    AS_OF_VIEW,
     EXPENSE,
     FLOW_LINES_VIEW,
     INCOME,
@@ -1342,8 +1343,40 @@ async def _load_expense_lines(
     return [_normalize_row(dict(row)) for row in result.mappings()]
 
 
+async def resolve_projection_reference_date(
+    db_session: AsyncSession, *, today: date | None = None
+) -> tuple[date, str]:
+    """Default as-of date of the dashboard forecast (T064 R11).
+
+    The transaction as-of date of ``vw_metric_as_of`` (plan 2.1: the month it
+    falls in is the in-progress month, or the last closed month when it is
+    the month's last day), not today. When the latest successful upload's
+    snapshot is later in the same month it becomes the as-of date, so the quiet
+    days it covers are observed (R10); an upload in a later month never moves
+    the month. Without any transaction the date falls back to today.
+    """
+    as_of = _as_date(await db_session.scalar(select(AS_OF_VIEW.c.transaction_as_of)))
+    if as_of is None:
+        return today or date.today(), "today_no_data"
+    # Same upload the forecast reads for R10: the latest successful one.
+    upload = _as_date(
+        await db_session.scalar(
+            select(UploadLog.snapshot_date)
+            .where(UploadLog.status.in_(["success", "completed"]))
+            .order_by(UploadLog.uploaded_at.desc(), UploadLog.id.desc())
+            .limit(1)
+        )
+    )
+    if upload is not None and upload > as_of and _period(upload) == _period(as_of):
+        as_of = upload
+    return as_of, "transaction_as_of"
+
+
 async def get_monthly_projection(
-    db_session: AsyncSession, *, reference_date: date
+    db_session: AsyncSession,
+    *,
+    reference_date: date,
+    as_of_basis: str = "requested_date",
 ) -> MonthlyProjection:
     month_start = reference_date.replace(day=1)
     start = _shift_month(month_start, -LOOKBACK)
@@ -1566,4 +1599,5 @@ async def get_monthly_projection(
         income_sources=sources,
         expense_components=components,
         coverage=coverage,
+        as_of_basis=as_of_basis,  # type: ignore[arg-type]
     )

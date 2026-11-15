@@ -23,6 +23,7 @@ from app.services.metrics_service import load_as_of
 from app.services.monthly_projection_service import (
     covered_periods,
     get_monthly_projection,
+    resolve_projection_reference_date,
 )
 
 T = TypeVar("T", bound=BaseModel)
@@ -312,8 +313,16 @@ async def get_canonical_views_dashboard(
         (SELECT COUNT(*) FROM vw_recurring_merchant_monthly) AS recurring_total""",
         {},
     )
+    # T064 R11: without an explicit date the forecast follows the transaction
+    # as-of date (in-progress month by data), not today.
+    if reference_date is None:
+        projection_date, as_of_basis = await resolve_projection_reference_date(
+            db_session, today=resolved_reference_date
+        )
+    else:
+        projection_date, as_of_basis = reference_date, "requested_date"
     projection = await get_monthly_projection(
-        db_session, reference_date=resolved_reference_date
+        db_session, reference_date=projection_date, as_of_basis=as_of_basis
     )
 
     monthly_cashflow_items = _to_items(monthly_cashflow, CanonicalMonthlyCashflowItem)
