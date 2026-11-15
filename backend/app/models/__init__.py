@@ -30,6 +30,7 @@ from app.models.nature_axes import (
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
+from app.models.transfer_purpose import TransferPurposeOverride, TransferPurposeRule
 from app.models.upload_log import UploadLog
 from app.models.upload_review_operation import UploadReviewOperation
 from app.models.upload_rollback_point import UploadRollbackPoint
@@ -64,6 +65,8 @@ __all__ = [
     "SettlementMatchStatus",
     "Transaction",
     "TransactionNatureOverride",
+    "TransferPurposeOverride",
+    "TransferPurposeRule",
     "UploadLog",
     "UploadReviewOperation",
     "UploadRollbackPoint",

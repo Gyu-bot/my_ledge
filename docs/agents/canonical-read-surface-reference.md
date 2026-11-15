@@ -400,6 +400,38 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 
 현재 일부 analytics code는 이 DB view를 직접 조회하지 않고 `vw_transactions_effective`와 같은 semantics로 Python에서 계산한다. 에이전트는 schema reference로 사용하되, live API 결과가 필요하면 analytics endpoint도 확인한다.
 
+## 재무상태와 순자산 대조 (T061)
+
+질문 Q5("남은 돈은 어디로 갔고 순자산은 왜 변했나")에 답하는 읽기 표면이다. 모두 `X-API-Key`가 필요하다.
+
+| 표면 | 쓰임 |
+|---|---|
+| `GET /api/v1/metrics/net-worth/intervals` | 종류별 스냅샷 날짜 목록(자산·대출·투자·보험·프로필, 합치지 않음)과 이어지는 자산 스냅샷 구간마다 상태, 순자산 변화, 설명되지 않은 차이, 이체 미정 비중. |
+| `GET /api/v1/metrics/net-worth/reconciliation?start_date=&end_date=` | 한 구간의 대조. 날짜를 생략하면 최근 두 자산 스냅샷. |
+| `GET /api/v1/metrics/net-worth/emergency-fund` | 비상금 개월 수 = 현금성 자산 ÷ 월 보호 지급, 미정 비중과 함께. |
+| `GET /api/v1/transfer-purposes/transactions` | 이체와 사람이 정한 목적. 미정 이체를 금액 큰 순으로 찾을 때 쓴다(읽기). |
+| `vw_transfer_purpose`, `vw_net_worth_snapshots`, `vw_snapshot_kind_totals` | 같은 값을 읽기 전용 DB에서 볼 때. |
+
+대조식은 `순자산 변화 = 잔여 + 대출 잔액 감소분 + 투자 평가 변동 + 설명되지 않은 차이`이고 응답의 정수 값에서 정확히 맞는다.
+
+| 값 | 의미 |
+|---|---|
+| `interval.transaction_start_date` … `transaction_end_date` | 스냅샷은 그날 끝의 잔액이다. 구간 거래는 시작 스냅샷 다음 날부터 끝 스냅샷일까지(시작 제외, 끝 포함). 이어진 구간이 같은 날을 두 번 세지 않는다. |
+| `items.net_worth_change` | 끝 순자산 − 시작 순자산. 순자산은 `/assets/snapshots`와 같은 정의(음수 자산 행 제외 자산 − 부채). |
+| `items.residual` | 구간의 잔여 = 수입 − 총지급(환불 차감, 대출 원리금 포함). 월 흐름표와 같은 식이다. |
+| `items.loan_balance_decrease` | 대출 스냅샷 잔액 감소분. 이자·원금을 추정으로 나누지 않는다. 잔여에 들어간 원리금 중 원금이 여기서 되돌아온다. |
+| `items.investment_valuation_change` | 투자 평가액 변화 − 순투자 유입. 순투자 유입(`investment_net_transfer_in`)은 사람이 `investment`로 표시한 이체의 부호 반대 합이다. |
+| `items.unexplained_difference` | 나머지. 추정 항목으로 채우지 않는다. 기록되지 않은 수수료, 추적하지 않는 계좌로 보낸 돈, 이체로 들어온 새 대출, 저축 이자, 스냅샷 시각 차이 등이 여기에 남는다. 계산할 수 없는 상태에서는 `null`. |
+| `transfers.*` | 잔여의 행방. `investment_savings_net`(투자·저축 이체), `internal_move_net`(그 밖의 계좌 간 이동), `undecided_net`, `undecided_share`(미정 이체 금액 ÷ 전체 이체 금액, 절댓값 기준). 이체는 부호대로 더하므로 장부 안의 두 계좌 사이 이동은 두 다리가 0으로 상쇄되어 두 번 세지 않는다. |
+| `kinds[]` | 대출·투자 스냅샷. `observed`(두 날짜 모두 있음), `absent`(그 종류 스냅샷이 한 번도 없음, 양 끝 0), `mismatched`(그 종류의 날짜가 구간과 다름, 값 `null`, 가까운 날짜로 맞추지 않음). |
+| `status` | `complete`, `incomplete_classification`(목적 미정 이체가 있어 투자 평가 변동이 불완전), `transactions_not_covered`(거래 기록이 구간을 덮지 않음), `snapshot_dates_mismatched`, `no_snapshot_pair`. `status_reasons`가 이유를 모두 적는다. |
+
+이체 목적(`investment`, `savings`, `internal_move`)은 사람이 작업대에서 거래 단위로, 또는 거래처·카테고리 규칙으로 정한다. 시스템은 이름이나 금액으로 목적을 추정하거나 제안하지 않는다. 정해지지 않은 이체는 `undecided`이며 그대로 보인다. 에이전트는 미정 이체를 투자로 가정해 평가 변동을 다시 계산해서 결과로 말하지 않는다. 필요하면 "미정 이체가 투자였다면"처럼 가정을 밝히고 별도로 말한다.
+
+월 흐름표(`/metrics/monthly-flow`)는 기존 값을 그대로 두고 `transfer_rows`(투자·저축 이체 / 그 밖의 계좌 간 이동 / 목적 미정 이체, 합 = `transfer_net`)와 목적별 순액 필드를 더했다. `rows`의 `transfer_undetermined` 줄은 이름이 그대로지만 "이체 전체"를 뜻한다.
+
+비상금 개월 수(`/metrics/net-worth/emergency-fund`)는 최신 자산 스냅샷의 현금성 자산(`vw_asset_snapshot_canonical`과 같은 규칙, 이름 규칙으로만 판단한 금액은 `cash_like_name_rule_total`로 따로)을 최근 마감월(최대 6개, 비교 계약과 같은 기준 구간 규칙) 보호 지급 중앙값으로 나눈 값이다. 조정 가능성 미정 지출은 보호로 가정하지 않으므로 미정 비중이 있으면 개월 수가 실제보다 클 수 있다. 자산 스냅샷 기준일과 거래 기준일은 따로 표시한다. `/analytics/liquidity-health`의 `emergency_fund_months`는 legacy이며 다른 분모를 쓴다.
+
 ## Analytics API 값 사전
 
 | Endpoint | 주요 값 | 의미 |
@@ -417,7 +449,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`/`past_unconfirmed_total`은 지난 미연결 회차이며 미납 확정이 아니다. `is_future_obligation`을 구분하고 projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `delta_pct_raw`, `delta_pct_display`, `baseline_quality`, `anomaly_mode`, `anomaly_score` | 기준 월과 비교 계약 기준 기간(T057: 자료 있는 최근 마감월 최대 6개의 중앙값, 기준 구간 시작일 적용, 진행월은 같은 경과일)의 category 지출 차이. `baseline_avg`는 이름과 달리 중앙값이다. `direction`은 signed delta의 증가/감소를 구분하고 sparse baseline에서는 raw percent와 표시용 percent를 구분한다. 환급 순감소를 증가로 말하지 않는다. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
 | `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. snapshot/history/compare/health와 공통의 `aggregation_basis` 및 `negative_asset_excluded_total`을 제공한다. |
-| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `emergency_fund_target_months`, `target_progress_ratio`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 목표 대비 진행률, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. `input_as_of_date`, `required_spend_period`, 필수/추가상환 금액, `debt_payment_snapshot_date`를 확인한다. 선택 snapshot 이후 거래를 섞지 않으며 이미 필수인 상환을 다시 더하지 않는다. |
+| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `emergency_fund_target_months`, `target_progress_ratio`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 목표 대비 진행률, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. `input_as_of_date`, `required_spend_period`, 필수/추가상환 금액, `debt_payment_snapshot_date`를 확인한다. 선택 snapshot 이후 거래를 섞지 않으며 이미 필수인 상환을 다시 더하지 않는다. T061부터 비상금 개월 수는 legacy이며 바뀌지 않았다. 새 값은 `/metrics/net-worth/emergency-fund`. |
 
 ## 에이전트 답변 시 주의사항
 
@@ -470,7 +502,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | Q2 무엇이 변했고 얼마씩 기여했나 | `/read/comparison/monthly-flow`, `/read/comparison/contributions` |
 | Q3 조정할 수 있는 지출은 얼마이고 어디에 있나 | `/read/spend-cube?adjustability=adjustable`, `/read/comparison/contributions?adjustability=adjustable`, `/read/review-items` |
 | Q4 매달 묶여 있는 지급은 얼마이고 언제 끝나나 | `/read/commitments` |
-| Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `T061`이 제공(색인에 예약됨). 그 전까지는 기존 자산 엔드포인트 |
+| Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `/api/v1/metrics/net-worth/intervals`, `/reconciliation`, `/emergency-fund` (`T061`, 색인에 실려 있음) |
 | Q6 언제까지의 자료이고 분류는 얼마나 되었나 | `/read/data-status`, 그리고 모든 응답의 `as_of`·`classification` |
 
 값의 뜻:

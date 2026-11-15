@@ -29,7 +29,9 @@
 | 변화 기여 | `/api/v1/read/comparison/contributions` | Q2, Q3 | `comparison.v1` |
 | 사후 검토할 거래 | `/api/v1/read/review-items` | Q2, Q3 | `review_items.v1` |
 | 약정 목록 | `/api/v1/read/commitments` | Q4 | `commitments.v1` |
-| 순자산 대조 | (예약됨) | Q5 | `T061`이 제공 |
+| 스냅샷 구간 목록 | `/api/v1/metrics/net-worth/intervals` | Q5 | `net_worth_reconciliation.v1` |
+| 순자산 대조 | `/api/v1/metrics/net-worth/reconciliation` | Q5 | `net_worth_reconciliation.v1` |
+| 비상금 개월 수 | `/api/v1/metrics/net-worth/emergency-fund` | Q5 | `emergency_fund.v1` |
 | 자료 현황 | `/api/v1/read/data-status` | Q6 | `data_status.v1` |
 
 ## 3. 지금 읽기 도구가 기대하는 것과 바꿀 곳
@@ -97,7 +99,7 @@
 1. **지금**: 새 표면 제공, 정리 대상 7개에 폐기 예정 표시. 아무것도 지우지 않는다.
 2. **읽기 도구 전환**: 상담 에이전트의 요약 단계를 `index` → `data-status` → `monthly-flow` → `commitments` → `review-items` → `comparison/contributions` 순으로 바꾼다. 가져오기·검토·되돌리기 도구는 바꾸지 않는다. 전환 뒤 폐기 예정 경로 호출이 남지 않았는지 응답 헤더(`Deprecation`)나 서버 로그로 확인한다.
 3. **화면 전환**: `T058`, `T059`에서 화면이 폐기 예정 경로를 더는 부르지 않게 한다.
-4. **재무상태**: `T061`의 순자산 대조가 들어오면 색인의 예약 항목을 채우고 `liquidity-health`에 폐기 예정 표시를 단다.
+4. **재무상태**: `T061`의 순자산 대조가 들어와 색인의 Q5 항목을 채웠다(공통 봉투 없이 지표 응답 그대로). `liquidity-health`의 폐기 예정 표시는 소비 쪽이 비상금 개월 수로 옮긴 뒤에 단다.
 5. **전망 자리 정하기**: `T064` 수정 단계가 승인되면 월말 순현금흐름 전망을 읽을 자리를 정한다. 그 전에는 대시보드를 지우지 않는다.
 6. **제거**: 위가 끝난 묶음부터 사용자 승인을 받아 한 묶음씩 지운다. 순서는 (가) `discretionary-velocity`, (나) `purchase-gate-candidates`·`spending-review-candidates`·`spending-anomalies`, (다) `category-mom`, (라) `installments/forecast`, (마) 큰 대시보드.
 

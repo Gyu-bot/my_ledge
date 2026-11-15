@@ -4,6 +4,8 @@ Runs without PostgreSQL: both sides are compiled/loaded as text. If this fails,
 a new migration is needed for the changed view definition (never edit a
 released migration). 0035 froze the T054 layer; 0038 (T056) supersedes it and
 its downgrade restores 0035 exactly, so 0035 must stay byte-for-byte frozen.
+0039 (T061) supersedes 0038 and its downgrade restores 0038 exactly, so 0038
+is pinned the same way.
 """
 
 import hashlib
@@ -19,10 +21,14 @@ from app.services.metric_views import METRIC_VIEWS, compile_view_sql
 
 VERSIONS = Path(__file__).resolve().parents[2] / "alembic" / "versions"
 T054_MIGRATION = VERSIONS / "20261115_0035_metric_contract_views.py"
-LATEST_METRIC_MIGRATION = VERSIONS / "20261115_0038_nature_axes_metric_views.py"
+T056_MIGRATION = VERSIONS / "20261115_0038_nature_axes_metric_views.py"
+LATEST_METRIC_MIGRATION = VERSIONS / "20261116_0039_transfer_purpose_net_worth_views.py"
 # sha256 of 0035's frozen METRIC_VIEW_SQL + LEGACY_VIEW_SQL, recorded when 0038
 # was written. 0038's downgrade recreates exactly this SQL.
 T054_FROZEN_SHA256 = "dafcddca15255c1aaaa4e8435f5e3bdb0dcf18c795d578b52b4c35d84b99d668"
+# sha256 of 0038's frozen METRIC_VIEW_SQL + work-queue SQL, recorded when 0039
+# was written. 0039's downgrade recreates exactly this SQL.
+T056_FROZEN_SHA256 = "4e6a6807bc810b9f6e64eb4b240b6266bb1c7ef2d860eaf36281ed217b7faac8"
 
 
 def _load(path: Path) -> ModuleType:
@@ -56,6 +62,15 @@ def test_t054_frozen_views_are_unchanged() -> None:
     assert hashlib.sha256(payload.encode()).hexdigest() == T054_FROZEN_SHA256
 
 
+def test_t056_frozen_views_are_unchanged() -> None:
+    migration = _load(T056_MIGRATION)
+    payload = json.dumps(
+        [list(item) for item in migration.METRIC_VIEW_SQL]
+        + [["vw_unclassified_work_queue", migration.UNCLASSIFIED_WORK_QUEUE_SQL]]
+    )
+    assert hashlib.sha256(payload.encode()).hexdigest() == T056_FROZEN_SHA256
+
+
 def test_legacy_aggregate_views_read_the_flow_lines_only() -> None:
     migration = _load(T054_MIGRATION)
     for name, sql in migration.LEGACY_VIEW_SQL:
@@ -85,7 +100,8 @@ def test_metric_views_read_the_two_axis_tables() -> None:
 
 
 def test_work_queue_no_longer_asks_recurring_kind() -> None:
-    queue = _load(LATEST_METRIC_MIGRATION).UNCLASSIFIED_WORK_QUEUE_SQL
+    # 0039 recreates the 0038 work queue unchanged.
+    queue = _load(T056_MIGRATION).UNCLASSIFIED_WORK_QUEUE_SQL
     assert "FALSE AS needs_recurring_payment_kind" in queue
     where = queue.rsplit("WHERE", 1)[1]
     assert "needs_recurring_payment_kind" not in where

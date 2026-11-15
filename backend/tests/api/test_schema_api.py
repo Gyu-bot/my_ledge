@@ -14,6 +14,9 @@ def test_expected_tables_exist() -> None:
         "category_adjustability_defaults",
         "recurring_commitments",
         "transaction_nature_overrides",
+        # T061 human-set transfer purpose (new tables; no existing table altered).
+        "transfer_purpose_overrides",
+        "transfer_purpose_rules",
         "merchant_alias_rules",
         "recurring_category_rules",
         "transactions",
@@ -202,6 +205,10 @@ async def test_schema_endpoint_returns_tables(
         "vw_monthly_flow_summary",
         "vw_spend_cube",
         "vw_metric_excluded_currency",
+        # T061 transfer purpose and snapshot-side views
+        "vw_transfer_purpose",
+        "vw_net_worth_snapshots",
+        "vw_snapshot_kind_totals",
     }
 
     effective_view = next(

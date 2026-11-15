@@ -1,13 +1,15 @@
-"""Single SQL definition of the metric view layer (T054/T055/T056).
+"""Single SQL definition of the metric view layer (T054/T055/T056/T061).
 
 Chain: transactions -> vw_metric_refund_allocations / vw_metric_transactions
 (effective transactions) -> vw_transaction_nature (two-axis nature per
-transaction, T056) -> vw_metric_flow_lines (every KRW won of every effective
-transaction assigned to exactly one monthly-flow row) -> vw_monthly_flow,
-vw_monthly_flow_summary, vw_spend_cube.
+transaction, T056) and vw_transfer_purpose (human-set purpose per 이체, T061)
+-> vw_metric_flow_lines (every KRW won of every effective transaction assigned
+to exactly one monthly-flow row; 이체 lines also carry exactly one transfer
+purpose) -> vw_monthly_flow, vw_monthly_flow_summary, vw_spend_cube.
 
 The PostgreSQL views are created by the newest metric-view Alembic migration
-(20261115_0038, superseding 0035) from a frozen copy of the SQL compiled here;
+(20261116_0039, superseding 0038 and 0035) from a frozen copy of the SQL
+compiled here;
 ``tests/migrations`` guards that the frozen SQL and these definitions never
 drift. Services read the views by name
 through the ``*_VIEW`` table handles below and must not re-aggregate the same
@@ -51,6 +53,7 @@ from app.models.nature_axes import (
 )
 from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction
+from app.models.transfer_purpose import TransferPurposeOverride, TransferPurposeRule
 from app.models.user_profile_snapshot import UserProfileSnapshot
 
 FLOW_DEFINITION = "monthly_flow.v2"
@@ -143,6 +146,8 @@ _installment_links = InstallmentTransactionLink.__table__
 _commitments = RecurringCommitment.__table__
 _defaults = CategoryAdjustabilityDefault.__table__
 _overrides = TransactionNatureOverride.__table__
+_transfer_overrides = TransferPurposeOverride.__table__
+_transfer_rules = TransferPurposeRule.__table__
 
 
 def _is_effective(transactions) -> ColumnElement[bool]:  # type: ignore[no-untyped-def]
@@ -519,6 +524,123 @@ TRANSACTION_NATURE_VIEW = view_table(
     "vw_transaction_nature", TRANSACTION_NATURE_DEFINITION
 )
 
+
+def transfer_rule_predicate(
+    rules,  # type: ignore[no-untyped-def]
+    *,
+    scope: str,
+    merchant: object,
+    category_major: object,
+    category_minor: object,
+) -> ColumnElement[bool]:
+    """A human transfer-purpose rule matches a transfer (T061).
+
+    Merchant scope: the same normalized ``merchant`` (counterparty). Category
+    scope: the same effective major category and either the same minor
+    (including "no minor") or a whole-major rule (``category_minor`` NULL).
+    Shared by the SQL view and the service so matching has one definition.
+    """
+    if scope == "merchant":
+        return and_(rules.c.match_scope == "merchant", rules.c.merchant == merchant)
+    return and_(
+        rules.c.match_scope == "category",
+        rules.c.category_major == category_major,
+        or_(
+            rules.c.category_minor.is_not_distinct_from(category_minor),
+            rules.c.category_minor.is_(None),
+        ),
+    )
+
+
+def transfer_rule_order(rules, scope: str) -> tuple[ColumnElement, ...]:  # type: ignore[no-untyped-def]
+    """Exact minor before whole-major (category scope); then lowest id."""
+    if scope == "merchant":
+        return (rules.c.id,)
+    return (case((rules.c.category_minor.is_(None), 1), else_=0), rules.c.id)
+
+
+def _transfer_purpose_select() -> Select:
+    """Resolved purpose per effective 이체 (T061).
+
+    Precedence: transaction-level purpose > merchant-scope rule >
+    category-scope rule > ``undecided``. Nothing is inferred: a transfer no
+    human marked (directly or by a rule) stays ``undecided``.
+    """
+    tx = METRIC_TRANSACTIONS_VIEW
+    merchant_rule = _transfer_rules.alias("merchant_rule")
+    category_rule = _transfer_rules.alias("category_rule")
+
+    def first_rule(rule, scope: str):  # type: ignore[no-untyped-def]
+        return (
+            select(rule.c.id)
+            .where(
+                transfer_rule_predicate(
+                    rule,
+                    scope=scope,
+                    merchant=tx.c.merchant,
+                    category_major=tx.c.effective_category_major,
+                    category_minor=tx.c.effective_category_minor,
+                )
+            )
+            .order_by(*transfer_rule_order(rule, scope))
+            .limit(1)
+            .scalar_subquery()
+        )
+
+    base = (
+        select(
+            tx.c.id.label("transaction_id"),
+            tx.c.date,
+            tx.c.period,
+            tx.c.amount,
+            tx.c.currency,
+            tx.c.merchant,
+            tx.c.description,
+            tx.c.effective_category_major,
+            tx.c.effective_category_minor,
+            _transfer_overrides.c.purpose.label("transaction_purpose"),
+            first_rule(merchant_rule, "merchant").label("merchant_rule_id"),
+            first_rule(category_rule, "category").label("category_rule_id"),
+        )
+        .select_from(
+            tx.outerjoin(
+                _transfer_overrides, _transfer_overrides.c.transaction_id == tx.c.id
+            )
+        )
+        .where(tx.c.type == TRANSFER)
+        .subquery("transfer_base")
+    )
+    rule = _transfer_rules.alias("applied_rule")
+    rule_id = func.coalesce(base.c.merchant_rule_id, base.c.category_rule_id)
+    return select(
+        base.c.transaction_id,
+        base.c.date,
+        base.c.period,
+        base.c.amount,
+        base.c.currency,
+        base.c.merchant,
+        base.c.description,
+        base.c.effective_category_major,
+        base.c.effective_category_minor,
+        base.c.transaction_purpose,
+        rule_id.label("rule_id"),
+        rule.c.purpose.label("rule_purpose"),
+        func.coalesce(
+            base.c.transaction_purpose, rule.c.purpose, literal("undecided")
+        ).label("purpose"),
+        case(
+            (base.c.transaction_purpose.is_not(None), literal("transaction")),
+            (base.c.merchant_rule_id.is_not(None), literal("rule_merchant")),
+            (base.c.category_rule_id.is_not(None), literal("rule_category")),
+            else_=literal("none"),
+        ).label("purpose_source"),
+    ).select_from(base.outerjoin(rule, rule.c.id == rule_id))
+
+
+TRANSFER_PURPOSE_DEFINITION = _transfer_purpose_select()
+TRANSFER_PURPOSE_VIEW = view_table("vw_transfer_purpose", TRANSFER_PURPOSE_DEFINITION)
+
+
 # Classification is read from the transaction whose meaning the line carries:
 # the posting transaction itself, or the original purchase for the part of a
 # refund that a confirmed settlement match allocated to it.
@@ -591,6 +713,7 @@ def _flow_lines_select() -> Select:
     # allocated refund part). Old classification columns are carried only for
     # the legacy aggregate views.
     nature = TRANSACTION_NATURE_VIEW
+    purposes = TRANSFER_PURPOSE_VIEW
     is_expense = lines.c.type == EXPENSE
     axes = (
         select(
@@ -625,11 +748,20 @@ def _flow_lines_select() -> Select:
                 ),
                 else_=null(),
             ).label("mapping_note"),
+            # T061: one human-set purpose per 이체 line (undecided when unset).
+            case(
+                (lines.c.type != TRANSFER, null()),
+                else_=func.coalesce(purposes.c.purpose, literal("undecided")),
+            ).label("transfer_purpose"),
+            case(
+                (lines.c.type != TRANSFER, null()),
+                else_=func.coalesce(purposes.c.purpose_source, literal("none")),
+            ).label("transfer_purpose_source"),
         )
         .select_from(
             lines.outerjoin(
                 nature, nature.c.transaction_id == lines.c.attributed_transaction_id
-            )
+            ).outerjoin(purposes, purposes.c.transaction_id == lines.c.transaction_id)
         )
         .subquery("axes")
     )
@@ -680,6 +812,8 @@ def _flow_lines_select() -> Select:
         axes.c.mapping_note,
         axes.c.recurring_commitment_id,
         axes.c.adjustability_source,
+        axes.c.transfer_purpose,
+        axes.c.transfer_purpose_source,
     )
 
 
@@ -805,6 +939,33 @@ def flow_summary_columns(lines: TableClause = FLOW_LINES_VIEW) -> list[ColumnEle
         _signed_sum(and_(is_expense, lines.c.amount > 0)).label("refund_total"),
         func.coalesce(func.sum(lines.c.amount), 0).label("signed_total"),
         func.count(lines.c.transaction_id.distinct()).label("transaction_count"),
+        # T061 잔여의 행방: transfer_net split by the human-set purpose. Signed
+        # (source sign), so the two legs of a move between ledger accounts net
+        # out inside their purpose instead of being counted twice.
+        _signed_sum(lines.c.transfer_purpose == "investment").label(
+            "transfer_investment_net"
+        ),
+        _signed_sum(lines.c.transfer_purpose == "savings").label(
+            "transfer_savings_net"
+        ),
+        _signed_sum(lines.c.transfer_purpose.in_(["investment", "savings"])).label(
+            "transfer_investment_savings_net"
+        ),
+        _signed_sum(lines.c.transfer_purpose == "internal_move").label(
+            "transfer_internal_move_net"
+        ),
+        _signed_sum(lines.c.transfer_purpose == "undecided").label(
+            "transfer_undecided_net"
+        ),
+        func.coalesce(
+            func.sum(
+                case(
+                    (lines.c.transfer_purpose == "undecided", func.abs(lines.c.amount)),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("transfer_undecided_activity_total"),
     ]
 
 
@@ -898,6 +1059,7 @@ METRIC_VIEWS: tuple[MetricViewDefinition, ...] = (
     MetricViewDefinition("vw_metric_refund_allocations", REFUND_ALLOCATIONS_DEFINITION),
     MetricViewDefinition("vw_metric_transactions", METRIC_TRANSACTIONS_DEFINITION),
     MetricViewDefinition("vw_transaction_nature", TRANSACTION_NATURE_DEFINITION),
+    MetricViewDefinition("vw_transfer_purpose", TRANSFER_PURPOSE_DEFINITION),
     MetricViewDefinition("vw_metric_flow_lines", FLOW_LINES_DEFINITION),
     MetricViewDefinition("vw_metric_as_of", AS_OF_DEFINITION),
     MetricViewDefinition("vw_monthly_flow", MONTHLY_FLOW_DEFINITION),

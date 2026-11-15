@@ -7,6 +7,10 @@ from app.schemas.read_surface import (
     ReadSurfaceIndexResponse,
 )
 from app.services.metric_views import FLOW_DEFINITION, SPEND_CUBE_DEFINITION
+from app.services.net_worth_service import (
+    EMERGENCY_FUND_DEFINITION,
+    RECONCILIATION_DEFINITION,
+)
 
 READ_PREFIX = "/api/v1/read"
 
@@ -99,15 +103,52 @@ def build_index() -> ReadSurfaceIndexResponse:
                 parameters=["period"],
             ),
             ReadSurfaceEntry(
+                key="net_worth_intervals",
+                name="스냅샷 구간 목록",
+                path="/api/v1/metrics/net-worth/intervals",
+                questions=["Q5"],
+                definition=RECONCILIATION_DEFINITION,
+                availability="live",
+                availability_label=live,
+                provided_by="T061",
+                parameters=[],
+                notes=(
+                    "종류별 스냅샷 날짜와 연속된 자산 스냅샷 구간. "
+                    "공통 봉투 없이 지표 응답을 그대로 준다. 상태 어휘가 따로 있다 "
+                    "(응답의 status, status_reasons)."
+                ),
+            ),
+            ReadSurfaceEntry(
                 key="net_worth_reconciliation",
                 name="순자산 대조",
-                path=None,
+                path="/api/v1/metrics/net-worth/reconciliation",
                 questions=["Q5"],
-                definition="(T061에서 정함)",
-                availability="reserved",
-                availability_label="예약됨",
+                definition=RECONCILIATION_DEFINITION,
+                availability="live",
+                availability_label=live,
                 provided_by="T061",
-                notes="재무상태와 순자산 대조는 T061이 제공한다. 경로는 T061 병합 뒤 채운다.",
+                parameters=["start_date", "end_date"],
+                notes=(
+                    "순자산 변동 = 잔여 + 대출 잔액 감소 + 투자 평가 변동 + 설명되지 않는 차이. "
+                    "공통 봉투 없이 지표 응답을 그대로 준다. 상태 어휘가 따로 있다 "
+                    "(응답의 status, status_reasons)."
+                ),
+            ),
+            ReadSurfaceEntry(
+                key="emergency_fund",
+                name="비상금 개월 수",
+                path="/api/v1/metrics/net-worth/emergency-fund",
+                questions=["Q5"],
+                definition=EMERGENCY_FUND_DEFINITION,
+                availability="live",
+                availability_label=live,
+                provided_by="T061",
+                parameters=[],
+                notes=(
+                    "현금성 자산 ÷ 월 보호 지급. "
+                    "공통 봉투 없이 지표 응답을 그대로 준다. 상태 어휘가 따로 있다 "
+                    "(응답의 status, status_reasons)."
+                ),
             ),
             entry(
                 key="data_status",
