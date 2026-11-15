@@ -11,6 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
+from app.services.nature_axes_service import write_through_legacy_classification
 
 HEADERS = {"X-API-Key": "test-api-key"}
 
@@ -41,6 +42,9 @@ def tx(
 
 async def add(session: AsyncSession, rows: list[Transaction]) -> None:
     session.add_all(rows)
+    await session.commit()
+    # T056: legacy necessity reaches the views through the two-axis tables.
+    await write_through_legacy_classification(session, [row.id for row in rows])
     await session.commit()
 
 

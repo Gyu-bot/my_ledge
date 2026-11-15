@@ -131,7 +131,7 @@ async def get_monthly_cashflow(
     contract = await build_flow_contract(
         db_session,
         definition="monthly_cashflow.legacy_v1",
-        scope="월별 수입·총지급·이체 활동. 월 흐름표(monthly_flow.v1)와 같은 줄에서 계산",
+        scope="월별 수입·총지급·이체 활동. 월 흐름표(monthly_flow.v2)와 같은 줄에서 계산",
         start_date=start_date,
         end_date=end_date,
         field_scopes={

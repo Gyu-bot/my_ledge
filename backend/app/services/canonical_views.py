@@ -596,12 +596,23 @@ METRIC_VIEW_DESCRIPTIONS = {
         "and superseded rows; keeps every currency with currency column; adds loan "
         "and installment links and confirmed refund allocation totals."
     ),
+    "vw_transaction_nature": (
+        "Two-axis nature per effective transaction (T056): payment_form "
+        "(committed/ad_hoc/not_applicable) with commitment_kind "
+        "(loan/installment/recurring) and recurring_commitment_id, and "
+        "adjustability (protected/adjustable/undecided/not_applicable) with "
+        "adjustability_source (fixed_loan/fixed_installment/transaction/"
+        "commitment/category_default/none) and the value at each level. 수입·이체 "
+        "are not_applicable and never undecided."
+    ),
     "vw_metric_flow_lines": (
         "Every won of every effective KRW transaction assigned to exactly one "
         "monthly-flow row (flow_section/flow_row) with payment form and "
-        "adjustability read from existing classification columns. Refunds stay in "
-        "their posting month; confirmed allocations take the original purchase's "
-        "classification. Prefer this over re-aggregating vw_transactions_effective."
+        "adjustability read from vw_transaction_nature (T056 two axes). Refunds "
+        "stay in their posting month; confirmed allocations take the original "
+        "purchase's classification. Legacy cost_kind/necessity/recurring columns "
+        "are carried only for the legacy aggregate views. Prefer this over "
+        "re-aggregating vw_transactions_effective."
     ),
     "vw_metric_as_of": (
         "Single-row data status: transaction as-of date, last closed and "

@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.transaction import Transaction
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.services.canonical_views import build_transactions_effective_select
+from app.services.nature_axes_service import (
+    LEGACY_CLASSIFICATION_FIELDS,
+    write_through_legacy_classification,
+)
 from app.schemas.transaction import (
     CategorySummaryItem,
     CategorySummaryResponse,
@@ -332,6 +336,9 @@ async def create_transaction(
         source="manual",
     )
     db_session.add(transaction)
+    if LEGACY_CLASSIFICATION_FIELDS & payload.model_fields_set:
+        await db_session.flush()
+        await write_through_legacy_classification(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
     return _serialize_transaction_model(transaction)
@@ -345,6 +352,8 @@ async def update_transaction(
     transaction = await _get_transaction_or_404(db_session, transaction_id)
     update_fields = payload.model_dump(exclude_unset=True)
     _apply_transaction_updates(transaction, update_fields)
+    if LEGACY_CLASSIFICATION_FIELDS & update_fields.keys():
+        await write_through_legacy_classification(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
     return _serialize_transaction_model(transaction)
@@ -488,6 +497,10 @@ async def bulk_update_transactions(
     update_fields = payload.model_dump(exclude={"ids"}, exclude_unset=True)
     for transaction in transactions:
         _apply_transaction_updates(transaction, update_fields)
+    if LEGACY_CLASSIFICATION_FIELDS & update_fields.keys():
+        await write_through_legacy_classification(
+            db_session, [transaction.id for transaction in transactions]
+        )
     await db_session.commit()
     return TransactionBulkUpdateResponse(updated=len(transactions))
 

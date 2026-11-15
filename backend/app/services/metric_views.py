@@ -1,13 +1,15 @@
-"""Single SQL definition of the metric view layer (T054/T055).
+"""Single SQL definition of the metric view layer (T054/T055/T056).
 
 Chain: transactions -> vw_metric_refund_allocations / vw_metric_transactions
-(effective transactions) -> vw_metric_flow_lines (every KRW won of every
-effective transaction assigned to exactly one monthly-flow row) ->
-vw_monthly_flow, vw_monthly_flow_summary, vw_spend_cube.
+(effective transactions) -> vw_transaction_nature (two-axis nature per
+transaction, T056) -> vw_metric_flow_lines (every KRW won of every effective
+transaction assigned to exactly one monthly-flow row) -> vw_monthly_flow,
+vw_monthly_flow_summary, vw_spend_cube.
 
-The PostgreSQL views are created by Alembic migration 20261115_0035 from a
-frozen copy of the SQL compiled here; ``tests/migrations`` guards that the
-frozen SQL and these definitions never drift. Services read the views by name
+The PostgreSQL views are created by the newest metric-view Alembic migration
+(20261115_0038, superseding 0035) from a frozen copy of the SQL compiled here;
+``tests/migrations`` guards that the frozen SQL and these definitions never
+drift. Services read the views by name
 through the ``*_VIEW`` table handles below and must not re-aggregate the same
 actuals in Python.
 """
@@ -42,12 +44,17 @@ from app.models.insurance_contract import InsuranceContract
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.loan_transaction_link import LoanTransactionLink
+from app.models.nature_axes import (
+    CategoryAdjustabilityDefault,
+    RecurringCommitment,
+    TransactionNatureOverride,
+)
 from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction
 from app.models.user_profile_snapshot import UserProfileSnapshot
 
-FLOW_DEFINITION = "monthly_flow.v1"
-SPEND_CUBE_DEFINITION = "spend_cube.v1"
+FLOW_DEFINITION = "monthly_flow.v2"
+SPEND_CUBE_DEFINITION = "spend_cube.v2"
 METRIC_CURRENCY = "KRW"
 EXPENSE = "지출"
 INCOME = "수입"
@@ -133,6 +140,9 @@ _transactions = Transaction.__table__
 _matches = SettlementMatch.__table__
 _loan_links = LoanTransactionLink.__table__
 _installment_links = InstallmentTransactionLink.__table__
+_commitments = RecurringCommitment.__table__
+_defaults = CategoryAdjustabilityDefault.__table__
+_overrides = TransactionNatureOverride.__table__
 
 
 def _is_effective(transactions) -> ColumnElement[bool]:  # type: ignore[no-untyped-def]
@@ -278,6 +288,237 @@ METRIC_TRANSACTIONS_VIEW = view_table(
     "vw_metric_transactions", METRIC_TRANSACTIONS_DEFINITION
 )
 
+
+def commitment_match_predicate(
+    commitments,  # type: ignore[no-untyped-def]
+    *,
+    merchant: object,
+    category_major: object,
+    category_minor: object,
+    on_date: object,
+) -> ColumnElement[bool]:
+    """A recurring commitment's rule matches a transaction (T056).
+
+    Merchant-scope bundles need the same merchant; both scopes need the same
+    effective category (major, and minor including "no minor"), and the date
+    must fall in ``[start_date, end_date]`` (open ends allowed). Shared by the
+    SQL view and the write-through service so membership has one definition.
+    """
+    return and_(
+        commitments.c.category_major == category_major,
+        commitments.c.category_minor.is_not_distinct_from(category_minor),
+        or_(
+            commitments.c.match_scope == "category",
+            and_(
+                commitments.c.match_scope == "merchant",
+                commitments.c.merchant == merchant,
+            ),
+        ),
+        or_(commitments.c.start_date.is_(None), commitments.c.start_date <= on_date),
+        or_(commitments.c.end_date.is_(None), commitments.c.end_date >= on_date),
+    )
+
+
+def commitment_match_order(commitments) -> tuple[ColumnElement, ...]:  # type: ignore[no-untyped-def]
+    """Merchant-scope bundles win over category-scope ones; then lowest id."""
+    return (
+        case((commitments.c.match_scope == "merchant", 0), else_=1),
+        commitments.c.id,
+    )
+
+
+def category_default_predicate(
+    defaults,  # type: ignore[no-untyped-def]
+    *,
+    category_major: object,
+    category_minor: object,
+) -> ColumnElement[bool]:
+    """Exact (major, minor) default, or a whole-major default (minor NULL)."""
+    return and_(
+        defaults.c.category_major == category_major,
+        or_(
+            defaults.c.category_minor.is_not_distinct_from(category_minor),
+            defaults.c.category_minor.is_(None),
+        ),
+    )
+
+
+def category_default_order(defaults) -> tuple[ColumnElement, ...]:  # type: ignore[no-untyped-def]
+    return (case((defaults.c.category_minor.is_(None), 1), else_=0),)
+
+
+def _transaction_nature_select() -> Select:
+    """Resolved payment form and adjustability per effective transaction.
+
+    Adjustability precedence for 지출: loan/installment link (fixed protected)
+    > transaction-level value > recurring-commitment value > category default
+    > undecided. 수입/이체 and other types are ``not_applicable``.
+    """
+    tx = METRIC_TRANSACTIONS_VIEW
+    overrides = _overrides
+    rule = _commitments.alias("rule_commitment")
+    default = _defaults.alias("category_default")
+    rule_commitment = (
+        select(rule.c.id)
+        .where(
+            commitment_match_predicate(
+                rule,
+                merchant=tx.c.merchant,
+                category_major=tx.c.effective_category_major,
+                category_minor=tx.c.effective_category_minor,
+                on_date=tx.c.date,
+            )
+        )
+        .order_by(*commitment_match_order(rule))
+        .limit(1)
+        .scalar_subquery()
+    )
+    category_default = (
+        select(default.c.adjustability)
+        .where(
+            category_default_predicate(
+                default,
+                category_major=tx.c.effective_category_major,
+                category_minor=tx.c.effective_category_minor,
+            )
+        )
+        .order_by(*category_default_order(default))
+        .limit(1)
+        .scalar_subquery()
+    )
+    base = (
+        select(
+            tx.c.id.label("transaction_id"),
+            tx.c.type,
+            tx.c.date,
+            tx.c.period,
+            tx.c.effective_category_major,
+            tx.c.effective_category_minor,
+            tx.c.merchant,
+            tx.c.loan_account_id,
+            tx.c.installment_plan_id,
+            overrides.c.adjustability.label("transaction_adjustability"),
+            overrides.c.commitment_id.label("explicit_commitment_id"),
+            func.coalesce(overrides.c.excluded_from_commitments, false()).label(
+                "excluded_from_commitments"
+            ),
+            func.coalesce(overrides.c.installment_link_unconfirmed, false()).label(
+                "installment_link_flag"
+            ),
+            func.coalesce(overrides.c.necessity_conflict, false()).label(
+                "necessity_conflict"
+            ),
+            rule_commitment.label("rule_commitment_id"),
+            category_default.label("category_default_adjustability"),
+        )
+        .select_from(tx.outerjoin(overrides, overrides.c.transaction_id == tx.c.id))
+        .subquery("nature_base")
+    )
+    is_expense = base.c.type == EXPENSE
+    linked = or_(
+        base.c.loan_account_id.is_not(None), base.c.installment_plan_id.is_not(None)
+    )
+    no_membership = or_(
+        not_(is_expense), linked, base.c.excluded_from_commitments == true()
+    )
+    staged = select(
+        *base.c,
+        case(
+            (no_membership, null()),
+            else_=func.coalesce(
+                base.c.explicit_commitment_id, base.c.rule_commitment_id
+            ),
+        ).label("recurring_commitment_id"),
+        case(
+            (no_membership, null()),
+            (base.c.explicit_commitment_id.is_not(None), literal("explicit")),
+            (base.c.rule_commitment_id.is_not(None), literal("rule")),
+            else_=null(),
+        ).label("commitment_match"),
+    ).subquery("nature_staged")
+
+    commitment = _commitments.alias("member_commitment")
+    is_expense = staged.c.type == EXPENSE
+    commitment_kind = case(
+        (not_(is_expense), null()),
+        (staged.c.loan_account_id.is_not(None), literal("loan")),
+        (staged.c.installment_plan_id.is_not(None), literal("installment")),
+        (staged.c.recurring_commitment_id.is_not(None), literal("recurring")),
+        else_=null(),
+    )
+    commitment_adjustability = case(
+        (staged.c.recurring_commitment_id.is_(None), null()),
+        else_=commitment.c.adjustability,
+    )
+    return select(
+        staged.c.transaction_id,
+        staged.c.type,
+        staged.c.date,
+        staged.c.period,
+        staged.c.effective_category_major,
+        staged.c.effective_category_minor,
+        staged.c.merchant,
+        staged.c.loan_account_id,
+        staged.c.installment_plan_id,
+        staged.c.recurring_commitment_id,
+        staged.c.commitment_match,
+        commitment_kind.label("commitment_kind"),
+        case(
+            (not_(is_expense), literal("not_applicable")),
+            (commitment_kind.is_not(None), literal("committed")),
+            else_=literal("ad_hoc"),
+        ).label("payment_form"),
+        staged.c.transaction_adjustability,
+        commitment_adjustability.label("commitment_adjustability"),
+        staged.c.category_default_adjustability,
+        case(
+            (not_(is_expense), literal("not_applicable")),
+            (staged.c.loan_account_id.is_not(None), literal("protected")),
+            (staged.c.installment_plan_id.is_not(None), literal("protected")),
+            else_=func.coalesce(
+                staged.c.transaction_adjustability,
+                commitment_adjustability,
+                staged.c.category_default_adjustability,
+                literal("undecided"),
+            ),
+        ).label("adjustability"),
+        case(
+            (not_(is_expense), literal("not_applicable")),
+            (staged.c.loan_account_id.is_not(None), literal("fixed_loan")),
+            (staged.c.installment_plan_id.is_not(None), literal("fixed_installment")),
+            (staged.c.transaction_adjustability.is_not(None), literal("transaction")),
+            (commitment_adjustability.is_not(None), literal("commitment")),
+            (
+                staged.c.category_default_adjustability.is_not(None),
+                literal("category_default"),
+            ),
+            else_=literal("none"),
+        ).label("adjustability_source"),
+        staged.c.excluded_from_commitments,
+        case(
+            (
+                and_(
+                    is_expense,
+                    staged.c.installment_plan_id.is_(None),
+                    staged.c.installment_link_flag == true(),
+                ),
+                true(),
+            ),
+            else_=false(),
+        ).label("installment_link_unconfirmed"),
+        staged.c.necessity_conflict,
+    ).select_from(
+        staged.outerjoin(
+            commitment, commitment.c.id == staged.c.recurring_commitment_id
+        )
+    )
+
+
+TRANSACTION_NATURE_DEFINITION = _transaction_nature_select()
+TRANSACTION_NATURE_VIEW = view_table(
+    "vw_transaction_nature", TRANSACTION_NATURE_DEFINITION
+)
+
 # Classification is read from the transaction whose meaning the line carries:
 # the posting transaction itself, or the original purchase for the part of a
 # refund that a confirmed settlement match allocated to it.
@@ -345,92 +586,57 @@ def _flow_lines_select() -> Select:
     )
     lines = union_all(self_lines, allocation_lines).subquery("lines")
 
-    # Stage 1: conflicts in the existing classification columns. Ambiguous
-    # combinations are kept visible and routed to the undecided row.
+    # Stage 1 (T056): the two axes come from vw_transaction_nature of the
+    # transaction whose meaning the line carries (the original purchase for an
+    # allocated refund part). Old classification columns are carried only for
+    # the legacy aggregate views.
+    nature = TRANSACTION_NATURE_VIEW
     is_expense = lines.c.type == EXPENSE
-    staged = select(
-        *lines.c,
-        case(
-            (not_(is_expense), null()),
-            (
-                or_(
-                    lines.c.loan_account_id.is_not(None),
-                    lines.c.installment_plan_id.is_not(None),
+    axes = (
+        select(
+            *lines.c,
+            case((not_(is_expense), null()), else_=nature.c.commitment_kind).label(
+                "commitment_kind"
+            ),
+            case(
+                (not_(is_expense), literal("not_applicable")),
+                else_=func.coalesce(nature.c.adjustability, literal("undecided")),
+            ).label("adjustability"),
+            case(
+                (not_(is_expense), literal("not_applicable")),
+                else_=func.coalesce(nature.c.adjustability_source, literal("none")),
+            ).label("adjustability_source"),
+            case(
+                (not_(is_expense), null()), else_=nature.c.recurring_commitment_id
+            ).label("recurring_commitment_id"),
+            case(
+                (not_(is_expense), null()),
+                (
+                    nature.c.installment_link_unconfirmed == true(),
+                    literal("installment_link_unconfirmed"),
                 ),
-                null(),
-            ),
-            (
-                and_(
-                    lines.c.cost_kind == "fixed",
-                    lines.c.recurring_payment_kind == "not_recurring",
+                (
+                    and_(
+                        nature.c.necessity_conflict == true(),
+                        func.coalesce(nature.c.adjustability, literal("undecided"))
+                        == "undecided",
+                    ),
+                    literal("necessity_conflict"),
                 ),
-                literal("fixed_cost_marked_not_recurring"),
-            ),
-            (
-                and_(
-                    lines.c.cost_kind == "variable",
-                    lines.c.recurring_payment_kind == "monthly_recurring",
-                ),
-                literal("variable_cost_marked_monthly_recurring"),
-            ),
-            (
-                lines.c.recurring_payment_kind == "installment",
-                literal("installment_kind_without_plan_link"),
-            ),
-            else_=null(),
-        ).label("payment_form_conflict"),
-        case(
-            (
-                and_(
-                    lines.c.cost_kind == "fixed",
-                    lines.c.fixed_cost_necessity.is_not(None),
-                    lines.c.spend_necessity.is_not(None),
-                    lines.c.fixed_cost_necessity != lines.c.spend_necessity,
-                ),
-                literal("necessity_conflict"),
-            ),
-            (
-                lines.c.cost_kind == "fixed",
-                func.coalesce(lines.c.fixed_cost_necessity, lines.c.spend_necessity),
-            ),
-            else_=lines.c.spend_necessity,
-        ).label("necessity"),
-    ).subquery("staged")
-
-    # Stage 2: payment form (지급 형태) and adjustability (조정 가능성).
-    is_expense = staged.c.type == EXPENSE
-    linked = or_(
-        staged.c.loan_account_id.is_not(None),
-        staged.c.installment_plan_id.is_not(None),
+                else_=null(),
+            ).label("mapping_note"),
+        )
+        .select_from(
+            lines.outerjoin(
+                nature, nature.c.transaction_id == lines.c.attributed_transaction_id
+            )
+        )
+        .subquery("axes")
     )
-    axes = select(
-        *staged.c,
-        case(
-            (not_(is_expense), null()),
-            (staged.c.loan_account_id.is_not(None), literal("loan")),
-            (staged.c.installment_plan_id.is_not(None), literal("installment")),
-            (staged.c.payment_form_conflict.is_not(None), null()),
-            (staged.c.cost_kind == "fixed", literal("recurring")),
-            (
-                and_(
-                    staged.c.cost_kind.is_(None),
-                    staged.c.recurring_payment_kind == "monthly_recurring",
-                ),
-                literal("recurring"),
-            ),
-            else_=null(),
-        ).label("commitment_kind"),
-        case(
-            (not_(is_expense), literal("not_applicable")),
-            (linked, literal("protected")),
-            (staged.c.necessity == "essential", literal("protected")),
-            (staged.c.necessity == "discretionary", literal("adjustable")),
-            else_=literal("undecided"),
-        ).label("adjustability"),
-    ).subquery("axes")
 
-    # Stage 3: the single monthly-flow row each line lands in.
+    # Stage 2: the single monthly-flow row each line lands in.
     is_expense = axes.c.type == EXPENSE
+    decided = axes.c.adjustability.in_(["protected", "adjustable"])
     flow_row = case(
         (axes.c.type == INCOME, literal("income_undetermined")),
         (axes.c.type == TRANSFER, literal("transfer_undetermined")),
@@ -438,7 +644,6 @@ def _flow_lines_select() -> Select:
         (axes.c.commitment_kind == "loan", literal("committed_loan")),
         (axes.c.commitment_kind == "installment", literal("committed_installment")),
         (axes.c.commitment_kind == "recurring", literal("committed_recurring")),
-        (axes.c.payment_form_conflict.is_not(None), literal("undecided")),
         (axes.c.adjustability == "protected", literal("ad_hoc_protected")),
         (axes.c.adjustability == "adjustable", literal("ad_hoc_adjustable")),
         else_=literal("undecided"),
@@ -448,26 +653,13 @@ def _flow_lines_select() -> Select:
         (axes.c.type == TRANSFER, literal("transfer")),
         (not_(is_expense), literal("other")),
         (axes.c.commitment_kind.is_not(None), literal("committed")),
-        (axes.c.payment_form_conflict.is_not(None), literal("undecided")),
-        (axes.c.adjustability == "undecided", literal("undecided")),
-        else_=literal("ad_hoc"),
+        (decided, literal("ad_hoc")),
+        else_=literal("undecided"),
     )
     payment_form = case(
         (not_(is_expense), literal("not_applicable")),
         (axes.c.commitment_kind.is_not(None), literal("committed")),
-        (axes.c.payment_form_conflict.is_not(None), literal("undetermined")),
         else_=literal("ad_hoc"),
-    )
-    mapping_note = case(
-        (axes.c.payment_form_conflict.is_not(None), axes.c.payment_form_conflict),
-        (
-            and_(
-                axes.c.adjustability == "undecided",
-                axes.c.necessity == "necessity_conflict",
-            ),
-            literal("necessity_conflict"),
-        ),
-        else_=null(),
     )
     return select(
         axes.c.transaction_id,
@@ -485,7 +677,9 @@ def _flow_lines_select() -> Select:
         axes.c.adjustability,
         flow_section.label("flow_section"),
         flow_row.label("flow_row"),
-        mapping_note.label("mapping_note"),
+        axes.c.mapping_note,
+        axes.c.recurring_commitment_id,
+        axes.c.adjustability_source,
     )
 
 
@@ -703,6 +897,7 @@ class MetricViewDefinition:
 METRIC_VIEWS: tuple[MetricViewDefinition, ...] = (
     MetricViewDefinition("vw_metric_refund_allocations", REFUND_ALLOCATIONS_DEFINITION),
     MetricViewDefinition("vw_metric_transactions", METRIC_TRANSACTIONS_DEFINITION),
+    MetricViewDefinition("vw_transaction_nature", TRANSACTION_NATURE_DEFINITION),
     MetricViewDefinition("vw_metric_flow_lines", FLOW_LINES_DEFINITION),
     MetricViewDefinition("vw_metric_as_of", AS_OF_DEFINITION),
     MetricViewDefinition("vw_monthly_flow", MONTHLY_FLOW_DEFINITION),

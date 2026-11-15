@@ -195,6 +195,7 @@ async def test_schema_endpoint_returns_tables(
         # T054 metric view layer
         "vw_metric_refund_allocations",
         "vw_metric_transactions",
+        "vw_transaction_nature",  # T056 two-axis nature
         "vw_metric_flow_lines",
         "vw_metric_as_of",
         "vw_monthly_flow",
