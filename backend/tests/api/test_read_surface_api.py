@@ -281,7 +281,11 @@ async def test_index_lists_surface_with_questions_and_versions(
 ):
     body = (await async_client.get("/api/v1/read/index", headers=api_headers)).json()
     paths = {entry["path"] for entry in body["entries"] if entry["path"]}
-    assert paths == set(ENVELOPE_PATHS)
+    net_worth = {
+        f"/api/v1/metrics/net-worth/{name}"
+        for name in ("intervals", "reconciliation", "emergency-fund")
+    }
+    assert paths == set(ENVELOPE_PATHS) | net_worth
     covered = {question for entry in body["entries"] for question in entry["questions"]}
     assert covered == {"Q1", "Q2", "Q3", "Q4", "Q5", "Q6"}
     assert all(entry["definition"] for entry in body["entries"])

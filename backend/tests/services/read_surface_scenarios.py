@@ -26,6 +26,8 @@ from read_surface_ledger import (
 )
 
 HEADERS = {"X-API-Key": "test-api-key"}
+# Q5 is answered by the T061 metric responses the index points at.
+INDEXED_PREFIXES = ("/api/v1/read/", "/api/v1/metrics/net-worth/")
 RAW_TRANSACTION_PREFIXES = ("/api/v1/transactions", "/api/v1/installment-transaction")
 
 
@@ -202,14 +204,15 @@ async def answer_q4(client: AsyncClient) -> None:
 
 
 async def answer_q5(client: AsyncClient) -> None:
-    """Net-worth reconciliation is reserved for T061 in the index."""
+    """The index points Q5 at the live net-worth reconciliation (T061)."""
     index = await _get(client, "index")
-    entry = [
-        item for item in index["entries"] if item["key"] == "net_worth_reconciliation"
-    ]
-    assert entry and entry[0]["availability"] == "reserved"
-    assert entry[0]["provided_by"] == "T061"
-    assert entry[0]["questions"] == ["Q5"]
+    entries = {item["key"]: item for item in index["entries"]}
+    for key in ("net_worth_intervals", "net_worth_reconciliation", "emergency_fund"):
+        assert entries[key]["availability"] == "live"
+        assert entries[key]["provided_by"] == "T061"
+        assert entries[key]["questions"] == ["Q5"]
+        response = await client.get(entries[key]["path"], headers=HEADERS)
+        assert response.status_code == 200
 
 
 async def answer_q6(client: AsyncClient) -> None:
@@ -246,6 +249,6 @@ async def answer_questions(client: AsyncClient) -> RequestLog:
     log = recording_hook(client)
     for question in QUESTIONS:
         await question(client)
-    assert all(path.startswith("/api/v1/read/") for path in log.paths), log.paths
+    assert all(path.startswith(INDEXED_PREFIXES) for path in log.paths), log.paths
     assert not any(path.startswith(RAW_TRANSACTION_PREFIXES) for path in log.paths)
     return log

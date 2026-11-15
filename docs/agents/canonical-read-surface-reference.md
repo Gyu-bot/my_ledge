@@ -502,7 +502,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | Q2 무엇이 변했고 얼마씩 기여했나 | `/read/comparison/monthly-flow`, `/read/comparison/contributions` |
 | Q3 조정할 수 있는 지출은 얼마이고 어디에 있나 | `/read/spend-cube?adjustability=adjustable`, `/read/comparison/contributions?adjustability=adjustable`, `/read/review-items` |
 | Q4 매달 묶여 있는 지급은 얼마이고 언제 끝나나 | `/read/commitments` |
-| Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `T061`이 제공(색인에 예약됨). 그 전까지는 기존 자산 엔드포인트 |
+| Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `/api/v1/metrics/net-worth/intervals`, `/reconciliation`, `/emergency-fund` (`T061`, 색인에 실려 있음) |
 | Q6 언제까지의 자료이고 분류는 얼마나 되었나 | `/read/data-status`, 그리고 모든 응답의 `as_of`·`classification` |
 
 값의 뜻:
