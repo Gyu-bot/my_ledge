@@ -105,6 +105,10 @@ class MonthlyProjection(BaseModel):
     period: str
     as_of_date: date
     observed_through: date | None
+    # First day the remaining-period assumptions cover: the day after the later
+    # of the last observed transaction and the latest upload snapshot in this
+    # month (T064 R10). None when the whole month is already covered.
+    remaining_period_start: date | None = None
     observed_income: int
     expected_remaining_income: int
     projected_month_income: int

@@ -12,11 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.models import AppSetting, Base, Transaction
 from app.services.metric_views import metric_view_ddl
-from app.services.monthly_projection_service import get_monthly_projection
+from app.services.monthly_projection_service import (
+    RENAMED_PAYER_MISSING_REASON,
+    get_monthly_projection,
+)
 from app.tools.forecast_backtest import (
     DATABASE_URL_ENV,
     BacktestConfig,
     BacktestError,
+    _reason_codes,
     collect_points,
     database_url,
     main,
@@ -154,6 +158,16 @@ async def test_pre_payday_and_classification_sections(db_session):
         "installment_plan_status_current",
         "income_expectation_settings_current",
     } <= codes
+
+
+async def test_payer_rename_reason_has_its_own_code(db_session):
+    projection = await get_monthly_projection(
+        db_session, reference_date=date(2031, 7, 20)
+    )
+    projection = projection.model_copy(
+        update={"missing_reasons": [RENAMED_PAYER_MISSING_REASON]}
+    )
+    assert _reason_codes(projection) == ["income_source_possible_payer_rename"]
 
 
 def test_database_url_errors_never_echo_the_url():
