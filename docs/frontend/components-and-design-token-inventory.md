@@ -35,11 +35,10 @@
 ### `navigation`
 
 - Source: `frontend/src/shell/navigation.ts`
-- Canonical main nav:
-  - `/`
-  - `/spending`
-  - `/net-worth`
-  - `/signals`
+- Canonical main nav (T058):
+  - `/` 월 결산
+  - `/analysis` 지출 분석
+  - `/net-worth` 자산·부채
 - Canonical data nav:
   - `/data/inbox`
   - `/data/transactions`
@@ -50,6 +49,11 @@
   - `/data/settings`
   - `/data/import`
   - `/data/reference`
+
+### `LegacySpendingRedirect`
+
+- Source: `frontend/src/shell/LegacySpendingRedirect.tsx`
+- 예전 `/spending?lens=…` 주소를 탭에 따라 `/` 또는 `/analysis`로 보낸다. 라우트 등록은 `router.tsx`에 있다.
 
 ## DS Primitives
 
@@ -90,22 +94,21 @@
 
 | Component | Current usage | Token source |
 | --- | --- | --- |
-| `CashflowChart` | home monthly cashflow | `--ds-chart-income`, `--ds-chart-expense`, `--ds-chart-net` |
-| `StackedBars` | spending category trend | `--ds-chart-1..11`, `--ds-chart-other` |
-| `HBarList` | category, asset, investment, merchant lists | caller color or `--ds-accent-fg` |
+| `CashflowChart` | month close 12-month trend (수입·총지급·잔여; optional `labels` prop for legend names) | `--ds-chart-income`, `--ds-chart-expense`, `--ds-chart-net` |
+| `StackedBars` | currently unused by a page (former spending trend) | `--ds-chart-1..11`, `--ds-chart-other` |
+| `HBarList` | net-worth asset and investment lists | caller color or `--ds-accent-fg` |
 | `LineArea` | net-worth history | `--ds-accent-fg`, `--ds-accent-bg`, `--ds-chart-grid` |
-| `MoMList` | category month-over-month signal | income/expense semantic tones |
-| `Treemap` | merchant/category area chart | `--ds-chart-1..11`, `--ds-chart-other` |
-| `CalendarHeat` | daily spending heat grid | expense/accent semantic tones |
+| `MoMList` | currently unused by a page (former category MoM) | income/expense semantic tones |
+| `Treemap` | currently unused by a page (former merchant treemap) | `--ds-chart-1..11`, `--ds-chart-other` |
+| `CalendarHeat` | currently unused by a page (former spending calendar) | expense/accent semantic tones |
 
 ## Feature Pages
 
 | Page | Source | Route |
 | --- | --- | --- |
-| Home | `features/home/HomePage.tsx` | `/` |
-| Spending | `features/spending/SpendingPage.tsx` | `/spending` |
+| Month close (월 결산) | `features/monthclose/MonthClosePage.tsx` (+ `FlowTable`, `ForecastCard`, `TrendCard`) | `/` |
+| Spending analysis (지출 분석) | `features/spending-analysis/SpendingAnalysisPage.tsx` (+ `CategoryBreakdownCard`, `ContributionsCard`, `NewPurchaseCard`, `ReviewItemsCard`) | `/analysis` |
 | Net worth | `features/networth/NetWorthPage.tsx` | `/net-worth` |
-| Signals | `features/signals/SignalsPage.tsx` | `/signals` |
 | Inbox | `features/data/InboxPage.tsx` | `/data/inbox` |
 | Transactions | `features/data/TransactionsPage.tsx` | `/data/transactions` |
 | Loans | `features/data/LoansPage.tsx` | `/data/loans` |
@@ -115,6 +118,16 @@
 | Settings | `features/data/SettingsPage.tsx` | `/data/settings` |
 | Import | `features/data/ImportPage.tsx` | `/data/import` |
 | Reference | `features/data/ReferencePage.tsx` | `/data/reference` |
+
+### Shared analysis pieces (T058)
+
+| Piece | Source | Responsibility | Main tokens |
+| --- | --- | --- | --- |
+| `DataStatusStrip` | `features/analysis/DataStatusStrip.tsx` | 화면 머리의 자료 현황: 거래 기준일, 마감월·진행월, 종류별 스냅샷 기준일, 미정 비중(보는 달·전체), 원화 외 제외 건수 | `bg-bg-surface`, `border-border`, `warn` badge |
+| `AmountDrilldown` | `features/analysis/AmountDrilldown.tsx` | 금액 아래에 그 자리에서 열리는 근거 패널: 산식, 포함·제외, 기준 비교, 카테고리 × 거래처 구성, 거래 목록과 거래 화면 링크 | `bg-bg-raised`, `border-accent-border`, `shadow-raised` |
+| `flowMeasures` | `features/analysis/flowMeasures.ts` | 월 흐름표 금액별 이름·산식·포함/제외 문장과 내역을 여는 조회 조건. 값은 응답에서 그대로 읽는다 | — |
+| `FlowTable` | `features/monthclose/FlowTable.tsx` | 월 흐름표 줄(연산 기호 −, = 를 글자로 표시해 색에만 의존하지 않음), 전체/간단(진행월) 두 모양 | `text-label`, `bg-bg-selected` |
+| `ForecastCard` | `features/monthclose/ForecastCard.tsx` | 진행월 월말 순현금흐름 전망 전용 카드. 추정 색은 이 카드의 가정·전망 값에만 | `border-t-estimate`, `bg-estimate-bg`, `text-estimate` |
 
 ### Settings Page Composition
 
@@ -136,6 +149,7 @@ Current frontend server state is TanStack Query based.
 - Profile: `src/api/profile.ts`, `src/hooks/useProfile.ts`
 - Settings: `src/api/settings.ts`, `src/hooks/useSettings.ts`
 - Schema/canonical reference: `src/api/schema.ts`, `src/api/canonicalViews.ts`, corresponding hooks
+- Metric contract (T058): `src/api/metrics.ts`, `src/hooks/useMetrics.ts`, `src/types/metrics.ts` — `/metrics/data-status`, `/metrics/monthly-flow`, `/metrics/spend-cube`, `/metrics/comparison/*`, `/read/review-items`, `/canonical-views/month-projection/accuracy`, `/transfer-purposes/transactions`
 
 ## Replacement Rules
 

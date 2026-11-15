@@ -29,10 +29,9 @@
 
 | Route | Role |
 | --- | --- |
-| `/` | 홈 대시보드 |
-| `/spending` | 지출 분석 |
+| `/` | 월 결산 (첫 화면, T058) |
+| `/analysis` | 지출 분석 (T058) |
 | `/net-worth` | 자산·부채 |
-| `/signals` | 신호 |
 | `/data/inbox` | 데이터 인박스 |
 | `/data/transactions` | 거래 작업대 |
 | `/data/loans` | 대출 관리 |
@@ -47,9 +46,11 @@
 
 | Route | Target |
 | --- | --- |
-| `/analysis/spending` | `/spending` |
+| `/spending` | 탭에 따라: `?lens=trend\|fixed\|income` → `/`, 그 밖(`composition`, `merchants`, `calendar`, 탭 없음) → `/analysis` (`category` 유지) |
+| `/signals` | `/analysis` |
+| `/analysis/spending` | `/analysis` |
 | `/analysis/assets` | `/net-worth` |
-| `/analysis/insights` | `/signals` |
+| `/analysis/insights` | `/analysis` |
 | `/operations/workbench` | `/data/transactions` |
 | `/operations/loan-mapping` | `/data/loans` |
 | `/operations/installments` | `/data/installments` |
@@ -66,7 +67,7 @@
 ## App Shell Requirements
 
 - Shell은 `left nav + route content` 구조다.
-- Main nav는 홈, 지출, 자산·부채, 신호를 노출한다.
+- Main nav는 월 결산, 지출 분석, 자산·부채를 노출한다 (T058). 약정 현황·작업대 재편은 T059.
 - Data studio nav는 인박스, 거래, 대출, 할부, 자산 메타, 규칙, 설정, 가져오기, 데이터 사전을 노출한다.
 - Page title, meta, controls는 `PageHeader`에서 처리한다.
 - Route mapping은 `frontend/src/router.tsx`, nav mapping은 `frontend/src/shell/navigation.ts`가 source of truth다.
@@ -82,18 +83,27 @@
 
 ## Page Requirements
 
-### Home
+### Month Close (월 결산, T058)
 
-- 현재 기준일과 spendable money를 보여준다.
-- 순자산, 수입, 지출, 저축률 KPI를 보여준다.
-- 현금흐름, 주의 신호, 데이터 품질 작업, 최근 거래를 한 화면에서 스캔 가능하게 배치한다.
+- 첫 화면은 가장 최근 마감월의 월 흐름표다. 마감월을 고를 수 있다(`?month=`).
+- 흐름표는 수입 − 약정 지급(대출 원리금·할부 회차·정기 지급) − 수시 지출(보호·조정 가능) − 미정 = 총지급, 잔여, 잔여의 행방(투자·저축 / 계좌 간 이동 / 목적 미정), 함께 보는 값(생활 지출, 보호, 조정 가능)을 보인다. 금액은 `/metrics/monthly-flow` 값 그대로다.
+- 흐름표의 모든 금액에서 산식, 포함·제외, 해당 거래 목록이 같은 자리에서 열린다.
+- 최근 12개월 추이는 자료 없는 달과 가져오기 전 달을 0원과 구분한다.
+- 진행월 영역은 관측 누적과 월말 순현금흐름 전망을 다른 카드로 나눈다. 전망은 관측 부분, 남은 기간 가정, 월말 값(또는 보류와 이유), 남은 지출 가정의 미정 비중, 지난 마감월 되짚기 오차를 보인다. 신뢰도는 등급 이름만으로 보이지 않고 권고가 아님을 밝힌다.
+- 진행월에는 비율과 지난달 전체 대비 증감을 내지 않는다. 월말 너머의 전망은 없다.
 
-### Spending
+### Spending Analysis (지출 분석, T058)
 
-- 월 범위 quick controls와 start/end select를 제공한다.
-- 수입 포함 여부를 전환할 수 있다.
-- 카테고리 추이, category MoM, breakdown, fixed cost, merchant, calendar, transaction table을 제공한다.
-- 거래 편집은 `/data/transactions`로 연결한다.
+- 대상 달은 마감월(기본: 가장 최근)이나 진행월(같은 경과일 비교)이다(`?period=`).
+- 카테고리 → 거래처 분해는 카테고리를 유지한다. 같은 거래처라도 카테고리가 다르면 따로 센다. 조정 가능성(보호·조정 가능·미정)으로 거를 수 있다.
+- 기준 대비 변화 기여를 금액 순으로 보이고 전체·보호·조정 가능만으로 나눠 볼 수 있다. 기준 기간, 자료 없는 달, 부분월 처리를 함께 밝힌다.
+- 기존 할부 회차를 뺀 지출(`총지급 − 할부 회차`)과 지급 형태별 구성을 보인다.
+- 사후 검토할 거래(`/read/review-items`)를 올라온 이유와 함께 보이고, 위험도·우선순위·신뢰도 점수는 보이지 않는다. 거래는 `/data/transactions?transaction_id=`로 연결한다.
+- 분류를 제안하거나 자동으로 채우지 않는다.
+
+### Common Data Status (T058)
+
+- 월 결산과 지출 분석 머리에 거래 기준일, 종류별 스냅샷 기준일, 조정 가능성 미정 비중을 둔다(`/metrics/data-status`).
 
 ### Net Worth
 
@@ -101,12 +111,6 @@
 - 순자산, 총자산, 총부채, 현금성 자산 KPI를 보여준다.
 - 순자산 추이, 자산 구성, 유동성 health, 대출, 투자, 보험, 할부 forecast를 제공한다.
 - provenance가 필요한 추정값은 출처/가정을 확인할 수 있어야 한다.
-
-### Signals
-
-- 저축률, 수입 변동성, 이상 지출, 재량 지출 속도 KPI를 보여준다.
-- 신호 피드는 severity/status/type 기준으로 스캔 가능해야 한다.
-- 반복 결제, 이상 지출, 구매 게이트 후보는 관련 data/spending route로 연결한다.
 
 ### Data Inbox
 

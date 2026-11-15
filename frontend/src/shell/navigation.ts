@@ -1,11 +1,10 @@
 import type { ComponentType } from 'react'
 import {
-  Activity,
   BarChart2,
   BookOpen,
+  CalendarCheck,
   CreditCard,
   Database,
-  Home,
   Inbox,
   Landmark,
   Scale,
@@ -16,7 +15,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 
-// 새 IA — docs/frontend-remake/02-ia-redesign.md §2
+// IA — Implentation-plan.md 3.1 (T058 월 결산·지출 분석, 나머지 영역은 T059 이후)
 
 export interface NavItem {
   path: string
@@ -25,12 +24,11 @@ export interface NavItem {
   exact?: boolean
 }
 
-/** 최상위 4 (질문 중심) + 데이터 스튜디오 */
+/** 분석 영역 (질문 중심) + 데이터 스튜디오 */
 export const MAIN_NAV: NavItem[] = [
-  { path: '/', label: '홈', Icon: Home, exact: true },
-  { path: '/spending', label: '지출', Icon: BarChart2 },
+  { path: '/', label: '월 결산', Icon: CalendarCheck, exact: true },
+  { path: '/analysis', label: '지출 분석', Icon: BarChart2 },
   { path: '/net-worth', label: '자산·부채', Icon: Scale },
-  { path: '/signals', label: '신호', Icon: Activity },
 ]
 
 /** 데이터 스튜디오 서브 내비 (도메인 단위) */

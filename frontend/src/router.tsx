@@ -1,9 +1,9 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppShell } from './shell/AppShell'
-import { HomePage } from './features/home/HomePage'
+import { LegacySpendingRedirect } from './shell/LegacySpendingRedirect'
+import { MonthClosePage } from './features/monthclose/MonthClosePage'
+import { SpendingAnalysisPage } from './features/spending-analysis/SpendingAnalysisPage'
 import { NetWorthPage } from './features/networth/NetWorthPage'
-import { SignalsPage } from './features/signals/SignalsPage'
-import { SpendingPage } from './features/spending/SpendingPage'
 import { InboxPage } from './features/data/InboxPage'
 import { TransactionsPage } from './features/data/TransactionsPage'
 import { LoansPage } from './features/data/LoansPage'
@@ -14,12 +14,13 @@ import { SettingsPage } from './features/data/SettingsPage'
 import { ImportPage } from './features/data/ImportPage'
 import { ReferencePage } from './features/data/ReferencePage'
 
-// 새 IA — docs/frontend-remake/02-ia-redesign.md §2, §5 (레거시 redirect 포함)
+// IA — Implentation-plan.md 3.1 (T058: 월 결산·지출 분석이 홈·지출 6탭·신호를 대체). 레거시 redirect 포함.
 
 const LEGACY_REDIRECTS: Array<{ from: string; to: string }> = [
-  { from: '/analysis/spending', to: '/spending' },
+  { from: '/analysis/spending', to: '/analysis' },
   { from: '/analysis/assets', to: '/net-worth' },
-  { from: '/analysis/insights', to: '/signals' },
+  { from: '/analysis/insights', to: '/analysis' },
+  { from: '/signals', to: '/analysis' },
   { from: '/operations/workbench', to: '/data/transactions' },
   { from: '/operations/loan-mapping', to: '/data/loans' },
   { from: '/operations/installments', to: '/data/installments' },
@@ -37,10 +38,9 @@ export const routes = [
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'spending', element: <SpendingPage /> },
+      { index: true, element: <MonthClosePage /> },
+      { path: 'analysis', element: <SpendingAnalysisPage /> },
       { path: 'net-worth', element: <NetWorthPage /> },
-      { path: 'signals', element: <SignalsPage /> },
       { path: 'data/inbox', element: <InboxPage /> },
       { path: 'data/transactions', element: <TransactionsPage /> },
       { path: 'data/loans', element: <LoansPage /> },
@@ -53,6 +53,8 @@ export const routes = [
       { path: 'data', element: <Navigate to="/data/inbox" replace /> },
     ],
   },
+  // 예전 /spending?lens=… 는 탭에 따라 나뉜다 (shell/LegacySpendingRedirect.tsx)
+  { path: '/spending', element: <LegacySpendingRedirect /> },
   ...LEGACY_REDIRECTS.map(({ from, to }) => ({ path: from, element: <Navigate to={to} replace /> })),
   { path: '*', element: <Navigate to="/" replace /> },
 ]

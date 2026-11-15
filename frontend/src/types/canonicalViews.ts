@@ -183,11 +183,55 @@ export interface ExpenseProjectionComponent {
   missing_reasons: string[]
   warnings: string[]
   sources: RecurringExpenseProjectionSource[]
+  /** T064 R1/R2: 사람이 등록한 규칙에 맞지만 연결이 확인되지 않은 이번 달 결제 */
+  link_unconfirmed_count?: number
+  link_unconfirmed_amount?: number
+  /** T064 R1: 장부에 지출 줄이 없어 가정에 더하지 않은 대출 */
+  not_in_expense_commitments?: ProjectionCommitmentNotInExpense[]
+  /** T064 R4 (변동 지출만) */
+  twelve_month_window?: ProjectionTwelveMonthWindow | null
+  annual_items?: AnnualExpenseAssumption[]
+}
+export interface ProjectionCommitmentNotInExpense {
+  kind: 'loan'
+  name: string
+  loan_account_id: number | null
+  monthly_amount: number | null
+  checked_periods: string[]
+  reason_code: 'no_expense_line_in_recent_month' | 'no_loan_account'
+  reason: string
+}
+export interface ProjectionTwelveMonthWindow {
+  rule: string
+  start_period: string
+  end_period: string
+  available: boolean
+  unavailable_reason: 'no_data' | 'data_start' | 'baseline_start_date' | null
+}
+export interface AnnualExpenseAssumption {
+  category: string
+  active_months_in_window: number
+  last_year_period: string
+  last_year_same_month_amount: number
+  observed_this_month: number
+  expected_remaining: number
+  basis: string
+}
+/** T064 R12: 남은 지출 가정의 조정 가능성 나눔 */
+export interface ProjectionAdjustabilityShare {
+  basis: string
+  protected_amount: number
+  adjustable_amount: number
+  undecided_amount: number
+  total_amount: number
+  undecided_share_pct: number | null
 }
 export interface MonthlyProjection {
   period: string
   as_of_date: string
   observed_through: string | null
+  /** T064 R10: 남은 기간 가정이 시작하는 날. 월 전체가 관측됐으면 null */
+  remaining_period_start?: string | null
   observed_income: number
   expected_remaining_income: number
   projected_month_income: number
@@ -207,4 +251,7 @@ export interface MonthlyProjection {
   income_sources: IncomeProjectionSource[]
   expense_components: ExpenseProjectionComponent[]
   coverage: ProjectionCoverage
+  /** T064 R11: 기준일을 정한 방법 */
+  as_of_basis?: 'requested_date' | 'transaction_as_of' | 'today_no_data'
+  remaining_expense_adjustability?: ProjectionAdjustabilityShare | null
 }

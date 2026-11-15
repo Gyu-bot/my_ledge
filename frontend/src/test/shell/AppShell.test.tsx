@@ -21,12 +21,17 @@ function renderShell(initialPath = '/') {
 }
 
 describe('AppShell', () => {
-  it('새 IA 내비게이션을 렌더한다 (최상위 4 + 데이터 9)', () => {
+  it('새 IA 내비게이션을 렌더한다 (분석 3 + 데이터 9)', () => {
     renderShell()
     const nav = screen.getByRole('navigation', { name: '주 메뉴' })
-    for (const label of ['홈', '지출', '자산·부채', '신호']) {
+    for (const label of ['월 결산', '지출 분석', '자산·부채']) {
       expect(within(nav).getByText(label)).toBeInTheDocument()
     }
+    for (const label of ['홈', '지출', '신호']) {
+      expect(within(nav).queryByText(label)).not.toBeInTheDocument()
+    }
+    expect(within(nav).getByRole('link', { name: /월 결산/ })).toHaveAttribute('href', '/')
+    expect(within(nav).getByRole('link', { name: /지출 분석/ })).toHaveAttribute('href', '/analysis')
     for (const label of ['인박스', '거래', '대출', '할부', '자산 메타', '규칙', '설정', '가져오기', '데이터 사전']) {
       expect(within(nav).getByText(label)).toBeInTheDocument()
     }
