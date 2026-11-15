@@ -14,17 +14,18 @@
 - 코드를 읽어 찾은 결함과 위험은 16건이다(5절). 그중 11건은 이번에 추가한 합성 시나리오로 재현했고(7절), 2건(F-C5, F-O2)은 기존 테스트가 동작을 덮으며, 3건(F-P1, F-R2, F-V1)은 코드 판독과 요구사항 대비로만 정리했다. F-V1은 실제 자료로 크기를 재야 하는 위험이다. 가장 영향이 큰 것은 **연결되지 않은 대출 상환의 이중 반영(F-C1)**, **지출 기록과 상관없이 스냅샷 월상환액을 더하는 대출 구성요소(F-C4)**, **월말 급여가 한 번 다음 달 1일로 넘어가면 정기 수입이 석 달간 빠지는 문제(F-I1)**, **연 1회 지출 미반영(F-E1)** 이다.
 - 대부분의 결함은 지출을 과대 전망해 월말 순현금흐름을 낮게(비관적으로) 만든다. 반대 방향은 연 1회 지출(F-E1), 이름이 바뀐 급여 입금처(F-I2), 변동 지출의 중앙값 사용(F-V1)이다.
 - 실제 자료의 오차는 아직 재지 않았다. 측정 도구(6절)를 만들었고, 실제 자료 실행은 사용자 쪽에서 한다.
-- 점검 단계에서는 수정하지 않았다. 8절의 수정 제안 R1–R12는 두 차례로 나눠 승인됐고, 1차(R3, R9, R10)를 적용했다(8.1절). 1–7절의 `파일:줄`과 "현재" 설명은 점검 기준 커밋의 동작이며, 1차에서 바뀐 곳은 해당 항목에 "1차 수정"으로 적었다.
+- 점검 단계에서는 수정하지 않았다. 8절의 수정 제안 R1–R12는 두 차례로 나눠 승인됐고, 1차(R3, R9, R10)와 2차(R1, R2, R4–R8, R11, R12)를 적용했다(8.1절). R8은 일부만(사람이 지정하는 수입 축이 `T056`에 없음), R2는 사람이 등록·표시한 경우만 고쳤다. 1–7절의 `파일:줄`과 "현재" 설명은 점검 기준 커밋의 동작이며, 바뀐 곳은 해당 항목에 "1차 수정", "2차 수정"으로 적었다.
 
 ## 1. 전망이 나오는 곳
 
 | 단계 | 위치 | 내용 |
 |---|---|---|
 | HTTP | `backend/app/api/v1/endpoints/canonical_views.py:22`, `:40` | `GET /api/v1/canonical-views/dashboard`. `reference_date`는 선택 쿼리 값이다. |
-| 기준일 결정 | `backend/app/services/canonical_views_dashboard_service.py:211` | `reference_date`가 없으면 **오늘 날짜**를 쓴다. 화면은 이 값을 넘기지 않는다(`frontend/src/features/home/HomePage.tsx:201`, `:213`). |
+| 기준일 결정 | `backend/app/services/canonical_views_dashboard_service.py:211` | `reference_date`가 없으면 **오늘 날짜**를 쓴다. 화면은 이 값을 넘기지 않는다(`frontend/src/features/home/HomePage.tsx:201`, `:213`). 2차 수정(R11): 거래 기준일(`vw_metric_as_of.transaction_as_of`)을 쓰고, 최신 업로드 스냅샷이 같은 달 안에서 더 늦으면 그 날을 쓴다(`resolve_projection_reference_date`). 응답 `as_of_basis`가 어느 쪽인지 밝힌다. |
 | 전망 호출 | `canonical_views_dashboard_service.py:315`, `:379` | `get_monthly_projection(reference_date=기준일)` 결과를 `month_projection`에 싣는다. |
 | 응답 형식 | `backend/app/schemas/income_projection.py:104` (`MonthlyProjection`), `:93` (`ExpenseProjectionComponent`), `:58` (`IncomeProjectionSource`), `:76` (`RecurringExpenseProjectionSource`), `:48` (`ProjectionCoverage`) | |
 | 수입 예상 설정 | `backend/app/services/income_expectations_service.py:10`, `GET/PATCH /settings/income-expectations` | 입금처별 금액·입금일·중단 여부. 이력 없이 현재 값만 있다. |
+| 최근 마감월 오차(2차, R12) | `backend/app/services/projection_accuracy_service.py`, `GET /api/v1/canonical-views/month-projection/accuracy` | 직전 최대 3개 마감월의 5·10·15·20·25일을 같은 전망 코드로 다시 돌린 오차. 읽기 전용, X-API-Key. |
 
 관련하지만 이 점검의 대상이 아닌 표면: `GET /installments/forecast`(`backend/app/services/installment_service.py:301`)는 할부 일정표를 여러 달 앞까지 보여 준다. 월말 순현금흐름 전망과 계산을 공유하지 않는다. 그 `missed` 상태는 `T059`에서 관측 여부 표시로 바뀔 예정이다.
 
@@ -45,6 +46,16 @@
 | 관측 수입·지출 | `vw_metric_flow_lines`에서 그 달 1일 ~ 기준일. 월 흐름표의 `income_total`, `total_outflow`와 같은 정의 | `:781-799` |
 
 거래의 유효 기준(삭제·병합·대체 제외, 원화만)은 지표 뷰와 같다. 전망의 내부 계산은 뷰가 아니라 `vw_metric_transactions`의 원래 금액(환불은 양수 지출 행)을 거래 단위로 읽는다.
+
+2차 수정 뒤 입력:
+
+| 입력 | 읽는 범위 | 쓰는 곳 |
+|---|---|---|
+| 지출 줄 | `vw_metric_flow_lines`의 지출 줄, `[기준월 1일 − 12개월, 기준일]`. 줄마다 `commitment_kind`, `recurring_commitment_id`, `adjustability`, `mapping_note` | 지출 구분(R6). 월 단위 가정은 예전처럼 6개월만 쓰고, 연 주기 묶음과 연간성 지출(R4)만 12개월 |
+| 정기 지급 묶음 | 지출 줄이 가리키는 `recurring_commitments` 행(주기·종료일) | 반복 지출(R4, R5, R6) |
+| 대출 거래처 규칙 | `loan_merchant_rules` 전부(사람이 등록) | 미연결 상환의 대출 배정(R1) |
+| 12개월 창 판정 | 직전 12개월의 자료 있는 달, 기준일 이하 첫 거래일, 비교 설정의 기준 구간 시작일 | 연간성 판정(R4) |
+| 수입 거래 | `vw_metric_transactions`를 6개월 창 시작 4일 전부터 | 월 경계 입금의 주기 배정(R7). 관측 범위 판정은 예전처럼 창 시작부터 |
 
 ### 2.2 "충분히 관측된 달" 판정
 
@@ -80,6 +91,8 @@
 
 조정 가능성 미정 비중이나 지난 달들로 잰 오차는 응답에 없다(F-R1, F-R2).
 
+2차 수정으로 더한 필드(기존 필드는 이름·형식 그대로): `as_of_basis`(R11), `remaining_expense_adjustability`(R12), 구성요소의 `link_unconfirmed_count`·`link_unconfirmed_amount`(R1, R2), `not_in_expense_commitments`(R1), `twelve_month_window`·`annual_items`(R4), 반복 지출 출처의 `commitment_id`·`cycle`·`end_date`(R6), 수입 출처의 `cycle_anchor`·`cycle_reassigned_transaction_ids`(R7). 지난 마감월 오차는 대시보드 응답이 아니라 별도 엔드포인트다(R12, 8.1절).
+
 ## 3. 구성요소별 산식
 
 표기: `M` = 기준월, `d` = `observed_day`, `P` = 충분히 관측된 직전 달들(최대 6개).
@@ -104,6 +117,8 @@
 - **월 수입 전망** = 이번 달 관측 수입 전체(일회성·이자 포함) + 출처별 남은 액 합(`:800`, `:835`).
 - **가정·신뢰도 필드**: 출처마다 `history_periods`(근거 달), `excluded_periods`, `status`, `confidence`, `reason`. 출처가 없으면 사유 "정기 수입을 식별할 … 없음"(`:805-808`).
 
+2차 수정(R7): 달력 월 대신 **지급 주기**로 묶는다. 입금처의 직전 6개월 입금 중(그 달 최대 입금 중앙값의 10% 미만 소액 제외) 절반 넘게 말일 5일 안에 있고 1–4일 입금보다 많으면 `month_end`, 절반 넘게 1–4일에 있고 말일 쪽보다 많으면 `month_start`, 그 밖에는 `calendar_month`다. `month_end`이면 1–4일 입금은 앞 달 주기, `month_start`이면 말일 5일 안 입금은 다음 달 주기로 센다. 기준액, 연속성, 최근 달 판정, 입금일(주기 안 날짜, 1–31로 자름), 월말 패턴은 주기 단위다. 이번 주기의 관측액에는 `month_start` 입금처가 전달 말에 미리 넣은 금액도 들어간다(그때 `expected_date_from`은 전달일 수 있다). `month_end` 입금처가 이번 달 1–4일에 넣은 금액은 지난 주기 급여라 이번 주기 관측액이 아니지만 관측 수입(흐름표)에는 그대로 있다. 수입 예상 설정에 등록한 입금처는 예전처럼 연속성 판정 없이 예상한다. R8: 사람이 정기 수입을 지정하는 축이 `T056`에 없어 급여 단어 후보 규칙은 그대로이며, 수입 예상 설정이 사람이 지정하는 길이다.
+
 계획 점검 (a) "급여일 전에도 정기 수입을 반영하는가": **반영한다.** 단, 위 0을 더하는 조건에 걸리지 않고 급여 카테고리이거나 설정에 등록된 입금처일 때만이다. 걸리는 대표 사례는 F-I1, F-I3이다.
 
 ### 3.2 대출 상환
@@ -119,6 +134,7 @@
 - **지출 기록과의 관계**: 대출 구성요소는 이 장부에 상환이 지출로 기록되는지 보지 않는다. 상환이 `이체`로 기록되거나 아예 다른 계좌에서 나가 장부에 없으면, 실제 월 흐름표의 지출에는 없는 금액을 더한다(F-C4).
 - **과거 상환 기록**: 연결된 과거 상환은 변동 기준선에서 빠진다. 연결되지 않은 과거 상환은 변동 기준선에 남는다(F-C1).
 - **가정·신뢰도 필드**: `basis`에 스냅샷 날짜. 출처별 근거는 없다.
+- **2차 수정(R1)**: 대출 몫의 줄은 흐름표의 대출 연결 줄과, 연결이 없지만 사람이 등록한 대출 거래처 규칙(`loan_merchant_rules`, 거래처 또는 원문 일치)에 맞는 줄이다. 대출마다 **최근 충분히 관측된 마감월이나 이번 달에 그 대출 계좌의 지출 줄이 있을 때만** 더한다: max(round(월상환액) − 이번 달 그 계좌의 연결·규칙 일치 상환 합, 0). 지출 줄이 없거나 대출 계좌가 없으면 더하지 않고 `not_in_expense_commitments`에 `reason_code`(`no_expense_line_in_recent_month`, `no_loan_account`)와 함께 보이며, 대출 구성요소 `warnings`에 이름을 붙인 경고를 단다(이체 기록·장부 밖 계좌라면 지출이 아니고, 미연결이라면 이미 변동 기준선에 있다). 규칙 일치로 이번 달 상환을 본 경우 `link_unconfirmed_*`와 경고를 남긴다. 규칙 일치 줄은 변동 기준선에 들어가지 않는다. 카테고리에 `대출`이 들어간 미연결·규칙 밖 지출이 이번 달에 있으면, 더하는 대출이 하나라도 있을 때만 보류한다. 월상환액은 예전처럼 스냅샷(또는 연결로 추정한 값)에서 읽는다. 대출 약정의 금액 속성은 `T056`에 없다.
 
 ### 3.3 할부 회차
 
@@ -130,6 +146,7 @@
 - **분할 규칙**: 할부 연결이 있거나 어느 활성 계획과 정확히 일치하는 거래, 또는 `recurring_payment_kind = installment`인 거래는 할부 몫으로 분리되어 변동 기준선에서 빠진다(`:548-555`). 연결도 정확한 일치도 없는 할부 결제는 변동 기준선에 남는다(F-C2).
 - **종료월**: 마지막 회차 월까지 더하고, 그 다음 달부터는 더하지 않는다. 연결되었거나 정확히 일치하는 과거 결제는 종료 뒤에도 변동 기준선에 들어가지 않는다(테스트 `test_linked_installment_after_final_month_is_not_assumed`).
 - **가정·신뢰도 필드**: `basis` 고정 문구. 계획별 근거는 없다.
+- **2차 수정(R2, R6)**: 할부 몫의 줄은 흐름표의 할부 연결 줄, 활성 계획 규칙(금액·정규화 거래처·결제수단·예정일 ±7일)에 정확히 맞는 미연결 줄, 사람이 할부로 표시한 미연결 줄(`mapping_note = installment_link_unconfirmed`, 예전 `recurring_payment_kind = installment`의 이행 값)이다. 셋 다 변동 기준선에 들어가지 않는다. 이번 달 회차를 계획 규칙 일치로 찾으면 `link_unconfirmed_*`와 계획 이름을 붙인 경고("연결 확인 필요")를 남긴다. 거래처 이름이 다르고 연결·표시도 없는 결제는 사람이 등록한 어떤 규칙에도 묶이지 않아 그대로 변동 지출이다(F-C2 일부 남음, 8.1절).
 
 ### 3.4 반복 지출
 
@@ -142,6 +159,7 @@
 - **이미 관측된 것**: 이번 달 결제 합 `paid`. 남은 액 = min(max(기준액 − paid, 0), 근거 달들에서 `d` 이후 날짜에 결제된 금액의 중앙값) (`:469-478`). 그래서 평소 결제일이 지났는데 결제가 없으면 0을 더하고 경고만 남긴다(`:483-488`). 환불은 관측 순지출에만 반영하고 남은 액을 늘리지 않는다(`:451`, `:490-493`).
 - **보류**: 기준액도 이번 달 결제도 없는 거래처(예: 환불만 있는 새 거래처)가 있으면 반복 지출 구성요소가 `null`(`:459-467`, `:663-666`).
 - **가정·신뢰도 필드**: 거래처별 `expected_monthly_amount`, `history_periods`, `excluded_periods`, `status`, `confidence`, `warnings`, `basis`.
+- **2차 수정(R6, R5, R4)**: 대상은 거래처가 아니라 **흐름표의 `commitment_kind = recurring` 줄**이고, 출처는 등록된 정기 지급 묶음(`recurring_commitments`, `T056`) 하나다. 예전 열(`cost_kind`, `recurring_payment_kind`)은 직접 읽지 않고 `T056` 대응표(쓰기 동기화, 이행)로만 들어온다. 같은 거래처라도 묶음 규칙(거래처·카테고리·기간)에 맞지 않는 줄은 변동 지출이다. 약한 근거로도 낮은 신뢰도로 쓰는 조건은 "이번 달 결제가 있고 묶음 주기가 `monthly`"다. 출처를 만들지 않은 묶음(끊긴 묶음, 주기 없는 불안정 묶음)의 줄은 **변동 기준선으로 옮기지 않는다**(R5). 묶음에 종료일이 있으면 종료일 뒤 날짜의 결제는 가정하지 않고, 기준월 전에 끝났고 이번 달 결제가 없으면 출처를 만들지 않는다. 주기가 `yearly`인 묶음은 작년 같은 달(12개월 전)에 결제가 있었을 때만 그 달 총결제액을 기준액으로 같은 잔여 날짜 규칙을 적용한다(R4). 출처에 `commitment_id`, `cycle`, `end_date`가 붙는다.
 
 ### 3.5 남은 기간의 변동·미분류 지출
 
@@ -152,6 +170,8 @@
 - **이미 관측된 것**: 날짜로 자른다. 이번 달 `d`까지의 지출은 관측으로만 들어가고, 남은 기간 가정은 과거 같은 날짜 구간의 금액이다. 이번 달에 이미 나간 일회성 지출을 빼는 단계는 없다(같은 날짜 구간이 아니면 겹치지 않는다).
 - **조회 기간**: 6개월. 해마다 한두 번 나가는 지출은 보지 못한다(F-E1).
 - **가정·신뢰도 필드**: `basis` 고정 문구, 위 `included_periods`.
+- **2차 수정(R6, R4)**: 대상은 흐름표의 약정 아닌 지출 줄(보호·조정 가능·미정) 중 대출 거래처 규칙·할부 계획 규칙·할부 표시에 맞는 줄을 뺀 나머지다. 12개월 창(기준월 직전 12개 마감월)을 쓸 수 있으면(12개월 모두 자료가 있고, 자료가 월중에 시작한 첫 달 뒤이며, 비교 설정의 기준 구간 시작일 뒤) 비교 계약과 같은 규칙으로 12개월 중 1–2개월에만 지출이 있는 카테고리(`effective_category_major`, 비면 `미분류`)를 연간성으로 보고, 그 줄은 6개월 중앙값에서 빼고 **작년 같은 달의 남은 날짜 금액**을 더한다. 이번 달 같은 카테고리 지출이 이미 있으면 더하지 않는다. 결과는 `annual_items`, 창 판정은 `twelve_month_window`. 중앙값 자체는 그대로다(R13 미승인).
+- **조정 가능성(2차, R12)**: `remaining_expense_adjustability`가 알려진 남은 지출 가정을 근거 줄의 조정 가능성 금액 비율로 나눈다(대출·할부 일정은 보호, 묶음은 그 묶음의 과거 결제 줄, 변동은 같은 잔여 날짜 구간의 과거 줄, 연간성 항목은 작년 같은 달 줄). 미정은 추정하지 않는다.
 
 ### 3.6 합계
 
@@ -168,10 +188,10 @@
 | 2.6 요구 | 현재 | 판단 |
 |---|---|---|
 | 관측과 남은 기간 가정을 나눠 금액을 보임 | `observed_*`, `expected_remaining_*`가 따로 있다 | 충족 |
-| 가정이 2.3 흐름표 줄과 같은 단위 | 전망의 구분(거래처 단위 반복 지출, 금액 일치 할부)이 흐름표의 `commitment_kind`(행 단위, 연결 기준)와 다르다 | 미충족 (F-P1) |
-| 약정은 기록된 약정 속성에서 읽고 관측 회차를 다시 더하지 않음 | 연결된 대출·할부는 대체로 지킨다. 미연결·번호 불일치·이체 기록에서 다시 더한다 | 부분 (F-C1–F-C4) |
-| 각 가정의 근거 달과 조정 가능성 미정 비중 | 근거 달은 수입·반복 지출 출처와 전체 `included_periods`에 있다. 미정 비중은 없다 | 부분 (F-R1) |
-| 정확도는 지난 마감월로 잰 오차로 보임 | 신뢰도 등급 이름만 있다 | 미충족 (F-R2). 측정 도구는 이번에 추가 |
+| 가정이 2.3 흐름표 줄과 같은 단위 | 전망의 구분(거래처 단위 반복 지출, 금액 일치 할부)이 흐름표의 `commitment_kind`(행 단위, 연결 기준)와 다르다 | 미충족 (F-P1). 2차(R6) 뒤 충족. 사람이 등록한 대출·할부 규칙에 맞는 미연결 줄만 전망에서 약정, 흐름표에서 비약정이다(연결 미확인으로 따로 셈) |
+| 약정은 기록된 약정 속성에서 읽고 관측 회차를 다시 더하지 않음 | 연결된 대출·할부는 대체로 지킨다. 미연결·번호 불일치·이체 기록에서 다시 더한다 | 부분 (F-C1–F-C4). 2차 뒤 F-C1, F-C3, F-C4 해결. F-C2는 사람이 묶지 않은 결제만 남음 |
+| 각 가정의 근거 달과 조정 가능성 미정 비중 | 근거 달은 수입·반복 지출 출처와 전체 `included_periods`에 있다. 미정 비중은 없다 | 부분 (F-R1). 2차 뒤 충족(`remaining_expense_adjustability`) |
+| 정확도는 지난 마감월로 잰 오차로 보임 | 신뢰도 등급 이름만 있다 | 미충족 (F-R2). 측정 도구는 이번에 추가. 2차 뒤 별도 엔드포인트로 충족(대시보드 응답에는 없음) |
 
 ## 5. 결함과 위험
 
@@ -185,28 +205,33 @@
 - 시나리오 1: 월상환액 2,000. 이번 달 5일에 카테고리 `금융`인 미연결 상환 2,000이 관측됨. 20일 기준 전망은 대출 남은 액 2,000을 더한다. 관측 지출에 이미 2,000이 있으므로 같은 상환이 두 번 들어간다. (`test_current_unlinked_observed_repayment_is_added_again`, xfail `test_expected_unlinked_observed_repayment_not_added_again`)
 - 시나리오 2: 과거 여섯 달 25일에 카테고리 `대출`인 미연결 상환 2,000. 20일 기준(상환일 전)에는 대출 남은 액 2,000에 더해 변동 기준선에도 2,000이 들어가 남은 지출이 4,300이 된다(맞는 값 2,300). 상환이 관측된 뒤에는 전망 전체가 보류된다. 즉 미연결 상환이 있는 달은 상환일 전에는 이중 반영, 후에는 보류다. (`test_current_unlinked_repayment_history_counts_loan_twice_before_payday`, xfail `test_expected_unlinked_repayment_history_counts_loan_once`)
 - 되짚기 도구에서는 대출의 `remaining_without_any_linked_actual_in_month`와 보류 사유 `loan_observed_without_account_link`로 드러난다.
+- **2차 수정(R1)으로 해결.** 최근 마감월·이번 달에 지출 줄이 없는 대출은 더하지 않고 따로 보이며, 사람이 등록한 대출 거래처 규칙에 맞는 미연결 상환은 관측 상환으로 빼고 변동 기준선에서도 뺀다. (`test_unlinked_observed_repayment_not_added_again`, `test_unlinked_repayment_history_counts_loan_once`, `test_loan_rule_match_counts_once_before_payday`, `test_loan_rule_match_this_month_is_the_observed_repayment`, `test_unlinked_loan_category_payment_withholds_only_with_an_added_loan`)
 
 ### F-C4. 지출 기록과 상관없이 더하는 대출 월상환액 — 높음, 과소
 
 - 코드: 대출 몫은 스냅샷 월상환액만 본다(`:574-587`). 실제 값(흐름표)은 지출로 기록되고 연결된 상환만 대출 줄에 넣는다(`backend/app/services/metric_views.py:410`).
 - 시나리오: 상환이 장부에 `이체`로 기록된다(또는 장부에 없는 계좌에서 나간다). 전망은 매달 2,000을 지출로 더하지만 실제 월 흐름표의 지출에는 그 돈이 없다. (`test_current_repayment_booked_as_transfer_is_added_to_expense`, xfail `test_expected_repayment_booked_as_transfer_not_added_to_expense`)
 - 대출이 여럿이면 대출마다 같은 크기로 쌓인다.
+- **2차 수정(R1)으로 해결.** 흐름표에 지출 줄이 없으면 `not_in_expense_commitments`로만 보인다. (`test_repayment_booked_as_transfer_not_added_to_expense`)
 
 ### F-I1. 월말 급여가 한 번 다음 달 1일로 넘어가면 정기 수입이 빠짐 — 높음, 과소
 
 - 코드: 달력 월 단위 합계와 연속성 규칙(`:304-313`).
 - 시나리오: 1–4월, 6월은 말일에 100,000. 5월분이 6월 1일에 들어옴. 5월은 0, 6월은 200,000이 되어 둘 다 기준에서 빠지고, 기준 달이 6개 중 4개라 "불연속"으로 판정된다. 7월 20일 전망은 정기 수입을 0으로 둔다. 같은 판정이 이후 약 석 달 이어진다(직전 세 달이 모두 기준에 들어갈 때까지). (`test_current_month_end_salary_crossing_boundary_drops_regular_income`, xfail `test_expected_month_end_salary_crossing_boundary_keeps_regular_income`)
 - 대조: 매달 말일에 들어오는 급여는 급여일 전에도 정상 반영된다(`test_month_end_salary_is_expected_before_payday`).
+- **2차 수정(R7)으로 해결.** 6월 1일 입금은 5월 주기로 센다. (`test_month_end_salary_crossing_boundary_keeps_regular_income`, `test_late_month_end_salary_this_month_is_last_cycle`, `test_early_month_start_salary_counts_for_its_own_cycle`, `test_month_start_salary_history_stays_continuous`)
 
 ### F-E1. 연 1회 지출 미반영 — 높음(그 달), 과대
 
 - 코드: 조회 기간이 6개월(`:39`, `:729`)이고 변동 기준선은 중앙값(`:681`).
 - 시나리오: 작년 7월 15일에 50,000을 낸 연회비. 올해 7월 10일 전망의 남은 지출은 500(식비 기준선)뿐이다. 계획 2.4는 이런 지출을 12개월 창으로 보라고 한다. (`test_current_annual_expense_is_not_in_remaining_assumption`, xfail `test_expected_annual_expense_is_in_remaining_assumption`)
+- **2차 수정(R4)으로 해결.** 12개월 창이 있으면 50,500이다. 창이 모자라면(자료가 월중에 시작한 첫 달이 창에 걸리거나 기준 구간 시작일 앞) 예전처럼 500이고 사유를 보인다. 연 주기로 등록한 묶음은 작년 같은 달에만 더한다. (`test_annual_expense_is_in_remaining_assumption` 외 4개, `test_yearly_commitment_is_added_in_its_month`, `test_yearly_commitment_is_not_assumed_in_other_months`. 7월 10일 시나리오는 창이 차도록 2030-06부터 자료를 넣었다)
 
 ### F-E2. 고정비로만 표시된 해지 지출이 변동 기준선에 남음 — 중간, 과소
 
 - 코드: 출처를 만들지 않은 반복 거래처는 `monthly_recurring` 표시가 없으면 변동 몫으로 옮겨진다(`:650-661`).
 - 시나리오: `cost_kind = fixed`만 표시된 5,000 구독이 1–4월에 나가고 해지됨. 7월 20일 전망은 변동 기준선(4/6달에 5,000 포함)의 중앙값 때문에 남은 지출 5,300을 낸다(맞는 값 300). 같은 지출에 `monthly_recurring`까지 표시돼 있으면 버려져 300이 된다. (`test_current_cancelled_fixed_cost_falls_back_to_variable_baseline`, xfail `test_expected_cancelled_fixed_cost_is_not_assumed`, 대조 `test_cancelled_explicit_monthly_recurring_is_not_assumed`)
+- **2차 수정(R5, R6)으로 해결.** 묶음의 줄은 변동 기준선으로 옮기지 않아 300이다. 묶음 종료일이 있으면 그 뒤를 가정하지 않는다. (`test_cancelled_fixed_cost_is_not_assumed`, `test_commitment_end_date_is_followed` 3개)
 - 이번 달에 해지되어 평소 결제일 전인 경우는 기록에 해지 사실이 없으므로 결함이 아니라 한계다. 평소 결제일이 지나면 0을 더하고 경고를 남긴다(`test_recurring_cancelled_this_month_is_still_assumed_before_its_day`).
 
 ### F-C2. 연결도 정확한 일치도 없는 할부 결제의 이중 반영 — 중간, 과소
@@ -214,6 +239,7 @@
 - 코드: 할부 몫 분리는 연결 또는 정확 일치(금액·거래처·결제수단·±7일)만 인정한다(`:370-381`, `:548-549`).
 - 시나리오: 계획 거래처는 `Example Device`인데 카드 명세에는 다른 이름으로 1,000씩 찍힘(미연결). 7월 10일 전망은 할부 1,000을 더하고 변동 기준선에도 같은 결제가 들어가 남은 지출이 2,500이 된다(맞는 값 1,500). 마지막 회차가 끝난 다음 달에도 변동 기준선에 남아 1,000을 계속 더한다. (`test_current_unmatched_installment_counted_in_schedule_and_variable`, `test_current_unmatched_installment_after_final_month_still_assumed`, 각각의 xfail)
 - 첫 회차 금액이 다른 할부(나머지 원 단위가 첫 회차에 붙는 경우)도 그 회차는 정확 일치가 안 된다.
+- **2차 수정(R2)으로 일부 해결.** 사람이 그 결제를 할부로 표시했거나(연결 미확인) 계획 규칙에 정확히 맞으면 변동 기준선에서 빠진다(`test_installment_marked_by_a_person_leaves_variable_baseline` 2개, `test_unlinked_plan_rule_match_is_shown_as_link_unconfirmed`). 위 시나리오처럼 거래처 이름이 다르고 연결·표시가 없는 결제는 금액·날짜만으로 계획에 묶으면 자동 추론이라 고치지 않았다. xfail 2개가 남는다.
 
 ### F-C3. 연결된 이번 달 회차를 번호가 다르다는 이유로 다시 더함 — 중간, 과소
 
@@ -233,6 +259,7 @@
 - 코드: 출처 후보는 급여 단어 카테고리나 사용자 설정 입금처뿐이다(`:205-210`).
 - 시나리오: 매달 28일 같은 입금처에서 들어오는 100,000이 `기타수입` 카테고리. 출처가 없고 남은 수입이 0이다. (`test_current_regular_income_outside_salary_category_is_not_forecast`, 현재 동작만 기록)
 - 분류는 사람이 한다는 원칙상 시스템이 자동으로 정기 수입을 찾는 것은 답이 아니다. 사람이 정기 수입을 지정하는 축(`T056`)이나 기존 수입 예상 설정으로 해결한다. 그래서 기대 동작 테스트를 두지 않았다.
+- 2차(R8): `T056`에 수입 정기/비정기 축이 없어 축으로 읽는 부분은 막혀 있다. 수입 예상 설정에 등록한 입금처는 카테고리와 상관없이 예상한다는 것을 테스트로 고정했다(`test_regular_income_registered_by_a_person_is_forecast`).
 
 ### F-O1. 업로드가 덮은 조용한 날도 남은 기간으로 봄 — 낮음, 과소
 
@@ -245,11 +272,13 @@
 - 코드: `canonical_views_dashboard_service.py:211`, 보류 규칙 `monthly_projection_service.py:814-821`.
 - 시나리오: 마지막 업로드가 열흘 전이면 화면의 전망은 항상 보류된다. 자료가 지난달 28일까지이고 오늘이 이번 달 2일이면, 자료상 진행월(지난달)이 아니라 관측이 0인 이번 달을 전망한다. 계획 2.1은 진행월을 자료 기준으로 정의한다.
 - 수동 업로드 도구에서 이 규칙은 전망이 보이는 날을 업로드 직후 일주일로 제한한다. 테스트는 기존 `test_no_data_and_stale_partial_coverage_withhold_month_end`가 보류 규칙을 덮는다.
+- **2차 수정(R11)으로 해결.** 기준일을 지정하지 않은 대시보드 전망은 거래 기준일(같은 달 안의 더 늦은 업로드 날짜 포함)을 쓴다. 다음 달로 넘어간 업로드는 달을 바꾸지 않는다. (`test_dashboard_forecast_defaults_to_the_transaction_as_of_date`)
 
 ### F-P1. 전망 구분과 흐름표 구분의 단위 불일치 — 중간, 방향 없음
 
 - 코드: 전망은 거래처 단위 반복 판정(`:539-544`), 금액 일치 할부(`:548`)를 쓴다. 흐름표는 행 단위 `cost_kind`, 연결만으로 약정을 정한다(`metric_views.py:406-422`).
 - 영향: 고정비로 한 번 표시된 거래처의 다른 지출까지 반복 지출 가정에 들어가고, 연결 없이 금액만 맞는 할부 결제는 전망에서는 할부, 실제에서는 수시·미정 줄이 된다. 그래서 구성요소별 오차의 일부는 정의 차이다. 월말 합계에는 영향이 없다. 되짚기 도구의 구성요소별 표는 이 차이를 포함한 값이다.
+- **2차 수정(R6)으로 해결.** 줄 단위 `commitment_kind`로 나눈다(`test_commitment_membership_is_per_row_not_per_merchant`). 남는 정의 차이는 사람이 등록한 대출·할부 규칙에 맞는 미연결 줄뿐이며 `link_unconfirmed_*`로 셈한다.
 
 ### F-C5. 지난 예정일의 미연결 할부가 전망 전체를 보류 — 낮음, 보류 증가
 
@@ -264,10 +293,12 @@
 ### F-R1. 조정 가능성 미정 비중을 보이지 않음 — 중간(요구 미충족)
 
 - 응답에 미정 비중이 없다(`income_projection.py:104-126`). 전망 계산도 조정 가능성을 읽지 않는다. (xfail `test_expected_projection_reports_undecided_adjustability_share`)
+- **2차 수정(R12)으로 해결.** `remaining_expense_adjustability` (`test_projection_reports_undecided_adjustability_share`).
 
 ### F-R2. 정확도를 등급 이름으로만 보임 — 중간(요구 미충족)
 
 - `confidence`는 사유·경고 유무로 정한 등급이다(`:857-861`). 지난 마감월로 잰 오차가 응답에 없다. 측정은 6절 도구로 가능해졌다.
+- **2차 수정(R12)으로 해결(별도 엔드포인트).** `GET /api/v1/canonical-views/month-projection/accuracy`. 전망을 15번 다시 돌리므로 대시보드 응답에는 싣지 않았다(8.1절의 측정). (`test_month_projection_accuracy_endpoint_is_read_only_and_banded`)
 
 ### 그 밖의 관찰 (낮음)
 
@@ -331,6 +362,7 @@ URL은 출력하지 않는다. PostgreSQL과 SQLite만 받는다. 앱 설정(`AP
 - (b) `special_cases.double_counting.{loan,installment,recurring}`: 그 줄이 as-of까지 관측됐는데 전망이 남은 금액을 더했고 실제로는 뒤에 더 없었던 점(`observed_then_added_again`), 남은 금액 과대 점, 그 달 흐름표에 연결된 실제가 전혀 없는데 더한 점(`remaining_without_any_linked_actual_in_month`; F-C1, F-C4 신호), 초과분 ÷ 그 달 지출(%).
 - (c) `special_cases.classification_bias`: 달마다 지출 중 조정 가능성 미정 비중, 약정처럼 보이나 미연결인 비중(카테고리에 `대출`이 있거나 `recurring_payment_kind = installment`인데 연결 없음), 약정 비중, 전망의 남은 지출 중 변동 가정 비중. 미정 비중 구간(<10%, 10–30%, ≥30%)과 미연결 비중(0%, >0%)별 오차 중앙값.
 - `withheld_reasons`: 보류된 점의 사유를 고정 코드로 센다(반복 지출 사유 앞의 거래처 이름은 복사하지 않는다).
+- 2차 수정에서 더한 측정: `double_counting.{loan,installment,recurring}`의 `link_unconfirmed_points`(사람이 등록한 규칙으로 이번 달 상환을 본 점, R1·R2)와 `not_in_expense_points`(지출 줄이 없어 더하지 않은 대출이 있는 점, R1), `consistency.component_sum_mismatch_points`(구성요소 전망의 합이 총지급 전망과 다른 점, R6. 0이어야 한다), `classification_bias.forecast_remaining_undecided_share_pct`(남은 지출 가정의 미정 비중, R12). 새 보류 사유 문구는 없어서 사유 코드는 더하지 않았다.
 
 ### 6.5 재생의 한계 (출력의 `limitations`에도 수와 함께 나온다)
 
@@ -355,23 +387,26 @@ URL은 출력하지 않는다. PostgreSQL과 SQLite만 받는다. 앱 설정(`AP
 | 테스트 | 시나리오 | 결과 |
 |---|---|---|
 | `test_month_end_salary_is_expected_before_payday` | 월말 급여, 급여일 전 | 현재 동작이 맞음 |
-| `test_current_/expected_month_end_salary_crossing_boundary_*` | 월말 급여가 한 번 다음 달 1일 | 현재 고정 + xfail (F-I1) |
-| `test_current_regular_income_outside_salary_category_is_not_forecast` | 급여 카테고리 아닌 정기 수입 | 현재 고정 (F-I3) |
+| `test_month_end_salary_crossing_boundary_keeps_regular_income` 외 3개 | 월말 급여가 한 번 다음 달 1일, 월초 급여가 전달 말일 | 2차 수정(R7)으로 통과 (F-I1) |
+| `test_current_regular_income_outside_salary_category_is_not_forecast`, `test_regular_income_registered_by_a_person_is_forecast` | 급여 카테고리 아닌 정기 수입, 설정에 등록한 경우 | 현재 동작이 맞음(자동 추천 없음), 등록하면 예상 (F-I3, R8 일부) |
 | `test_renamed_salary_payer_withholds_pending_old_source`, `test_expected_renamed_salary_payer_not_counted_twice` 외 대조 3개 | 이름이 바뀐 급여 입금처 | 1차 수정(R9)으로 통과 (F-I2) |
-| `test_current_/expected_annual_expense_*` | 연 1회 지출 | 현재 고정 + xfail (F-E1) |
+| `test_annual_expense_is_in_remaining_assumption` 외 4개, `test_yearly_commitment_*` 2개 | 연 1회 지출, 연 주기 묶음 | 2차 수정(R4)으로 통과 (F-E1) |
 | `test_cancelled_explicit_monthly_recurring_is_not_assumed` | 해지된 월 반복 표시 지출 | 현재 동작이 맞음 |
-| `test_current_/expected_cancelled_fixed_cost_*` | 고정비로만 표시된 해지 지출 | 현재 고정 + xfail (F-E2) |
+| `test_cancelled_fixed_cost_is_not_assumed`, `test_commitment_end_date_is_followed` 3개 | 고정비로만 표시된 해지 지출, 묶음 종료일 | 2차 수정(R5)으로 통과 (F-E2) |
 | `test_recurring_cancelled_this_month_is_still_assumed_before_its_day` | 이번 달 해지 | 한계로 기록 |
 | `test_quiet_days_inside_export_are_observed`, `test_expected_quiet_days_inside_export_are_not_assumed_again` 외 대조 3개 | 업로드가 덮은 조용한 날 | 1차 수정(R10)으로 통과 (F-O1) |
 | `test_linked_installment_last_month_and_after_end`, `test_linked_installment_after_final_month_is_not_assumed` | 할부 종료월과 그 다음 달(연결됨) | 현재 동작이 맞음 |
-| `test_current_/expected_unmatched_installment_*` (2쌍) | 미연결·불일치 할부, 종료월과 그 다음 달 | 현재 고정 + xfail (F-C2) |
+| `test_current_/expected_unmatched_installment_*` (2쌍) | 미연결·불일치 할부(다른 거래처 이름, 표시 없음), 종료월과 그 다음 달 | 현재 고정 + xfail 유지 (F-C2, 사람이 묶지 않은 결제) |
+| `test_installment_marked_by_a_person_leaves_variable_baseline` 2개, `test_unlinked_plan_rule_match_is_shown_as_link_unconfirmed` | 사람이 할부로 표시한 결제, 계획 규칙 일치 미연결 결제 | 2차 수정(R2)으로 통과 |
 | `test_installment_link_number_mismatch_only_warns`, `test_expected_linked_installment_of_this_month_not_added_again` 외 대조 2개 | 회차 번호 불일치 | 1차 수정(R3)으로 통과 (F-C3) |
-| `test_current_/expected_unlinked_observed_repayment_*` | 관측된 미연결 상환 | 현재 고정 + xfail (F-C1) |
-| `test_current_/expected_unlinked_repayment_history_*` | 과거 미연결 상환, 상환일 전 | 현재 고정 + xfail (F-C1) |
-| `test_current_/expected_repayment_booked_as_transfer_*` | 이체로 기록된 상환 | 현재 고정 + xfail (F-C4) |
-| `test_expected_projection_reports_undecided_adjustability_share` | 응답의 미정 비중 | xfail (F-R1) |
+| `test_unlinked_observed_repayment_not_added_again`, `test_unlinked_repayment_history_counts_loan_once` | 관측된 미연결 상환, 과거 미연결 상환 | 2차 수정(R1)으로 통과 (F-C1) |
+| `test_loan_rule_match_*` 2개, `test_unlinked_loan_category_payment_withholds_only_with_an_added_loan` | 대출 거래처 규칙 일치 미연결 상환, 규칙 밖 `대출` 지출 | 2차 수정(R1)으로 통과 |
+| `test_repayment_booked_as_transfer_not_added_to_expense` | 이체로 기록된 상환 | 2차 수정(R1)으로 통과 (F-C4) |
+| `test_projection_reports_undecided_adjustability_share` | 응답의 미정 비중 | 2차 수정(R12)으로 통과 (F-R1) |
 
-xfail은 모두 `strict=True`다. 수정되어 통과하기 시작하면 테스트가 실패하므로, 고칠 때 xfail 표시를 함께 지운다. 1차 수정 뒤 남은 xfail은 9개(F-I1, F-E1, F-E2, F-C2 2개, F-C1 2개, F-C4, F-R1)다.
+xfail은 모두 `strict=True`다. 수정되어 통과하기 시작하면 테스트가 실패하므로, 고칠 때 xfail 표시를 함께 지운다. 1차 수정 뒤 남은 xfail은 9개(F-I1, F-E1, F-E2, F-C2 2개, F-C1 2개, F-C4, F-R1)였고, 2차 수정 뒤에는 F-C2 2개만 남는다. 둘 다 거래처 이름이 계획과 다르고 연결도 할부 표시도 없는 결제라, 사람이 등록한 어떤 규칙도 그 결제를 계획에 묶지 않는다. 금액·날짜만으로 묶으면 자동 추론이 된다.
+
+2차 수정에서 테스트 입력도 바뀌었다. 전망이 `T056` 성격 축을 읽으므로, 예전 열(`cost_kind`, `recurring_payment_kind`)을 직접 넣는 시나리오는 운영과 같은 쓰기 동기화(`write_through_legacy_classification`)를 거친 뒤 전망을 부른다(`project()` 도우미). 관련 서비스 테스트(`test_monthly_projection_service.py`) 중 바뀐 것: 미연결 대출 시나리오는 지출 줄을 연결해 월상환액 미상 보류를 확인하고, 지출 줄 없는 대출은 따로 보이는지 확인한다. 거래처의 다른 분류가 바뀐 이번 달 결제는 "묶음 규칙에 맞는 새 거래는 묶음 결제", "사람이 묶음에서 뺀 거래는 변동"의 두 테스트로 나눴다.
 
 ## 8. 수정 제안
 
@@ -402,7 +437,41 @@ R1–R12는 승인됐다(두 차례로 나눔). R13은 승인되지 않았다. �
 | R3 | 1차 적용 | 이번 달 회차 = 그 계획에 연결된 거래 중 날짜가 이번 달인 것. 번호가 다르면 경고만 남기고 다시 더하지 않음. 이번 달 날짜의 연결이 없으면 예전처럼 계산한 번호의 연결을 씀 | 할부 구성요소 `warnings`에 경고 문구(계획 이름 접두), 그 구성요소와 전체 `confidence`가 `low` |
 | R9 | 1차 적용 | 새 입금처(창 안 이전 입금·설정 없음)의 급여 분류 입금이 기존 예상액의 10% 이상이고 기존 출처가 이번 달 아직 받은 것이 없으면, 기존 출처를 `uncertain`·남은 액 0으로 보류 | 출처 `reason` 문구, `missing_reasons`에 입금처 이름 변경 확인 사유. 되짚기 사유 코드 `income_source_possible_payer_rename` 추가 |
 | R10 | 1차 적용 | 남은 기간 시작 = max(이번 달 마지막 거래일, 기준일 이하 최신 업로드 날짜)의 다음 날 | 새 필드 `remaining_period_start`(nullable). 기존 필드 이름·형식은 그대로 |
-| R1, R2, R4–R8, R11, R12 | 2차 대상 | 미적용 | — |
+| R6 | 2차 적용 | 지출 가정을 `vw_metric_flow_lines`의 줄과 `commitment_kind`에서 읽는다. 반복 지출은 거래처 단위가 아니라 등록된 정기 지급 묶음 단위. 예전 분류 열은 `T056` 대응표를 거쳐서만 들어온다 | 출처에 `commitment_id`, `cycle`, `end_date`. 출처 `merchant`는 묶음의 거래처(거래처 범위) 또는 이름·카테고리(카테고리 범위), 같은 `source_key`는 `#묶음id`를 붙인다 |
+| R1 | 2차 적용 | 대출 계좌 연결 줄과 사람이 등록한 대출 거래처 규칙 일치 줄로 관측 상환을 뺀다. 최근 충분히 관측된 마감월·이번 달에 지출 줄이 없는 대출은 더하지 않고 따로 보인다. 규칙 일치 과거 줄은 변동 기준선에서 뺀다. `대출` 카테고리 미연결 지출로 보류하는 것은 더하는 대출이 있을 때만 | `not_in_expense_commitments`, `link_unconfirmed_count/amount`, 대출 구성요소 `warnings`. 대출 금액은 여전히 스냅샷 월상환액(`T056`에 대출 금액 속성 없음) |
+| R2 | 2차 일부 적용 | 계획 규칙에 정확히 맞는 미연결 결제와 사람이 할부로 표시한 결제는 변동 기준선에서 뺀다. 이번 달 규칙 일치는 연결 미확인 경고. 거래처 이름이 다르고 연결·표시가 없는 결제는 그대로(자동 추론 금지) | `link_unconfirmed_count/amount`, 할부 구성요소 `warnings` |
+| R4 | 2차 적용 | 연 주기로 등록된 묶음은 작년 같은 달에 낸 금액을 그 달에 더한다. 등록되지 않은 연간성 지출은 비교 계약의 12개월 창 규칙으로 골라 6개월 중앙값에서 빼고 작년 같은 달의 남은 날짜 금액을 더한다 | `twelve_month_window`, `annual_items` |
+| R5 | 2차 적용 | 끝난 묶음의 이력은 변동 기준선으로 옮기지 않는다. 묶음 `end_date`를 따른다 | 출처 `end_date`, 근거 문구 |
+| R7 | 2차 적용 | 수입 연속성을 지급 주기로 판정(월말·월초 기준 입금처의 경계 4–5일 입금을 가까운 주기로). 수입 예상 설정 입금처는 연속성 판정 없이 예상(예전부터) | `cycle_anchor`, `cycle_reassigned_transaction_ids`. `T056` 수입 정기/비정기 축은 없어 그 부분은 막힘 |
+| R8 | 2차 일부(막힘) | 사람이 정기 수입을 지정하는 축이 `T056`에 없어 급여 단어 판정은 그대로. 수입 예상 설정에 등록한 입금처는 카테고리와 상관없이 예상(기존 동작, 테스트로 고정). 축을 만들려면 새 테이블·열과 마이그레이션이 필요해 이번에 하지 않음 | 없음 |
+| R11 | 2차 적용 | `reference_date` 없는 대시보드 전망은 거래 기준일(같은 달 안에서 더 늦은 업로드 날짜면 그 날)을 쓴다 | `as_of_basis` |
+| R12 | 2차 적용 | 남은 지출 가정의 조정 가능성 미정 비중을 금액으로 싣는다. 최근 마감월 되짚기 오차는 별도 읽기 전용 엔드포인트 | `remaining_expense_adjustability`, `GET /api/v1/canonical-views/month-projection/accuracy` |
 | R13 | 미승인 | — | — |
 
 기존 응답 필드는 지우거나 이름·형식을 바꾸지 않았다. 마이그레이션은 없다.
+
+R12의 되짚기 오차를 대시보드 응답에 싣지 않은 이유: 전망을 마감월 3개 × 5일 = 15번 다시 계산한다. 합성 원장(`tests/tools/forecast_backtest_ledger.py`)에서 전망 한 번이 PostgreSQL 약 8–18ms, SQLite 약 5ms인데, 되짚기는 PostgreSQL 반복 호출 약 130ms(새로 만든 DB의 첫 호출 약 1.3초), SQLite 약 70ms였다. 실제 장부는 줄 수가 훨씬 많아 대시보드 요청마다 쓰기에는 무겁다. 그래서 X-API-Key가 필요한 읽기 전용 엔드포인트로 두고, 저장·캐시는 하지 않는다. 2차 수정으로 전망 한 번의 비용도 늘었다(12개월 지출 줄과 12개월 창 판정을 더 읽음). 같은 합성 원장 PostgreSQL에서 약 8ms에서 8–18ms 사이로 측정됐다.
+
+#### 2차 수정의 합성 되짚기 변화
+
+합성 원장 변형마다 같은 SQLite 파일에 1차 수정 뒤 코드(`797a344`)와 2차 수정 뒤 코드의 되짚기 도구를 돌렸다. 기본 원장은 7개 마감월 × 5일 = 35점, 12개월 창이 필요한 변형은 19개 마감월 95점이다. 비율과 건수만 적는다. 변하지 않은 측정은 적지 않았다(기본 원장은 모든 측정이 그대로, 모든 변형에서 `component_sum_mismatch_points` = 0, `observed_mismatch_points` = 0).
+
+| 변형 | 제안 | 측정 | 1차 뒤 → 2차 뒤 |
+|---|---|---|---|
+| 대출 상환 미연결 | R1 | 순현금흐름 보류 점 / 과소 점 / 일치 점 | 21 / 14 / 0 → 0 / 0 / 35 |
+| 대출 상환 미연결 | R1 | 대출 `remaining_without_any_linked_actual_in_month` / 보류 사유 `loan_observed_without_account_link` | 14 / 21 → 0 / 0 (`not_in_expense_points` 35) |
+| 대출 상환 미연결 | R1 | 총지급 과대 점 | 14 → 0 |
+| 대출 상환을 이체로 기록 | R1 | 순현금흐름 과소 점(부호 오차 중앙값) | 35(−7.5%) → 0(0.0%) |
+| 대출 상환을 이체로 기록 | R1 | 총지급 과대 점 / 대출 `remaining_without_any_linked_actual_in_month` | 35 / 35 → 0 / 0 |
+| 할부 계획 규칙 일치 미연결 | R2 | 순현금흐름 일치 점 | 35 → 35 (변화 없음) |
+| 할부 계획 규칙 일치 미연결 | R2 | 할부 `remaining_over_forecast` / 변동 과소 점 | 15 / 15 → 15 / 15 (흐름표가 미연결 결제를 할부 줄로 세지 않는 정의 차이. `link_unconfirmed_points` 10) |
+| 할부로 표시한 미연결 결제 | R2 | 순현금흐름 보류 점 | 10 → 10 (이번 달 표시 결제가 있으면 예전처럼 보류) |
+| 연 1회 지출(매년 7월) | R4 | 총지급 과소 점 / 순현금흐름 과대 점 | 6 / 6 → 3 / 3 (남은 3점은 앞선 12개월 자료가 없는 첫해 7월) |
+| 고정비로만 표시된 지출이 중간에 끊김 | R5 | 변동 과대 점 | 12 → 0 |
+| 고정비로만 표시된 지출이 중간에 끊김 | R5 | 총지급 과대 점 / 순현금흐름 과소 점 | 16 / 16 → 4 / 4 (남은 4점은 끊긴 다음 달 결제일 전, 기록에 해지 사실이 없는 한계) |
+| 정기 지급 거래처의 다른 카테고리 지출 | R6 | 반복 지출 과대 점(부호 오차 중앙값) / 변동 과소 점 | 28(+25.0%) / 28 → 0 / 0 |
+| 정기 지급 거래처의 다른 카테고리 지출 | R6 | 반복 지출 `observed_then_added_again` | 14 → 0 |
+| 월말 급여가 두 번 다음 달 1일로 | R7 | (a) 정기 수입 포함 점 / (a) 상태 `uncertain` | 65 / 20 → 85 / 0 (85점 중) |
+| 월말 급여가 두 번 다음 달 1일로 | R7 | 수입 과소 점 / 과대 점 | 20 / 5 → 0 / 10 (과대 10점은 급여가 다음 달로 넘어간 바로 그 달 두 번: 달력 월 실제에는 그 급여가 없다) |
+
+R8, R11은 되짚기로 잴 수 없다(R8은 동작 변화 없음, R11은 기준일을 정하는 방식이라 6.5의 재생 대상이 아님). R12는 표시 요구라 오차가 바뀌지 않는다. 기본 원장의 남은 지출 가정 미정 비중 중앙값은 39.7%였다(식비 줄에 조정 가능성이 정해지지 않음).
