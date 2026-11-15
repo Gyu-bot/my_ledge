@@ -42,4 +42,5 @@ async def patch_analytics_settings_endpoint(
         ),
         bulk_operations=payload.bulk_operations.model_dump(exclude_unset=True),
         financial_targets=payload.financial_targets.model_dump(exclude_unset=True),
+        comparison=payload.comparison.model_dump(exclude_unset=True),
     )

@@ -59,6 +59,7 @@
 - `GET /api/v1/schema`
 - `GET /api/v1/canonical-views/dashboard`
 - `GET /api/v1/metrics/monthly-flow`, `GET /api/v1/metrics/spend-cube`, `GET /api/v1/metrics/data-status`
+- `GET /api/v1/metrics/comparison/monthly-flow`, `GET /api/v1/metrics/comparison/contributions` (T057)
 - `GET /api/v1/settings/analytics`
 - `PATCH /api/v1/settings/analytics`
 - `GET /api/v1/settings/income-expectations`
@@ -1203,7 +1204,7 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
   - `level` default `major`
   - `type` default `지출`
 - Response model: `CategoryMoMResponse`
-- Metadata: `reference_date`, `is_partial_period`, `comparison_basis` (`same_day_previous_month` or `full_previous_month`). An explicit partial `end_date` selects that month even with no rows and compares only the same day range in the previous month.
+- Metadata: `reference_date`, `is_partial_period`, `comparison_basis` (`same_day_previous_month` or `full_previous_month`). An explicit partial `end_date` selects that month even with no rows and compares only the same day range in the previous month. T057: an in-progress target month is always `same_day_previous_month` through the transaction as-of date.
 - Response shape:
   - `items[]`
     - `period`
@@ -1213,6 +1214,9 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
     - `previous_amount`
     - `delta_amount`
     - `delta_pct`
+    - `baseline_amount` (T057, nullable): comparison-contract median for the category
+    - `baseline_change_amount` (T057, nullable): `current_amount − baseline_amount`
+  - `comparison` (T057, nullable): comparison-contract basis (null when the target month is after the data as-of month or there is no data)
 
 #### `GET /api/v1/analytics/fixed-cost-summary`
 
@@ -1363,7 +1367,7 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
 - Purpose: detect unusual category spend
 - Query params:
   - `end_date`
-  - `baseline_months` optional override; default resolves from analytics settings, then code default `3`
+  - `baseline_months` optional override; default resolves from analytics settings, then code default `6` (T057; was `3`)
   - `anomaly_threshold` optional override; default resolves from analytics settings, then code default `0.5`
   - `min_delta_amount` optional override; default resolves from analytics settings, then code default `100000`
   - `page`
@@ -1388,9 +1392,10 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
     - `anomaly_score`
     - `reason`
   - `comparison_mode`
-  - `reference_date`
+  - `reference_date` (T057: never later than the transaction as-of date inside the as-of month)
   - `is_partial_period`
   - `assumptions`
+  - `comparison` (T057, nullable): comparison-contract basis; see [Comparison Contract](#comparison-contract-t057)
 - Behavior:
   - if `end_date` omitted, uses last closed month end
   - if partial date provided, baseline months use same day cutoff
@@ -1449,7 +1454,10 @@ Recurring `default_apply_scope` supports only `all_matching|reviewed_only`. Mont
 Historical unsupported default scopes remain visible in `saved`; `effective.default_apply_scope` safely resolves to `reviewed_only` until corrected. This does not silently turn a legacy preference into full-scope approval.
 - Response shape:
   - `defaults`, `saved`, and `effective`
-  - sections: `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets`
+  - sections: `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets`, `comparison`
+  - `comparison.baseline_start_date` (T057): nullable ISO date, default `null`. Stored as one `app_settings` row (`scope=analytics.comparison`, `key=baseline_start_date`); no schema change. See [Comparison Contract](#comparison-contract-t057).
+  - `spending_anomalies.baseline_months` default is `6` since T057 (was `3`).
+  - `comparison_guide`: `title`, `summary`, `options[]` with `key`, Korean `label`, `description`, `editable`, and `value_label` (the effective value in Korean). Keys: `baseline_start_date` (editable), `baseline_method`, `partial_month_handling`, `no_data_months`, `annual_window`, `ordering` (fixed rules, shown for explanation).
   - `saved` values are nullable; `effective` is saved-over-default and is what backend analytics use when requests do not pass explicit overrides
   - `financial_targets` includes `emergency_fund_target_months` default `3`, nullable `savings_rate_target`, and nullable `debt_strategy_preference` (`avalanche` or `snowball`)
 
@@ -1747,7 +1755,7 @@ Source: `app.services.analytics_service.get_monthly_cashflow` (SQL over `vw_metr
 - `income = income_total`, `expense = total_outflow` (loans included, refunds netted in their posting month), `transfer = transfer_activity_total` (`SUM(ABS(amount))` of `이체`)
 - settlement links never move amounts between months (T055); see [Metric Contract](#metric-contract-t054t055)
 - `net_cashflow = residual = income - expense`
-- `savings_rate = net_cashflow / income` for every month (legacy); the plan's 현금 잔여율 is `residual_rate`, closed months only, on `/metrics/monthly-flow`
+- `savings_rate = net_cashflow / income` for closed months; `null` for the in-progress month since T057 (it was computed for every month before). The plan's 현금 잔여율 is `residual_rate`, closed months only, on `/metrics/monthly-flow`
 - items add `month_status`; the response adds `contract`
 
 ### Category MoM
@@ -1756,8 +1764,10 @@ Source: `app.services.analytics_service.get_category_mom`
 
 - loads rows in requested date window
 - an explicit `end_date` selects the current period even if it has no rows; otherwise derives it from the latest observed month
+- T057: an explicit `end_date` later than the transaction as-of date in the same month is clamped to the as-of date; without `end_date`, an in-progress latest month is cut at the as-of date. An in-progress month is therefore always partial and never compared with the full previous month
 - derives `previous_period = previous calendar month`
-- compares those two months; partial explicit dates truncate the prior month to the same day-of-month and expose `same_day_previous_month` rather than `full_previous_month`
+- compares those two months; partial dates truncate the prior month to the same day-of-month and expose `same_day_previous_month` rather than `full_previous_month`
+- T057 additive fields: per item `baseline_amount` (median of the comparison-contract baseline months for that category, same amount normalization and type filter, ignoring `start_date`) and `baseline_change_amount = current_amount − baseline_amount`; response `comparison` (the contract basis). `previous_*`/`delta_*` keep their previous-month meaning
 - amount sign is normalized in SQL (`_analytics_amount`)
   - income positive
   - expense positive via `-amount`
@@ -1856,21 +1866,21 @@ Source: `app.services.analytics_service.get_recurring_payments`
 Source: `app.services.analytics_service.get_spending_anomalies`
 
 - expense-only rows
-- reference period:
-  - last closed month by default
-  - or supplied `end_date`
-- baseline window:
-  - previous `baseline_months`
-- if partial end date:
+- reference period (T057: resolved by the comparison contract):
+  - last closed month by default, judged from the transaction as-of date (previously from today's date)
+  - or the month of the supplied `end_date`, counted through `min(end_date, transaction as-of date)`
+  - a target month after the as-of month, or with no data, yields no items and `comparison=null` (target after as-of) / `target_coverage=no_data`
+- baseline months (T057): the most recent `baseline_months` (default `6`) closed months before the target that have data; no-data months are skipped instead of counted as 0; months before the comparison baseline start date are excluded
+- if partial target (in-progress or explicit mid-month end date):
   - baseline months are cut off at same day-of-month
-- groups by `(period, effective_category_major)`
+- groups by `(period, effective_category_major)` in SQL over `vw_metric_flow_lines`
 - for each category:
   - `target_amount`
-  - `baseline_avg`
+  - `baseline_avg` — name kept; since T057 the value is the median of the baseline months (rounded to won), not the mean
   - `delta`
   - `delta_pct`
   - `anomaly_score`
-- anomaly score:
+- anomaly score (formula unchanged; stdev is the population stdev of the baseline month amounts around their mean):
   - `abs_delta / stdev` when baseline stdev exists
   - otherwise `abs_delta / baseline_avg`
   - otherwise `0`
@@ -1946,6 +1956,61 @@ Invariant tests: `tests/services/test_metric_flow_invariants.py` (SQLite) and `t
 - Deleted, merged, and superseded rows (T055/F01): an approved replacement counts once.
 - Non-KRW rows (T055/F04): excluded from every total and reported separately. The parser's integer `amount` still truncates fractional foreign amounts at import; that import-contract behavior is unchanged here.
 
+## Comparison Contract (T057)
+
+Plan reference: `Implentation-plan.md` section 2.4. Code: `backend/app/services/comparison_service.py`, schemas `backend/app/schemas/comparison.py`, setting in `backend/app/services/settings_service.py`. No view or migration is added; every amount is a SQL `SUM` over `vw_metric_flow_lines` with the same sign rules as the monthly flow (`flow_summary_columns`) and spend cube (`−amount` for 지출). Python takes medians of those SQL sums and assembles the response; it never re-sums transactions.
+
+### Window resolution (`resolve_comparison_window`)
+
+- Data facts come from `vw_metric_as_of` (`transaction_as_of`, `first_transaction_date`, `last_closed_period`) and the set of periods present in `vw_monthly_flow_summary` (a period is "with data" when it has at least one effective KRW line).
+- Target: `period` if given, else `last_closed_period` (or the as-of month when no month is closed yet). A target after the as-of month is rejected (`422`) on `/metrics/comparison/*`.
+- Target dates: `target_start_date` = 1st; `target_end_date` = month end for a closed target, the transaction as-of date for the in-progress month, or an earlier explicit end date passed by a legacy endpoint. `elapsed_day = target_end_date.day` when that is not the month end.
+- Baseline months: walk back from the month before the target. Stop at the first data month (`baseline_limited_by=data_start`) or before `baseline_start_period` (`baseline_limited_by=baseline_start_date`). Skip months without data (`skipped_periods`, reason `no_data`) and keep walking. Collect up to `baseline_months_requested` (6 by default; `spending-anomalies` passes its own `baseline_months`).
+- `baseline_start_period`: month of `baseline_start_date` when it is the 1st, otherwise the next month.
+- Day cut: when `elapsed_day` is set, all lines in scope satisfy `day_of_month(date) <= elapsed_day` (target and baseline months alike).
+- The first data month counts as closed by the 2.1 definition even when the data starts mid-month; `first_data_period_starts_mid_month` and `partial_month_note` say so when that month is in the baseline. (Open question for the plan owner: whether to exclude it.)
+
+### Median
+
+- `median_won(values)`: odd count → middle value; even count → `(a + b) / 2` rounded with `ROUND_HALF_UP` on `Decimal` (half away from zero). Empty → `null`.
+- Baseline values are taken over every baseline month; a month with data but no amount for the item contributes `0`.
+- Per-item medians are not additive: `sum(items[].baseline_amount)` generally differs from `baseline_total`.
+
+### `GET /api/v1/metrics/comparison/monthly-flow`
+
+- Query: `period` (`YYYY-MM`, optional).
+- Measures (key → label): `income_total` 수입, `committed_loan_total`, `committed_installment_total`, `committed_recurring_total`, `committed_total`, `ad_hoc_protected_total`, `ad_hoc_adjustable_total`, `undecided_total` 미정, `total_outflow` 총지급, `living_spend` 생활 지출, `protected_spend`, `adjustable_spend`, `adjustability_undecided_total`, `residual` 잔여, `transfer_net`.
+- Each measure: `target_amount` (null when the target has no data), `baseline_amount` (median), `change_amount = target − baseline`, `baseline_values[]` (`period`, `amount`).
+- `residual_rate`: only for a closed target; `target_rate = residual ÷ income_total` (null when income ≤ 0), `baseline_rate` = median of the baseline months' rates (months with positive income only), rounded to 4 places. `null` for an in-progress target.
+
+### `GET /api/v1/metrics/comparison/contributions`
+
+- Query: `period`, `adjustability` (`all` = every expense line including 미정, `protected`, `adjustable`), `level` (`category` = effective major category; `merchant` = (category, merchant) pairs, so a merchant under two categories is two items), `category` (narrow to one category; `''`/null categories are `미분류`), `limit` (per list).
+- Monthly items: target-month amount vs the median of the baseline months. Items with target `0` and baseline `0`/null are dropped. `baseline_observed_month_count` / `baseline_zero_month_count` show how many baseline months had an amount vs 0.
+- Cadence: in the 12 months ending at the target (`twelve_month_window.target_window_*`), count months with positive net spend per item (SQL). When all 12 months have data and the count is 1–2, the item is `annual_like` and moves to `twelve_month_items`: `target_amount` = 12-month total, `baseline_amount` = total of the preceding 12 months, `target_period_amount` = the target month alone. For an in-progress target the last month of the baseline window is cut at the same `elapsed_day`.
+- Baseline 12-month window availability: every month on/after the first data month (`data_start`), on/after `baseline_start_period` (`baseline_start_date`), and with data (`no_data`); otherwise annual-like baselines are `null` with `baseline_note`.
+- Ordering (both lists): `abs(change_amount)` descending, then target amount, category, merchant; items without a baseline come last by target amount. Never by percent.
+- View totals: `target_total` (null when the target has no data), `baseline_total` = median of the view's monthly totals, `change_total`.
+
+### Existing analytics under the contract
+
+| Surface | What changed (names and types unchanged) |
+|---|---|
+| `GET /analytics/spending-anomalies` (3-month mean baseline) | Replaced by the contract: median of up to `baseline_months` (default 6) closed months with data, baseline start date, same elapsed days, default target from the data as-of date. Adds `comparison`. `baseline_avg` keeps its name but holds the median. |
+| `GET /analytics/category-mom` (previous month) | Previous-month fields kept, but an in-progress month is always compared through the same day. Adds per-item `baseline_amount`/`baseline_change_amount` (contract median) and `comparison`. `delta_pct` kept (same-elapsed-day percentage, not a ratio metric). |
+| `GET /analytics/monthly-cashflow` | `savings_rate` null for the in-progress month. |
+| `GET /analytics/fixed-cost-trend` | `fixed_ratio` null for the in-progress month. |
+| `GET /canonical-views/dashboard` `monthly_cashflow[]` | `savings_rate` null for months after `metric_as_of.last_closed_period` (basis stays `observed_partial_month`, or `no_income`). The DB view `vw_monthly_cashflow.savings_rate` (readonly SQL consumers) is unchanged and still computed for every month. |
+
+Not migrated in T057 (each keeps its own baseline, stated here so consumers do not mistake it for the contract):
+
+- `vw_merchant_monthly_baseline` and dashboard `merchant_monthly_baseline[]`: trailing 3-month mean (`trailing_3_month_avg`, `baseline_delta`, `baseline_delta_pct`). Column names encode the method and readonly SQL consumers depend on them; use `/metrics/comparison/contributions?level=merchant` for the contract view. Removal belongs to `T060`.
+- `discretionary-velocity`: prorated outlier-trimmed mean, slated for removal by plan 3.3 (not removed here).
+- `purchase-gate-candidates`/`spending-review-candidates` `merchant_spike`/`discretionary_spike`: monthly mean of prior months on the `purchase_net.v1` basis; to be merged into the post-transaction review list (`T058`).
+- `fixed-cost-summary.fixed_ratio` and `payment-method-patterns.pct_of_total`: composition shares of the requested range, not month comparisons; unchanged.
+- `income-stability`: variability of observed months, not a baseline comparison; unchanged (its default reference date still uses today's date).
+- Monthly projection baselines (`T064`) and snapshot comparisons (`T061`).
+
 ## Implementation Notes That Matter
 
 - `transactions/merge` is still an intentional `501` stub
@@ -1955,7 +2020,7 @@ Invariant tests: `tests/services/test_metric_flow_invariants.py` (SQLite) and `t
   - `reference_date`
   - `is_partial_period`
 - current frontend still contains some fallbacks for older backend contracts, especially around transaction filter options
-- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live analytics scopes include `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, and `financial_targets`
+- analytics settings are stored in `app_settings` with `scope + key` uniqueness; current live analytics scopes include `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets`, and `comparison`
 - upload file retention is live for `POST /api/v1/upload`: default `UPLOAD_DIR=/data/uploads`, keep latest 5 original files
 
 

@@ -14,7 +14,8 @@ async def test_analytics_settings_defaults_when_no_saved_values(
 
     assert settings.defaults.spending_anomalies.min_delta_amount == 100_000
     assert settings.defaults.spending_anomalies.anomaly_threshold == 0.5
-    assert settings.defaults.spending_anomalies.baseline_months == 3
+    # T057: the anomaly baseline defaults to the comparison contract's 6 months.
+    assert settings.defaults.spending_anomalies.baseline_months == 6
     assert settings.saved.spending_anomalies.min_delta_amount is None
     assert settings.effective.spending_anomalies.min_delta_amount == 100_000
 
@@ -34,7 +35,7 @@ async def test_patch_analytics_settings_persists_and_resets_individual_values(
     assert saved.saved.spending_anomalies.anomaly_threshold == 1.25
     assert saved.saved.spending_anomalies.baseline_months is None
     assert saved.effective.spending_anomalies.min_delta_amount == 30_000
-    assert saved.effective.spending_anomalies.baseline_months == 3
+    assert saved.effective.spending_anomalies.baseline_months == 6
 
     reset = await patch_analytics_settings(
         db_session,
@@ -69,3 +70,35 @@ async def test_resolve_spending_anomalies_settings_prefers_overrides_then_saved(
     assert resolved.baseline_months == 2
     assert resolved.anomaly_threshold == 1.25
     assert resolved.min_delta_amount == 30_000
+
+
+async def test_comparison_baseline_start_date_persists_resets_and_labels(
+    db_session: AsyncSession,
+) -> None:
+    from datetime import date
+
+    from app.services.settings_service import get_comparison_settings
+
+    initial = await get_analytics_settings(db_session)
+    assert initial.defaults.comparison.baseline_start_date is None
+    assert initial.comparison_guide is not None
+    assert initial.comparison_guide.options[0].value_label.startswith("제한 없음")
+
+    saved = await patch_analytics_settings(
+        db_session,
+        spending_anomalies={},
+        comparison={"baseline_start_date": date(2026, 3, 15)},
+    )
+    assert saved.saved.comparison.baseline_start_date == date(2026, 3, 15)
+    assert saved.effective.comparison.baseline_start_date == date(2026, 3, 15)
+    assert saved.comparison_guide is not None
+    assert "2026-04부터" in saved.comparison_guide.options[0].value_label
+    assert (await get_comparison_settings(db_session)).baseline_start_date == date(
+        2026, 3, 15
+    )
+
+    reset = await patch_analytics_settings(
+        db_session, spending_anomalies={}, comparison={"baseline_start_date": None}
+    )
+    assert reset.saved.comparison.baseline_start_date is None
+    assert reset.effective.comparison.baseline_start_date is None

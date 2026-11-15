@@ -25,7 +25,12 @@ class CanonicalMonthlyCashflowItem(BaseModel):
     discretionary_spend_total: int
     unclassified_expense_total: int
     net_cashflow: int
-    savings_rate: float | None
+    savings_rate: float | None = Field(
+        description=(
+            "net_cashflow ÷ income_total. 진행월(metric_as_of.last_closed_period 이후)은 "
+            "비교 계약(T057)에 따라 null. DB 뷰 vw_monthly_cashflow는 모든 달에 계산한다."
+        )
+    )
     savings_rate_basis: Literal[
         "observed_closed_month",
         "observed_partial_month",

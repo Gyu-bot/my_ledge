@@ -47,10 +47,19 @@ from app.services.metric_views import (
     day_of_month,
     flow_summary_columns,
 )
+from app.services.comparison_service import (
+    ComparisonWindow,
+    build_comparison_basis,
+    grouped_period_amounts,
+    median_won,
+    period_start,
+    resolve_comparison_window,
+)
 from app.services.metrics_service import (
     PURCHASE_NET_DEFINITION,
     build_flow_contract,
     build_purchase_net_contract,
+    load_as_of,
     month_status,
 )
 
@@ -130,13 +139,14 @@ async def get_monthly_cashflow(
             "expense": "total_outflow (총지급: 대출 원리금 포함, 환불은 게시월에서 차감)",
             "transfer": "transfer_activity_total (이체 절댓값 합, 수입·지출 아님)",
             "net_cashflow": "residual = income − expense",
-            "savings_rate": "net_cashflow ÷ income (모든 월에 계산되는 기존 필드; 현금 잔여율은 마감월에만 /metrics/monthly-flow 참조)",
+            "savings_rate": "net_cashflow ÷ income. 비교 계약(T057)에 따라 마감월에만 내고 진행월은 null",
         },
     )
     items = []
     for row in result.mappings():
         income = int(row["income_total"])
         net_cashflow = int(row["residual"])
+        row_status = month_status(row["period"], contract.as_of)
         items.append(
             MonthlyCashflowItem(
                 period=row["period"],
@@ -144,8 +154,12 @@ async def get_monthly_cashflow(
                 expense=int(row["total_outflow"]),
                 transfer=int(row["transfer_activity_total"]),
                 net_cashflow=net_cashflow,
-                savings_rate=_safe_ratio(net_cashflow, income),
-                month_status=month_status(row["period"], contract.as_of),
+                savings_rate=(
+                    _safe_ratio(net_cashflow, income)
+                    if row_status == "closed"
+                    else None
+                ),
+                month_status=row_status,
             )
         )
     return MonthlyCashflowResponse(items=items, contract=contract)
@@ -163,13 +177,31 @@ async def get_category_mom(
         *_date_filters(start_date, end_date),
         *_type_filters(tx_type),
     ]
-    max_line_date = await db_session.scalar(
-        select(func.max(_LINES.c.date)).where(*scope_filters)
-    )
-    ref_date = end_date or (
-        _as_date(max_line_date) if max_line_date is not None else None
-    )
-    is_partial_period = end_date is not None and not _is_month_end(end_date)
+    as_of = await load_as_of(db_session)
+    data_as_of = as_of.transaction_as_of
+    if end_date is not None:
+        ref_date: date | None = end_date
+        # Never count days the transaction data has not reached yet.
+        if (
+            data_as_of is not None
+            and data_as_of < end_date
+            and _month_key(end_date) == _month_key(data_as_of)
+        ):
+            ref_date = data_as_of
+        is_partial_period = ref_date is not None and not _is_month_end(ref_date)
+    else:
+        max_line_date = await db_session.scalar(
+            select(func.max(_LINES.c.date)).where(*scope_filters)
+        )
+        ref_date = _as_date(max_line_date) if max_line_date is not None else None
+        # An in-progress month is compared only through the as-of day.
+        is_partial_period = (
+            ref_date is not None
+            and data_as_of is not None
+            and month_status(_month_key(ref_date), as_of) == "in_progress"
+        )
+        if is_partial_period:
+            ref_date = data_as_of
     response_basis = {
         "reference_date": ref_date,
         "is_partial_period": is_partial_period,
@@ -182,10 +214,21 @@ async def get_category_mom(
         definition="category_change.legacy_v1",
         scope=(
             "기준월과 전월의 카테고리별 금액. 지출은 순지출(환불 차감), 수입은 수입액, "
-            "이체는 절댓값. 부분월이면 전월도 같은 날짜까지만 집계"
+            "이체는 절댓값. 부분월(진행월 포함)이면 전월도 같은 날짜까지만 집계"
         ),
         start_date=start_date,
         end_date=end_date,
+        field_scopes={
+            "previous_*": (
+                "기존 전월 비교. 부분월이면 전월 같은 경과일 누적이며 진행월에 전월 "
+                "전체와 비교하지 않는다"
+            ),
+            "baseline_amount": (
+                "비교 계약 기준값: 최근 마감월 중앙값(기준 기간은 comparison 참조). "
+                "날짜 범위(start_date)와 무관하게 기준 기간 전체에서 집계"
+            ),
+            "delta_pct": "delta_amount ÷ previous_amount (같은 경과일끼리의 증감률)",
+        },
     )
     if ref_date is None:
         return CategoryMoMResponse(items=[], contract=contract, **response_basis)
@@ -202,7 +245,8 @@ async def get_category_mom(
         "미분류",
     )
     period_filters: list[ColumnElement[bool]] = [
-        _LINES.c.period.in_([current_period, previous_period])
+        _LINES.c.period.in_([current_period, previous_period]),
+        _LINES.c.date <= ref_date,
     ]
     if is_partial_period:
         period_filters.append(
@@ -228,11 +272,37 @@ async def get_category_mom(
         grouped[(row["period"], row["category"])] = int(row["amount"])
         categories.add(row["category"])
 
+    window = await _legacy_comparison_window(
+        db_session,
+        as_of_period=_month_key(data_as_of) if data_as_of is not None else None,
+        target_period=current_period,
+        through_date=ref_date,
+    )
+    baseline: dict[tuple, int] = {}
+    if window is not None:
+        baseline = await grouped_period_amounts(
+            db_session,
+            window,
+            keys=[category],
+            amount=_analytics_amount(),
+            filters=_type_filters(tx_type),
+        )
+
     items = []
     for category_name in categories:
         current_amount = grouped[(current_period, category_name)]
         previous_amount = grouped[(previous_period, category_name)]
         delta_amount = current_amount - previous_amount
+        baseline_amount = (
+            median_won(
+                [
+                    baseline.get((period, category_name), 0)
+                    for period in window.baseline_periods
+                ]
+            )
+            if window is not None
+            else None
+        )
         items.append(
             CategoryMoMItem(
                 period=current_period,
@@ -242,11 +312,49 @@ async def get_category_mom(
                 previous_amount=previous_amount,
                 delta_amount=delta_amount,
                 delta_pct=_safe_ratio(delta_amount, previous_amount),
+                baseline_amount=baseline_amount,
+                baseline_change_amount=(
+                    current_amount - baseline_amount
+                    if baseline_amount is not None
+                    else None
+                ),
             )
         )
 
     items.sort(key=lambda item: (-item.delta_amount, item.category))
-    return CategoryMoMResponse(items=items, contract=contract, **response_basis)
+    return CategoryMoMResponse(
+        items=items,
+        contract=contract,
+        comparison=build_comparison_basis(window) if window is not None else None,
+        **response_basis,
+    )
+
+
+async def _legacy_comparison_window(
+    db_session: AsyncSession,
+    *,
+    as_of_period: str | None,
+    target_period: str,
+    through_date: date | None,
+    baseline_months: int | None = None,
+) -> ComparisonWindow | None:
+    """Comparison-contract window for a legacy endpoint's target month.
+
+    None when there is no data or the target is after the data's as-of month
+    (legacy endpoints keep answering those requests without a contract basis).
+    """
+    if as_of_period is None or target_period > as_of_period:
+        return None
+    if baseline_months is None:
+        return await resolve_comparison_window(
+            db_session, target_period=target_period, through_date=through_date
+        )
+    return await resolve_comparison_window(
+        db_session,
+        target_period=target_period,
+        through_date=through_date,
+        baseline_months=baseline_months,
+    )
 
 
 async def get_fixed_cost_summary(
@@ -310,6 +418,7 @@ async def get_fixed_cost_trend(
     items = []
     for row in result.mappings():
         values = {key: int(row[key] or 0) for key in _FIXED_COST_FIELDS}
+        row_status = month_status(row["period"], contract.as_of)
         items.append(
             FixedCostTrendItem(
                 period=row["period"],
@@ -321,8 +430,12 @@ async def get_fixed_cost_trend(
                     values["discretionary_fixed_total"]
                     + values["discretionary_variable_total"]
                 ),
-                fixed_ratio=_safe_ratio(values["fixed_total"], values["expense_total"]),
-                month_status=month_status(row["period"], contract.as_of),
+                fixed_ratio=(
+                    _safe_ratio(values["fixed_total"], values["expense_total"])
+                    if row_status == "closed"
+                    else None
+                ),
+                month_status=row_status,
             )
         )
     return FixedCostTrendResponse(items=items, contract=contract)
@@ -337,6 +450,10 @@ _FIXED_COST_FIELD_SCOPES = {
     "fixed_total": "cost_kind = fixed (대출 연결 거래도 cost_kind에 따라 포함)",
     "unclassified_total": "cost_kind가 fixed/variable이 아닌 지출",
     "*_count": "해당 구간에 금액이 걸린 서로 다른 거래 수",
+    "fixed_ratio": (
+        "fixed_total ÷ expense_total. fixed-cost-trend는 진행월에 null(T057). "
+        "fixed-cost-summary는 요청 구간 전체의 구성비라 그대로 낸다"
+    ),
 }
 _FIXED_COST_FIELDS = (
     "expense_total",
@@ -763,79 +880,73 @@ async def get_spending_anomalies(
     page: int = 1,
     per_page: int = 10,
 ) -> SpendingAnomaliesResponse:
+    """Category spend vs the comparison-contract baseline (T057).
+
+    The baseline is the median of the most recent ``baseline_months`` closed
+    months with data before the target (no-data months are skipped, not
+    counted as 0), limited by the user's baseline start date. A partial target
+    month compares the same elapsed days. The anomaly score formula is
+    unchanged: |delta| ÷ stdev of the baseline months, or ÷ baseline when the
+    stdev is 0.
+    """
     used_last_closed_month = end_date is None
-    ref_date = (
-        _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    as_of = await load_as_of(db_session)
+    as_of_period = (
+        _month_key(as_of.transaction_as_of)
+        if as_of.transaction_as_of is not None
+        else None
     )
-    assert ref_date is not None
-    target_period = _month_key(ref_date)
-    partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
-
-    # baseline: baseline_months개월 이전부터 target 전달까지
-    year_int = int(target_period[:4])
-    month_int = int(target_period[5:7])
-    baseline_start_month = month_int - baseline_months
-    baseline_start_year = year_int
-    while baseline_start_month <= 0:
-        baseline_start_month += 12
-        baseline_start_year -= 1
-
-    load_start = date(baseline_start_year, baseline_start_month, 1)
-    load_end = ref_date
-
-    # baseline periods
-    baseline_periods: list[str] = []
-    y, m = baseline_start_year, baseline_start_month
-    while _month_key(date(y, m, 1)) < target_period:
-        baseline_periods.append(f"{y:04d}-{m:02d}")
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
-    baseline_period_set = set(baseline_periods)
-
-    filters: list[ColumnElement[bool]] = [
-        _LINES.c.type == EXPENSE,
-        *_date_filters(load_start, load_end),
-    ]
-    if partial_cutoff_day is not None and baseline_period_set:
-        filters.append(
-            not_(
-                and_(
-                    _LINES.c.period.in_(sorted(baseline_period_set)),
-                    day_of_month(_LINES.c.date) > partial_cutoff_day,
-                )
-            )
+    window: ComparisonWindow | None
+    if end_date is None:
+        window = (
+            await resolve_comparison_window(db_session, baseline_months=baseline_months)
+            if as_of_period is not None
+            else None
         )
+    else:
+        window = await _legacy_comparison_window(
+            db_session,
+            as_of_period=as_of_period,
+            target_period=_month_key(end_date),
+            through_date=end_date,
+            baseline_months=baseline_months,
+        )
+    if window is None or window.target_period is None or window.target_end is None:
+        ref_date = end_date or _last_closed_month_end(date.today())
+        target_period = _month_key(ref_date)
+        partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
+        baseline_periods: list[str] = []
+    else:
+        ref_date = window.target_end
+        target_period = window.target_period
+        partial_cutoff_day = window.cutoff_day
+        baseline_periods = list(window.baseline_periods)
+
     category_expr = func.coalesce(
         func.nullif(_LINES.c.effective_category_major, ""), "미분류"
     )
-    result = await db_session.execute(
-        select(
-            _LINES.c.period,
-            category_expr.label("category"),
-            func.coalesce(func.sum(-_LINES.c.amount), 0).label("amount"),
-        )
-        .where(*filters)
-        .group_by(_LINES.c.period, category_expr)
-    )
     # (period, category) -> net spend, aggregated in SQL from the flow lines.
-    grouped: dict[tuple[str, str], int] = {
-        (row["period"], row["category"]): int(row["amount"])
-        for row in result.mappings()
-    }
+    grouped: dict[tuple, int] = {}
+    if window is not None and window.target_has_data:
+        grouped = await grouped_period_amounts(
+            db_session,
+            window,
+            keys=[category_expr],
+            amount=-_LINES.c.amount,
+            filters=[_LINES.c.type == EXPENSE],
+        )
 
-    # 카테고리별 baseline 통계
-    all_categories = {cat for (_, cat) in grouped.keys()}
+    all_categories = {category for (_, category) in grouped}
     items = []
     for category in all_categories:
-        target_amount = grouped.get((target_period, category), 0)
-        baseline_amounts = [grouped.get((p, category), 0) for p in baseline_periods]
         if not baseline_periods:
             continue
-        baseline_avg = round(sum(baseline_amounts) / len(baseline_amounts))
+        target_amount = grouped.get((target_period, category), 0)
+        baseline_amounts = [grouped.get((p, category), 0) for p in baseline_periods]
+        baseline_avg = median_won(baseline_amounts) or 0
+        baseline_mean = sum(baseline_amounts) / len(baseline_amounts)
         if len(baseline_amounts) > 1:
-            b_var = sum((v - baseline_avg) ** 2 for v in baseline_amounts) / len(
+            b_var = sum((v - baseline_mean) ** 2 for v in baseline_amounts) / len(
                 baseline_amounts
             )
             b_stdev = math.sqrt(b_var)
@@ -913,6 +1024,7 @@ async def get_spending_anomalies(
         assumptions=_build_spending_anomalies_assumptions(
             target_period=target_period,
             baseline_months=baseline_months,
+            baseline_periods=baseline_periods,
             anomaly_threshold=anomaly_threshold,
             min_delta_amount=min_delta_amount,
             used_last_closed_month=used_last_closed_month,
@@ -924,11 +1036,25 @@ async def get_spending_anomalies(
             definition="spending_anomalies.legacy_v1",
             scope=(
                 "대분류 카테고리별 월 순지출(환불은 게시월에서 차감, 대출 포함)의 "
-                "기준월 대비 기준 기간 평균 비교"
+                "기준월 대비 비교 계약(comparison.v1) 기준값 비교"
             ),
-            start_date=load_start,
-            end_date=load_end,
+            start_date=(
+                period_start(baseline_periods[0]) if baseline_periods else None
+            ),
+            end_date=ref_date,
+            field_scopes={
+                "baseline_avg": (
+                    "필드 이름은 유지하지만 값은 비교 계약 기준값: 기준 기간 월별 "
+                    "순지출의 중앙값(원 단위 반올림). 자료 없는 달은 빼고, 자료 있는 "
+                    "달의 0원은 포함"
+                ),
+                "anomaly_score": (
+                    "|amount − baseline_avg| ÷ 기준 기간 월별 금액의 표준편차"
+                    "(0이면 ÷ baseline_avg)"
+                ),
+            },
         ),
+        comparison=build_comparison_basis(window) if window is not None else None,
     )
 
 
@@ -1470,18 +1596,25 @@ def _build_spending_anomalies_assumptions(
     *,
     target_period: str,
     baseline_months: int,
+    baseline_periods: list[str],
     anomaly_threshold: float,
     min_delta_amount: int,
     used_last_closed_month: bool,
     partial_cutoff_day: int | None,
     ref_date: date,
 ) -> str:
+    used = ", ".join(baseline_periods) if baseline_periods else "없음"
     parts = [
         f"기준월={target_period}",
-        f"baseline={baseline_months}개월 평균 대비",
+        (
+            f"baseline=최근 마감월 최대 {baseline_months}개의 중앙값 대비"
+            f"(사용한 달: {used}; 자료 없는 달 제외, 기준 구간 시작일 적용)"
+        ),
     ]
     if used_last_closed_month:
-        parts.append(f"직전 마감월 기준(as_of={ref_date.isoformat()})")
+        parts.append(
+            f"직전 마감월 기준(as_of={ref_date.isoformat()}, 자료 기준일로 판단)"
+        )
     elif partial_cutoff_day is not None:
         parts.append(
             f"부분 기간 비교(기준일={ref_date.isoformat()}, 이전 월도 매월 {partial_cutoff_day}일까지만 집계)"

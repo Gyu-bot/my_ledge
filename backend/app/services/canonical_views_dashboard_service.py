@@ -55,21 +55,40 @@ def _data_coverage(as_of: MetricAsOf) -> CanonicalDataCoverage:
 
 def _apply_cashflow_basis(
     items: list[CanonicalMonthlyCashflowItem],
+    as_of: MetricAsOf | None = None,
 ) -> list[CanonicalMonthlyCashflowItem]:
-    return [
-        item.model_copy(
-            update={
-                "savings_rate_basis": (
-                    "no_income"
-                    if item.income_total <= 0 or item.savings_rate is None
-                    else "observed_closed_month"
-                    if item.is_complete_month
-                    else "observed_partial_month"
+    last_closed = as_of.last_closed_period if as_of is not None else None
+    updated = []
+    for item in items:
+        # Comparison contract (T057): no ratio metric for an in-progress month.
+        if last_closed is not None and item.period > last_closed:
+            updated.append(
+                item.model_copy(
+                    update={
+                        "savings_rate": None,
+                        "savings_rate_basis": (
+                            "no_income"
+                            if item.income_total <= 0
+                            else "observed_partial_month"
+                        ),
+                    }
                 )
-            }
+            )
+            continue
+        updated.append(
+            item.model_copy(
+                update={
+                    "savings_rate_basis": (
+                        "no_income"
+                        if item.income_total <= 0 or item.savings_rate is None
+                        else "observed_closed_month"
+                        if item.is_complete_month
+                        else "observed_partial_month"
+                    )
+                }
+            )
         )
-        for item in items
-    ]
+    return updated
 
 
 def _queue_issue_types(item: CanonicalUnclassifiedWorkQueueItem) -> list[str]:
@@ -336,7 +355,7 @@ async def get_canonical_views_dashboard(
         )
         for item in monthly_cashflow_items
     ]
-    monthly_cashflow_items = _apply_cashflow_basis(monthly_cashflow_items)
+    monthly_cashflow_items = _apply_cashflow_basis(monthly_cashflow_items, metric_as_of)
     true_spendable_items = _to_items(
         true_spendable,
         CanonicalTrueSpendableMonthlyItem,

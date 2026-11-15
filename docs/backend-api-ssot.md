@@ -38,6 +38,8 @@
   - `GET /api/v1/metrics/monthly-flow`
   - `GET /api/v1/metrics/spend-cube`
   - `GET /api/v1/metrics/data-status`
+  - `GET /api/v1/metrics/comparison/monthly-flow`
+  - `GET /api/v1/metrics/comparison/contributions`
   - `GET /api/v1/settings/analytics`
   - `PATCH /api/v1/settings/analytics`
   - `GET /api/v1/settings/income-expectations`
@@ -225,6 +227,8 @@ All aggregate analytics responses above now also carry an optional `contract` ob
 | `GET` | `/api/v1/metrics/monthly-flow` | live | API key required. `start_period`/`end_period` (`YYYY-MM`). Month totals and per-row lines of `vw_monthly_flow_summary`/`vw_monthly_flow`, `month_status`, `residual_rate` (closed months only), `contract` |
 | `GET` | `/api/v1/metrics/spend-cube` | live | API key required. `group_by` = comma list of `period, effective_category_major, effective_category_minor, merchant, payment_form, commitment_kind, adjustability, flow_row`; same-named equality filters; `limit` 1–2000. Reads `vw_spend_cube` |
 | `GET` | `/api/v1/metrics/data-status` | live | API key required. Transaction/snapshot as-of dates, closed months, in-progress month, 미정 share, excluded non-KRW summary |
+| `GET` | `/api/v1/metrics/comparison/monthly-flow` | live | API key required. T057. Optional `period` (`YYYY-MM`, default latest closed month; 422 after the transaction as-of month). Each monthly-flow measure: `target_amount`, `baseline_amount` (median), `change_amount`, `baseline_values`; `residual_rate` (target vs baseline median) for a closed target only; `comparison` basis and `contract` |
+| `GET` | `/api/v1/metrics/comparison/contributions` | live | API key required. T057. `period`, `adjustability=all\|protected\|adjustable`, `level=category\|merchant` (merchant stays inside its category), optional `category`, `limit` 1–1000. Monthly `items` and 12-month-window `twelve_month_items` ordered by `abs(change_amount)` (won); view totals `target_total`/`baseline_total`/`change_total`; `twelve_month_window`; `comparison`; `contract` |
 
 ## Key Contract Notes
 
@@ -240,6 +244,17 @@ All aggregate analytics responses above now also carry an optional `contract` ob
 - As-of dates: `transaction_as_of` = latest effective transaction date (basis `max_effective_transaction_date`); snapshot as-of dates are separate per kind (`assets`, `loans`, `investments`, `insurance`, `profile`) and never merged. A month is `closed` when `transaction_as_of` reaches its last day; the latest uncovered month is `in_progress`.
 - `contract` object on aggregate responses: `definition`, `scope`, `inclusion` (basis view, currency, exclusions, sign/refund/transfer/loan/period rules), `as_of`, `adjustability_undecided_total` and `adjustability_undecided_share` (amount basis, share of `total_outflow`), `non_krw_transaction_count`, `field_scopes`.
 - Purchase-level detectors (`recurring-payments`, `discretionary-velocity`, `purchase-gate-candidates`/`spending-review-candidates`) use a separate, named basis `purchase_net.v1` (`vw_metric_transactions.purchase_net_amount`): confirmed allocations net into the original purchase regardless of posting date; an unallocated refund remainder stays on the refund row. These are review signals, not monthly cashflow actuals.
+
+### Comparison Contract (T057)
+
+- One rule set (`comparison.v1`, `backend/app/services/comparison_service.py`) for every comparison. Amounts are SQL sums over `vw_metric_flow_lines` (same lines as the monthly flow and spend cube); Python only takes medians of those sums. No new view or migration.
+- Every comparison response states its basis in a `comparison` object: `target_period`, `target_month_status`, `target_coverage` (`observed|no_data`), `target_start_date`/`target_end_date`, `baseline_method`, `baseline_periods`, `baseline_month_count`, `baseline_status` (`full|fewer_than_requested|none`), `baseline_limited_by` (`data_start|baseline_start_date`), `baseline_start_date`/`baseline_start_period`, `first_data_period(_starts_mid_month)`, `skipped_periods` (no-data months), `partial_month_handling` (`closed_month_full|same_elapsed_days`), `elapsed_day`, `ratio_metrics_available`, `previous_full_month_delta_available`, and the Korean rule texts.
+- Baseline: median of the most recent 6 closed months before the target that have data. Fewer available months are used as they are (`fewer_than_requested`); none gives null baselines. An even count averages the middle two, rounded to the won (half away from zero). Medians are per item and are not additive across items.
+- Baseline start date: the single stored setting `analytics.comparison.baseline_start_date`. Only months on or after it count (a date on the 1st includes that month, any other date starts from the next month). It changes every comparison surface at once: `/metrics/comparison/*`, `category-mom` `baseline_*`, and `spending-anomalies`.
+- In-progress target: target and every baseline month are cut to day 1 … `elapsed_day` (the transaction as-of day; a shorter month is used whole). No ratio metric and no full-previous-month delta is produced for it. An explicit `end_date` inside the as-of month is clamped to the transaction as-of date.
+- No data vs zero: a month with no effective KRW transactions is skipped (listed in `skipped_periods`) and the search continues further back; a month with data but no amount for an item counts as 0. A target month with no data returns null target amounts.
+- 12-month window: an item whose net spend is positive in only 1–2 of the 12 months ending at the target (all 12 months with data) is `cadence=annual_like` and compared as the 12-month total vs the preceding 12-month total (`twelve_month_items`). The baseline window must be fully covered and on/after the baseline start date, otherwise its baseline is null with `baseline_window_unavailable_reason`.
+- Legacy analytics under the contract: `spending-anomalies` uses the contract baseline (field `baseline_avg` now holds the median; anomaly score formula unchanged; `baseline_months` default 6); `category-mom` adds per-item `baseline_amount`/`baseline_change_amount` and `comparison`, and its `previous_*` fields compare the same elapsed days whenever the target month is in progress; `monthly-cashflow.savings_rate`, `fixed-cost-trend.fixed_ratio` and dashboard `monthly_cashflow.savings_rate` are null for in-progress months. Details and what is not yet migrated: [backend-api-and-metrics-reference.md](backend-api-and-metrics-reference.md#comparison-contract-t057).
 
 ### Transactions
 
@@ -368,12 +383,14 @@ All aggregate analytics responses above now also carry an optional `contract` ob
 ### Analytics Settings
 
 - `GET /api/v1/settings/analytics` 와 `PATCH /api/v1/settings/analytics` 는 `X-API-Key` 인증이 필요하다.
-- persisted setting 범위는 `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets` 다.
-- 응답은 `defaults`, `saved`, `effective` 를 나눠 반환한다.
+- persisted setting 범위는 `spending_anomalies`, `discretionary_velocity`, `purchase_gate`, `recurring_dry_run`, `asset_liability_health`, `bulk_operations`, `financial_targets`, `comparison` 이다.
+- 응답은 `defaults`, `saved`, `effective` 를 나눠 반환하고, `comparison_guide`(제목, 요약, `options[]`: `key`, 한국어 `label`·`description`, `editable`, 현재 값의 한국어 `value_label`)를 함께 준다. 화면은 내부 문자열 대신 이 한국어 선택지와 설명을 그대로 보여 줄 수 있다.
+- `comparison` 지원 필드 (T057):
+  - `baseline_start_date` default `null`(제한 없음). ISO 날짜. 저장 위치는 `app_settings`(`scope=analytics.comparison`)의 한 행이며 스키마 변경은 없다. `null`을 보내면 저장값을 지운다.
 - `spending_anomalies` 지원 필드:
   - `min_delta_amount` default `100000`
   - `anomaly_threshold` default `0.5`
-  - `baseline_months` default `3`
+  - `baseline_months` default `6` (T057 이전 `3`; 비교 계약의 기본 기준 기간과 같게 바꿈)
 - `PATCH` 에서 값을 지정하면 저장되고, `null` 로 보내면 해당 저장값을 삭제해 code default로 되돌린다.
 - `GET /api/v1/analytics/spending-anomalies` 의 설정 해석 순서는 `명시적 query param > persisted setting > code default` 다.
 - sparse baseline에서는 `delta_pct_raw`와 user-facing `delta_pct_display`/`reason`이 분리된다. 매우 작은 baseline에서 과도한 percentage를 그대로 문장화하지 않는다.
@@ -397,7 +414,7 @@ All aggregate analytics responses above now also carry an optional `contract` ob
 
 ### Signed Analytics and Asset Basis
 
-- Category month comparison exposes `reference_date`, `is_partial_period` and `comparison_basis`; a partial selected month is compared with the same day range in the previous month, including when the target month has no rows.
+- Category month comparison exposes `reference_date`, `is_partial_period` and `comparison_basis`; a partial selected month is compared with the same day range in the previous month, including when the target month has no rows. Since T057 an in-progress target month is always partial (also when `end_date` is omitted or set past the transaction as-of date), so it is never compared with the full previous month.
 - Expense refunds remain signed in recurring amounts, necessity buckets, anomalies and discretionary velocity. Anomalies include `direction`; necessity-unclassified amounts/counts are separate from cost-kind-unclassified values.
 - Count fields on cashflow aggregates (`merchant-spend.count`, `payment-method-patterns.transaction_count`, `fixed-cost-*.unclassified_count`/`necessity_unclassified_count`) count distinct transactions whose amount lands in the bucket, including refunds and zero-amount rows.
 - Snapshot totals, history, comparison, net-worth breakdown and liquidity health share `aggregation_basis='nonnegative_asset_rows_minus_liability_rows'`. Raw negative asset rows are preserved and excluded from asset totals; their signed sum is `negative_asset_excluded_total`.

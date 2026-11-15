@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -144,6 +145,32 @@ class FinancialTargetsSavedSettings(BaseModel):
     debt_strategy_preference: DebtStrategyPreference | None
 
 
+class ComparisonSettings(BaseModel):
+    """Comparison contract setting (T057). One value drives every comparison."""
+
+    baseline_start_date: date | None
+
+
+class ComparisonSavedSettings(BaseModel):
+    baseline_start_date: date | None
+
+
+class SettingOptionDescription(BaseModel):
+    """Korean label and description a settings screen can render as-is."""
+
+    key: str
+    label: str
+    description: str
+    editable: bool
+    value_label: str
+
+
+class ComparisonSettingsGuide(BaseModel):
+    title: str = "비교 기준"
+    summary: str
+    options: list[SettingOptionDescription]
+
+
 class AnalyticsSettingsSection(BaseModel):
     spending_anomalies: SpendingAnomaliesSettings
     discretionary_velocity: DiscretionaryVelocitySettings
@@ -152,6 +179,7 @@ class AnalyticsSettingsSection(BaseModel):
     asset_liability_health: AssetLiabilityHealthSettings
     bulk_operations: BulkOperationsSettings
     financial_targets: FinancialTargetsSettings
+    comparison: ComparisonSettings
 
 
 class AnalyticsSavedSettingsSection(BaseModel):
@@ -162,12 +190,14 @@ class AnalyticsSavedSettingsSection(BaseModel):
     asset_liability_health: AssetLiabilityHealthSavedSettings
     bulk_operations: BulkOperationsSavedSettings
     financial_targets: FinancialTargetsSavedSettings
+    comparison: ComparisonSavedSettings
 
 
 class AnalyticsSettingsResponse(BaseModel):
     defaults: AnalyticsSettingsSection
     saved: AnalyticsSavedSettingsSection
     effective: AnalyticsSettingsSection
+    comparison_guide: ComparisonSettingsGuide | None = None
 
 
 class SpendingAnomaliesSettingsPatch(BaseModel):
@@ -237,6 +267,16 @@ class FinancialTargetsSettingsPatch(BaseModel):
     debt_strategy_preference: DebtStrategyPreference | None = None
 
 
+class ComparisonSettingsPatch(BaseModel):
+    baseline_start_date: date | None = Field(
+        default=None,
+        description=(
+            "기준 구간 시작일. 이 날짜 이후의 달만 기준 기간에 쓴다(1일이면 그 달부터, "
+            "아니면 다음 달부터). null을 보내면 설정을 지워 제한 없음으로 돌아간다."
+        ),
+    )
+
+
 class AnalyticsSettingsPatchRequest(BaseModel):
     spending_anomalies: SpendingAnomaliesSettingsPatch = Field(
         default_factory=SpendingAnomaliesSettingsPatch,
@@ -258,4 +298,7 @@ class AnalyticsSettingsPatchRequest(BaseModel):
     )
     financial_targets: FinancialTargetsSettingsPatch = Field(
         default_factory=FinancialTargetsSettingsPatch,
+    )
+    comparison: ComparisonSettingsPatch = Field(
+        default_factory=ComparisonSettingsPatch,
     )
