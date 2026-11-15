@@ -4,6 +4,7 @@
 
 import { formatSignedWon, formatWon } from '../../ds/format'
 import type { FlowRowKey, MonthlyFlowMonth, SpendCubeFilters, TransferPurpose } from '../../types/metrics'
+import type { TransactionListParams } from '../../types/transaction'
 
 export type FlowMeasureKey =
   | 'income_total'
@@ -331,4 +332,15 @@ export const COMMITMENT_KIND_LABELS: Record<string, string> = {
   loan: '대출 원리금',
   installment: '할부 회차',
   recurring: '정기 지급',
+}
+
+/** 금액을 이루는 지출 조건을 거래 조회 조건으로 옮긴다 (월 흐름표 줄 필터, T059). */
+export function lineFiltersFor(filters: SpendCubeFilters): Pick<TransactionListParams, 'flow_row' | 'payment_form' | 'adjustability'> {
+  const flowRow: FlowRowKey | undefined =
+    filters.flow_row ?? (filters.commitment_kind ? (`committed_${filters.commitment_kind}` as FlowRowKey) : undefined)
+  return {
+    ...(flowRow ? { flow_row: flowRow } : {}),
+    ...(filters.payment_form ? { payment_form: filters.payment_form } : {}),
+    ...(filters.adjustability ? { adjustability: filters.adjustability } : {}),
+  }
 }

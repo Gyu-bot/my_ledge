@@ -227,14 +227,15 @@ describe('MonthClosePage — 월 결산', () => {
     // 같은 거래처라도 카테고리가 다르면 다른 칸
     expect(within(composition).getAllByText('샘플 마트')).toHaveLength(2)
     fireEvent.click(within(composition).getAllByRole('button')[0])
-    expect(txCalls).toContainEqual(expect.objectContaining({ type: '지출', category_major: '샘플 식비', search: '샘플 마트', start_date: '2026-07-01', end_date: '2026-07-31' }))
+    // T059: 거래 목록은 금액과 같은 흐름표 줄 조건(미정)으로 거른다
+    expect(txCalls).toContainEqual(expect.objectContaining({ type: '지출', category_major: '샘플 식비', search: '샘플 마트', flow_row: 'undecided', start_date: '2026-07-01', end_date: '2026-07-31' }))
     const list = within(panel).getByRole('list', { name: '샘플 식비 · 샘플 마트 거래' })
     // 검색이 부분 일치라도 거래처 이름이 정확히 같은 거래만 보인다
     expect(within(list).getAllByRole('listitem')).toHaveLength(2)
-    expect(within(list).getAllByRole('link')[0]).toHaveAttribute('href', '/data/transactions?transaction_id=21')
-    // 이 칸이 흐름표 여러 줄에 걸치면 그 사실과 줄별 금액을 알린다
-    expect(within(panel).getByText(/흐름표 여러 줄에 걸쳐 있습니다/)).toBeInTheDocument()
-    expect(within(panel).getByText('수시 지출 · 조정 가능 ₩30,000 · 1건')).toBeInTheDocument()
+    expect(within(list).getAllByRole('button', { name: /거래 고치기/ })).toHaveLength(2)
+    // 목록의 합계가 설명하는 금액과 같다는 것을 밝힌다
+    expect(within(panel).getByText('아래 2건의 합계가 이 금액과 같습니다.')).toBeInTheDocument()
+    expect(within(panel).queryByText(/흐름표 여러 줄에 걸쳐 있습니다/)).not.toBeInTheDocument()
 
     fireEvent.click(within(panel).getByRole('button', { name: '근거 닫기' }))
     expect(screen.queryByRole('region', { name: '미정 근거' })).not.toBeInTheDocument()
@@ -250,6 +251,7 @@ describe('MonthClosePage — 월 결산', () => {
     const income = screen.getByRole('region', { name: '수입 근거' })
     expect(within(income).getByRole('list', { name: '수입 거래' })).toBeInTheDocument()
     expect(within(income).getByText(/흐름표는 2건인데 거래 목록은 1건/)).toBeInTheDocument()
+    expect(txCalls).toContainEqual(expect.objectContaining({ type: '수입', flow_row: 'income_undetermined' }))
   })
 
   it('최근 12개월 추이에서 자료 없는 달과 가져오기 전 달을 0원과 구분한다', () => {
