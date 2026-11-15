@@ -12,7 +12,11 @@ interface CashflowChartProps {
   height?: number
   /** is_complete_month=false인 월 — 반투명 처리 + 진행중 표기 */
   incompletePeriods?: ReadonlySet<string>
+  /** 범례 이름 (기본: 수입 / 지출 / 순현금흐름) */
+  labels?: { income: string; expense: string; net: string }
 }
+
+const DEFAULT_LABELS = { income: '수입', expense: '지출', net: '순현금흐름' }
 
 const VIRTUAL_WIDTH = 720
 const PAD_LEFT = 52
@@ -24,7 +28,7 @@ const PAD_BOTTOM = 22
  * 수입/지출 dual bar + 순현금흐름 라인 — 04-design-system.md §3.
  * 경량 커스텀 SVG (프로토타입 단계, recharts 미사용).
  */
-export function CashflowChart({ items, height = 200, incompletePeriods }: CashflowChartProps) {
+export function CashflowChart({ items, height = 200, incompletePeriods, labels = DEFAULT_LABELS }: CashflowChartProps) {
   if (items.length === 0) return null
 
   const plotWidth = VIRTUAL_WIDTH - PAD_LEFT - PAD_RIGHT
@@ -56,7 +60,7 @@ export function CashflowChart({ items, height = 200, incompletePeriods }: Cashfl
         width="100%"
         viewBox={`0 0 ${VIRTUAL_WIDTH} ${height}`}
         role="img"
-        aria-label={`최근 ${items.length}개월 수입·지출·순현금흐름 차트`}
+        aria-label={`최근 ${items.length}개월 ${labels.income}·${labels.expense}·${labels.net} 차트`}
       >
         {gridValues.map((value) => (
           <g key={value}>
@@ -91,7 +95,7 @@ export function CashflowChart({ items, height = 200, incompletePeriods }: Cashfl
           return (
             <g key={item.period} opacity={incomplete ? 0.45 : 1}>
               <title>
-                {`${item.period}${incomplete ? ' (진행중)' : ''} · 수입 ${formatWon(item.income)} · 지출 ${formatWon(Math.abs(item.expense))} · 순 ${formatSignedWon(item.net)}`}
+                {`${item.period}${incomplete ? ' (진행중)' : ''} · ${labels.income} ${formatWon(item.income)} · ${labels.expense} ${formatWon(Math.abs(item.expense))} · ${labels.net} ${formatSignedWon(item.net)}`}
               </title>
               <rect
                 x={center - barWidth - 1.5}
@@ -132,15 +136,15 @@ export function CashflowChart({ items, height = 200, incompletePeriods }: Cashfl
       <figcaption className="mt-2 flex gap-4 text-micro text-text-muted">
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-[2px] bg-[var(--ds-chart-income)]" aria-hidden />
-          수입
+          {labels.income}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-[2px] bg-[var(--ds-chart-expense)]" aria-hidden />
-          지출
+          {labels.expense}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-3 bg-[var(--ds-chart-net)]" aria-hidden />
-          순현금흐름
+          {labels.net}
         </span>
       </figcaption>
     </figure>
