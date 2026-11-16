@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services"))
 
 from app.main import app  # noqa: E402
+from app.models.asset_snapshot import AssetSnapshot  # noqa: E402
+from app.models.investment import Investment  # noqa: E402
 from app.models.loan import Loan  # noqa: E402
 from app.models.nature_axes import (  # noqa: E402
     CategoryAdjustabilityDefault,
@@ -700,3 +702,117 @@ async def test_spend_cube_reports_group_counts(
     assert cut["total_group_count"] == full["total_group_count"] == len(full["rows"])
     assert cut["returned_count"] == cut["row_count"] == 3
     assert cut["truncated"] is True
+
+
+# --------------------------------------------------------------------------
+# Finding 6: "complete" does not read as "explained".
+# --------------------------------------------------------------------------
+
+
+async def _seed_net_worth(db_session: AsyncSession, *, undecided_transfer: bool):
+    for month in (4, 5, 6):
+        for day in range(1, 29, 3):
+            db_session.add(_tx(date(2026, month, day), -1_000, category="category-a"))
+    db_session.add(_tx(date(2026, 6, 30), -1_000, category="category-a"))
+    if undecided_transfer:
+        transfer = _tx(date(2026, 5, 10), -300_000, category="transfer-a")
+        transfer.type = "이체"
+        db_session.add(transfer)
+    for snapshot_date, cash in (
+        (date(2026, 4, 30), 1_000_000),
+        (date(2026, 6, 30), 5_000_000),
+    ):
+        db_session.add_all(
+            [
+                AssetSnapshot(
+                    snapshot_date=snapshot_date,
+                    side="asset",
+                    category="cash-a",
+                    product_name="account-a",
+                    amount=Decimal(cash),
+                ),
+                Loan(
+                    snapshot_date=snapshot_date,
+                    lender="lender-b",
+                    product_name="loan-b",
+                    balance=Decimal("100"),
+                ),
+                Investment(
+                    snapshot_date=snapshot_date,
+                    broker="broker-b",
+                    product_name="fund-b",
+                    market_value=Decimal("100"),
+                ),
+            ]
+        )
+    await db_session.commit()
+
+
+async def test_complete_interval_states_unexplained_share(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await _seed_net_worth(db_session, undecided_transfer=False)
+    body = (
+        await async_client.get(
+            "/api/v1/metrics/net-worth/reconciliation", headers=api_headers
+        )
+    ).json()
+    assert body["status"] == "complete"
+    assert body["status_reasons"] == []
+    items = body["items"]
+    assert items["net_worth_change"] == 4_000_000
+    assert items["unexplained_difference"] == 4_021_000
+    assert items["unexplained_share_of_change"] == round(4_021_000 / 4_000_000, 4)
+    assert items["unexplained_share_withheld_reason"] is None
+    assert items["investment_valuation_change_provisional"] is False
+    assert "설명되었다는 뜻이 아니다" in body["status_note"]
+    intervals = (
+        await async_client.get(
+            "/api/v1/metrics/net-worth/intervals", headers=api_headers
+        )
+    ).json()
+    interval = intervals["intervals"][0]
+    assert interval["status"] == "complete"
+    assert (
+        interval["unexplained_share_of_change"] == items["unexplained_share_of_change"]
+    )
+    assert intervals["status_note"] == body["status_note"]
+
+
+async def test_undecided_transfers_make_valuation_change_provisional(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await _seed_net_worth(db_session, undecided_transfer=True)
+    body = (
+        await async_client.get(
+            "/api/v1/metrics/net-worth/reconciliation", headers=api_headers
+        )
+    ).json()
+    assert body["status"] == "incomplete_classification"
+    items = body["items"]
+    assert items["investment_valuation_change"] is not None
+    assert items["investment_valuation_change_provisional"] is True
+    assert "목적 미정 이체" in items["investment_valuation_change_provisional_reason"]
+    interval = (
+        await async_client.get(
+            "/api/v1/metrics/net-worth/intervals", headers=api_headers
+        )
+    ).json()["intervals"][0]
+    assert interval["investment_valuation_change_provisional"] is True
+
+
+async def test_unexplained_share_is_withheld_when_net_worth_does_not_change(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await _seed_net_worth(db_session, undecided_transfer=False)
+    snapshot = await db_session.get(AssetSnapshot, 2)
+    snapshot.amount = Decimal(1_000_000)
+    await db_session.commit()
+    items = (
+        await async_client.get(
+            "/api/v1/metrics/net-worth/reconciliation", headers=api_headers
+        )
+    ).json()["items"]
+    assert items["net_worth_change"] == 0
+    assert items["unexplained_share_of_change"] is None
+    assert items["unexplained_share_withheld_reason"] == "net_worth_change_zero"
