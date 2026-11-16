@@ -1831,5 +1831,13 @@ def _projection_completeness(
     return ProjectionCompleteness(
         status=status,  # type: ignore[arg-type]
         status_label=PROJECTION_COMPLETENESS_LABELS[status],
+        full_projection_available=status == "all_known_components",
+        amount_scope=(  # type: ignore[arg-type]
+            "none"
+            if status == "not_projected"
+            else "known_components"
+            if left_out
+            else "all_known_components"
+        ),
         left_out=left_out,
     )
