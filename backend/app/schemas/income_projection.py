@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.metrics import MONTH_DATA_COVERAGE_RULE
+
 
 Confidence = Literal["high", "medium", "low", "unavailable"]
 
@@ -53,6 +55,14 @@ class ProjectionCoverage(BaseModel):
     adequately_covered_periods: list[str] = Field(default_factory=list)
     excluded_periods: list[str] = Field(default_factory=list)
     missing_periods: list[str] = Field(default_factory=list)
+    month_coverage_rule: str = Field(
+        default=(
+            MONTH_DATA_COVERAGE_RULE
+            + " 월말 전망은 이 달력상 범위 규칙 위에 basis의 관측 밀도 규칙을 더해 "
+            "'충분히 관측된 달'(adequately_covered_periods)만 가정에 쓴다."
+        ),
+        description="/read/data-status·비교 계약과 같은 달별 자료 범위 규칙.",
+    )
 
 
 class IncomeProjectionSource(BaseModel):

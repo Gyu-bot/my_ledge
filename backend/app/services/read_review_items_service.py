@@ -14,6 +14,7 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.analytics import PurchaseGateCandidateItem, SpendingAnomalyItem
+from app.schemas.metrics import MONTH_DATA_COVERAGE_RULE
 from app.schemas.read_surface import (
     REVIEW_REASON_LABELS,
     REVIEW_SOURCE_LABELS,
@@ -226,6 +227,7 @@ async def read_review_items(
                 "한 목록으로. 각 항목은 어느 검출기가 왜 올렸는지를 밝힌다."
             ),
             rules={
+                "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
                 "sources": (
                     "purchase_review_candidate: 기존 구매 단위 후보 검출기(큰 일회성 지출, "
                     "처음 등장한 거래처, 거래처·카테고리 급증) 그대로. "

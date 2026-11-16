@@ -6,6 +6,35 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 MonthStatus = Literal["closed", "in_progress"]
+# One per-month data-coverage rule shared by /read/data-status (period
+# states), the comparison contract (target month) and the month projection.
+# It sits next to the calendar status (closed / in_progress) and never claims
+# a verification the data cannot support.
+MonthDataCoverage = Literal[
+    "full", "partial", "no_transactions_observed", "outside_data"
+]
+MonthDataCoverageReason = Literal[
+    "first_month_starts_mid_month", "data_ends_before_month_end"
+]
+MONTH_DATA_COVERAGE_LABELS: dict[str, str] = {
+    "full": "자료 범위가 달 전체를 덮음(수집 완전성은 확인하지 않음)",
+    "partial": "자료 범위가 달의 일부만 덮음",
+    "no_transactions_observed": "자료 범위 안이지만 거래 0건(추정, 확인 안 됨)",
+    "outside_data": "자료 범위 밖",
+}
+MONTH_DATA_COVERAGE_REASON_LABELS: dict[str, str] = {
+    "first_month_starts_mid_month": "첫 거래일이 1일이 아닌 첫 자료 달",
+    "data_ends_before_month_end": "거래 기준일이 말일 전인 달(진행월)",
+}
+MONTH_DATA_COVERAGE_RULE = (
+    "달별 자료 범위(data_coverage): 자료 범위는 첫 유효 거래일부터 거래 기준일까지다. "
+    "그 밖의 달은 outside_data. 첫 거래일이 1일이 아니면 첫 달은 partial(비교 계약의 "
+    "first_full_period 규칙: 그 달은 중앙값 기준 기간·12개월 창에 넣지 않는다), 거래 "
+    "기준일이 말일 전인 달도 partial이다. 범위 안인데 유효 거래가 0건인 달은 "
+    "no_transactions_observed로, 거래가 없었다는 확인이 아니라 기록이 없다는 추정이다. "
+    "나머지는 full이며 달력상 범위만 뜻하고 모든 계좌가 수집되었다는 확인이 아니다. "
+    "month_status(closed / in_progress)는 달력 상태로 따로 둔다."
+)
 FlowSection = Literal["income", "committed", "ad_hoc", "undecided", "transfer", "other"]
 FlowRowKey = Literal[
     "income_undetermined",

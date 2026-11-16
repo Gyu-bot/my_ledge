@@ -17,9 +17,14 @@ from app.core.validation import (
 )
 from app.core.database import get_db_session
 from app.core.security import require_api_key
-from app.schemas.comparison import ComparisonAdjustabilityView, ComparisonLevel
+from app.schemas.comparison import (
+    BaselineMethod,
+    ComparisonAdjustabilityView,
+    ComparisonLevel,
+)
 from app.schemas.metrics import SpendCubeDimension
 from app.schemas.read_surface import (
+    ContributionLists,
     ReadCommitmentsResponse,
     ReadComparisonResponse,
     ReadContributionsResponse,
@@ -55,6 +60,10 @@ router = APIRouter(
 )
 
 PERIOD_PATTERN = r"^[1-9]\d{3}-(0[1-9]|1[0-2])$"
+BASELINE_DESCRIPTION = (
+    "기준: median_of_recent_closed_months(기본, 최근 마감월 중앙값) 또는 "
+    "previous_month(직전 마감월 한 달). 쓸 수 없는 기준은 null로 둔다."
+)
 _DIMENSIONS: tuple[str, ...] = get_args(SpendCubeDimension)
 _ERROR_RESPONSES: dict[int | str, dict[str, object]] = {
     401: {"description": "인증 실패: X-API-Key가 없거나 틀림."},
@@ -181,12 +190,16 @@ async def get_read_comparison(
         pattern=PERIOD_PATTERN,
         description="대상 월. 생략하면 가장 최근 마감월(없으면 진행월).",
     ),
+    baseline: BaselineMethod = Query(
+        default="median_of_recent_closed_months",
+        description=BASELINE_DESCRIPTION,
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadComparisonResponse | JSONResponse:
     return await _guard(
         "comparison_monthly_flow",
         db_session,
-        lambda: read_comparison(db_session, period=period),
+        lambda: read_comparison(db_session, period=period, baseline=baseline),
     )
 
 
@@ -201,6 +214,17 @@ async def get_read_contributions(
     level: ComparisonLevel = Query(default="category"),
     category: str | None = Query(default=None, max_length=50),
     limit: int = Query(default=100, ge=1, le=1000),
+    baseline: BaselineMethod = Query(
+        default="median_of_recent_closed_months",
+        description=BASELINE_DESCRIPTION,
+    ),
+    lists: ContributionLists = Query(
+        default="both",
+        description=(
+            "both(기본): 두 목록 모두. monthly: items만. twelve_month: "
+            "twelve_month_items만. 요청하지 않은 목록은 빈 배열이고 *_summary.requested=false."
+        ),
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadContributionsResponse | JSONResponse:
     return await _guard(
@@ -213,6 +237,8 @@ async def get_read_contributions(
             level=level,
             category=category,
             limit=limit,
+            baseline=baseline,
+            lists=lists,
         ),
     )
 

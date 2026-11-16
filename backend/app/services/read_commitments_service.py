@@ -21,6 +21,7 @@ from app.models.installment_plan import InstallmentPlan
 from app.models.loan import Loan
 from app.models.nature_axes import RecurringCommitment
 from app.schemas.metrics import MetricAsOf
+from app.schemas.metrics import MONTH_DATA_COVERAGE_RULE
 from app.schemas.read_surface import (
     ADJUSTABILITY_LABELS,
     COMMITMENT_KIND_LABELS,
@@ -739,6 +740,7 @@ async def read_commitments(
                 "선택한 기간의 관측 여부. 관측 금액은 월 흐름표의 약정 지급 줄과 같은 거래다."
             ),
             rules={
+                "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
                 "observation": (
                     "observed: 그 기간 약정에 속한(연결된) 지출이 있음. "
                     "expected_not_observed: 마감월이고 기록된 주기상 있어야 하는데 없음. "

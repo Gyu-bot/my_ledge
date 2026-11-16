@@ -9,7 +9,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.metrics import MetricContract, MonthStatus
+from app.schemas.metrics import (
+    MONTH_DATA_COVERAGE_RULE,
+    MetricContract,
+    MonthDataCoverage,
+    MonthDataCoverageReason,
+    MonthStatus,
+)
 
 ComparisonAdjustabilityView = Literal["all", "protected", "adjustable"]
 ComparisonLevel = Literal["category", "merchant"]
@@ -18,6 +24,7 @@ PartialMonthHandling = Literal["closed_month_full", "same_elapsed_days"]
 TargetCoverage = Literal["observed", "no_data"]
 BaselineStatus = Literal["full", "fewer_than_requested", "none"]
 BaselineLimitedBy = Literal["baseline_start_date", "data_start"]
+BaselineUnavailableReason = Literal["baseline_start_date", "data_start", "no_data"]
 ComparisonWindowKind = Literal["monthly", "twelve_month"]
 ItemCadence = Literal["monthly", "annual_like"]
 
@@ -105,8 +112,33 @@ class ComparisonBasis(BaseModel):
         description="비율 지표(현금 잔여율 등)는 마감월 대상일 때만 낸다."
     )
     previous_full_month_delta_available: bool = Field(
-        description="진행월 대상에는 전월 전체 대비 증감을 내지 않는다."
+        description=(
+            "이 응답의 증감(change_amount)이 월 전체끼리의 비교로 실제로 들어 있으면 "
+            "true: 대상 월이 마감월이고 자료가 있으며 기준 월이 하나 이상 있을 때. "
+            "기준은 baseline_method를 따른다(previous_month면 직전 마감월 하나, "
+            "기본이면 최근 마감월 중앙값). 진행월 대상(같은 경과일 비교), 기준 기간 "
+            "없음, 대상 월 자료 없음이면 false."
+        )
     )
+    baseline_unavailable_reason: BaselineUnavailableReason | None = Field(
+        default=None,
+        description=(
+            "기준 월을 하나도 쓰지 못했을 때(baseline_status=none) 그 이유: data_start "
+            "(자료 시작 전이거나 월중 시작 첫 달), baseline_start_date(기준 구간 시작일 "
+            "전), no_data(그 달 유효 거래 0건). 기준값은 채우지 않고 null로 둔다."
+        ),
+    )
+    target_data_coverage: MonthDataCoverage | None = Field(
+        default=None,
+        description=(
+            "대상 월의 자료 범위(data_coverage_rule). target_coverage(거래 유무)와 "
+            "target_month_status(달력 상태)와 따로 읽는다."
+        ),
+    )
+    target_data_coverage_reasons: list[MonthDataCoverageReason] = Field(
+        default_factory=list
+    )
+    data_coverage_rule: str = MONTH_DATA_COVERAGE_RULE
     zero_vs_no_data_rule: str = (
         "자료 없는 달(유효 거래 0건)은 기준 기간에서 빠지고 skipped_periods에 남는다. "
         "자료가 있는 달에 해당 항목 지출이 없으면 0원으로 중앙값에 들어간다."

@@ -30,7 +30,10 @@ from app.schemas.comparison import (
     TwelveMonthWindowBasis,
 )
 from app.schemas.metrics import (
+    MONTH_DATA_COVERAGE_LABELS,
     ExcludedCurrencyItem,
+    MonthDataCoverage,
+    MonthDataCoverageReason,
     MonthlyFlowMonth,
     MonthStatus,
     SnapshotAsOf,
@@ -206,6 +209,18 @@ class ReadPeriodState(BaseModel):
         default=None,
         description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1). 지출 줄이 없으면 null.",
     )
+    data_coverage: MonthDataCoverage = Field(
+        default="outside_data",
+        description=(
+            "달별 자료 범위: full / partial / no_transactions_observed / outside_data. "
+            "month_status(달력상 마감·진행)와 따로 읽는다. 규칙은 basis.rules."
+            "month_data_coverage."
+        ),
+    )
+    data_coverage_label: str = MONTH_DATA_COVERAGE_LABELS["outside_data"]
+    data_coverage_reasons: list[MonthDataCoverageReason] = Field(
+        default_factory=list, description="partial인 이유."
+    )
 
 
 class ReadPeriodScope(BaseModel):
@@ -328,6 +343,31 @@ class ReadComparisonResponse(ReadEnvelope):
     data: ReadComparisonData
 
 
+ContributionLists = Literal["both", "monthly", "twelve_month"]
+
+
+class ContributionListSummary(BaseModel):
+    """What a contribution list holds after ``limit`` and ``lists``."""
+
+    requested: bool = Field(
+        description="lists 인자로 이 목록을 요청했는가. false면 목록은 비어 있다."
+    )
+    total_count: int = Field(description="자르기 전 항목 수.")
+    returned_count: int
+    truncated: bool = Field(description="limit 때문에 잘린 항목이 있으면 true.")
+    returned_change_amount_sum: int = Field(
+        description="반환한 항목 change_amount 합(원, null 제외)."
+    )
+    not_returned_change_amount_sum: int = Field(
+        description="잘려서 반환하지 않은 항목 change_amount 합(원, null 제외)."
+    )
+    returned_target_amount_sum: int
+    not_returned_target_amount_sum: int
+    items_without_change_count: int = Field(
+        description="change_amount가 null이라 위 합에 들지 않은 항목 수(전체 기준)."
+    )
+
+
 class ReadContributionsData(BaseModel):
     comparison: ComparisonBasis
     adjustability: str
@@ -340,6 +380,26 @@ class ReadContributionsData(BaseModel):
     items: list[ContributionItem]
     twelve_month_window: TwelveMonthWindowBasis
     twelve_month_items: list[ContributionItem]
+    lists: ContributionLists = Field(
+        default="both", description="요청한 목록: both / monthly / twelve_month."
+    )
+    items_summary: ContributionListSummary | None = None
+    twelve_month_items_summary: ContributionListSummary | None = None
+    sum_item_changes: int | None = Field(
+        default=None,
+        description=(
+            "items(월 단위 비교) 전체(자르기 전)의 change_amount 합(원, null 제외). "
+            "change_total이 null이면 null."
+        ),
+    )
+    non_additive_gap: int | None = Field(
+        default=None,
+        description=(
+            "change_total − sum_item_changes. 기본 기준(중앙값)에서는 항목별 중앙값이 "
+            "더해지지 않고 annual_like 항목이 12개월 창으로 빠져 0이 아닐 수 있다. "
+            "baseline=previous_month이면 항상 0."
+        ),
+    )
 
 
 class ReadContributionsResponse(ReadEnvelope):
@@ -641,6 +701,13 @@ class CoverageGap(BaseModel):
     period: str
     status: Literal["no_transactions"] = "no_transactions"
     status_label: str = STATUS_LABELS["no_transactions"]
+    data_coverage: Literal["no_transactions_observed"] = "no_transactions_observed"
+    inferred: bool = Field(
+        default=True,
+        description=(
+            "항상 true: 거래가 없었다는 확인이 아니라 가져온 기록에 거래가 없다는 추정."
+        ),
+    )
 
 
 class ReadDataStatusData(BaseModel):
