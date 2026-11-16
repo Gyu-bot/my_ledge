@@ -1,9 +1,10 @@
 """Two-axis transaction nature (T056): payment form and adjustability.
 
 These tables replace the per-transaction ``cost_kind``/necessity/
-``recurring_payment_kind`` inputs as the source of the metric views. They are
-The import review digests and rollback snapshots include these tables and
-their confirmation metadata. Schema changes invalidate previously prepared work.
+``recurring_payment_kind`` inputs as the source of the metric views.
+
+가져오기 검토 digest와 되돌리기 스냅샷은 확인 기록도 포함한다. 구조가 바뀌면
+이전에 준비한 검토와 되돌리기 지점은 다시 사용할 수 없다.
 
 - ``recurring_commitments``: human-registered recurring-payment bundles
   (정기 지급 묶음). A transaction belongs to a bundle when its merchant (for
