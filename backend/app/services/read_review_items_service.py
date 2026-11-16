@@ -14,6 +14,7 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.analytics import PurchaseGateCandidateItem, SpendingAnomalyItem
+from app.schemas.metrics import MONTH_DATA_COVERAGE_RULE
 from app.schemas.read_surface import (
     REVIEW_REASON_LABELS,
     REVIEW_SOURCE_LABELS,
@@ -40,6 +41,7 @@ from app.services.read_surface_service import (
     resolve_status,
     scope_classification,
 )
+from app.services.transaction_axes_service import load_transaction_axes
 from app.services.settings_service import (
     get_analytics_settings,
     resolve_spending_anomalies_settings,
@@ -204,6 +206,14 @@ async def read_review_items(
             ),
             key=lambda item: (-abs(item.change_amount or 0), item.category),
         )
+        axes = await load_transaction_axes(
+            db_session,
+            [item.transaction_id for item in transaction_items if item.transaction_id],
+        )
+        transaction_items = [
+            item.model_copy(update={"axes": axes.get(item.transaction_id or 0)})
+            for item in transaction_items
+        ]
         items = [*transaction_items, *category_items]
     classification = scope_classification(scope) if scope.periods else None
     state, reasons = resolve_status(
@@ -226,6 +236,7 @@ async def read_review_items(
                 "한 목록으로. 각 항목은 어느 검출기가 왜 올렸는지를 밝힌다."
             ),
             rules={
+                "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
                 "sources": (
                     "purchase_review_candidate: 기존 구매 단위 후보 검출기(큰 일회성 지출, "
                     "처음 등장한 거래처, 거래처·카테고리 급증) 그대로. "

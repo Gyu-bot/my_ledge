@@ -27,14 +27,16 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from fastapi import HTTPException, status
 from sqlalchemy import and_, func, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.validation import query_error
 from app.models.insurance_contract import InsuranceContract
 from app.models.user_profile_snapshot import UserProfileSnapshot
 from app.schemas.metrics import MetricAsOf, MetricContract
 from app.schemas.net_worth import (
+    UNEXPLAINED_SHARE_NOT_COMPUTABLE,
+    UNEXPLAINED_SHARE_ZERO_CHANGE,
     EmergencyFundBaseline,
     EmergencyFundResponse,
     NetWorthPoint,
@@ -390,6 +392,14 @@ async def _reconcile(
         if computable
         else None
     )
+    if unexplained is None:
+        unexplained_share, withheld = None, UNEXPLAINED_SHARE_NOT_COMPUTABLE
+    elif net_worth_change == 0:
+        unexplained_share, withheld = None, UNEXPLAINED_SHARE_ZERO_CHANGE
+    else:
+        unexplained_share = round(unexplained / abs(net_worth_change), 4)
+        withheld = None
+    provisional = bool(transfers.undecided_activity_total)
     items = ReconciliationItems(
         net_worth_change=net_worth_change,
         residual=flow.residual,
@@ -398,6 +408,16 @@ async def _reconcile(
         unexplained_difference=unexplained,
         investment_value_change=investments.change,
         investment_net_transfer_in=net_transfer_in,
+        unexplained_share_of_change=unexplained_share,
+        unexplained_share_withheld_reason=withheld,  # type: ignore[arg-type]
+        investment_valuation_change_provisional=provisional,
+        investment_valuation_change_provisional_reason=(
+            "구간에 목적 미정 이체가 있다(이체 |금액| "
+            f"{transfers.undecided_activity_total}원). 그중 투자 입금이 있으면 순투자 "
+            "유입과 투자 평가 변동이 달라진다. 사람이 목적을 정하기 전까지 잠정값이다."
+            if provisional
+            else None
+        ),
     )
     return _Reconciliation(
         status=state,
@@ -426,6 +446,17 @@ RECONCILIATION_FIELD_SCOPES = {
     "items.loan_balance_decrease": "시작 대출 잔액 − 끝 대출 잔액 (스냅샷, 이자·원금 추정 분리 없음)",
     "items.investment_valuation_change": "투자 평가액 변화 − 순투자 유입(−investment_net)",
     "items.unexplained_difference": "나머지. 추정 항목으로 채우지 않는다",
+    "items.unexplained_share_of_change": (
+        "설명되지 않은 차이 ÷ |순자산 변화|. 부호 있음, 절댓값이 1을 넘을 수 있음. "
+        "변화가 0이거나 차이를 계산할 수 없으면 null"
+    ),
+    "items.investment_valuation_change_provisional": (
+        "목적 미정 이체가 있으면 true: 투자 입금일 수 있어 투자 평가 변동이 잠정값"
+    ),
+    "status": (
+        "complete는 대조 항목을 모두 계산할 수 있었다는 뜻이지 변화가 설명되었다는 "
+        "뜻이 아니다"
+    ),
     "transfers.undecided_share": "목적 미정 이체 |금액| ÷ 전체 이체 |금액|",
 }
 
@@ -439,25 +470,27 @@ async def get_net_worth_reconciliation(
     context = await _load_context(db_session)
     asset_dates = context.asset_dates
     if (start_date is None) != (end_date is None):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "start_date와 end_date는 함께 주거나 함께 생략한다.",
+        missing_param = "end_date" if end_date is None else "start_date"
+        raise query_error(
+            missing_param, "start_date와 end_date는 함께 주거나 함께 생략한다."
         )
     if start_date is not None and end_date is not None:
         missing = [
             value for value in (start_date, end_date) if value not in context.net_worth
         ]
         if missing:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            raise query_error(
+                "start_date" if start_date in missing else "end_date",
                 "자산 스냅샷이 없는 날짜다: "
                 + ", ".join(value.isoformat() for value in missing)
                 + ". /metrics/net-worth/intervals에서 날짜를 고른다.",
+                value=missing[0].isoformat(),
             )
         if start_date >= end_date:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            raise query_error(
+                "start_date",
                 "start_date는 end_date보다 앞서야 한다.",
+                value=start_date.isoformat(),
             )
     elif len(asset_dates) >= 2:
         start_date, end_date = asset_dates[-2], asset_dates[-1]
@@ -533,6 +566,10 @@ async def list_snapshot_intervals(
                 net_worth_change=result.items.net_worth_change,
                 unexplained_difference=result.items.unexplained_difference,
                 transfer_undecided_share=result.transfers.undecided_share,
+                unexplained_share_of_change=result.items.unexplained_share_of_change,
+                investment_valuation_change_provisional=(
+                    result.items.investment_valuation_change_provisional
+                ),
             )
         )
 

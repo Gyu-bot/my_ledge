@@ -2185,6 +2185,71 @@ emergency_fund_months = cash_like_total ÷ monthly_protected_outflow   (2 decima
 - `/metrics/monthly-flow` `contract.inclusion.transfers` text now states the T061 split and netting rule; `contract.field_scopes.transfer_net` text no longer says "(투자·저축 구분은 T061)" and a `transfer_rows` scope was added. No numeric value of an existing field changes.
 - `GET /api/v1/schema`: two new tables and three new views are listed; `vw_metric_flow_lines` and `vw_monthly_flow_summary` list the new columns.
 
+## Read Surface Consumer Review
+
+Formulas and rules added after a consuming agent used the read surface. All values are SQL aggregates over the existing views (`vw_metric_flow_lines`, `vw_transaction_nature`, `vw_spend_cube`, `vw_monthly_flow_summary`); no view, table or migration changed. Contract summary and field list: [backend-api-ssot.md](backend-api-ssot.md#read-surface-consumer-review).
+
+### Validation and 422 shape (`app/core/validation.py`)
+
+- `/read/*` router dependencies: `require_api_key` → `reject_unknown_query_params` (compares `request.query_params` with the matched route's flat dependant query parameter aliases; one `extra_forbidden` error per unknown name, `ctx.allowed`).
+- `UniformValidationRoute` (both `/read` and `/metrics/net-worth` routers) turns `HTTPException(422, "<text>")` into `RequestValidationError([{type: value_error, loc: ["query"], msg: <text>}])`. Services owned by these surfaces raise `query_error(<param>, ...)` directly, so `loc` names the parameter (`group_by`, `end_period`, `start_period`, `start_date`, `end_date`). The comparison service's future-target message stays a string in the service (shared with `/metrics/comparison/*`) and is converted with `loc: ["query"]` on `/read/*` only.
+
+### Classification completeness
+
+Per period and per response scope, over expense lines (`type = 지출`) of `vw_metric_flow_lines`:
+
+- `adjustability_undecided_transaction_count` = `COUNT(DISTINCT transaction_id)` of lines with `adjustability = 'undecided'`.
+- `adjustability_undecided_gross_total` = `SUM(ABS(amount))` of those lines; `expense_gross_total` = `SUM(ABS(amount))` of all expense lines in scope; `adjustability_undecided_gross_share` = ratio (4 dp, null when the denominator is 0), always 0–1.
+- `complete` = count is 0. The period `status` and the `adjustability_undecided` reason use the count. The net `adjustability_undecided_total`/`_share` are unchanged (signed). The spend cube scope uses the same filters on the flow lines (every cube dimension is a flow-line column).
+
+### Month data coverage (`MONTH_DATA_COVERAGE_RULE`, `metrics_service.month_data_coverage`)
+
+Bounds: first effective transaction date F, transaction as-of date A.
+
+| Value | Rule |
+|---|---|
+| `outside_data` | period < month(F) or period > month(A), or no transactions at all |
+| `no_transactions_observed` | inside the bounds and no effective KRW transaction (inferred, not verified) |
+| `partial` | period = month(F) and F is not the 1st (`first_month_starts_mid_month`; the comparison's `first_full_period` rule), and/or period = month(A) and A is not the month's last day (`data_ends_before_month_end`) |
+| `full` | otherwise (calendar range only; account completeness is not verified) |
+
+Comparison `target_data_coverage` applies it to the target month. The projection's `coverage.month_coverage_rule` quotes the same text and adds that the forecast further keeps only adequately covered months (its observation-density rule, unchanged).
+
+### Comparison baseline `previous_month`
+
+- `previous_month_window(window)`: P = target − 1 month. `data_start` when P < `first_full_period`; `baseline_start_date` when P is before the user's baseline start period; `no_data` when P has no effective transaction (`skipped_periods=[P]`); otherwise the baseline is `[P]`. The in-progress target keeps the same-elapsed-days cut on P. Unusable → `baseline_status=none`, every baseline value null.
+- `baseline_unavailable_reason` is set for both methods whenever no baseline month was used.
+- `previous_full_month_delta_available` = target set ∧ target not cut to a partial day range ∧ target has data ∧ ≥1 baseline month.
+- Contributions under `previous_month`: annual-like items are not split out of `items` (they keep `cadence=annual_like`, `window=monthly`), so Σ item `change_amount` = `change_total`. `twelve_month_items` and `twelve_month_window` are the same 12-month view as with the default baseline.
+
+### Contribution list summaries
+
+`read_contributions` asks the service for every item (`limit=None`) and cuts in the read layer. For each list: `total_count`, `returned_count`, `truncated`, Σ`change_amount` (nulls skipped) and Σ`target_amount` of returned and not returned items, `items_without_change_count`. `sum_item_changes` = Σ`change_amount` of all monthly items (null when `change_total` is null); `non_additive_gap` = `change_total − sum_item_changes`. `lists` only blanks the unrequested list (`requested=false`); the summary still counts it.
+
+### Spend cube counts
+
+`total_group_count` = `COUNT(*)` of `SELECT <group_by> FROM vw_spend_cube WHERE <filters> GROUP BY <group_by>`; `returned_count` = rows returned.
+
+### Commitments
+
+- `end_date_status`: loan `recorded` with maturity, else `not_recorded`; installment `recorded` (first payment date + (total − 1) months), else `not_recorded`; recurring `recorded` with `end_date`, `not_applicable` for `n_times` with `total_count`, `not_recorded` for `n_times` without it, else `open_ended`.
+- `monthly_burden_origin`: loan `manual` → `entered_by_person`, `estimated_from_linked_transactions` → same, other source with a value → `source_not_recorded`, no value → `not_available`; installment → `installment_plan_record`; monthly bundle with a last observed closed month → `observed_closed_month`.
+- `status` filters `items` by `lifecycle` (`unknown` only in `all`); `view=summary` returns `item_summaries` instead of `items`. `totals`, `counts_by_state` and `status_reasons` are computed on every commitment.
+
+### Transaction axes (`transaction_axes_service.load_transaction_axes`)
+
+For the returned page's ids: `vw_transaction_nature` gives `payment_form`, `commitment_kind`, `adjustability` and the sources; `vw_metric_flow_lines` gives the flow rows. Source mapping: `adjustability_source` `fixed_loan→loan_link`, `fixed_installment→installment_link`, others as named; `payment_form_source` `loan_link`/`installment_link` by `commitment_kind`, `transaction` when the transaction was put in a bundle explicitly (`commitment_match=explicit`), `commitment` when a bundle rule matched, `none` for ad hoc, `not_applicable` for non-expense. Rows outside the views → `not_effective`. `flow_row` = the row of the transaction's own line (`transaction`/`refund_remainder`), otherwise the first allocated purchase's row; `flow_rows` = all distinct rows.
+
+### Net worth
+
+- `unexplained_share_of_change` = round(`unexplained_difference` ÷ |`net_worth_change`|, 4); withheld with `net_worth_change_zero` or `unexplained_not_computable`.
+- `investment_valuation_change_provisional` = `transfers.undecided_activity_total > 0`; the reason states the undecided transfer activity in won.
+- `status_note` on reconciliation and intervals: `complete` = inputs computable, not explained.
+
+### Month projection completeness
+
+`left_out[]` order: income sources (`uncertain` → `income_source_uncertain`; `stopped` with low confidence, i.e. stopped by the history rule rather than by a person → `income_source_stopped_by_rule`), then per component its `not_in_expense_commitments` (loan, `reason_code` as there) and, when `expected_remaining` is null, `component_not_estimated` with the joined `missing_reasons`. `status` = `not_projected` if `projected_month_end_net` is null, else `known_components_only` if `left_out` is non-empty, else `all_known_components`. Loan rows: `observed_payment_amount` = Σ −amount of this month's negative loan lines, `observed_refund_amount` = Σ positive, `observed_net_expense` = difference (the value the component subtracts), `expected_remaining` = max(monthly − net, 0) or null without a monthly payment; `match_method` from the lines' link vs person-registered loan merchant rule. Loans with balance ≤ 0 and loans in `not_in_expense_commitments` have no row.
+
 ## Implementation Notes That Matter
 
 - `transactions/merge` is still an intentional `501` stub

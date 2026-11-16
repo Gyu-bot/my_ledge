@@ -64,7 +64,7 @@ async def test_complete_interval_matches_hand_computed_items(
     assert payload["net_worth_start"]["net_worth"] == -2_000_000
     assert payload["net_worth_start"]["negative_asset_excluded_total"] == -5_000
     assert payload["net_worth_end"]["net_worth"] == 500_000
-    assert payload["items"] == {
+    expected_items = {
         "net_worth_change": 2_500_000,
         # The D0 row (−50,000) is outside; the D1 row (−20,000) is inside.
         "residual": 1_880_000,
@@ -74,6 +74,12 @@ async def test_complete_interval_matches_hand_computed_items(
         "investment_value_change": 1_150_000,
         "investment_net_transfer_in": 1_000_000,
     }
+    assert {key: payload["items"][key] for key in expected_items} == expected_items
+    # Added fields (consumer review): the unexplained share of the change.
+    assert payload["items"]["unexplained_share_of_change"] == round(
+        -30_000 / 2_500_000, 4
+    )
+    assert payload["items"]["investment_valuation_change_provisional"] is False
     assert _identity_holds(payload["items"])
     transfers = payload["transfers"]
     assert transfers["investment_net"] == -1_000_000

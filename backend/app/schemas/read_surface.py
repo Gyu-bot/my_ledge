@@ -29,8 +29,12 @@ from app.schemas.comparison import (
     ContributionItem,
     TwelveMonthWindowBasis,
 )
+from app.schemas.transaction import TransactionAxes
 from app.schemas.metrics import (
+    MONTH_DATA_COVERAGE_LABELS,
     ExcludedCurrencyItem,
+    MonthDataCoverage,
+    MonthDataCoverageReason,
     MonthlyFlowMonth,
     MonthStatus,
     SnapshotAsOf,
@@ -122,6 +126,19 @@ FLOW_SECTION_LABELS: dict[str, str] = {
     "transfer": "잔여의 행방(이체)",
     "other": "기타 유형",
 }
+# Values the spend cube (expense lines only) can hold per filter dimension.
+# Anything else is rejected with HTTP 422 instead of returning zero rows.
+SpendCubePaymentForm = Literal["committed", "ad_hoc"]
+SpendCubeCommitmentKind = Literal["loan", "installment", "recurring"]
+SpendCubeAdjustability = Literal["protected", "adjustable", "undecided"]
+SpendCubeFlowRow = Literal[
+    "committed_loan",
+    "committed_installment",
+    "committed_recurring",
+    "ad_hoc_protected",
+    "ad_hoc_adjustable",
+    "undecided",
+]
 FLOW_ROW_LABELS: dict[str, str] = {
     "income_undetermined": "수입 (정기·비정기 구분 전)",
     "committed_loan": "약정 지급 · 대출 원리금",
@@ -169,8 +186,42 @@ class ReadPeriodState(BaseModel):
     status_label: str
     transaction_count: int = 0
     total_outflow: int = 0
-    adjustability_undecided_total: int = 0
-    adjustability_undecided_share: float | None = None
+    adjustability_undecided_total: int = Field(
+        default=0, description="조정 가능성 미정 지출 순액(원, 환불 차감)."
+    )
+    adjustability_undecided_share: float | None = Field(
+        default=None,
+        description=(
+            "부호 있는 순액 비중 = 미정 순액 ÷ 총지급. 미정 쪽 환불이 결제보다 크면 "
+            "음수가 되고 0–1 밖일 수 있다. 완성도는 *_gross_share와 건수로 읽는다."
+        ),
+    )
+    adjustability_undecided_transaction_count: int = Field(
+        default=0, description="조정 가능성 미정 지출 거래 수(환불 포함)."
+    )
+    adjustability_undecided_gross_total: int = Field(
+        default=0,
+        description="미정 지출 줄 금액의 절댓값 합(원). 결제와 환불이 상쇄되지 않는다.",
+    )
+    expense_gross_total: int = Field(
+        default=0, description="같은 범위 지출 줄 금액의 절댓값 합(원)."
+    )
+    adjustability_undecided_gross_share: float | None = Field(
+        default=None,
+        description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1). 지출 줄이 없으면 null.",
+    )
+    data_coverage: MonthDataCoverage = Field(
+        default="outside_data",
+        description=(
+            "달별 자료 범위: full / partial / no_transactions_observed / outside_data. "
+            "month_status(달력상 마감·진행)와 따로 읽는다. 규칙은 basis.rules."
+            "month_data_coverage."
+        ),
+    )
+    data_coverage_label: str = MONTH_DATA_COVERAGE_LABELS["outside_data"]
+    data_coverage_reasons: list[MonthDataCoverageReason] = Field(
+        default_factory=list, description="partial인 이유."
+    )
 
 
 class ReadPeriodScope(BaseModel):
@@ -183,13 +234,35 @@ class ReadClassificationState(BaseModel):
     """How complete the human classification is for the response's scope."""
 
     adjustability_undecided_total: int = Field(
-        description="조정 가능성 미정 지출 순액(원)."
+        description="조정 가능성 미정 지출 순액(원, 환불 차감)."
     )
     total_outflow: int = Field(description="같은 범위의 총지급(원).")
     adjustability_undecided_share: float | None = Field(
-        description="금액 기준 미정 비중 = 미정 ÷ 총지급. 총지급이 0 이하면 null."
+        description=(
+            "부호 있는 순액 비중 = 미정 순액 ÷ 총지급. 총지급이 0 이하면 null. 미정 쪽 "
+            "환불이 결제보다 크면 음수, 0–1 밖일 수 있다. 완성도 판단에는 쓰지 않는다."
+        )
     )
-    complete: bool = Field(description="미정 금액이 0이면 true.")
+    complete: bool = Field(
+        description=(
+            "조정 가능성 미정 지출 거래가 0건이면 true. 결제와 환불이 상쇄되어 순액이 "
+            "0이어도 미정 거래가 있으면 false."
+        )
+    )
+    adjustability_undecided_transaction_count: int = Field(
+        default=0, description="조정 가능성 미정 지출 거래 수(환불 포함)."
+    )
+    adjustability_undecided_gross_total: int = Field(
+        default=0,
+        description="미정 지출 줄 금액의 절댓값 합(원). 결제와 환불이 상쇄되지 않는다.",
+    )
+    expense_gross_total: int = Field(
+        default=0, description="같은 범위 지출 줄 금액의 절댓값 합(원)."
+    )
+    adjustability_undecided_gross_share: float | None = Field(
+        default=None,
+        description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1). 지출 줄이 없으면 null.",
+    )
 
 
 class ReadBasis(BaseModel):
@@ -255,6 +328,12 @@ class ReadSpendCubeData(BaseModel):
         description="limit 때문에 잘렸으면 true. total_amount는 잘리기 전 전체 합계."
     )
     rows: list[SpendCubeRow]
+    total_group_count: int = Field(
+        default=0, description="limit 전 group_by 조합(칸) 수."
+    )
+    returned_count: int = Field(
+        default=0, description="반환한 칸 수(row_count와 같다)."
+    )
 
 
 class ReadSpendCubeResponse(ReadEnvelope):
@@ -271,6 +350,31 @@ class ReadComparisonResponse(ReadEnvelope):
     data: ReadComparisonData
 
 
+ContributionLists = Literal["both", "monthly", "twelve_month"]
+
+
+class ContributionListSummary(BaseModel):
+    """What a contribution list holds after ``limit`` and ``lists``."""
+
+    requested: bool = Field(
+        description="lists 인자로 이 목록을 요청했는가. false면 목록은 비어 있다."
+    )
+    total_count: int = Field(description="자르기 전 항목 수.")
+    returned_count: int
+    truncated: bool = Field(description="limit 때문에 잘린 항목이 있으면 true.")
+    returned_change_amount_sum: int = Field(
+        description="반환한 항목 change_amount 합(원, null 제외)."
+    )
+    not_returned_change_amount_sum: int = Field(
+        description="잘려서 반환하지 않은 항목 change_amount 합(원, null 제외)."
+    )
+    returned_target_amount_sum: int
+    not_returned_target_amount_sum: int
+    items_without_change_count: int = Field(
+        description="change_amount가 null이라 위 합에 들지 않은 항목 수(전체 기준)."
+    )
+
+
 class ReadContributionsData(BaseModel):
     comparison: ComparisonBasis
     adjustability: str
@@ -283,6 +387,26 @@ class ReadContributionsData(BaseModel):
     items: list[ContributionItem]
     twelve_month_window: TwelveMonthWindowBasis
     twelve_month_items: list[ContributionItem]
+    lists: ContributionLists = Field(
+        default="both", description="요청한 목록: both / monthly / twelve_month."
+    )
+    items_summary: ContributionListSummary | None = None
+    twelve_month_items_summary: ContributionListSummary | None = None
+    sum_item_changes: int | None = Field(
+        default=None,
+        description=(
+            "items(월 단위 비교) 전체(자르기 전)의 change_amount 합(원, null 제외). "
+            "change_total이 null이면 null."
+        ),
+    )
+    non_additive_gap: int | None = Field(
+        default=None,
+        description=(
+            "change_total − sum_item_changes. 기본 기준(중앙값)에서는 항목별 중앙값이 "
+            "더해지지 않고 annual_like 항목이 12개월 창으로 빠져 0이 아닐 수 있다. "
+            "baseline=previous_month이면 항상 0."
+        ),
+    )
 
 
 class ReadContributionsResponse(ReadEnvelope):
@@ -347,6 +471,13 @@ class ReviewItem(BaseModel):
         description="subject=transaction일 때 사람이 남긴 검토 상태(pending 등).",
     )
     listed_because: list[ReviewListedBecause]
+    axes: TransactionAxes | None = Field(
+        default=None,
+        description=(
+            "subject=transaction일 때 거래의 지급 형태·조정 가능성·흐름표 줄과 각 출처"
+            "(GET /transactions와 같은 값, vw_transaction_nature·vw_metric_flow_lines)."
+        ),
+    )
 
 
 class ReadReviewItemsData(BaseModel):
@@ -442,6 +573,31 @@ MONTHLY_BURDEN_BASIS_LABELS: dict[str, str] = {
     "last_observed_closed_month": "최근 마감월에 관측된 묶음 합계",
     "not_available": "기록된 월 금액 없음",
 }
+MonthlyBurdenOrigin = Literal[
+    "entered_by_person",
+    "estimated_from_linked_transactions",
+    "source_not_recorded",
+    "installment_plan_record",
+    "observed_closed_month",
+    "not_available",
+]
+MONTHLY_BURDEN_ORIGIN_LABELS: dict[str, str] = {
+    "entered_by_person": "사람이 입력한 월 상환액",
+    "estimated_from_linked_transactions": "연결된 상환 거래로 추정해 저장된 월 상환액",
+    "source_not_recorded": "월 상환액은 있으나 누가 넣었는지 기록되지 않음",
+    "installment_plan_record": "할부 계획에 기록된 월 금액",
+    "observed_closed_month": "최근 마감월에 관측된 묶음 합계",
+    "not_available": "월 부담 없음",
+}
+EndDateStatus = Literal["recorded", "open_ended", "not_recorded", "not_applicable"]
+END_DATE_STATUS_LABELS: dict[str, str] = {
+    "recorded": "종료 시점이 기록됨",
+    "open_ended": "끝이 정해지지 않은 약정(사람이 종료일을 넣기 전까지)",
+    "not_recorded": "종료 시점이 기록되지 않음",
+    "not_applicable": "날짜가 아니라 횟수로 끝나는 약정",
+}
+CommitmentStatusFilter = Literal["active", "ended", "all"]
+CommitmentView = Literal["detail", "summary"]
 CommitmentLifecycle = Literal["active", "ended", "unknown"]
 LIFECYCLE_LABELS: dict[str, str] = {
     "active": "진행 중",
@@ -490,10 +646,31 @@ class CommitmentItem(BaseModel):
     monthly_burden_source: str | None = Field(
         default=None, description="대출 월 상환액의 출처 표시(기존 값 그대로)."
     )
+    monthly_burden_origin: MonthlyBurdenOrigin = Field(
+        default="not_available",
+        description=(
+            "월 부담 값이 어디서 왔나. 대출은 저장된 월 상환액을 사람이 넣었는지"
+            "(entered_by_person) 연결 거래로 추정해 저장했는지"
+            "(estimated_from_linked_transactions) 구분한다. monthly_burden_basis="
+            "recorded_monthly_payment는 '스냅샷에 저장된 값'이라는 뜻일 뿐이다."
+        ),
+    )
+    monthly_burden_origin_label: str = MONTHLY_BURDEN_ORIGIN_LABELS["not_available"]
     start_date: date | None
     end_date: date | None = Field(
         description="기록된 종료 시점: 대출 만기, 할부 마지막 회차 예정일, 묶음 종료일."
     )
+    end_date_status: EndDateStatus = Field(
+        default="not_recorded",
+        description=(
+            "end_date가 null인 이유를 구분한다: recorded(값 있음), open_ended(정기 지급 "
+            "묶음처럼 끝이 정해지지 않음), not_recorded(대출 만기 등 있어야 할 값이 "
+            "기록되지 않음), not_applicable(회차 약정처럼 횟수로 끝남). 서버는 종료일을 "
+            "추정하지 않는다."
+        ),
+    )
+    end_date_status_label: str = END_DATE_STATUS_LABELS["not_recorded"]
+    end_date_reason: str = ""
     total_count: int | None = Field(
         default=None, description="할부 총 회차 또는 회차 약정의 총 횟수."
     )
@@ -515,17 +692,45 @@ class CommitmentItem(BaseModel):
     observation: CommitmentObservation
 
 
+class CommitmentSummaryItem(BaseModel):
+    """Compact row for ``view=summary``."""
+
+    commitment_key: str
+    kind: Literal["loan", "installment", "recurring"]
+    name: str
+    lifecycle: CommitmentLifecycle
+    monthly_burden: int | None
+    monthly_burden_origin: MonthlyBurdenOrigin
+    end_date: date | None
+    end_date_status: EndDateStatus
+    observation_state: ObservationState
+    observed_amount: int
+
+
 class ReadCommitmentsData(BaseModel):
     period: str | None
     period_month_status: MonthStatus | None
     totals: dict[str, int] = Field(
         description=(
             "기간 합계(원): monthly_burden_recorded(기록된 월 부담 합, 진행 중 약정만), "
-            "observed_amount(관측 합계)."
+            "observed_amount(관측 합계). status·view 필터와 무관하게 모든 약정 기준."
         )
     )
-    counts_by_state: dict[str, int]
-    items: list[CommitmentItem]
+    counts_by_state: dict[str, int] = Field(
+        description="관측 상태별 약정 수. status·view 필터와 무관하게 모든 약정 기준."
+    )
+    items: list[CommitmentItem] = Field(
+        description="view=detail(기본)일 때 status 필터를 통과한 약정. summary면 빈 배열."
+    )
+    status_filter: CommitmentStatusFilter = "all"
+    view: CommitmentView = "detail"
+    total_item_count: int = Field(default=0, description="필터 전 약정 수.")
+    returned_item_count: int = Field(
+        default=0, description="status 필터를 통과해 반환한 약정 수."
+    )
+    item_summaries: list[CommitmentSummaryItem] | None = Field(
+        default=None, description="view=summary일 때만 채우는 간단한 행."
+    )
 
 
 class ReadCommitmentsResponse(ReadEnvelope):
@@ -552,7 +757,22 @@ class ClassificationCompleteness(BaseModel):
     total_outflow: int
     adjustability_undecided_share: float | None
     adjustability_decided_share: float | None = Field(
-        description="1 − 미정 비중(금액 기준). 총지급이 0 이하면 null."
+        description=(
+            "1 − 순액 미정 비중. 순액 비중이 음수면 1보다 클 수 있다. 총지급이 0 이하면 "
+            "null. 완성도는 adjustability_decided_gross_share로 읽는다."
+        )
+    )
+    adjustability_undecided_gross_total: int = Field(
+        default=0, description="미정 지출 줄 금액의 절댓값 합(원)."
+    )
+    expense_gross_total: int = Field(
+        default=0, description="지출 줄 금액의 절댓값 합(원)."
+    )
+    adjustability_undecided_gross_share: float | None = Field(
+        default=None, description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1)."
+    )
+    adjustability_decided_gross_share: float | None = Field(
+        default=None, description="1 − adjustability_undecided_gross_share(0–1)."
     )
     uncategorized_expense_total: int = Field(
         description="대분류가 비었거나 '미분류'인 지출 순액(원)."
@@ -569,6 +789,13 @@ class CoverageGap(BaseModel):
     period: str
     status: Literal["no_transactions"] = "no_transactions"
     status_label: str = STATUS_LABELS["no_transactions"]
+    data_coverage: Literal["no_transactions_observed"] = "no_transactions_observed"
+    inferred: bool = Field(
+        default=True,
+        description=(
+            "항상 true: 거래가 없었다는 확인이 아니라 가져온 기록에 거래가 없다는 추정."
+        ),
+    )
 
 
 class ReadDataStatusData(BaseModel):
@@ -614,6 +841,16 @@ class ReadSurfaceEntry(BaseModel):
     provided_by: str
     parameters: list[str] = Field(default_factory=list)
     notes: str | None = None
+    response_field: str | None = Field(
+        default=None,
+        description="값이 응답 안의 한 필드에 있을 때 그 필드 이름(예: month_projection).",
+    )
+
+
+class ReadVocabularyMapping(BaseModel):
+    read_surface: str
+    net_worth_metrics: str
+    meaning: str
 
 
 class ReadSurfaceIndexResponse(BaseModel):
@@ -624,3 +861,11 @@ class ReadSurfaceIndexResponse(BaseModel):
     status_vocabulary: dict[str, str]
     format_rules: list[str]
     migration_document: str
+    signed_ratio_fields: dict[str, str] = Field(
+        default_factory=dict,
+        description="0–1 규칙의 예외: 부호가 있거나 0–1 밖일 수 있는 비율 필드 → 이유.",
+    )
+    vocabulary_mapping: list[ReadVocabularyMapping] = Field(
+        default_factory=list,
+        description="/read/*와 지표 응답(/metrics/net-worth/* 등)의 같은 뜻 다른 이름.",
+    )

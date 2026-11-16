@@ -21,7 +21,7 @@ as the monthly flow and the spend cube). Python only takes medians of those
 SQL aggregates and assembles the response.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from statistics import median
@@ -56,6 +56,7 @@ from app.services.metric_views import (
 from app.services.metrics_service import (
     build_flow_contract,
     load_as_of,
+    month_data_coverage,
     month_status,
     ratio,
 )
@@ -273,6 +274,56 @@ async def resolve_comparison_window(
     )
 
 
+def previous_month_window(window: ComparisonWindow) -> ComparisonWindow:
+    """The same window with the previous full month as the only baseline.
+
+    Same contract rules as the median baseline (T057): only a month before the
+    target, never before the first full data month (``first_full_period``,
+    so a mid-month first month is excluded) or the user's baseline start, and
+    never a month without effective transactions. An in-progress target keeps
+    its same-elapsed-days cut. Without a usable month the baseline is empty
+    and every baseline value is withheld (null) with
+    ``baseline_unavailable_reason``.
+    """
+    if window.target_period is None:
+        return replace(window, baseline_periods=(), skipped_periods=())
+    previous = shift_period(window.target_period, -1)
+    baseline: tuple[str, ...] = ()
+    skipped: tuple[str, ...] = ()
+    limited_by: str | None = None
+    if window.first_full_period is None or previous < window.first_full_period:
+        limited_by = "data_start"
+    elif (
+        window.baseline_start_period is not None
+        and previous < window.baseline_start_period
+    ):
+        limited_by = "baseline_start_date"
+    elif previous not in window.periods_with_data:
+        skipped = (previous,)
+        limited_by = "no_data"
+    else:
+        baseline = (previous,)
+    return replace(
+        window,
+        baseline_periods=baseline,
+        skipped_periods=skipped,
+        baseline_months_requested=1,
+        limited_by=limited_by,
+    )
+
+
+async def resolve_window_for_baseline(
+    db_session: AsyncSession,
+    *,
+    target_period: str | None,
+    baseline: BaselineMethod,
+) -> ComparisonWindow:
+    window = await resolve_comparison_window(db_session, target_period=target_period)
+    if baseline == "previous_month":
+        return previous_month_window(window)
+    return window
+
+
 def build_comparison_basis(
     window: ComparisonWindow,
     *,
@@ -309,6 +360,21 @@ def build_comparison_basis(
             f" 기준 기간에 든 {window.first_data_period}는 자료가 월중에 시작된 "
             "첫 달입니다."
         )
+    if window.target_period is None:
+        target_data_coverage, coverage_reasons = None, []
+    else:
+        target_data_coverage, coverage_reasons = month_data_coverage(
+            window.target_period,
+            first_transaction_date=window.as_of.first_transaction_date,
+            transaction_as_of=window.as_of.transaction_as_of,
+            has_transactions=window.target_has_data,
+        )
+    if count:
+        unavailable_reason = None
+    elif window.limited_by is not None:
+        unavailable_reason = window.limited_by
+    else:
+        unavailable_reason = "no_data" if window.skipped_periods else "data_start"
     return ComparisonBasis(
         definition=COMPARISON_DEFINITION,
         target_period=window.target_period,
@@ -336,21 +402,18 @@ def build_comparison_basis(
         baseline_status=baseline_status,
         baseline_limited_by=(
             window.limited_by  # type: ignore[arg-type]
-            if method != "previous_month" and baseline_status != "full"
+            if baseline_status != "full"
+            and window.limited_by in ("data_start", "baseline_start_date")
             else None
         ),
         baseline_start_date=window.baseline_start_date,
         baseline_start_period=window.baseline_start_period,
         first_data_period=window.first_data_period,
         first_data_period_starts_mid_month=window.first_data_mid_month,
-        skipped_periods=(
-            [
-                ComparisonSkippedMonth(period=period, reason="no_data")
-                for period in window.skipped_periods
-            ]
-            if method != "previous_month"
-            else []
-        ),
+        skipped_periods=[
+            ComparisonSkippedMonth(period=period, reason="no_data")
+            for period in window.skipped_periods
+        ],
         partial_month_handling=(
             "same_elapsed_days" if window.is_partial else "closed_month_full"
         ),
@@ -358,8 +421,14 @@ def build_comparison_basis(
         partial_month_note=note,
         ratio_metrics_available=not in_progress and window.target_period is not None,
         previous_full_month_delta_available=(
-            not in_progress and window.target_period is not None
+            window.target_period is not None
+            and not window.is_partial
+            and window.target_has_data
+            and count > 0
         ),
+        baseline_unavailable_reason=unavailable_reason,  # type: ignore[arg-type]
+        target_data_coverage=target_data_coverage,  # type: ignore[arg-type]
+        target_data_coverage_reasons=coverage_reasons,  # type: ignore[arg-type]
     )
 
 
@@ -433,9 +502,14 @@ FLOW_MEASURES: tuple[tuple[str, str], ...] = (
 
 
 async def get_monthly_flow_comparison(
-    db_session: AsyncSession, *, period: str | None
+    db_session: AsyncSession,
+    *,
+    period: str | None,
+    baseline: BaselineMethod = "median_of_recent_closed_months",
 ) -> ComparisonMonthlyFlowResponse:
-    window = await resolve_comparison_window(db_session, target_period=period)
+    window = await resolve_window_for_baseline(
+        db_session, target_period=period, baseline=baseline
+    )
     totals: dict[str, dict[str, int]] = {}
     if window.target_period is not None:
         periods = [*window.baseline_periods, window.target_period]
@@ -505,7 +579,7 @@ async def get_monthly_flow_comparison(
     )
     return ComparisonMonthlyFlowResponse(
         contract=contract,
-        comparison=build_comparison_basis(window),
+        comparison=build_comparison_basis(window, method=baseline),
         measures=measures,
         residual_rate=residual_rate,
     )
@@ -548,9 +622,16 @@ async def get_change_contributions(
     adjustability: ComparisonAdjustabilityView,
     level: ComparisonLevel,
     category: str | None,
-    limit: int,
+    limit: int | None,
+    baseline: BaselineMethod = "median_of_recent_closed_months",
 ) -> ContributionResponse:
-    window = await resolve_comparison_window(db_session, target_period=period)
+    """``limit=None`` returns every item (the read surface counts and cuts)."""
+    window = await resolve_window_for_baseline(
+        db_session, target_period=period, baseline=baseline
+    )
+    # Against one previous month every item is compared month by month, so
+    # the items add up to change_total; the 12-month view is reported as is.
+    split_annual_like = baseline != "previous_month"
     base_filters: list[ColumnElement[bool]] = [
         _LINES.c.type == EXPENSE,
         *adjustability_filters(adjustability),
@@ -607,7 +688,8 @@ async def get_change_contributions(
                     ),
                 )
             )
-            continue
+            if split_annual_like:
+                continue
         values = [monthly.get((period, *item_key), 0) for period in baseline_periods]
         baseline_amount = median_won(values)
         if target_month_amount == 0 and not baseline_amount:
@@ -615,7 +697,9 @@ async def get_change_contributions(
         monthly_items.append(
             ContributionItem(
                 **names,
-                cadence="monthly",
+                cadence="annual_like"
+                if annual_like and stats is not None
+                else "monthly",
                 window="monthly",
                 target_amount=target_month_amount,
                 target_period_amount=target_month_amount,
@@ -658,7 +742,7 @@ async def get_change_contributions(
     )
     return ContributionResponse(
         contract=contract,
-        comparison=build_comparison_basis(window),
+        comparison=build_comparison_basis(window, method=baseline),
         adjustability=adjustability,
         level=level,
         category=category,

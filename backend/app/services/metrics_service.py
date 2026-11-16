@@ -129,6 +129,30 @@ def month_status(period: str, as_of: MetricAsOf) -> str:
     return "in_progress"
 
 
+def month_data_coverage(
+    period: str,
+    *,
+    first_transaction_date: date | None,
+    transaction_as_of: date | None,
+    has_transactions: bool,
+) -> tuple[str, list[str]]:
+    """Data coverage of one month (``MONTH_DATA_COVERAGE_RULE``)."""
+    if first_transaction_date is None or transaction_as_of is None:
+        return "outside_data", []
+    first_period = first_transaction_date.strftime("%Y-%m")
+    last_period = transaction_as_of.strftime("%Y-%m")
+    if not first_period <= period <= last_period:
+        return "outside_data", []
+    if not has_transactions:
+        return "no_transactions_observed", []
+    reasons: list[str] = []
+    if period == first_period and first_transaction_date.day != 1:
+        reasons.append("first_month_starts_mid_month")
+    if period == last_period and transaction_as_of != _period_end(period):
+        reasons.append("data_ends_before_month_end")
+    return ("partial" if reasons else "full"), reasons
+
+
 def ratio(numerator: int, denominator: int) -> float | None:
     if denominator <= 0:
         return None
@@ -446,6 +470,33 @@ async def get_spend_cube(
         total_amount=int(total_amount or 0),
         rows=rows,
     )
+
+
+async def count_spend_cube_groups(
+    db_session: AsyncSession,
+    *,
+    start_period: str | None,
+    end_period: str | None,
+    group_by: list[str],
+    filters: dict[str, str],
+) -> int:
+    """Number of spend-cube groups before any limit (same scope as the cube)."""
+    cube = SPEND_CUBE_VIEW
+    dimensions = [cube.c[name] for name in dict.fromkeys(group_by)]
+    conditions: list[ColumnElement[bool]] = []
+    if start_period is not None:
+        conditions.append(cube.c.period >= start_period)
+    if end_period is not None:
+        conditions.append(cube.c.period <= end_period)
+    for name, value in filters.items():
+        conditions.append(cube.c[name] == value)
+    groups = (
+        select(*dimensions)
+        .where(and_(true(), *conditions))
+        .group_by(*dimensions)
+        .subquery("cube_groups")
+    )
+    return int(await db_session.scalar(select(func.count()).select_from(groups)) or 0)
 
 
 async def get_metric_data_status(db_session: AsyncSession) -> MetricDataStatusResponse:

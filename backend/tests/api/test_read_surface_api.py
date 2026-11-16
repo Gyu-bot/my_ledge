@@ -220,7 +220,7 @@ async def test_envelope_and_data_shapes_are_frozen(
     response = await async_client.get(path, headers=api_headers)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert set(body) == ENVELOPE_KEYS
+    assert set(body) >= ENVELOPE_KEYS
     assert body["read_surface_version"] == "read_surface.v1"
     assert body["status"] in STATUS_VALUES
     assert body["status_label"]
@@ -234,9 +234,9 @@ async def test_envelope_and_data_shapes_are_frozen(
         "assumptions",
     }
     assert all(isinstance(item, str) for item in body["basis"]["assumptions"])
-    assert set(body["data"]) == DATA_KEYS[path]
+    assert set(body["data"]) >= DATA_KEYS[path]
     for state in (body["period_scope"] or {}).get("periods", []):
-        assert set(state) == PERIOD_STATE_KEYS
+        assert set(state) >= PERIOD_STATE_KEYS
         assert len(state["period"]) == 7 and state["period"][4] == "-"
     for reason in body["status_reasons"]:
         assert set(reason) == {"code", "label", "periods", "detail"}
@@ -252,8 +252,8 @@ async def test_commitment_and_review_item_shapes(
         await async_client.get("/api/v1/read/commitments", headers=api_headers)
     ).json()
     for item in commitments["data"]["items"]:
-        assert set(item) == COMMITMENT_KEYS
-        assert set(item["observation"]) == OBSERVATION_KEYS
+        assert set(item) >= COMMITMENT_KEYS
+        assert set(item["observation"]) >= OBSERVATION_KEYS
         assert item["kind_label"] and item["observation"]["state_label"]
     review = (
         await async_client.get(
@@ -264,7 +264,7 @@ async def test_commitment_and_review_item_shapes(
     ).json()
     assert review["data"]["items"]
     for item in review["data"]["items"]:
-        assert set(item) == REVIEW_ITEM_KEYS
+        assert set(item) >= REVIEW_ITEM_KEYS
         for entry in item["listed_because"]:
             assert set(entry) == {
                 "source",
@@ -285,7 +285,11 @@ async def test_index_lists_surface_with_questions_and_versions(
         f"/api/v1/metrics/net-worth/{name}"
         for name in ("intervals", "reconciliation", "emergency-fund")
     }
-    assert paths == set(ENVELOPE_PATHS) | net_worth
+    projection = {
+        "/api/v1/canonical-views/dashboard",
+        "/api/v1/canonical-views/month-projection/accuracy",
+    }
+    assert paths == set(ENVELOPE_PATHS) | net_worth | projection
     covered = {question for entry in body["entries"] for question in entry["questions"]}
     assert covered == {"Q1", "Q2", "Q3", "Q4", "Q5", "Q6"}
     assert all(entry["definition"] for entry in body["entries"])

@@ -4,17 +4,29 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import get_args
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.validation import (
+    UniformValidationRoute,
+    query_error,
+    reject_unknown_query_params,
+)
 from app.core.database import get_db_session
 from app.core.security import require_api_key
-from app.schemas.comparison import ComparisonAdjustabilityView, ComparisonLevel
+from app.schemas.comparison import (
+    BaselineMethod,
+    ComparisonAdjustabilityView,
+    ComparisonLevel,
+)
 from app.schemas.metrics import SpendCubeDimension
 from app.schemas.read_surface import (
+    CommitmentStatusFilter,
+    CommitmentView,
+    ContributionLists,
     ReadCommitmentsResponse,
     ReadComparisonResponse,
     ReadContributionsResponse,
@@ -24,6 +36,10 @@ from app.schemas.read_surface import (
     ReadReviewItemsResponse,
     ReadSpendCubeResponse,
     ReadSurfaceIndexResponse,
+    SpendCubeAdjustability,
+    SpendCubeCommitmentKind,
+    SpendCubeFlowRow,
+    SpendCubePaymentForm,
 )
 from app.services.read_commitments_service import read_commitments
 from app.services.read_review_items_service import read_review_items
@@ -38,9 +54,18 @@ from app.services.read_surface_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/read", dependencies=[Depends(require_api_key)])
+# Authentication first, then unknown query parameters (HTTP 422 naming each).
+router = APIRouter(
+    prefix="/read",
+    dependencies=[Depends(require_api_key), Depends(reject_unknown_query_params)],
+    route_class=UniformValidationRoute,
+)
 
 PERIOD_PATTERN = r"^[1-9]\d{3}-(0[1-9]|1[0-2])$"
+BASELINE_DESCRIPTION = (
+    "기준: median_of_recent_closed_months(기본, 최근 마감월 중앙값) 또는 "
+    "previous_month(직전 마감월 한 달). 쓸 수 없는 기준은 null로 둔다."
+)
 _DIMENSIONS: tuple[str, ...] = get_args(SpendCubeDimension)
 _ERROR_RESPONSES: dict[int | str, dict[str, object]] = {
     401: {"description": "인증 실패: X-API-Key가 없거나 틀림."},
@@ -111,10 +136,10 @@ async def get_read_spend_cube(
     effective_category_major: str | None = Query(default=None, max_length=50),
     effective_category_minor: str | None = Query(default=None, max_length=50),
     merchant: str | None = Query(default=None, max_length=500),
-    payment_form: str | None = Query(default=None, max_length=20),
-    commitment_kind: str | None = Query(default=None, max_length=20),
-    adjustability: str | None = Query(default=None, max_length=20),
-    flow_row: str | None = Query(default=None, max_length=40),
+    payment_form: SpendCubePaymentForm | None = Query(default=None),
+    commitment_kind: SpendCubeCommitmentKind | None = Query(default=None),
+    adjustability: SpendCubeAdjustability | None = Query(default=None),
+    flow_row: SpendCubeFlowRow | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=2000),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadSpendCubeResponse | JSONResponse:
@@ -123,9 +148,11 @@ async def get_read_spend_cube(
     )
     unknown = [item for item in dimensions if item not in _DIMENSIONS]
     if not dimensions or unknown:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="group_by must list one or more of: " + ", ".join(_DIMENSIONS),
+        raise query_error(
+            "group_by",
+            "group_by must list one or more of: " + ", ".join(_DIMENSIONS),
+            value=group_by,
+            allowed=_DIMENSIONS,
         )
     filters = {
         name: value
@@ -165,12 +192,16 @@ async def get_read_comparison(
         pattern=PERIOD_PATTERN,
         description="대상 월. 생략하면 가장 최근 마감월(없으면 진행월).",
     ),
+    baseline: BaselineMethod = Query(
+        default="median_of_recent_closed_months",
+        description=BASELINE_DESCRIPTION,
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadComparisonResponse | JSONResponse:
     return await _guard(
         "comparison_monthly_flow",
         db_session,
-        lambda: read_comparison(db_session, period=period),
+        lambda: read_comparison(db_session, period=period, baseline=baseline),
     )
 
 
@@ -185,6 +216,17 @@ async def get_read_contributions(
     level: ComparisonLevel = Query(default="category"),
     category: str | None = Query(default=None, max_length=50),
     limit: int = Query(default=100, ge=1, le=1000),
+    baseline: BaselineMethod = Query(
+        default="median_of_recent_closed_months",
+        description=BASELINE_DESCRIPTION,
+    ),
+    lists: ContributionLists = Query(
+        default="both",
+        description=(
+            "both(기본): 두 목록 모두. monthly: items만. twelve_month: "
+            "twelve_month_items만. 요청하지 않은 목록은 빈 배열이고 *_summary.requested=false."
+        ),
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadContributionsResponse | JSONResponse:
     return await _guard(
@@ -197,6 +239,8 @@ async def get_read_contributions(
             level=level,
             category=category,
             limit=limit,
+            baseline=baseline,
+            lists=lists,
         ),
     )
 
@@ -233,12 +277,23 @@ async def get_read_commitments(
         pattern=PERIOD_PATTERN,
         description="관측 여부를 볼 달. 생략하면 가장 최근 마감월(없으면 진행월).",
     ),
+    commitment_status: CommitmentStatusFilter = Query(
+        default="all",
+        alias="status",
+        description="active(진행 중) / ended(종료) / all(기본, 확인 불가 포함).",
+    ),
+    view: CommitmentView = Query(
+        default="detail",
+        description="detail(기본): items 전체. summary: item_summaries만(간단한 행).",
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadCommitmentsResponse | JSONResponse:
     return await _guard(
         "commitments",
         db_session,
-        lambda: read_commitments(db_session, period=period),
+        lambda: read_commitments(
+            db_session, period=period, status_filter=commitment_status, view=view
+        ),
     )
 
 

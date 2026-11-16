@@ -20,6 +20,15 @@ EmergencyFundStatus = Literal[
 ]
 
 
+COMPLETE_STATUS_NOTE = (
+    "status=complete는 대조 항목을 모두 계산할 수 있었다는 뜻이지 순자산 변화가 "
+    "설명되었다는 뜻이 아니다. 설명되지 않은 차이의 크기는 unexplained_difference와 "
+    "unexplained_share_of_change(설명되지 않은 차이 ÷ |순자산 변화|)로 읽는다."
+)
+UNEXPLAINED_SHARE_ZERO_CHANGE = "net_worth_change_zero"
+UNEXPLAINED_SHARE_NOT_COMPUTABLE = "unexplained_not_computable"
+
+
 class ReconciliationInterval(BaseModel):
     start_snapshot_date: date
     end_snapshot_date: date
@@ -136,6 +145,26 @@ class ReconciliationItems(BaseModel):
     investment_net_transfer_in: int = Field(
         description="Money moved into investments by transfers = −investment_net."
     )
+    unexplained_share_of_change: float | None = Field(
+        default=None,
+        description=(
+            "unexplained_difference ÷ |net_worth_change|, 4 dp. Signed (sign of the "
+            "unexplained difference) and may exceed 1 in magnitude. Withheld (null) "
+            "when the change is 0 or the difference cannot be computed."
+        ),
+    )
+    unexplained_share_withheld_reason: (
+        Literal["net_worth_change_zero", "unexplained_not_computable"] | None
+    ) = None
+    investment_valuation_change_provisional: bool = Field(
+        default=False,
+        description=(
+            "True when transfers of undecided purpose exist in the interval: some of "
+            "them may be investment deposits, so investment_valuation_change may move "
+            "once a person sets their purpose."
+        ),
+    )
+    investment_valuation_change_provisional_reason: str | None = None
 
 
 class NetWorthReconciliationResponse(BaseModel):
@@ -155,6 +184,7 @@ class NetWorthReconciliationResponse(BaseModel):
     transfers: TransferBreakdown | None
     items: ReconciliationItems | None
     contract: MetricContract
+    status_note: str = COMPLETE_STATUS_NOTE
 
 
 class SnapshotIntervalItem(BaseModel):
@@ -164,6 +194,10 @@ class SnapshotIntervalItem(BaseModel):
     net_worth_change: int
     unexplained_difference: int | None
     transfer_undecided_share: float | None
+    unexplained_share_of_change: float | None = Field(
+        default=None, description="Same as items.unexplained_share_of_change."
+    )
+    investment_valuation_change_provisional: bool = False
 
 
 class SnapshotDatesByKind(BaseModel):
@@ -182,6 +216,7 @@ class SnapshotIntervalsResponse(BaseModel):
         description="Consecutive asset (net worth) snapshot pairs, newest first."
     )
     interval_rule: str
+    status_note: str = COMPLETE_STATUS_NOTE
 
 
 class EmergencyFundBaseline(BaseModel):

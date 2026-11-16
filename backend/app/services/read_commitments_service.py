@@ -21,17 +21,21 @@ from app.models.installment_plan import InstallmentPlan
 from app.models.loan import Loan
 from app.models.nature_axes import RecurringCommitment
 from app.schemas.metrics import MetricAsOf
+from app.schemas.metrics import MONTH_DATA_COVERAGE_RULE
 from app.schemas.read_surface import (
     ADJUSTABILITY_LABELS,
     COMMITMENT_KIND_LABELS,
     CYCLE_LABELS,
+    END_DATE_STATUS_LABELS,
     LIFECYCLE_LABELS,
+    MONTHLY_BURDEN_ORIGIN_LABELS,
     MONTHLY_BURDEN_BASIS_LABELS,
     OBSERVATION_REASON_LABELS,
     OBSERVATION_STATE_LABELS,
     STATUS_LABELS,
     CommitmentItem,
     CommitmentObservation,
+    CommitmentSummaryItem,
     ReadBasis,
     ReadCommitmentsData,
     ReadCommitmentsResponse,
@@ -290,6 +294,50 @@ async def _latest_loan_payments(
 PROTECTED_BASIS = "대출·할부는 끝날 때까지 보호로 고정한다(2.2)."
 
 
+def _end_date_fields(status: str, reason: str) -> dict[str, str]:
+    return {
+        "end_date_status": status,
+        "end_date_status_label": END_DATE_STATUS_LABELS[status],
+        "end_date_reason": reason,
+    }
+
+
+def _burden_origin_fields(origin: str) -> dict[str, str]:
+    return {
+        "monthly_burden_origin": origin,
+        "monthly_burden_origin_label": MONTHLY_BURDEN_ORIGIN_LABELS[origin],
+    }
+
+
+def _loan_burden_origin(monthly: int | None, source: str | None) -> str:
+    if monthly is None:
+        return "not_available"
+    if source == "manual":
+        return "entered_by_person"
+    if source == "estimated_from_linked_transactions":
+        return "estimated_from_linked_transactions"
+    return "source_not_recorded"
+
+
+def _recurring_end_date(commitment: RecurringCommitment) -> dict[str, str]:
+    if commitment.end_date is not None:
+        return _end_date_fields("recorded", "사람이 기록한 묶음 종료일")
+    if commitment.cycle == "n_times":
+        if commitment.total_count is not None:
+            return _end_date_fields(
+                "not_applicable",
+                "회차 약정은 날짜가 아니라 총 횟수(total_count)로 끝난다. 종료일은 "
+                "기록되지 않았고 추정하지 않는다.",
+            )
+        return _end_date_fields(
+            "not_recorded", "회차 약정인데 종료일도 총 횟수도 기록되지 않음"
+        )
+    return _end_date_fields(
+        "open_ended",
+        "정기 지급 묶음은 사람이 종료일을 기록하기 전까지 끝이 정해지지 않는다.",
+    )
+
+
 async def _loan_items(
     db_session: AsyncSession,
     ctx: _Context,
@@ -368,8 +416,17 @@ async def _loan_items(
                     else "not_available"
                 ],
                 monthly_burden_source=payment_source,
+                **_burden_origin_fields(_loan_burden_origin(monthly, payment_source)),
                 start_date=start,
                 end_date=maturity,
+                **(
+                    _end_date_fields("recorded", "대출 스냅샷·계좌에 기록된 만기일")
+                    if maturity is not None
+                    else _end_date_fields(
+                        "not_recorded",
+                        "대출 만기일이 기록되지 않음. 서버는 만기를 추정하지 않는다.",
+                    )
+                ),
                 linked_count=int(member.get("count", 0)) or None,  # type: ignore[call-overload]
                 adjustability="protected",
                 adjustability_label=ADJUSTABILITY_LABELS["protected"],
@@ -502,8 +559,19 @@ async def _installment_items(
                 monthly_burden_basis_label=MONTHLY_BURDEN_BASIS_LABELS[
                     "plan_monthly_amount"
                 ],
+                **_burden_origin_fields("installment_plan_record"),
                 start_date=plan.first_payment_date,
                 end_date=due_dates[-1] if due_dates else None,
+                **(
+                    _end_date_fields(
+                        "recorded",
+                        "할부 계획의 첫 결제일과 총 회차로 정해지는 마지막 회차 예정일",
+                    )
+                    if due_dates
+                    else _end_date_fields(
+                        "not_recorded", "할부 계획에 회차가 기록되지 않음"
+                    )
+                ),
                 total_count=plan.total_installments,
                 remaining_count=remaining,
                 linked_count=len(plan_links),
@@ -618,8 +686,12 @@ async def _recurring_items(
                 monthly_burden=monthly,
                 monthly_burden_basis=basis,  # type: ignore[arg-type]
                 monthly_burden_basis_label=MONTHLY_BURDEN_BASIS_LABELS[basis],
+                **_burden_origin_fields(
+                    "observed_closed_month" if monthly is not None else "not_available"
+                ),
                 start_date=commitment.start_date,
                 end_date=commitment.end_date,
+                **_recurring_end_date(commitment),
                 total_count=commitment.total_count,
                 remaining_count=remaining,
                 linked_count=count,
@@ -638,8 +710,27 @@ async def _recurring_items(
     return items
 
 
+def _summary_item(item: CommitmentItem) -> CommitmentSummaryItem:
+    return CommitmentSummaryItem(
+        commitment_key=item.commitment_key,
+        kind=item.kind,
+        name=item.name,
+        lifecycle=item.lifecycle,
+        monthly_burden=item.monthly_burden,
+        monthly_burden_origin=item.monthly_burden_origin,
+        end_date=item.end_date,
+        end_date_status=item.end_date_status,
+        observation_state=item.observation.state,
+        observed_amount=item.observation.observed_amount,
+    )
+
+
 async def read_commitments(
-    db_session: AsyncSession, *, period: str | None
+    db_session: AsyncSession,
+    *,
+    period: str | None,
+    status_filter: str = "all",
+    view: str = "detail",
 ) -> ReadCommitmentsResponse:
     as_of = await load_as_of(db_session)
     target = period or default_period(as_of)
@@ -722,6 +813,11 @@ async def read_commitments(
     state, reasons = resolve_status(
         as_of=as_of, scope=scope, classification=None, extra_incomplete=extra
     )
+    selected = [
+        item
+        for item in items
+        if status_filter == "all" or item.lifecycle == status_filter
+    ]
     return ReadCommitmentsResponse(
         surface="commitments",
         surface_label="약정 목록",
@@ -739,6 +835,7 @@ async def read_commitments(
                 "선택한 기간의 관측 여부. 관측 금액은 월 흐름표의 약정 지급 줄과 같은 거래다."
             ),
             rules={
+                "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
                 "observation": (
                     "observed: 그 기간 약정에 속한(연결된) 지출이 있음. "
                     "expected_not_observed: 마감월이고 기록된 주기상 있어야 하는데 없음. "
@@ -758,6 +855,22 @@ async def read_commitments(
                 "yearly_anchor": (
                     "매년 묶음은 시작일의 달, 시작일이 없으면 처음 관측된 거래의 달을 "
                     "해당 달로 본다."
+                ),
+                "end_date_status": (
+                    "end_date가 null이면 end_date_status가 이유를 준다: open_ended(정기 "
+                    "지급 묶음은 끝이 정해지지 않음), not_recorded(대출 만기 등 기록 없음), "
+                    "not_applicable(회차 약정은 횟수로 끝남). 종료일은 추정하지 않는다."
+                ),
+                "monthly_burden_origin": (
+                    "monthly_burden_origin은 월 부담 값의 출처다. 대출의 "
+                    "recorded_monthly_payment는 '스냅샷에 저장된 값'이며, 그 값을 사람이 "
+                    "넣었으면 entered_by_person, 연결 거래로 추정해 저장했으면 "
+                    "estimated_from_linked_transactions다."
+                ),
+                "filters": (
+                    "status=active|ended|all(기본 all)은 lifecycle로 items를 고른다(unknown은 "
+                    "all에서만). view=summary면 items는 비고 item_summaries에 간단한 행을 준다. "
+                    "totals와 counts_by_state는 필터와 무관하게 모든 약정 기준이다."
                 ),
                 "monthly_burden": (
                     "대출은 스냅샷의 월 상환액, 할부는 계획의 월 금액, 매월 묶음은 최근 "
@@ -796,6 +909,15 @@ async def read_commitments(
                 "observed_committed_total": committed_total,
             },
             counts_by_state=counts_by_state,
-            items=items,
+            items=selected if view == "detail" else [],
+            status_filter=status_filter,  # type: ignore[arg-type]
+            view=view,  # type: ignore[arg-type]
+            total_item_count=len(items),
+            returned_item_count=len(selected),
+            item_summaries=(
+                [_summary_item(item) for item in selected]
+                if view == "summary"
+                else None
+            ),
         ),
     )

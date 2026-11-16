@@ -9,12 +9,20 @@ It never re-sums transaction amounts in Python.
 
 from datetime import date
 
-from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.validation import query_error
 from app.models.nature_axes import RecurringCommitment
-from app.schemas.metrics import MetricAsOf, MetricContract
+from app.schemas.metrics import (
+    MONTH_DATA_COVERAGE_LABELS,
+    MONTH_DATA_COVERAGE_REASON_LABELS,
+    MONTH_DATA_COVERAGE_RULE,
+    MetricAsOf,
+    MetricContract,
+)
+from app.schemas.comparison import ContributionItem
 from app.schemas.read_surface import (
     ADJUSTABILITY_LABELS,
     COMMITMENT_KIND_LABELS,
@@ -28,6 +36,7 @@ from app.schemas.read_surface import (
     STATUS_LABELS,
     STATUS_REASON_LABELS,
     ClassificationCompleteness,
+    ContributionListSummary,
     CoverageGap,
     ReadAsOf,
     ReadBasis,
@@ -58,9 +67,11 @@ from app.services.metric_views import (
     MONTHLY_FLOW_SUMMARY_VIEW,
 )
 from app.services.metrics_service import (
+    count_spend_cube_groups,
     get_metric_data_status,
     get_monthly_flow,
     get_spend_cube,
+    month_data_coverage,
     ratio,
 )
 
@@ -100,9 +111,8 @@ def period_of(value: date) -> str:
 
 def period_range(start_period: str, end_period: str) -> list[str]:
     if end_period < start_period:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="end_period must not be before start_period",
+        raise query_error(
+            "end_period", "end_period must not be before start_period", value=end_period
         )
     year, month = (int(part) for part in start_period.split("-"))
     periods: list[str] = []
@@ -112,9 +122,10 @@ def period_range(start_period: str, end_period: str) -> list[str]:
         if current >= end_period:
             break
         if len(periods) > MAX_PERIOD_SPAN:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"period span must be at most {MAX_PERIOD_SPAN} months",
+            raise query_error(
+                "start_period",
+                f"period span must be at most {MAX_PERIOD_SPAN} months",
+                value=start_period,
             )
         month += 1
         if month == 13:
@@ -122,10 +133,59 @@ def period_range(start_period: str, end_period: str) -> list[str]:
     return periods
 
 
+COMPLETENESS_KEYS = (
+    "adjustability_undecided_transaction_count",
+    "adjustability_undecided_gross_total",
+    "expense_gross_total",
+)
+
+
+def _completeness_columns() -> list[ColumnElement]:
+    """Classification completeness measures that cannot cancel out.
+
+    Over expense lines of ``vw_metric_flow_lines``: the number of
+    transactions with an undecided line and absolute-value sums, so an
+    undecided payment and an undecided refund never net to "complete".
+    """
+    lines = FLOW_LINES_VIEW
+    undecided = lines.c.adjustability == "undecided"
+    return [
+        func.count(func.distinct(case((undecided, lines.c.transaction_id)))).label(
+            "adjustability_undecided_transaction_count"
+        ),
+        func.coalesce(
+            func.sum(case((undecided, func.abs(lines.c.amount)), else_=0)), 0
+        ).label("adjustability_undecided_gross_total"),
+        func.coalesce(func.sum(func.abs(lines.c.amount)), 0).label(
+            "expense_gross_total"
+        ),
+    ]
+
+
+async def load_completeness(
+    db_session: AsyncSession, conditions: list[ColumnElement[bool]] | None = None
+) -> dict[str, int]:
+    """Completeness measures over expense lines matching ``conditions``."""
+    lines = FLOW_LINES_VIEW
+    row = (
+        (
+            await db_session.execute(
+                select(*_completeness_columns()).where(
+                    lines.c.type == EXPENSE, *(conditions or [])
+                )
+            )
+        )
+        .mappings()
+        .one()
+    )
+    return {key: int(row[key] or 0) for key in COMPLETENESS_KEYS}
+
+
 async def load_period_summaries(
     db_session: AsyncSession,
 ) -> dict[str, dict[str, int]]:
-    """Per-period totals from ``vw_monthly_flow_summary`` (one row per month)."""
+    """Per-period totals from ``vw_monthly_flow_summary`` (one row per month)
+    plus the completeness measures of the same month's expense lines."""
     summary = MONTHLY_FLOW_SUMMARY_VIEW
     rows = await db_session.execute(
         select(
@@ -135,16 +195,30 @@ async def load_period_summaries(
             summary.c.adjustability_undecided_total,
         )
     )
-    return {
+    result = {
         row.period: {
             "transaction_count": int(row.transaction_count or 0),
             "total_outflow": int(row.total_outflow or 0),
             "adjustability_undecided_total": int(
                 row.adjustability_undecided_total or 0
             ),
+            **dict.fromkeys(COMPLETENESS_KEYS, 0),
         }
         for row in rows
     }
+    lines = FLOW_LINES_VIEW
+    for row in (
+        await db_session.execute(
+            select(lines.c.period, *_completeness_columns())
+            .where(lines.c.type == EXPENSE)
+            .group_by(lines.c.period)
+        )
+    ).mappings():
+        if row["period"] in result:
+            result[row["period"]].update(
+                {key: int(row[key] or 0) for key in COMPLETENESS_KEYS}
+            )
+    return result
 
 
 def imported_bounds(as_of: MetricAsOf) -> tuple[str, str] | None:
@@ -172,6 +246,9 @@ def period_state(
     count = values.get("transaction_count", 0)
     outflow = values.get("total_outflow", 0)
     undecided = values.get("adjustability_undecided_total", 0)
+    undecided_count = values.get("adjustability_undecided_transaction_count", 0)
+    undecided_gross = values.get("adjustability_undecided_gross_total", 0)
+    expense_gross = values.get("expense_gross_total", 0)
     month_status = (
         "closed"
         if as_of.last_closed_period is not None and period <= as_of.last_closed_period
@@ -179,10 +256,16 @@ def period_state(
     )
     if count == 0:
         state = "no_transactions"
-    elif undecided != 0:
+    elif undecided_count > 0:
         state = "classification_incomplete"
     else:
         state = "ok"
+    data_coverage, coverage_reasons = month_data_coverage(
+        period,
+        first_transaction_date=as_of.first_transaction_date,
+        transaction_as_of=as_of.transaction_as_of,
+        has_transactions=count > 0,
+    )
     return ReadPeriodState(
         period=period,
         coverage="imported",
@@ -194,6 +277,13 @@ def period_state(
         total_outflow=outflow,
         adjustability_undecided_total=undecided,
         adjustability_undecided_share=ratio(undecided, outflow),
+        adjustability_undecided_transaction_count=undecided_count,
+        adjustability_undecided_gross_total=undecided_gross,
+        expense_gross_total=expense_gross,
+        adjustability_undecided_gross_share=ratio(undecided_gross, expense_gross),
+        data_coverage=data_coverage,  # type: ignore[arg-type]
+        data_coverage_label=MONTH_DATA_COVERAGE_LABELS[data_coverage],
+        data_coverage_reasons=coverage_reasons,  # type: ignore[arg-type]
     )
 
 
@@ -222,12 +312,35 @@ def build_period_scope(
     return ReadPeriodScope(start_period=start, end_period=end, periods=periods)
 
 
-def classification_state(undecided_total: int, outflow: int) -> ReadClassificationState:
+def classification_state(
+    undecided_total: int,
+    outflow: int,
+    *,
+    undecided_count: int = 0,
+    undecided_gross: int = 0,
+    expense_gross: int = 0,
+) -> ReadClassificationState:
     return ReadClassificationState(
         adjustability_undecided_total=undecided_total,
         total_outflow=outflow,
         adjustability_undecided_share=ratio(undecided_total, outflow),
-        complete=undecided_total == 0,
+        complete=undecided_count == 0,
+        adjustability_undecided_transaction_count=undecided_count,
+        adjustability_undecided_gross_total=undecided_gross,
+        expense_gross_total=expense_gross,
+        adjustability_undecided_gross_share=ratio(undecided_gross, expense_gross),
+    )
+
+
+def classification_from_completeness(
+    undecided_total: int, outflow: int, measures: dict[str, int]
+) -> ReadClassificationState:
+    return classification_state(
+        undecided_total,
+        outflow,
+        undecided_count=measures["adjustability_undecided_transaction_count"],
+        undecided_gross=measures["adjustability_undecided_gross_total"],
+        expense_gross=measures["expense_gross_total"],
     )
 
 
@@ -236,6 +349,13 @@ def scope_classification(scope: ReadPeriodScope) -> ReadClassificationState:
     return classification_state(
         sum(item.adjustability_undecided_total for item in imported),
         sum(item.total_outflow for item in imported),
+        undecided_count=sum(
+            item.adjustability_undecided_transaction_count for item in imported
+        ),
+        undecided_gross=sum(
+            item.adjustability_undecided_gross_total for item in imported
+        ),
+        expense_gross=sum(item.expense_gross_total for item in imported),
     )
 
 
@@ -282,7 +402,7 @@ def resolve_status(
             return "not_imported", reasons
         if all(p.transaction_count == 0 for p in imported):
             return "no_transactions", reasons
-    if classification is not None and classification.adjustability_undecided_total:
+    if classification is not None and not classification.complete:
         resolved = "classification_incomplete"
         reasons.append(
             _reason(
@@ -290,7 +410,7 @@ def resolve_status(
                 [
                     p.period
                     for p in (scope.periods if scope else [])
-                    if p.adjustability_undecided_total
+                    if p.adjustability_undecided_transaction_count
                 ],
             )
         )
@@ -302,6 +422,14 @@ def resolve_status(
             _reason("non_krw_excluded", detail=f"{non_krw_count}건 제외(전체 기간)")
         )
     return resolved, reasons
+
+
+CLASSIFICATION_COMPLETENESS_RULE = (
+    "classification.complete는 조정 가능성 미정 지출 거래가 0건일 때만 true다. "
+    "adjustability_undecided_share는 환불을 뺀 순액 비중이라 부호가 있고 0–1 밖일 수 "
+    "있다. 상쇄되지 않는 완성도는 adjustability_undecided_transaction_count와 "
+    "adjustability_undecided_gross_share(미정 줄 |금액| 합 ÷ 지출 줄 |금액| 합, 0–1)다."
+)
 
 
 def basis_from_contract(
@@ -320,6 +448,8 @@ def basis_from_contract(
             "transfers": inclusion.transfers,
             "loans": inclusion.loans,
             "period_attribution": inclusion.period_attribution,
+            "classification_completeness": CLASSIFICATION_COMPLETENESS_RULE,
+            "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
         },
         field_scopes=dict(contract.field_scopes),
         assumptions=assumptions or [],
@@ -332,6 +462,14 @@ def common_labels() -> dict[str, str]:
         **{f"month_status.{key}": value for key, value in MONTH_STATUS_LABELS.items()},
         **{f"coverage.{key}": value for key, value in COVERAGE_LABELS.items()},
         **{f"snapshot.{key}": value for key, value in SNAPSHOT_KIND_LABELS.items()},
+        **{
+            f"data_coverage.{key}": value
+            for key, value in MONTH_DATA_COVERAGE_LABELS.items()
+        },
+        **{
+            f"data_coverage_reason.{key}": value
+            for key, value in MONTH_DATA_COVERAGE_REASON_LABELS.items()
+        },
     }
 
 
@@ -430,8 +568,15 @@ async def read_spend_cube(
         start_period=start_period,
         end_period=end_period,
     )
-    classification = classification_state(
-        int(cube.contract.adjustability_undecided_total or 0), cube.total_amount
+    classification = classification_from_completeness(
+        int(cube.contract.adjustability_undecided_total or 0),
+        cube.total_amount,
+        await load_completeness(
+            db_session,
+            spend_cube_line_conditions(
+                start_period=start_period, end_period=end_period, filters=filters
+            ),
+        ),
     )
     state, reasons = resolve_status(
         as_of=as_of,
@@ -465,8 +610,35 @@ async def read_spend_cube(
             row_count=len(rows),
             truncated=len(cube.rows) > limit,
             rows=rows,
+            total_group_count=await count_spend_cube_groups(
+                db_session,
+                start_period=start_period,
+                end_period=end_period,
+                group_by=group_by,
+                filters=filters,
+            ),
+            returned_count=len(rows),
         ),
     )
+
+
+def spend_cube_line_conditions(
+    *, start_period: str | None, end_period: str | None, filters: dict[str, str]
+) -> list[ColumnElement[bool]]:
+    """The spend cube's scope as conditions on ``vw_metric_flow_lines``.
+
+    Every cube dimension is a column of the flow lines, so the same filters
+    select the same expense lines the cube aggregated.
+    """
+    lines = FLOW_LINES_VIEW
+    conditions: list[ColumnElement[bool]] = []
+    if start_period is not None:
+        conditions.append(lines.c.period >= start_period)
+    if end_period is not None:
+        conditions.append(lines.c.period <= end_period)
+    for name, value in filters.items():
+        conditions.append(lines.c[name] == value)
+    return conditions
 
 
 def _single_period_scope(
@@ -487,12 +659,65 @@ COMPARISON_ASSUMPTIONS = [
     "진행월 대상은 같은 경과일까지의 누적끼리 비교하고 비율·전월 전체 대비 증감을 내지 않는다.",
     "변화 목록은 증감률이 아니라 금액 기여 절댓값 순이다.",
 ]
+PREVIOUS_MONTH_ASSUMPTIONS = [
+    "기준값은 대상 월 바로 앞의 마감월 한 달 금액이다(baseline=previous_month). 그 달이 "
+    "자료 시작 전·월중 시작 첫 달·기준 구간 시작일 전·거래 0건이면 기준값을 채우지 않고 "
+    "null로 둔다(comparison.baseline_unavailable_reason).",
+    "진행월 대상은 같은 경과일까지의 누적끼리 비교하고 비율·전월 전체 대비 증감을 내지 않는다.",
+    "변화 목록은 증감률이 아니라 금액 기여 절댓값 순이다.",
+]
+BASELINE_RULES = {
+    "median_of_recent_closed_months": (
+        "baseline=median_of_recent_closed_months(기본): 대상 월 앞의 최근 마감월(기본 6개) "
+        "월별 금액 중앙값. 자료 없는 달은 건너뛰고, 월중 시작 첫 달(first_full_period "
+        "이전)과 기준 구간 시작일 전 달은 쓰지 않는다."
+    ),
+    "previous_month": (
+        "baseline=previous_month: 대상 월 바로 앞의 마감월 한 달. 같은 비교 계약 규칙"
+        "(월중 시작 첫 달·기준 구간 시작일 전·거래 0건 달은 쓰지 않음, 진행월 대상은 같은 "
+        "경과일)을 따르고, 쓸 수 없으면 기준값을 null로 둔다."
+    ),
+}
+ADDITIVITY_RULES = {
+    "median_of_recent_closed_months": (
+        "항목은 각 항목 자신의 기준값(그 항목 월별 금액의 중앙값)에 대한 변화이며 전체 "
+        "변화의 분해가 아니다. 중앙값은 더해지지 않고 annual_like 항목은 12개월 창 "
+        "목록으로 빠지므로 sum_item_changes가 change_total과 다를 수 있다(non_additive_gap)."
+    ),
+    "previous_month": (
+        "기준이 직전 마감월 한 달이라 항목별 변화가 더해진다: items에는 annual_like 항목도 "
+        "월 단위로 함께 들어가고 sum_item_changes = change_total, non_additive_gap = 0이다. "
+        "twelve_month_items는 기준 선택과 무관한 12개월 창 보기 그대로다."
+    ),
+}
+
+
+def comparison_basis_for(
+    contract: MetricContract, baseline: str, *, contributions: bool = False
+) -> ReadBasis:
+    assumptions = (
+        PREVIOUS_MONTH_ASSUMPTIONS
+        if baseline == "previous_month"
+        else COMPARISON_ASSUMPTIONS
+    )
+    basis = basis_from_contract(contract, [*FLOW_ASSUMPTIONS, *assumptions])
+    basis.rules["baseline"] = BASELINE_RULES[baseline]
+    if contributions:
+        basis.rules["contributions_additivity"] = ADDITIVITY_RULES[baseline]
+    return basis
 
 
 async def read_comparison(
-    db_session: AsyncSession, *, period: str | None
+    db_session: AsyncSession,
+    *,
+    period: str | None,
+    baseline: str = "median_of_recent_closed_months",
 ) -> ReadComparisonResponse:
-    result = await get_monthly_flow_comparison(db_session, period=period)
+    result = await get_monthly_flow_comparison(
+        db_session,
+        period=period,
+        baseline=baseline,  # type: ignore[arg-type]
+    )
     as_of = result.contract.as_of
     target = result.comparison.target_period or period
     scope = _single_period_scope(
@@ -519,14 +744,39 @@ async def read_comparison(
         as_of=read_as_of(as_of),
         period_scope=scope,
         classification=classification,
-        basis=basis_from_contract(
-            result.contract, [*FLOW_ASSUMPTIONS, *COMPARISON_ASSUMPTIONS]
-        ),
+        basis=comparison_basis_for(result.contract, baseline),
         labels=flow_labels(),
         data=ReadComparisonData(
             comparison=result.comparison,
             measures=result.measures,
             residual_rate=result.residual_rate,
+        ),
+    )
+
+
+def contribution_list_summary(
+    items: list[ContributionItem], *, limit: int, requested: bool
+) -> tuple[list[ContributionItem], ContributionListSummary]:
+    returned = items[:limit] if requested else []
+    rest = items[len(returned) :]
+
+    def change_sum(values: list[ContributionItem]) -> int:
+        return sum(item.change_amount or 0 for item in values)
+
+    def target_sum(values: list[ContributionItem]) -> int:
+        return sum(item.target_amount for item in values)
+
+    return returned, ContributionListSummary(
+        requested=requested,
+        total_count=len(items),
+        returned_count=len(returned),
+        truncated=requested and len(items) > limit,
+        returned_change_amount_sum=change_sum(returned),
+        not_returned_change_amount_sum=change_sum(rest),
+        returned_target_amount_sum=target_sum(returned),
+        not_returned_target_amount_sum=target_sum(rest),
+        items_without_change_count=sum(
+            1 for item in items if item.change_amount is None
         ),
     )
 
@@ -539,6 +789,8 @@ async def read_contributions(
     level: str,
     category: str | None,
     limit: int,
+    baseline: str = "median_of_recent_closed_months",
+    lists: str = "both",
 ) -> ReadContributionsResponse:
     result = await get_change_contributions(
         db_session,
@@ -546,7 +798,21 @@ async def read_contributions(
         adjustability=adjustability,  # type: ignore[arg-type]
         level=level,  # type: ignore[arg-type]
         category=category,
+        limit=None,
+        baseline=baseline,  # type: ignore[arg-type]
+    )
+    items, items_summary = contribution_list_summary(
+        result.items, limit=limit, requested=lists in ("both", "monthly")
+    )
+    twelve_items, twelve_summary = contribution_list_summary(
+        result.twelve_month_items,
         limit=limit,
+        requested=lists in ("both", "twelve_month"),
+    )
+    sum_item_changes = (
+        sum(item.change_amount or 0 for item in result.items)
+        if result.change_total is not None
+        else None
     )
     as_of = result.contract.as_of
     target = result.comparison.target_period or period
@@ -574,9 +840,7 @@ async def read_contributions(
         as_of=read_as_of(as_of),
         period_scope=scope,
         classification=classification,
-        basis=basis_from_contract(
-            result.contract, [*FLOW_ASSUMPTIONS, *COMPARISON_ASSUMPTIONS]
-        ),
+        basis=comparison_basis_for(result.contract, baseline, contributions=True),
         labels={**flow_labels(), **axis_labels()},
         data=ReadContributionsData(
             comparison=result.comparison,
@@ -587,9 +851,18 @@ async def read_contributions(
             target_total=result.target_total,
             baseline_total=result.baseline_total,
             change_total=result.change_total,
-            items=result.items,
+            items=items,
             twelve_month_window=result.twelve_month_window,
-            twelve_month_items=result.twelve_month_items,
+            twelve_month_items=twelve_items,
+            lists=lists,  # type: ignore[arg-type]
+            items_summary=items_summary,
+            twelve_month_items_summary=twelve_summary,
+            sum_item_changes=sum_item_changes,
+            non_additive_gap=(
+                result.change_total - sum_item_changes
+                if result.change_total is not None and sum_item_changes is not None
+                else None
+            ),
         ),
     )
 
@@ -673,8 +946,9 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
         as_of=as_of, summaries=summaries, start_period=None, end_period=None
     )
     counts = await _classification_counts(db_session)
-    classification = classification_state(
-        base.adjustability_undecided_total, base.total_outflow
+    measures = await load_completeness(db_session)
+    classification = classification_from_completeness(
+        base.adjustability_undecided_total, base.total_outflow, measures
     )
     missing_attributes = (
         counts["commitments_without_cycle"]
@@ -703,6 +977,7 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
     snapshot_values = as_of.snapshot_as_of.model_dump()
     bounds = imported_bounds(as_of)
     share = classification.adjustability_undecided_share
+    gross_share = classification.adjustability_undecided_gross_share
     return ReadDataStatusResponse(
         surface="data_status",
         surface_label="자료 현황",
@@ -727,6 +1002,8 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
                 ),
                 "snapshot_as_of": "스냅샷 기준일은 종류마다 따로 두고 합치지 않는다.",
                 "undecided_share": "미정 비중 = 조정 가능성 미정 지출 ÷ 총지급(금액 기준).",
+                "classification_completeness": CLASSIFICATION_COMPLETENESS_RULE,
+                "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
             },
             assumptions=[
                 "업로드 기록에는 파일이 덮는 기간이 없어서, 가져온 기간은 유효 거래의 첫 날과 "
@@ -771,6 +1048,14 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
                 adjustability_undecided_share=share,
                 adjustability_decided_share=(
                     None if share is None else round(1 - share, 4)
+                ),
+                adjustability_undecided_gross_total=(
+                    classification.adjustability_undecided_gross_total
+                ),
+                expense_gross_total=classification.expense_gross_total,
+                adjustability_undecided_gross_share=gross_share,
+                adjustability_decided_gross_share=(
+                    None if gross_share is None else round(1 - gross_share, 4)
                 ),
                 uncategorized_expense_total=counts["uncategorized_total"],
                 uncategorized_expense_transaction_count=counts["uncategorized_count"],
