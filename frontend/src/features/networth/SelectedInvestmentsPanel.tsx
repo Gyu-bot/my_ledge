@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
 import { ListSkeleton } from '../../ds/Skeleton'
@@ -7,11 +6,12 @@ import { useSelectedInvestments } from '../../hooks/useSourcePolicy'
 import { SourceSelectionDetails } from '../assets/SourceSelectionDetails'
 import { SOURCE_LABEL, sourceMoney } from '../assets/sourcePresentation'
 
+/** 선택한 투자 소스의 현재 평가액 — 기록된 스냅샷이 아닌 참고값이라 재무상태 화면이 아니라 소스 설정 옆에 둔다(T061). */
 export function SelectedInvestmentsPanel() {
   const selected = useSelectedInvestments()
   const data = selected.data
   return (
-    <Card title="선택 소스 기준 현재 자산" meta="과거 스냅샷과 구분한 참고값" action={<Link className="text-caption text-transfer hover:underline" to="/data/settings">소스 설정</Link>}>
+    <Card title="선택 소스 기준 현재 자산" meta="과거 스냅샷과 구분한 참고값. 재무상태의 순자산 대조에는 쓰지 않습니다." className="mb-4">
       {selected.isLoading ? <ListSkeleton rows={4} /> : selected.error || !data ? <ErrorState message="선택 소스 자산을 불러오지 못했습니다" onRetry={() => void selected.refetch()} /> : (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">

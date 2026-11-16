@@ -1,3 +1,4 @@
+vi.mock('../../features/networth/SelectedInvestmentsPanel', () => ({ SelectedInvestmentsPanel: () => null }))
 vi.mock('../../features/data/SourcePolicyEditor', () => ({ SourcePolicyEditor: () => null }))
 vi.mock('../../features/settings/IncomeExpectationsEditor', () => ({ IncomeExpectationsEditor: () => null }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'

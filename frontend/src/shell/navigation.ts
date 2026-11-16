@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import {
   Activity,
+  ArrowLeftRight,
   BarChart2,
   BookOpen,
   CalendarCheck,
@@ -18,7 +19,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
-// IA — Implentation-plan.md 3.1 (T058 월 결산·지출 분석, T059 약정 현황·작업대)
+// IA — Implentation-plan.md 3.1 (T058 월 결산·지출 분석, T059 약정 현황·작업대, T061 재무상태·이체 목적)
 
 export interface NavItem {
   path: string
@@ -32,7 +33,7 @@ export const MAIN_NAV: NavItem[] = [
   { path: '/', label: '월 결산', Icon: CalendarCheck, exact: true },
   { path: '/analysis', label: '지출 분석', Icon: BarChart2 },
   { path: '/commitments', label: '약정 현황', Icon: Repeat },
-  { path: '/net-worth', label: '자산·부채', Icon: Scale },
+  { path: '/net-worth', label: '재무상태', Icon: Scale },
 ]
 
 /** 작업대 서브 내비 — 분류, 거래, 규칙, 가져오기와 되돌리기, 설정 */
@@ -40,6 +41,7 @@ export const DATA_NAV: NavItem[] = [
   { path: '/data/inbox', label: '분류', Icon: Inbox },
   { path: '/data/transactions', label: '거래', Icon: Table2 },
   { path: '/data/nature', label: '기본값·정기 지급', Icon: Tags },
+  { path: '/data/transfers', label: '이체 목적', Icon: ArrowLeftRight },
   { path: '/data/loans', label: '대출', Icon: Landmark },
   { path: '/data/installments', label: '할부', Icon: CreditCard },
   { path: '/data/assets', label: '자산 메타', Icon: WalletCards },

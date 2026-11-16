@@ -1,3 +1,4 @@
+vi.mock('../../features/networth/SelectedInvestmentsPanel', () => ({ SelectedInvestmentsPanel: () => null }))
 vi.mock('../../features/data/SourcePolicyEditor', () => ({ SourcePolicyEditor: () => null }))
 vi.mock('../../features/settings/IncomeExpectationsEditor', () => ({ IncomeExpectationsEditor: () => null }))
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'

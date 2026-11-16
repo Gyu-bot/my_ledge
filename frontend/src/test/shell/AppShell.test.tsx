@@ -21,10 +21,10 @@ function renderShell(initialPath = '/') {
 }
 
 describe('AppShell', () => {
-  it('새 IA 내비게이션을 렌더한다 (분석 4 + 작업대 11)', () => {
+  it('새 IA 내비게이션을 렌더한다 (분석 4 + 작업대 12)', () => {
     renderShell()
     const nav = screen.getByRole('navigation', { name: '주 메뉴' })
-    for (const label of ['월 결산', '지출 분석', '약정 현황', '자산·부채', '작업대']) {
+    for (const label of ['월 결산', '지출 분석', '약정 현황', '재무상태', '작업대']) {
       expect(within(nav).getByText(label)).toBeInTheDocument()
     }
     for (const label of ['홈', '지출', '신호']) {
@@ -33,11 +33,13 @@ describe('AppShell', () => {
     expect(within(nav).getByRole('link', { name: /월 결산/ })).toHaveAttribute('href', '/')
     expect(within(nav).getByRole('link', { name: /지출 분석/ })).toHaveAttribute('href', '/analysis')
     expect(within(nav).getByRole('link', { name: /약정 현황/ })).toHaveAttribute('href', '/commitments')
-    for (const label of ['분류', '거래', '기본값·정기 지급', '대출', '할부', '자산 메타', '규칙', '자료 현황', '가져오기', '설정', '데이터 사전']) {
+    for (const label of ['분류', '거래', '기본값·정기 지급', '이체 목적', '대출', '할부', '자산 메타', '규칙', '자료 현황', '가져오기', '설정', '데이터 사전']) {
       expect(within(nav).getByText(label)).toBeInTheDocument()
     }
     expect(within(nav).getByRole('link', { name: /자료 현황/ })).toHaveAttribute('href', '/data/status')
     expect(within(nav).getByRole('link', { name: /기본값·정기 지급/ })).toHaveAttribute('href', '/data/nature')
+    expect(within(nav).getByRole('link', { name: /이체 목적/ })).toHaveAttribute('href', '/data/transfers')
+    expect(within(nav).getByRole('link', { name: /재무상태/ })).toHaveAttribute('href', '/net-worth')
     expect(within(nav).queryByText('인박스')).not.toBeInTheDocument()
   })
 

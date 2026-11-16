@@ -8,6 +8,7 @@ import { CommitmentsPage } from './features/commitments/CommitmentsPage'
 import { ClassificationPage } from './features/workbench/ClassificationPage'
 import { DataStatusPage } from './features/workbench/DataStatusPage'
 import { NatureSettingsPage } from './features/workbench/NatureSettingsPage'
+import { TransferPurposePage } from './features/workbench/TransferPurposePage'
 import { TransactionsPage } from './features/data/TransactionsPage'
 import { LoansPage } from './features/data/LoansPage'
 import { InstallmentsPage } from './features/data/InstallmentsPage'
@@ -18,7 +19,7 @@ import { ImportPage } from './features/data/ImportPage'
 import { ReferencePage } from './features/data/ReferencePage'
 
 // IA — Implentation-plan.md 3.1 (T058: 월 결산·지출 분석이 홈·지출 6탭·신호를 대체,
-// T059: 약정 현황과 작업대). 레거시 redirect 포함.
+// T059: 약정 현황과 작업대, T061: 재무상태와 이체 목적). 레거시 redirect 포함.
 
 const LEGACY_REDIRECTS: Array<{ from: string; to: string }> = [
   { from: '/analysis/spending', to: '/analysis' },
@@ -48,6 +49,7 @@ export const routes = [
       { path: 'net-worth', element: <NetWorthPage /> },
       { path: 'data/inbox', element: <ClassificationPage /> },
       { path: 'data/nature', element: <NatureSettingsPage /> },
+      { path: 'data/transfers', element: <TransferPurposePage /> },
       { path: 'data/status', element: <DataStatusPage /> },
       { path: 'data/transactions', element: <TransactionsPage /> },
       { path: 'data/loans', element: <LoansPage /> },
