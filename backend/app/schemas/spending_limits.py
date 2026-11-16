@@ -80,7 +80,14 @@ class LimitComparison(BaseModel):
 
 
 class AnnualEquivalent(BaseModel):
-    category: str
+    category: str = Field(description="유효 대분류. 빈 문자열은 대분류 없음.")
+    category_minor: str | None = Field(
+        description="유효 소분류. null·빈 값은 null로 묶음."
+    )
+    source: Literal["observed_pattern", "registered_yearly_commitment"]
+    commitment_id: int | None
+    commitment_label: str | None
+    observed_periods: list[str] = Field(description="월 순지출이 양수인 달, 오름차순.")
     window_amount: int
     monthly_equivalent: int
     active_months_in_window: int

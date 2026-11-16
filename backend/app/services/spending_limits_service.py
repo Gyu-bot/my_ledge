@@ -1,11 +1,12 @@
-"""T062: reuse T057 annual contributions and T054 SQL actuals; append-only limits."""
+"""T062: retrospective category-pair references and append-only human limits."""
 
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.nature_axes import RecurringCommitment
 from app.models.spending_limit import SpendingLimitRevision
 from app.schemas.read_surface import ADJUSTABILITY_LABELS, ReadBasis
 from app.schemas.spending_limits import (
@@ -19,7 +20,12 @@ from app.schemas.spending_limits import (
     SpendingLimitRevisionResponse,
     SpendingReferenceData,
 )
-from app.services.comparison_service import get_change_contributions
+from app.services.comparison_service import (
+    period_range,
+    resolve_comparison_window,
+    shift_period,
+)
+from app.services.metric_views import EXPENSE, FLOW_LINES_VIEW
 from app.services.metrics_service import get_spend_cube, load_as_of
 from app.services.read_surface_service import read_monthly_flow
 from app.services.upload_rollback_service import LOCK_KEY
@@ -89,6 +95,137 @@ async def create_limit(
     await db.commit()
     await db.refresh(revision)
     return SpendingLimitRevisionResponse.model_validate(revision)
+
+
+async def _annual_equivalents(
+    db: AsyncSession, *, start: str, end: str
+) -> list[AnnualEquivalent]:
+    """One SQL statement over flow lines; Python only shapes SQL totals/months.
+
+    Qualify the whole pair before removing registered yearly lines. Keep those
+    lines (including refund parts) exclusively in their commitment bucket.
+    Empty and null minor categories share the explicit missing-minor bucket.
+    View membership already resolves dates, exclusions, overrides and refunds;
+    never re-match merchants or infer a cycle here. Only human input can set
+    cycle=yearly; origin may still be migration after a person edits a bundle.
+    """
+    lines = FLOW_LINES_VIEW
+    commitment = RecurringCommitment.__table__
+    major = func.coalesce(lines.c.effective_category_major, "").label("category")
+    minor = func.nullif(lines.c.effective_category_minor, "").label("category_minor")
+    monthly = (
+        select(
+            major,
+            minor,
+            lines.c.period,
+            commitment.c.id.label("commitment_id"),
+            commitment.c.label.label("commitment_label"),
+            func.sum(-lines.c.amount).label("amount"),
+            func.count().label("line_count"),
+        )
+        .select_from(
+            lines.outerjoin(
+                commitment,
+                and_(
+                    commitment.c.id == lines.c.recurring_commitment_id,
+                    commitment.c.cycle == "yearly",
+                ),
+            )
+        )
+        .where(lines.c.type == EXPENSE, lines.c.period.between(start, end))
+        .group_by(major, minor, lines.c.period, commitment.c.id, commitment.c.label)
+        .cte("annual_source_months")
+    )
+    pair_months = (
+        select(
+            monthly.c.category,
+            monthly.c.category_minor,
+            monthly.c.period,
+            func.sum(monthly.c.amount).label("pattern_amount"),
+            func.sum(
+                case((monthly.c.commitment_id.is_(None), monthly.c.line_count), else_=0)
+            ).label("line_count"),
+            func.sum(
+                case((monthly.c.commitment_id.is_(None), monthly.c.amount), else_=0)
+            ).label("amount"),
+        )
+        .group_by(monthly.c.category, monthly.c.category_minor, monthly.c.period)
+        .cte("annual_pair_months")
+    )
+    buckets = union_all(
+        select(
+            pair_months.c.category,
+            pair_months.c.category_minor,
+            pair_months.c.period,
+            literal(None, type_=commitment.c.id.type).label("commitment_id"),
+            literal(None, type_=commitment.c.label.type).label("commitment_label"),
+            pair_months.c.pattern_amount,
+            pair_months.c.amount,
+            pair_months.c.line_count,
+        ),
+        select(
+            monthly.c.category,
+            monthly.c.category_minor,
+            monthly.c.period,
+            monthly.c.commitment_id,
+            monthly.c.commitment_label,
+            monthly.c.amount.label("pattern_amount"),
+            monthly.c.amount,
+            monthly.c.line_count,
+        ).where(monthly.c.commitment_id.is_not(None)),
+    ).cte("annual_buckets")
+    partition = [buckets.c.category, buckets.c.category_minor, buckets.c.commitment_id]
+    query = select(
+        buckets,
+        func.sum(buckets.c.amount).over(partition_by=partition).label("window_amount"),
+        func.sum(buckets.c.line_count)
+        .over(partition_by=partition)
+        .label("window_line_count"),
+        func.count(case((buckets.c.pattern_amount > 0, 1)))
+        .over(partition_by=partition)
+        .label("pattern_months"),
+        func.count(case((buckets.c.amount > 0, 1)))
+        .over(partition_by=partition)
+        .label("active_months"),
+    ).order_by(buckets.c.period)
+    items: dict[tuple[str, str | None, int | None], AnnualEquivalent] = {}
+    for row in (await db.execute(query)).mappings():
+        registered = row["commitment_id"] is not None
+        if row["window_line_count"] == 0:
+            continue
+        if not registered and not 1 <= row["pattern_months"] <= 2:
+            continue
+        key = (row["category"], row["category_minor"], row["commitment_id"])
+        if key not in items:
+            items[key] = AnnualEquivalent(
+                category=row["category"],
+                category_minor=row["category_minor"],
+                source="registered_yearly_commitment"
+                if registered
+                else "observed_pattern",
+                commitment_id=row["commitment_id"],
+                commitment_label=row["commitment_label"],
+                window_amount=int(row["window_amount"]),
+                monthly_equivalent=int(
+                    (Decimal(row["window_amount"]) / 12).quantize(
+                        Decimal(1), rounding=ROUND_HALF_UP
+                    )
+                ),
+                active_months_in_window=int(row["active_months"]),
+                observed_periods=[],
+            )
+        if row["amount"] > 0:
+            items[key].observed_periods.append(row["period"])
+    return sorted(
+        items.values(),
+        key=lambda item: (
+            -item.window_amount,
+            item.category,
+            item.category_minor or "",
+            item.source,
+            item.commitment_id or 0,
+        ),
+    )
 
 
 async def read_spending_reference(
@@ -194,34 +331,21 @@ async def read_spending_reference(
     annual_reason = None
     start = end = None
     if period is not None:
-        contributions = await get_change_contributions(
-            db,
-            period=period,
-            adjustability="all",
-            level="category",
-            category=None,
-            limit=None,
+        window = await resolve_comparison_window(db, target_period=period)
+        start, end = shift_period(period, -11), period
+        complete = (
+            window.first_full_period is not None
+            and start >= window.first_full_period
+            and all(
+                month in window.periods_with_data for month in period_range(start, end)
+            )
         )
-        window = contributions.twelve_month_window
-        start, end = window.target_window_start_period, window.target_window_end_period
         if state and state.month_status == "in_progress":
             annual_reason = "month_in_progress"
-        elif not window.target_window_complete:
+        elif not complete:
             annual_reason = "incomplete_twelve_month_window"
         else:
-            annual_items = [
-                AnnualEquivalent(
-                    category=item.category,
-                    window_amount=item.target_amount,
-                    monthly_equivalent=int(
-                        (Decimal(item.target_amount) / 12).quantize(
-                            Decimal(1), rounding=ROUND_HALF_UP
-                        )
-                    ),
-                    active_months_in_window=item.active_months_in_window,
-                )
-                for item in contributions.twelve_month_items
-            ]
+            annual_items = await _annual_equivalents(db, start=start, end=end)
     else:
         annual_reason = "incomplete_twelve_month_window"
     basis = ReadBasis(
@@ -229,7 +353,10 @@ async def read_spending_reference(
         scope="과거 유효 KRW 지출(환불 차감, 대출 포함). 대분류와 조정 가능성은 겹치는 두 보기이며 합산하지 않습니다.",
         rules={
             **flow.basis.rules,
-            "annual_like": "T057 twelve_month_items 그대로: 대상 월로 끝나는 완전한 12개월 창에서 월 지출 순액이 양수인 달이 1~2개인 대분류. 월중 시작 첫 달·자료 없는 달을 포함한 창은 판정하지 않음. 분류나 약정 주기를 자동 지정하지 않음.",
+            "annual_like": "대상 마감월로 끝나는 완전한 12개월 창에서 월 순지출이 양수인 달이 정확히 1~2개인 유효 대분류·소분류 쌍(observed_pattern). null·빈 소분류는 소분류 없음 쌍으로 묶음. 월중 시작 첫 달·자료 없는 달을 포함한 창은 판정하지 않음. T057 기여 목록은 변경하지 않음.",
+            "registered_yearly_commitment": "사람이 cycle=yearly로 지정한 약정(기존 이행 묶음을 편집한 경우 포함)에 흐름표가 귀속한 지출 줄을 약정 ID·유효 대분류·소분류별로 별도 표시. 주기·분류를 자동 지정하지 않으며 관측된 12개월 순액을 제공(0·음수도 환불 순액 그대로).",
+            "annual_deduplication": "전체 쌍의 양수 순지출 월 수로 패턴을 판정한 뒤, 등록 연간 약정에 귀속된 구매·환불 줄을 패턴 금액에서 제외. 남은 지출 줄이 없으면 쌍을 생략. 줄이 남으면 0·음수 순액도 그대로 표시. 약정 항목은 같은 줄을 한 번만 포함.",
+            "annual_list": "12개월 순액 내림차순, 대분류·소분류·source·약정 ID 순으로 동률 해소. 전체 목록 반환, 제한·잘림 없음. observed_periods는 각 항목의 차감 후 월 순액이 양수인 달을 오름차순으로 표시.",
             "monthly_equivalent": "12개월 순액 ÷ 12, 원 단위 사사오입. 참고값이며 total_outflow·한도 대비 실적에 더하거나 대체하지 않음. 진행월에는 제공하지 않음.",
             "limit_history": HISTORY_RULE,
             "comparison": "자료가 있는 완전한 마감월에만 실적 − 해당 월 한도. 미설정·한도 해제·진행월·부분월·자료 없음은 null과 missing_reason. 한도끼리 합산하지 않음.",
@@ -237,7 +364,7 @@ async def read_spending_reference(
         field_scopes={
             "data.total_outflow": "선택 월의 기존 월 흐름표 총지급(진행월은 관측 누적).",
             "data.comparisons[].actual_amount": "선택 월의 SQL 지출 큐브 순액. 자료 있는 달의 거래 없는 대상은 0원.",
-            "data.annual_items": "window_start_period~window_end_period의 T057 12개월 기여 목록. 한도 비교와 별도.",
+            "data.annual_items": "window_start_period~window_end_period의 관측 패턴 쌍과 사람이 등록한 연간 약정별 관측 순액. 한도 비교와 별도.",
         },
         assumptions=[
             "한도 금액·대상·시작월은 사람이 직접 입력합니다. 추천·남은 예산·적립 계획을 만들지 않습니다."

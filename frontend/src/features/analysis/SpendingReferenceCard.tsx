@@ -18,14 +18,14 @@ export function SpendingReferenceCard({ period }: { period: string }) {
         <div className="space-y-3 text-caption">
           <p className="text-text-muted">{data.period} 기록 · 총지급 {data.total_outflow == null ? '자료 없음' : formatNetWon(data.total_outflow)}</p>
           <div>
-            <h3 className="font-semibold text-text-primary">해마다 한두 번 나간 지출의 월 환산</h3>
-            <p className="text-micro text-text-muted">{data.window_start_period} ~ {data.window_end_period} · 자료가 완전한 12개월 중 순지출이 양수인 달이 1~2개인 대분류입니다. 합계를 12로 나누고 원 단위로 반올림합니다.</p>
+            <h3 className="font-semibold text-text-primary">연간성 지출과 등록 연간 약정의 월 환산</h3>
+            <p className="text-micro text-text-muted">{data.window_start_period} ~ {data.window_end_period} · 자료가 완전한 12개월 중 순지출이 양수인 달이 1~2개인 대분류·소분류 쌍과 사람이 등록한 연간 약정입니다. 중복되는 약정 지출은 쌍에서 빼고, 각 순액을 12로 나눠 원 단위로 반올림합니다. 지출 합계에 포함하지 않는 참고값입니다.</p>
             {data.annual_missing_reason_label ? <p className="mt-1 text-text-muted">{data.annual_missing_reason_label}</p> : data.annual_items.length === 0 ? (
               <p className="mt-1 text-text-muted">이 조건에 해당하는 지출이 없습니다.</p>
             ) : (
               <ul aria-label="연간성 지출 월 환산" className="mt-2 space-y-2">
-                {data.annual_items.map((item) => <li key={item.category} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                  <span className="min-w-0 break-words">{item.category || '미분류'} · {item.active_months_in_window}개월 관측</span>
+                {data.annual_items.map((item) => <li key={JSON.stringify([item.source, item.category, item.category_minor, item.commitment_id])} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                  <span className="min-w-0 break-words">{item.category || '대분류 없음'} › {item.category_minor || '소분류 없음'}{item.source === 'registered_yearly_commitment' ? ` · 사람이 등록한 연간 약정 (${item.commitment_label || `#${item.commitment_id}`})` : ' · 관측 패턴'} · {item.active_months_in_window}개월 관측 ({item.observed_periods.join(', ')})</span>
                   <span className="tnum">12개월 {formatNetWon(item.window_amount)} → 월 {formatNetWon(item.monthly_equivalent)} (참고)</span>
                 </li>)}
               </ul>
@@ -43,7 +43,7 @@ export function SpendingReferenceCard({ period }: { period: string }) {
               </li>)}
             </ul>
           </div>
-          <details className="text-text-muted"><summary className="cursor-pointer">계산 근거와 이력 규칙</summary><p className="mt-1">{query.data?.basis.scope}</p><p>{query.data?.basis.rules.limit_history}</p></details>
+          <details className="text-text-muted"><summary className="cursor-pointer">계산 근거와 이력 규칙</summary><p className="mt-1">{query.data?.basis.scope}</p><p>{query.data?.basis.rules.annual_like}</p><p>{query.data?.basis.rules.annual_deduplication}</p><p>{query.data?.basis.rules.limit_history}</p></details>
           <Link to="/data/settings#spending-limits" className="inline-block text-transfer hover:underline">설정에서 한도 입력·변경 이력 보기</Link>
         </div>
       )}

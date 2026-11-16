@@ -76,6 +76,11 @@ async def scenario_annual_reference_and_outflow(session, client):
     assert set(annual) == {"category-annual", "category-twice"}
     assert annual["category-annual"] == {
         "category": "category-annual",
+        "category_minor": None,
+        "source": "observed_pattern",
+        "commitment_id": None,
+        "commitment_label": None,
+        "observed_periods": ["2030-03"],
         "window_amount": 12000,
         "monthly_equivalent": 1000,
         "active_months_in_window": 1,
@@ -105,7 +110,7 @@ async def scenario_annual_reference_and_outflow(session, client):
         no_limit["missing_reason"],
     ) == (120, None, None, "no_limit_set")
     assert payload["basis"]["definition"] == "spending_reference.v1"
-    assert "T057" in payload["basis"]["rules"]["annual_like"]
+    assert "대분류·소분류" in payload["basis"]["rules"]["annual_like"]
     assert payload["period_scope"]["start_period"] == "2030-12"
 
 
@@ -227,3 +232,238 @@ async def scenario_no_limit_progress_and_gaps(session, client):
     assert partial["data"]["annual_missing_reason"] == "month_in_progress"
     assert partial["data"]["annual_items"] == []
     assert (await get(client, READ))["data"]["period"] == "2030-12"
+
+
+async def scenario_pairs_and_registered_yearly(session, client):
+    from app.models.nature_axes import RecurringCommitment, TransactionNatureOverride
+
+    def pair(month, amount, minor, *, merchant="synthetic-other"):
+        row = tx(
+            date(2030, month, 10), amount, category="synthetic-major", merchant=merchant
+        )
+        row.category_minor = minor
+        return row
+
+    await add(
+        session,
+        [
+            tx(date(2030, month, 1), -10, category="synthetic-major")
+            for month in range(1, 13)
+        ],
+    )
+    annual = pair(3, -12001, "raw-minor")
+    annual.category_minor_user = "synthetic-once"
+    annual.category_major = "raw-major"
+    annual.category_major_user = "synthetic-major"
+    rows = [
+        annual,
+        pair(3, 1, "synthetic-once"),
+        pair(2, -6000, "synthetic-twice"),
+        pair(9, -6000, "synthetic-twice"),
+        *[pair(month, -100, "synthetic-three") for month in (2, 3, 4)],
+        pair(5, -1000, "synthetic-mixed", merchant="synthetic-yearly"),
+        pair(5, 100, "synthetic-mixed", merchant="synthetic-yearly"),
+        pair(5, -300, "synthetic-mixed"),
+        pair(6, -2400, "synthetic-only", merchant="synthetic-only-yearly"),
+        *[
+            pair(
+                month,
+                -400,
+                "synthetic-registered-three",
+                merchant="synthetic-multi-yearly",
+            )
+            for month in (1, 2, 3)
+        ],
+        *[pair(month, -20, "synthetic-registered-three") for month in (1, 2, 3)],
+        tx(date(2030, 7, 10), -120, category="synthetic-null"),
+        tx(date(2030, 12, 31), 1, tx_type="수입"),
+    ]
+    empty_minor = tx(date(2030, 8, 10), -120, category="synthetic-null")
+    empty_minor.category_minor = ""
+    rows.append(empty_minor)
+    deleted = pair(4, -900, "synthetic-once")
+    deleted.is_deleted = True
+    foreign = pair(4, -900, "synthetic-once")
+    foreign.currency = "USD"
+    transfer = pair(4, -900, "synthetic-once")
+    transfer.type = "이체"
+    rows.extend([deleted, foreign, transfer])
+    await add(session, rows)
+    commitments = []
+    for merchant, minor in [
+        ("synthetic-yearly", "synthetic-mixed"),
+        ("synthetic-only-yearly", "synthetic-only"),
+        ("synthetic-multi-yearly", "synthetic-registered-three"),
+    ]:
+        item = RecurringCommitment(
+            label="synthetic-label",
+            match_scope="merchant",
+            merchant=merchant,
+            category_major="synthetic-major",
+            category_minor=minor,
+            cycle="yearly",
+            origin="migration" if minor == "synthetic-only" else "user",
+        )
+        session.add(item)
+        commitments.append(item)
+    await session.commit()
+    excluded = pair(5, -200, "synthetic-mixed", merchant="synthetic-yearly")
+    await add(session, [excluded])
+    session.add(
+        TransactionNatureOverride(
+            transaction_id=excluded.id, excluded_from_commitments=True, source="user"
+        )
+    )
+    await session.commit()
+
+    params = {"period": "2030-12", "lists": "twelve_month"}
+    path = "/api/v1/read/comparison/contributions"
+    contributions_before = await client.get(path, params=params, headers=HEADERS)
+    before = await get(
+        client, "/metrics/monthly-flow", start_period="2030-12", end_period="2030-12"
+    )
+    payload = await reference(client)
+    items = payload["data"]["annual_items"]
+    assert payload["data"]["annual_missing_reason"] is None
+    observed = {
+        (item["category"], item["category_minor"]): item
+        for item in items
+        if item["source"] == "observed_pattern"
+    }
+    assert set(observed) == {
+        ("synthetic-major", "synthetic-once"),
+        ("synthetic-major", "synthetic-twice"),
+        ("synthetic-major", "synthetic-mixed"),
+        ("synthetic-null", None),
+    }
+    assert observed[("synthetic-major", "synthetic-once")]["window_amount"] == 12000
+    assert observed[("synthetic-major", "synthetic-once")]["monthly_equivalent"] == 1000
+    assert observed[("synthetic-major", "synthetic-twice")]["observed_periods"] == [
+        "2030-02",
+        "2030-09",
+    ]
+    assert observed[("synthetic-null", None)]["observed_periods"] == [
+        "2030-07",
+        "2030-08",
+    ]
+    assert observed[("synthetic-null", None)]["window_amount"] == 240
+    assert observed[("synthetic-major", "synthetic-mixed")]["window_amount"] == 500
+    registered = {
+        item["commitment_id"]: item
+        for item in items
+        if item["source"] == "registered_yearly_commitment"
+    }
+    assert set(registered) == {item.id for item in commitments}
+    assert registered[commitments[0].id]["window_amount"] == 900
+    assert registered[commitments[0].id]["monthly_equivalent"] == 75
+    assert registered[commitments[0].id]["observed_periods"] == ["2030-05"]
+    assert registered[commitments[1].id]["window_amount"] == 2400
+    assert registered[commitments[2].id]["active_months_in_window"] == 3
+    assert registered[commitments[2].id]["window_amount"] == 1200
+    assert all(
+        item["active_months_in_window"] == len(item["observed_periods"])
+        for item in items
+    )
+    assert [item["window_amount"] for item in items] == [
+        12000,
+        12000,
+        2400,
+        1200,
+        900,
+        500,
+        240,
+    ]
+    assert items[0]["category_minor"] == "synthetic-once"
+    assert payload["data"]["total_outflow"] == before["items"][0]["total_outflow"]
+    assert (
+        await get(
+            client,
+            "/metrics/monthly-flow",
+            start_period="2030-12",
+            end_period="2030-12",
+        )
+        == before
+    )
+    contributions_after = await client.get(path, params=params, headers=HEADERS)
+    assert contributions_after.content == contributions_before.content
+    assert "synthetic-major" not in {
+        item["category"]
+        for item in contributions_after.json()["data"]["twelve_month_items"]
+    }
+    assert (await reference(client))["data"] == payload["data"]
+
+
+async def scenario_refund_nets_and_commitment_attribution(session, client):
+    from app.models.nature_axes import RecurringCommitment
+    from app.models.settlement_group import SettlementMatch
+
+    await seed(session)
+    purchase = tx(
+        date(2030, 2, 10),
+        -1200,
+        category="synthetic-allocated",
+        merchant="synthetic-registered",
+    )
+    purchase.category_minor = "synthetic-minor"
+    refund = tx(
+        date(2030, 3, 10),
+        1200,
+        category="synthetic-refund",
+        merchant="synthetic-different",
+    )
+    await add(session, [purchase, refund])
+    commitment = RecurringCommitment(
+        match_scope="merchant",
+        merchant="synthetic-registered",
+        category_major="synthetic-allocated",
+        category_minor="synthetic-minor",
+        cycle="yearly",
+        origin="user",
+    )
+    session.add(commitment)
+    session.add(
+        SettlementMatch(
+            original_transaction_id=purchase.id,
+            settlement_transaction_id=refund.id,
+            matched_amount=1200,
+            status="user_confirmed",
+        )
+    )
+    await session.commit()
+    # The refund follows the original purchase's pair and commitment in the
+    # flow view, despite a different raw category and merchant on the refund.
+    items = (await reference(client))["data"]["annual_items"]
+    item = next(item for item in items if item["commitment_id"] == commitment.id)
+    assert item["window_amount"] == item["monthly_equivalent"] == 0
+    assert item["observed_periods"] == ["2030-02"]
+    assert not any(
+        item["category"] == "synthetic-allocated"
+        and item["source"] == "observed_pattern"
+        for item in items
+    )
+    assert not any(item["category"] == "synthetic-refund" for item in items)
+    # Negative annual net is retained, rather than silently discarding refunds.
+    await add(
+        session,
+        [
+            tx(
+                date(2030, 4, 10),
+                120,
+                category="synthetic-allocated",
+                merchant="synthetic-registered",
+            )
+        ],
+    )
+    extra = tx(
+        date(2030, 4, 10),
+        120,
+        category="synthetic-allocated",
+        merchant="synthetic-registered",
+    )
+    extra.category_minor = "synthetic-minor"
+    await add(session, [extra])
+    items = (await reference(client))["data"]["annual_items"]
+    item = next(item for item in items if item["commitment_id"] == commitment.id)
+    assert item["window_amount"] == -120
+    assert item["monthly_equivalent"] == -10
+    assert item["observed_periods"] == ["2030-02"]

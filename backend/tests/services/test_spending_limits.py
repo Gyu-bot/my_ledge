@@ -3,6 +3,8 @@ import spending_limit_scenarios as scenarios
 
 SCENARIOS = [
     scenarios.scenario_annual_reference_and_outflow,
+    scenarios.scenario_pairs_and_registered_yearly,
+    scenarios.scenario_refund_nets_and_commitment_attribution,
     scenarios.scenario_limit_history,
     scenarios.scenario_no_limit_progress_and_gaps,
 ]

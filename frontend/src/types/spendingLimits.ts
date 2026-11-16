@@ -35,7 +35,17 @@ export interface SpendingReference {
     window_end_period: string | null
     annual_missing_reason: 'month_in_progress' | 'incomplete_twelve_month_window' | null
     annual_missing_reason_label: string | null
-    annual_items: Array<{ category: string; window_amount: number; monthly_equivalent: number; active_months_in_window: number }>
+    annual_items: Array<{
+      category: string
+      category_minor: string | null
+      source: 'observed_pattern' | 'registered_yearly_commitment'
+      commitment_id: number | null
+      commitment_label: string | null
+      observed_periods: string[]
+      window_amount: number
+      monthly_equivalent: number
+      active_months_in_window: number
+    }>
     comparisons: LimitComparison[]
   }
 }

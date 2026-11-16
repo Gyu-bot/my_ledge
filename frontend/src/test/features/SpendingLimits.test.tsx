@@ -27,7 +27,7 @@ beforeEach(() => {
     basis: { definition: 'spending_reference.v1', scope: '과거 기록', rules: { limit_history: history.history_rule } },
     data: {
       period: '2030-12', total_outflow: 120, window_start_period: '2030-01', window_end_period: '2030-12', annual_missing_reason: null, annual_missing_reason_label: null,
-      annual_items: [{ category: '합성 연간 항목', window_amount: 12000, monthly_equivalent: 1000, active_months_in_window: 1 }],
+      annual_items: [{ category: '합성 대분류', category_minor: '합성 연간 항목', source: 'observed_pattern', commitment_id: null, commitment_label: null, observed_periods: ['2030-03'], window_amount: 12000, monthly_equivalent: 1000, active_months_in_window: 1 }],
       comparisons: [{ target_kind: 'category', target_value: '합성 항목', target_label: '합성 항목', actual_amount: 120, limit_amount: 100, limit_revision_id: 1, effective_from_period: '2030-01', difference_amount: 20, missing_reason: null, missing_reason_label: null }],
     },
   }
@@ -43,6 +43,26 @@ describe('T062 참고 표시와 한도 대비', () => {
     expect(screen.getByText(/총지급이나 한도 대비 실적에 다시 더하지/)).toBeInTheDocument()
     expect(screen.getByRole('list', { name: '월 한도 대비' })).toHaveTextContent('₩20 초과')
     expect(periods).toContain('2030-12')
+  })
+  it('대분류·소분류, 등록 연간 약정 출처와 실제 관측월을 구분한다', () => {
+    reference.data.annual_items.push({
+      category: '합성 대분류', category_minor: null,
+      source: 'registered_yearly_commitment', commitment_id: 7, commitment_label: '합성 약정',
+      observed_periods: ['2030-02', '2030-09'], active_months_in_window: 2,
+      window_amount: 2400, monthly_equivalent: 200,
+    })
+    card()
+    const list = screen.getByRole('list', { name: '연간성 지출 월 환산' })
+    expect(list).toHaveTextContent('합성 대분류 › 합성 연간 항목 · 관측 패턴 · 1개월 관측 (2030-03)')
+    expect(list).toHaveTextContent('합성 대분류 › 소분류 없음 · 사람이 등록한 연간 약정 (합성 약정) · 2개월 관측 (2030-02, 2030-09)')
+    expect(list).toHaveTextContent('12개월 ₩2,400 → 월 ₩200 (참고)')
+    expect(screen.getByText(/지출 합계에 포함하지 않는 참고값/)).toBeInTheDocument()
+  })
+  it('항목이 없으면 빈 상태를 표시한다', () => {
+    reference.data.annual_items = []
+    card()
+    expect(screen.getByText('이 조건에 해당하는 지출이 없습니다.')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: '연간성 지출 월 환산' })).not.toBeInTheDocument()
   })
   it('미설정과 진행월은 차이를 만들어 내지 않고 빠진 이유를 보인다', () => {
     reference.data.comparisons[0] = { ...reference.data.comparisons[0], limit_amount: null, difference_amount: null, missing_reason: 'no_limit_set', missing_reason_label: '이 달에 적용할 한도가 없습니다.' }
