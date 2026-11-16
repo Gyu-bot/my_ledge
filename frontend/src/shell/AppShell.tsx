@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import { Lock, Moon, Sun } from 'lucide-react'
 import { useWriteAccess } from '../hooks/useWriteAccess'
 import { cn } from '../lib/utils'
@@ -34,9 +34,66 @@ function SideNavLink({ item, indent = false }: { item: NavItem; indent?: boolean
   )
 }
 
+// 뒤로 가기로 돌아오면 보던 위치를 되살린다 (데스크톱은 창, 모바일은 본문이 스크롤된다).
+// 위치는 스크롤할 때마다 그 기록 항목의 키로 적어 둔다.
+const scrollPositions = new Map<string, { window: number; main: number }>()
+
+function useScrollMemory(mainRef: RefObject<HTMLElement | null>) {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const keyRef = useRef(location.key)
+  const pathRef = useRef(location.pathname)
+
+  useEffect(() => {
+    const main = mainRef.current
+    const save = () => scrollPositions.set(keyRef.current, { window: window.scrollY, main: main?.scrollTop ?? 0 })
+    window.addEventListener('scroll', save, { passive: true })
+    main?.addEventListener('scroll', save, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', save)
+      main?.removeEventListener('scroll', save)
+    }
+  }, [mainRef])
+
+  useLayoutEffect(() => {
+    const previousKey = keyRef.current
+    keyRef.current = location.key
+    const pathChanged = pathRef.current !== location.pathname
+    pathRef.current = location.pathname
+    const main = mainRef.current
+    if (navigationType === 'POP') {
+      const saved = scrollPositions.get(location.key)
+      if (!saved) return
+      // 자료가 늦게 그려져 높이가 모자라면 잠시 다시 시도한다.
+      let tries = 0
+      let timer = 0
+      const restore = () => {
+        window.scrollTo(0, saved.window)
+        if (main) main.scrollTop = saved.main
+        tries += 1
+        const reached = Math.abs(window.scrollY - saved.window) < 2 && (!main || Math.abs(main.scrollTop - saved.main) < 2)
+        if (!reached && tries < 20) timer = window.setTimeout(restore, 50)
+      }
+      restore()
+      return () => window.clearTimeout(timer)
+    }
+    if (navigationType === 'REPLACE') {
+      // 같은 화면에서 필터만 바뀐 경우: 위치를 새 기록 항목으로 옮겨 둔다.
+      const saved = scrollPositions.get(previousKey)
+      if (saved) scrollPositions.set(location.key, saved)
+    } else if (pathChanged) {
+      window.scrollTo(0, 0)
+      if (main) main.scrollTop = 0
+    }
+    return undefined
+  }, [location.key, location.pathname, navigationType, mainRef])
+}
+
 export function AppShell() {
   const { pathname } = useLocation()
   const hasWrite = useWriteAccess()
+  const mainRef = useRef<HTMLElement>(null)
+  useScrollMemory(mainRef)
   const [theme, setTheme] = useState<Theme>(readTheme)
   const inData = pathname.startsWith('/data')
 
@@ -57,7 +114,7 @@ export function AppShell() {
           ))}
 
           <div className="mx-3 my-2 border-t border-border-subtle" />
-          <div className="px-3 pb-1 text-micro font-semibold uppercase tracking-wider text-text-faint">데이터</div>
+          <div className="px-3 pb-1 text-micro font-semibold uppercase tracking-wider text-text-faint">작업대</div>
           {DATA_NAV.map((item) => (
             <SideNavLink key={item.path} item={item} indent />
           ))}
@@ -87,10 +144,10 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-14 md:overflow-visible md:pb-0">
-        {/* 데이터 스튜디오 서브 칩 (모바일 전용 — 데스크톱은 사이드바가 담당) */}
+        {/* 작업대 서브 칩 (모바일 전용 — 데스크톱은 사이드바가 담당) */}
         {inData && (
           <nav
-            aria-label="데이터 메뉴"
+            aria-label="작업대 메뉴"
             className="sticky top-0 z-30 flex gap-1.5 overflow-x-auto border-b border-border-subtle bg-bg-base px-4 py-2 md:hidden"
           >
             {DATA_NAV.map((item) => {
@@ -113,7 +170,7 @@ export function AppShell() {
           </nav>
         )}
 
-        <main className="mx-auto w-full max-w-content flex-1 overflow-y-auto px-4 pb-6 md:overflow-visible md:px-6 md:pb-8">
+        <main ref={mainRef} className="mx-auto w-full max-w-content flex-1 overflow-y-auto px-4 pb-6 md:overflow-visible md:px-6 md:pb-8">
           <Outlet />
         </main>
       </div>

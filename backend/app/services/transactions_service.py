@@ -2,13 +2,14 @@ from collections import defaultdict
 from datetime import date
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, exists, func, literal, or_, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.services.canonical_views import build_transactions_effective_select
+from app.services.metric_views import FLOW_LINES_VIEW
 from app.services.nature_axes_service import (
     LEGACY_CLASSIFICATION_FIELDS,
     write_through_legacy_classification,
@@ -58,6 +59,9 @@ async def list_transactions(
     recurring_payment_kind: str,
     page: int,
     per_page: int,
+    flow_row: str | None = None,
+    payment_form: str | None = None,
+    adjustability: str | None = None,
 ) -> TransactionListResponse:
     base_query, canonical = _build_transaction_query(
         start_date=start_date,
@@ -74,6 +78,13 @@ async def list_transactions(
         include_deleted=include_deleted,
         include_merged=include_merged,
         search=search,
+    )
+    base_query = _apply_flow_line_filters(
+        base_query,
+        canonical,
+        flow_row=flow_row,
+        payment_form=payment_form,
+        adjustability=adjustability,
     )
     total = (
         await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
@@ -681,6 +692,40 @@ def _build_transaction_query(
             )
         )
     return query, canonical
+
+
+def _apply_flow_line_filters(
+    query: Select,
+    canonical,  # type: ignore[no-untyped-def]
+    *,
+    flow_row: str | None,
+    payment_form: str | None,
+    adjustability: str | None,
+) -> Select:
+    """Keep transactions that have a monthly-flow line with every given value.
+
+    Reads ``vw_metric_flow_lines`` (the same lines as the monthly flow and the
+    spend cube), so the classification is never re-derived here. The line's
+    ``transaction_id`` is the posting transaction: a refund part allocated to a
+    purchase is a line of the refund row carrying the purchase's axes. Only
+    effective KRW transactions have lines, so any of these filters also drops
+    deleted, merged, superseded, and non-KRW rows.
+    """
+    conditions = []
+    if flow_row is not None:
+        conditions.append(FLOW_LINES_VIEW.c.flow_row == flow_row)
+    if payment_form is not None:
+        conditions.append(FLOW_LINES_VIEW.c.payment_form == payment_form)
+    if adjustability is not None:
+        conditions.append(FLOW_LINES_VIEW.c.adjustability == adjustability)
+    if not conditions:
+        return query
+    matching_line = (
+        select(literal(1))
+        .select_from(FLOW_LINES_VIEW)
+        .where(FLOW_LINES_VIEW.c.transaction_id == canonical.c.id, *conditions)
+    )
+    return query.where(exists(matching_line))
 
 
 async def _get_transaction_or_404(

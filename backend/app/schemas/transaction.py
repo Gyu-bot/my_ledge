@@ -208,3 +208,21 @@ TransactionRecurringPaymentKindFilter = Literal[
     "not_recurring",
     "all",
 ]
+# Monthly-flow line filters (T059): values exactly as vw_metric_flow_lines
+# stores them. A transaction matches when one of its flow lines matches every
+# given value; nothing is re-derived in Python.
+TransactionFlowRowFilter = Literal[
+    "income_undetermined",
+    "committed_loan",
+    "committed_installment",
+    "committed_recurring",
+    "ad_hoc_protected",
+    "ad_hoc_adjustable",
+    "undecided",
+    "transfer_undetermined",
+    "other_type",
+]
+TransactionPaymentFormFilter = Literal["committed", "ad_hoc", "not_applicable"]
+TransactionAdjustabilityFilter = Literal[
+    "protected", "adjustable", "undecided", "not_applicable"
+]

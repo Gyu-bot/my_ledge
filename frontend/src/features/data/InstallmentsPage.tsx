@@ -195,7 +195,7 @@ export function InstallmentsPage() {
   return (
     <>
       <PageHeader
-        title="데이터 · 할부"
+        title="작업대 · 할부"
         controls={
           <SegmentedControl
             ariaLabel="할부 탭"

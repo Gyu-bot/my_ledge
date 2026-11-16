@@ -147,7 +147,7 @@ export function RulesPage() {
 
   return (
     <>
-      <PageHeader title="데이터 · 규칙" meta={<span>{totalRules}개 규칙</span>} />
+      <PageHeader title="작업대 · 규칙" meta={<span>{totalRules}개 규칙</span>} />
 
       <div className="flex flex-col gap-4">
         {[...(categoryRules.data?.items ?? []), ...(recurringRules.data?.items ?? [])].some((rule) => rule.category_valid === false) && <div role="alert" className="rounded-md border border-warn-border bg-warn-bg p-3 text-caption text-warn">현재 지출 카테고리와 일치하지 않는 규칙이 있습니다. 각 행의 상태를 확인하고 불필요한 규칙을 삭제하세요.</div>}

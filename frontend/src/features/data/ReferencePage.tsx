@@ -65,16 +65,16 @@ export function ReferencePage() {
   ]
 
   if (dashboard.isLoading || schema.isLoading) {
-    return (<><PageHeader title="데이터 · 데이터 사전" /><ListSkeleton rows={6} /></>)
+    return (<><PageHeader title="작업대 · 데이터 사전" /><ListSkeleton rows={6} /></>)
   }
   if (dashboard.isError || schema.isError) {
-    return (<><PageHeader title="데이터 · 데이터 사전" /><ErrorState onRetry={() => { void dashboard.refetch(); void schema.refetch() }} /></>)
+    return (<><PageHeader title="작업대 · 데이터 사전" /><ErrorState onRetry={() => { void dashboard.refetch(); void schema.refetch() }} /></>)
   }
 
   return (
     <>
       <PageHeader
-        title="데이터 · 데이터 사전"
+        title="작업대 · 데이터 사전"
         meta={coverage ? <span className="tnum">관측 {coverage.first_transaction_date ?? '—'} ~ {coverage.last_transaction_date ?? '—'}</span> : undefined}
       />
 
@@ -137,7 +137,7 @@ export function ReferencePage() {
         </Card>
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <Card title="분류 품질 큐" meta={`전체 ${data?.unclassified_work_queue_total ?? 0}건`} action={<Link to="/data/inbox" className="text-caption text-transfer hover:underline">인박스에서 처리</Link>} bodyClassName="p-0">
+          <Card title="분류 품질 큐" meta={`전체 ${data?.unclassified_work_queue_total ?? 0}건`} action={<Link to="/data/inbox" className="text-caption text-transfer hover:underline">분류 큐에서 처리</Link>} bodyClassName="p-0">
             <div className="divide-y divide-border-subtle">
               {(data?.unclassified_work_queue ?? []).map((item) => (
                 <div key={item.transaction_id} className="flex items-start justify-between gap-3 px-4 py-2.5">

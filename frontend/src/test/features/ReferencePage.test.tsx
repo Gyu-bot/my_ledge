@@ -92,7 +92,7 @@ describe('ReferencePage projection and completeness', () => {
     renderReference()
     expect(screen.getByText('전체 23건')).toBeInTheDocument()
     expect(screen.getByText('샘플 미분류 10')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '인박스에서 처리' })).toHaveAttribute('href', '/data/inbox')
+    expect(screen.getByRole('link', { name: '분류 큐에서 처리' })).toHaveAttribute('href', '/data/inbox')
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
     expect(paramsSeen).toHaveBeenLastCalledWith({ queue_page: 2, queue_limit: 10 })
     expect(screen.getByText('샘플 미분류 20')).toBeInTheDocument()

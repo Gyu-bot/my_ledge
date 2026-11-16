@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatKRW, formatKRWCompact, formatMonthAxisLabel, formatPct, monthRange } from '../../lib/utils'
+import { cn, formatKRW, formatKRWCompact, formatMonthAxisLabel, formatPct, monthRange } from '../../lib/utils'
 
 describe('formatKRW', () => {
   it('formats positive numbers with comma', () => {
@@ -44,5 +44,15 @@ describe('formatMonthAxisLabel', () => {
 
   it('keeps the year when formatting a YYYY-MM-DD date', () => {
     expect(formatMonthAxisLabel('2026-03-01')).toBe('26.03')
+  })
+})
+
+describe('cn', () => {
+  it('디자인 글자 크기와 색 클래스를 둘 다 남긴다', () => {
+    expect(cn('text-micro font-medium', 'text-text-secondary bg-bg-inset')).toBe('text-micro font-medium text-text-secondary bg-bg-inset')
+    expect(cn('text-accent', 'px-2 text-caption')).toBe('text-accent px-2 text-caption')
+  })
+  it('같은 무리끼리는 뒤의 것이 이긴다', () => {
+    expect(cn('text-micro', 'text-caption')).toBe('text-caption')
   })
 })

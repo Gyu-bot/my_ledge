@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload } from 'lucide-react'
+import { ShieldAlert, Upload } from 'lucide-react'
 import { Card } from '../../ds/Card'
 import { Button } from '../../ds/Button'
 import { Field, TextInput } from '../../ds/Field'
@@ -17,6 +17,8 @@ import type { DataResetScope, UploadPreviewResponse, UploadRollbackPoint } from 
 import { ImportPreviewPanel } from './ImportPreviewPanel'
 import { canApplyChange, changeKey, selectionFromChange } from './importPreviewModel'
 import { snapshotDateFromFilename } from './uploadFilename'
+import { uploadStatus } from '../workbench/uploadLabels'
+import { writeErrorMessage } from '../analysis/text'
 
 const TABLE_LABELS: Record<string, string> = {
   transactions: '거래',
@@ -58,6 +60,7 @@ export function ImportPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [rollbackPoint, setRollbackPoint] = useState<UploadRollbackPoint | null>(null)
   const [rollbackStep, setRollbackStep] = useState<'first' | 'changes'>('first')
+  const [dangerOpen, setDangerOpen] = useState(false)
 
   function selectFile(nextFile: File) {
     setFile(nextFile)
@@ -119,7 +122,7 @@ export function ImportPage() {
       toast.success(`${RESET_LABEL[resetScope]} 완료`)
       setConfirmOpen(false)
     } catch (error) {
-      toast.error('초기화 실패', { description: String(error) })
+      toast.error('초기화 실패', { description: writeErrorMessage(error) })
     }
   }
 
@@ -133,7 +136,7 @@ export function ImportPage() {
       setRollbackPoint(null)
       // Refresh the point if the ledger changed while the confirmation was open.
       void rollbackPoints.refetch()
-      toast.error('업로드 되돌리기 실패', { description: String(error) })
+      toast.error('업로드 되돌리기 실패', { description: writeErrorMessage(error) })
     }
   }
 
@@ -142,7 +145,7 @@ export function ImportPage() {
 
   return (
     <>
-      <PageHeader title="데이터 · 가져오기" meta={<span>업로드 · 이력 · 초기화</span>} />
+      <PageHeader title="작업대 · 가져오기" meta={<span>업로드 · 이력</span>} />
 
       <div className="flex flex-col gap-4">
         <Card title="업로드" meta="BankSalad 엑셀 (.xlsx, 최대 20MB)">
@@ -230,7 +233,7 @@ export function ImportPage() {
               <table className="min-w-[520px] w-full border-collapse text-label">
                 <thead className="bg-bg-inset">
                   <tr>
-                    {['파일명', '상태', '신규', '스킵', '기준일', '시각', '작업'].map((header) => (
+                    {['파일명', '상태', '새 거래', '건너뜀', '스냅샷 기준일', '시각'].map((header) => (
                       <th key={header} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{header}</th>
                     ))}
                   </tr>
@@ -240,22 +243,12 @@ export function ImportPage() {
                     <tr key={log.id}>
                       <td className="max-w-[180px] truncate px-4 py-2 text-text-primary">{log.filename ?? '—'}</td>
                       <td className="px-4 py-2">
-                        <Badge variant={log.status === 'failed' ? 'expense' : log.status === 'partial' ? 'warn' : 'accent'}>
-                          {log.status === 'rolled_back' ? '되돌림' : log.status ?? '—'}
-                        </Badge>
+                        <Badge variant={uploadStatus(log.status).variant}>{uploadStatus(log.status).label}</Badge>
                       </td>
                       <td className="tnum px-4 py-2 text-income">+{log.tx_new ?? 0}</td>
                       <td className="tnum px-4 py-2 text-text-muted">{log.tx_skipped ?? 0}</td>
                       <td className="tnum px-4 py-2 text-text-muted">{log.snapshot_date ?? '—'}</td>
                       <td className="tnum px-4 py-2 text-right text-text-faint">{log.uploaded_at.slice(0, 16).replace('T', ' ')}</td>
-                      <td className="px-4 py-2">
-                        {availablePoint?.upload_id === log.id ? (
-                          <Button size="sm" variant="danger" disabled={!hasWrite || rollback.isPending} onClick={() => {
-                            setRollbackStep('first')
-                            setRollbackPoint(availablePoint)
-                          }}>되돌리기</Button>
-                        ) : null}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -264,33 +257,70 @@ export function ImportPage() {
           ) : <EmptyState className="py-8" message="업로드 이력이 없습니다" />}
         </Card>
 
-        <Card title="Danger Zone" meta="되돌릴 수 없습니다 · 업로드 이력은 보존됩니다" className="border-expense-border">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(['transactions_only', 'transactions_and_snapshots'] as DataResetScope[]).map((scope) => (
-              <button
-                key={scope}
-                type="button"
-                onClick={() => setResetScope(scope)}
-                className={`rounded-md border px-3 py-2.5 text-left text-caption transition-colors duration-fast ${
-                  resetScope === scope ? 'border-expense bg-expense-bg text-expense' : 'border-border text-text-muted'
-                }`}
-              >
-                <div className="font-semibold">{RESET_LABEL[scope]}</div>
-                <div className="mt-0.5 text-micro opacity-80">
-                  {scope === 'transactions_only' ? '거래 내역만 삭제, 스냅샷 유지' : '거래·스냅샷·소스 관측·계좌 연결·소스 선택 설정 삭제'}
-                </div>
-              </button>
-            ))}
+        <section aria-label="위험한 작업" className="mt-4 border-t border-dashed border-expense-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-expense" aria-hidden="true" />
+              <div>
+                <h2 className="text-section text-expense">위험한 작업</h2>
+                <p className="text-caption text-text-muted">업로드 되돌리기와 자료 초기화는 장부를 크게 바꿉니다. 평소 가져오기에는 필요 없습니다.</p>
+              </div>
+            </div>
+            <Button variant="secondary" aria-expanded={dangerOpen} aria-controls="danger-actions" onClick={() => setDangerOpen((open) => !open)}>
+              {dangerOpen ? '위험한 작업 닫기' : '위험한 작업 열기'}
+            </Button>
           </div>
-          <Button
-            variant="danger"
-            className="mt-3 w-full"
-            disabled={!hasWrite}
-            onClick={() => setConfirmOpen(true)}
-          >
-            초기화 실행
-          </Button>
-        </Card>
+
+          {dangerOpen ? (
+            <div id="danger-actions" className="mt-3 flex flex-col gap-4">
+              <Card title="가장 최근 업로드 되돌리기" meta="가장 최근에 반영한 업로드 하나만, 그 뒤에 다른 업로드가 없을 때 되돌릴 수 있습니다." className="border-expense-border">
+                {availablePoint ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="tnum text-caption text-text-secondary">
+                      <div className="font-medium text-text-primary">{availablePoint.filename ?? '이름 없는 파일'}</div>
+                      <div className="text-text-muted">스냅샷 기준일 {availablePoint.snapshot_date ?? '—'} · 반영 {availablePoint.created_at?.slice(0, 16).replace('T', ' ') ?? '—'}</div>
+                    </div>
+                    <Button variant="danger" disabled={!hasWrite || rollback.isPending} onClick={() => {
+                      setRollbackStep('first')
+                      setRollbackPoint(availablePoint)
+                    }}>되돌리기</Button>
+                  </div>
+                ) : (
+                  <p className="text-caption text-text-muted">지금 되돌릴 수 있는 업로드가 없습니다.</p>
+                )}
+              </Card>
+
+              <Card title="자료 초기화" meta="되돌릴 수 없습니다 · 업로드 이력은 남습니다" className="border-expense-border">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(['transactions_only', 'transactions_and_snapshots'] as DataResetScope[]).map((scope) => (
+                    <button
+                      key={scope}
+                      type="button"
+                      aria-pressed={resetScope === scope}
+                      onClick={() => setResetScope(scope)}
+                      className={`rounded-md border px-3 py-2.5 text-left text-caption transition-colors duration-fast ${
+                        resetScope === scope ? 'border-expense bg-expense-bg text-expense' : 'border-border text-text-muted'
+                      }`}
+                    >
+                      <div className="font-semibold">{RESET_LABEL[scope]}</div>
+                      <div className="mt-0.5 text-micro opacity-80">
+                        {scope === 'transactions_only' ? '거래 내역만 삭제, 스냅샷 유지' : '거래·스냅샷·소스 관측·계좌 연결·소스 선택 설정 삭제'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  variant="danger"
+                  className="mt-3 w-full"
+                  disabled={!hasWrite}
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  초기화 실행
+                </Button>
+              </Card>
+            </div>
+          ) : null}
+        </section>
       </div>
 
       {rollbackPoint ? (

@@ -178,7 +178,8 @@ describe('SpendingAnalysisPage — 지출 분석', () => {
     const list = screen.getByRole('list', { name: '사후 검토 목록' })
     expect(within(list).getByText('큰 일회성 지출')).toBeInTheDocument()
     expect(within(list).getByText('카테고리 지출 증가')).toBeInTheDocument()
-    expect(within(list).getByRole('link', { name: /거래 화면에서 열기/ })).toHaveAttribute('href', '/data/transactions?transaction_id=901')
+    // 거래는 화면을 떠나지 않고 그 자리에서 고친다 (T059)
+    expect(within(list).getByRole('button', { name: '이 거래 고치기' })).toBeInTheDocument()
     expect(list).not.toHaveTextContent(/위험|신뢰도|우선순위|3\.2/)
     expect(screen.getByText('구매 단위 검출기는 예전 재량 분류를 읽는다.')).toBeInTheDocument()
 

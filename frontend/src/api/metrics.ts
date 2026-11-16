@@ -12,6 +12,7 @@ import type {
   TransferPurpose,
   TransferPurposeListResponse,
 } from '../types/metrics'
+import type { ReadCommitmentsResponse, ReadDataStatusResponse } from '../types/readSurface'
 
 function buildQuery(params: object): string {
   const q = new URLSearchParams()
@@ -47,4 +48,11 @@ export const metricsApi = {
 
   transferTransactions: (params: { start_date?: string; end_date?: string; purpose?: TransferPurpose; limit?: number }) =>
     apiFetch<TransferPurposeListResponse>(`/transfer-purposes/transactions${buildQuery(params)}`),
+
+  /** 약정 목록 (T060 read surface, Q4) — 기록된 속성과 한 달의 관측 여부. 전망이 아니다. */
+  commitments: (period?: string) =>
+    apiFetch<ReadCommitmentsResponse>(`/read/commitments${buildQuery({ period })}`),
+
+  /** 자료 현황 (T060 read surface, Q6) — 가져온 범위, 기준일, 공백, 분류 상태. */
+  readDataStatus: () => apiFetch<ReadDataStatusResponse>('/read/data-status'),
 }

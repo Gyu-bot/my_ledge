@@ -7,6 +7,17 @@ export function loadErrorMessage(error: unknown): string {
   return '자료를 불러오지 못했습니다.'
 }
 
+/** 저장 실패를 쉬운 말로 (개발자용 응답 본문을 화면에 내지 않는다). */
+export function writeErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message.startsWith('401')) return 'API 키가 없거나 맞지 않아 저장하지 못했습니다.'
+  if (message.startsWith('404')) return '대상을 찾지 못했습니다. 이미 지워졌을 수 있습니다.'
+  if (message.startsWith('409')) return '같은 대상이 이미 있거나 그사이 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.'
+  if (message.startsWith('422')) return '입력한 값을 저장할 수 없습니다. 날짜와 필수 칸을 확인해 주세요.'
+  if (message.startsWith('503')) return '데이터베이스가 응답하지 않습니다. 잠시 뒤 다시 해 주세요.'
+  return '저장하지 못했습니다. 잠시 뒤 다시 해 주세요.'
+}
+
 /** 0–1 비율 → "12.3%" (없으면 "—") */
 export function sharePct(share: number | null | undefined): string {
   if (share == null || Number.isNaN(share)) return '—'

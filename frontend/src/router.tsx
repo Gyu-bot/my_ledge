@@ -4,7 +4,10 @@ import { LegacySpendingRedirect } from './shell/LegacySpendingRedirect'
 import { MonthClosePage } from './features/monthclose/MonthClosePage'
 import { SpendingAnalysisPage } from './features/spending-analysis/SpendingAnalysisPage'
 import { NetWorthPage } from './features/networth/NetWorthPage'
-import { InboxPage } from './features/data/InboxPage'
+import { CommitmentsPage } from './features/commitments/CommitmentsPage'
+import { ClassificationPage } from './features/workbench/ClassificationPage'
+import { DataStatusPage } from './features/workbench/DataStatusPage'
+import { NatureSettingsPage } from './features/workbench/NatureSettingsPage'
 import { TransactionsPage } from './features/data/TransactionsPage'
 import { LoansPage } from './features/data/LoansPage'
 import { InstallmentsPage } from './features/data/InstallmentsPage'
@@ -14,7 +17,8 @@ import { SettingsPage } from './features/data/SettingsPage'
 import { ImportPage } from './features/data/ImportPage'
 import { ReferencePage } from './features/data/ReferencePage'
 
-// IA — Implentation-plan.md 3.1 (T058: 월 결산·지출 분석이 홈·지출 6탭·신호를 대체). 레거시 redirect 포함.
+// IA — Implentation-plan.md 3.1 (T058: 월 결산·지출 분석이 홈·지출 6탭·신호를 대체,
+// T059: 약정 현황과 작업대). 레거시 redirect 포함.
 
 const LEGACY_REDIRECTS: Array<{ from: string; to: string }> = [
   { from: '/analysis/spending', to: '/analysis' },
@@ -27,7 +31,7 @@ const LEGACY_REDIRECTS: Array<{ from: string; to: string }> = [
   { from: '/operations/asset-settings', to: '/data/assets' },
   { from: '/operations/auto-classification', to: '/data/rules' },
   { from: '/operations/canonical-views', to: '/data/reference' },
-  { from: '/operations/recurring-classification', to: '/data/transactions?view=groups' },
+  { from: '/operations/recurring-classification', to: '/data/nature?tab=recurring' },
   { from: '/assets', to: '/net-worth' },
   { from: '/income', to: '/' },
   { from: '/transfers', to: '/' },
@@ -40,8 +44,11 @@ export const routes = [
     children: [
       { index: true, element: <MonthClosePage /> },
       { path: 'analysis', element: <SpendingAnalysisPage /> },
+      { path: 'commitments', element: <CommitmentsPage /> },
       { path: 'net-worth', element: <NetWorthPage /> },
-      { path: 'data/inbox', element: <InboxPage /> },
+      { path: 'data/inbox', element: <ClassificationPage /> },
+      { path: 'data/nature', element: <NatureSettingsPage /> },
+      { path: 'data/status', element: <DataStatusPage /> },
       { path: 'data/transactions', element: <TransactionsPage /> },
       { path: 'data/loans', element: <LoansPage /> },
       { path: 'data/installments', element: <InstallmentsPage /> },

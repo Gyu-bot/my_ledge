@@ -65,7 +65,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="데이터 · 설정" meta={<span>분석 파라미터 · 재무 목표</span>} />
+      <PageHeader title="작업대 · 설정" meta={<span>분석 파라미터 · 재무 목표</span>} />
 
       <SourcePolicyEditor />
 

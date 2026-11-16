@@ -10,6 +10,8 @@ import { useMonthlyFlowComparison, useSpendCube, useTransferTransactions } from 
 import { useTransactionList } from '../../hooks/useTransactions'
 import { cn } from '../../lib/utils'
 import type { FlowRowKey, MonthStatus, MonthlyFlowMonth, SpendCubeFilters, SpendCubeRow, TransferPurpose } from '../../types/metrics'
+import type { TransactionListParams } from '../../types/transaction'
+import { TransactionRows, type TxRow } from '../transactions/TransactionRows'
 import {
   FLOW_MEASURES,
   FLOW_ROW_LABELS,
@@ -17,6 +19,7 @@ import {
   type FlowMeasureKey,
   formatMeasure,
   formulaWithValues,
+  lineFiltersFor,
   measureAmount,
   measureTransactionCount,
 } from './flowMeasures'
@@ -64,47 +67,22 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function TransactionLink({ id }: { id: number }) {
+/** 목록의 합계가 설명하는 금액과 같은지 밝힌다. 다르면 이유를 쉬운 말로. */
+function ListTotalCheck({ rows, amount, count, truncated }: { rows: TxRow[]; amount: number; count: number; truncated: boolean }) {
+  if (truncated) return null
+  const paid = -rows.reduce((sum, row) => sum + row.amount, 0)
+  if (paid === amount && rows.length === count) {
+    return <p className="text-text-muted">아래 {rows.length}건의 합계가 이 금액과 같습니다.</p>
+  }
   return (
-    <Link
-      to={`/data/transactions?transaction_id=${id}`}
-      className="inline-flex shrink-0 items-center gap-0.5 text-micro font-medium text-transfer hover:underline"
-      aria-label={`거래 ${id} 거래 화면에서 열기`}
-    >
-      열기
-      <ArrowRight className="h-3 w-3" />
-    </Link>
+    <p className="rounded-md border border-warn-border bg-warn-bg px-2.5 py-2 text-warn">
+      아래 {rows.length}건의 합계는 {formatNetWon(paid)}로, 이 금액({formatNetWon(amount)}, {count}건)과 다릅니다. 환불의 일부만 이 금액에 들어갔거나(목록에는 환불 전체 금액이 보입니다),
+      다른 카테고리·거래처로 기록된 환불이 이 구매에 연결된 경우입니다.
+    </p>
   )
 }
 
-interface TxRow {
-  id: number
-  date: string
-  title: string
-  sub: string
-  amount: number
-}
-
-function TransactionRows({ rows, caption }: { rows: TxRow[]; caption: string }) {
-  if (rows.length === 0) return <p className="text-text-muted">해당하는 거래가 없습니다.</p>
-  return (
-    <ul aria-label={caption} className="divide-y divide-border-subtle rounded-md border border-border bg-bg-inset">
-      {rows.map((row) => (
-        <li key={row.id} className="flex items-center gap-2 px-2.5 py-2">
-          <span className="tnum w-[4.5rem] shrink-0 text-micro text-text-muted">{row.date}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-label text-text-primary">{row.title}</span>
-            <span className="block truncate text-micro text-text-muted">{row.sub}</span>
-          </span>
-          <span className="tnum shrink-0 text-label font-semibold text-text-primary">{formatSignedWon(row.amount)}</span>
-          <TransactionLink id={row.id} />
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-/** 한 카테고리·거래처의 원본 거래 목록. /transactions에는 흐름표 줄 필터가 없어, 그 칸이 여러 줄에 걸치면 그 사실과 줄별 금액을 함께 보인다. */
+/** 한 카테고리·거래처 칸의 거래 목록 — 금액과 같은 흐름표 줄 조건으로 거른다. */
 function CellTransactions({
   period,
   cell,
@@ -117,23 +95,16 @@ function CellTransactions({
   const category = cell.effective_category_major ?? ''
   const merchant = cell.merchant ?? ''
   const range = periodDateRange(period)
-  const list = useTransactionList({
+  const params: TransactionListParams = {
     type: '지출',
     category_major: category,
     search: merchant,
     start_date: range.start_date,
     end_date: range.end_date,
     per_page: TX_LIMIT,
-  })
-  const allLines = useSpendCube({
-    start_period: period,
-    end_period: period,
-    group_by: ['flow_row'],
-    effective_category_major: category,
-    merchant,
-    limit: 20,
-  })
-  const hasExtraFilters = Object.keys(filters).length > 0
+    ...lineFiltersFor(filters),
+  }
+  const list = useTransactionList(params)
 
   const rows: TxRow[] = (list.data?.items ?? [])
     .filter((tx) => tx.merchant === merchant && tx.effective_category_major === category && tx.currency === 'KRW')
@@ -144,37 +115,28 @@ function CellTransactions({
       sub: [tx.effective_category_major, tx.effective_category_minor, tx.memo].filter(Boolean).join(' · '),
       amount: tx.amount,
     }))
-
-  const allCount = (allLines.data?.rows ?? []).reduce((sum, row) => sum + row.transaction_count, 0)
-  const sameAsCell = allLines.data != null && allLines.data.total_amount === cell.amount && allCount === cell.transaction_count
+  const truncated = (list.data?.total ?? 0) > TX_LIMIT
+  const query = new URLSearchParams(
+    Object.entries(params)
+      .filter(([key, value]) => value !== undefined && key !== 'per_page')
+      .map(([key, value]) => [key, String(value)]),
+  )
 
   return (
     <div className="mt-2 space-y-2">
-      {allLines.data && hasExtraFilters ? (
-        sameAsCell ? (
-          <p className="text-text-muted">이 카테고리·거래처의 이 달 지출은 모두 이 금액에 들어갑니다.</p>
-        ) : (
-          <div className="rounded-md border border-warn-border bg-warn-bg px-2.5 py-2 text-warn">
-            <p>이 카테고리·거래처의 지출은 흐름표 여러 줄에 걸쳐 있습니다. 아래 거래 목록은 줄을 나누지 않고 모두 보여 줍니다.</p>
-            <ul className="tnum mt-1 list-inside list-disc">
-              {allLines.data.rows.map((row) => (
-                <li key={row.flow_row ?? 'none'}>
-                  {FLOW_ROW_LABELS[(row.flow_row ?? 'other_type') as FlowRowKey]} {formatNetWon(row.amount)} · {row.transaction_count}건
-                </li>
-              ))}
-            </ul>
-          </div>
-        )
-      ) : null}
       {list.isLoading ? (
         <ListSkeleton rows={3} />
       ) : list.error ? (
         <ErrorState message={loadErrorMessage(list.error)} onRetry={() => void list.refetch()} />
       ) : (
         <>
+          <ListTotalCheck rows={rows} amount={cell.amount} count={cell.transaction_count} truncated={truncated} />
           <TransactionRows rows={rows} caption={`${category} · ${merchant} 거래`} />
-          {(list.data?.total ?? 0) > TX_LIMIT ? (
-            <p className="text-text-muted">거래가 많아 최근 {TX_LIMIT}건까지만 보여 줍니다. 전체는 거래 화면에서 보세요.</p>
+          {truncated ? (
+            <p className="text-text-muted">
+              거래가 많아 최근 {TX_LIMIT}건까지만 보여 줍니다.{' '}
+              <Link to={`/data/transactions?${query.toString()}`} className="text-transfer hover:underline">거래 화면에서 전체 보기</Link>
+            </p>
           ) : null}
         </>
       )}
@@ -287,7 +249,7 @@ function FlowRowsBreakdown({
 
 function IncomeTransactions({ period, expectedCount }: { period: string; expectedCount: number | null }) {
   const range = periodDateRange(period)
-  const list = useTransactionList({ type: '수입', start_date: range.start_date, end_date: range.end_date, per_page: TX_LIMIT })
+  const list = useTransactionList({ type: '수입', flow_row: 'income_undetermined', start_date: range.start_date, end_date: range.end_date, per_page: TX_LIMIT })
   if (list.isLoading) return <ListSkeleton rows={3} />
   if (list.error) return <ErrorState message={loadErrorMessage(list.error)} onRetry={() => void list.refetch()} />
   const rows: TxRow[] = (list.data?.items ?? [])
@@ -302,7 +264,7 @@ function IncomeTransactions({ period, expectedCount }: { period: string; expecte
   return (
     <div className="space-y-1.5">
       {expectedCount != null && expectedCount !== rows.length ? (
-        <p className="text-warn">흐름표는 {expectedCount}건인데 거래 목록은 {rows.length}건입니다. 대체된 거래가 목록에 남아 있거나 목록이 잘렸을 수 있습니다.</p>
+        <p className="text-warn">흐름표는 {expectedCount}건인데 거래 목록은 {rows.length}건입니다. 거래가 많아 목록이 잘렸을 수 있습니다.</p>
       ) : null}
       <TransactionRows rows={rows} caption="수입 거래" />
     </div>
@@ -326,7 +288,7 @@ function TransferTransactions({ period, purposes }: { period: string; purposes: 
   return (
     <div className="space-y-1.5">
       <TransactionRows rows={rows} caption="이체 거래" />
-      <p className="text-text-muted">이체의 목적은 사람이 정합니다. 목적을 정하는 화면은 작업대 재편(T059)에서 붙습니다.</p>
+      <p className="text-text-muted">이체의 목적은 사람이 정합니다. 거래 옆 "고치기"에서 그 거래의 목적을 정할 수 있습니다.</p>
     </div>
   )
 }
@@ -437,7 +399,7 @@ export function AmountDrilldown({ target, onClose, onNavigate, nonKrwCount = 0 }
           </Section>
         ) : null}
         <Section title={def?.source.kind === 'parts' ? '이루는 금액' : '구성과 거래'}>{body}</Section>
-        <p className="text-micro text-text-muted">거래 옆 "열기"를 누르면 거래 화면에서 그 거래가 열리고 분류를 고칠 수 있습니다.</p>
+        <p className="text-micro text-text-muted">거래 옆 "고치기"를 누르면 이 화면 위에서 그 거래의 분류를 고칠 수 있습니다. 닫으면 보던 자리로 돌아옵니다.</p>
       </div>
     </div>
   )

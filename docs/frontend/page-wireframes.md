@@ -9,9 +9,12 @@
 
 - `/` — 월 결산 (T058)
 - `/analysis` — 지출 분석 (T058)
+- `/commitments` — 약정 현황 (T059)
 - `/net-worth`
-- `/data/inbox`
+- `/data/inbox` — 작업대 · 분류 (T059: 분류 큐 + 대출 연결 후보)
 - `/data/transactions`
+- `/data/nature` — 작업대 · 기본값·정기 지급 (T059)
+- `/data/status` — 작업대 · 자료 현황 (T059)
 - `/data/loans`
 - `/data/installments`
 - `/data/assets`
@@ -33,7 +36,8 @@
 - `/operations/asset-settings` -> `/data/assets`
 - `/operations/auto-classification` -> `/data/rules`
 - `/operations/canonical-views` -> `/data/reference`
-- `/operations/recurring-classification` -> `/data/transactions?view=groups`
+- `/operations/recurring-classification` -> `/data/nature?tab=recurring` (T059: 거래마다 반복 여부를 묻지 않고 정기 지급 묶음으로 등록)
+- `/data/transactions?view=groups` (예전 반복 결제 그룹 보기) -> `/data/nature?tab=recurring`
 - `/assets` -> `/net-worth`
 - `/income` -> `/`
 - `/transfers` -> `/`
@@ -44,7 +48,7 @@
 
 ```text
 +---------------------------------------------------------------+
-| left nav: main + data studio | page header + controls          |
+| left nav: 분석 + 작업대      | page header + controls          |
 +---------------------------------------------------------------+
 |                              | route content                   |
 |                              | cards, filters, tables, charts  |
@@ -53,7 +57,8 @@
 
 Shell rules:
 
-- `AppShell` owns navigation and content frame.
+- `AppShell` owns navigation and content frame. 분석 메뉴: 월 결산, 지출 분석, 약정 현황, 자산·부채. 작업대 메뉴: 분류, 거래, 기본값·정기 지급, 대출, 할부, 자산 메타, 규칙, 자료 현황, 가져오기, 설정, 데이터 사전 (모바일 하단 탭의 "작업대"는 `/data/inbox`).
+- 뒤로 가기로 돌아오면 그 기록 항목에서 보던 스크롤 위치(데스크톱은 창, 모바일은 본문)를 되살리고, 다른 화면으로 새로 갈 때는 맨 위에서 시작한다. 같은 화면에서 필터만 바뀌는 주소 교체(replace)는 위치를 그대로 둔다.
 - `PageHeader` owns page title, meta, and page-level controls.
 - Page sections are regular content bands/cards, not marketing hero sections.
 - Operational pages optimize for scanning, filtering, and repeated edits.
@@ -76,12 +81,31 @@ Shell rules:
 빼는 것         이체·수입 등 그 금액에 들어가지 않는 것
 기준 기간과 비교 최근 마감월 중앙값, 차이, 기준 기간, 자료 없는 달, 부분월 처리 (/metrics/comparison/monthly-flow)
 구성과 거래     지출 큐브의 카테고리 × 거래처 칸(10칸 + 더 보기) → 칸을 누르면 그 칸의 원본 거래 목록
-                (거래마다 "열기" → /data/transactions?transaction_id=…)
+                (거래마다 "고치기" → 이 화면 위에 거래 고치기 패널이 열린다. 화면을 떠나지 않는다)
 ```
 
 - 지출 금액의 구성은 `/metrics/spend-cube`를 그 줄의 조건(`flow_row`, `payment_form`, `adjustability`)으로 읽는다. 생활 지출은 흐름표 줄별로 보여 주고 대출 줄을 "빠짐"으로 표시한다. 잔여는 수입·총지급으로 옮겨 가는 버튼을 준다.
-- 수입은 `/transactions?type=수입`, 이체 세 줄과 이체 순액은 `/transfer-purposes/transactions`에서 거래를 읽는다.
-- `/transactions`에는 흐름표 줄(지급 형태·조정 가능성) 필터가 없다. 그래서 칸의 거래 목록은 "그 달 그 카테고리·거래처의 지출 거래 전체"이고, 그 칸이 흐름표 여러 줄에 걸치면 패널이 그 사실과 줄별 금액(지출 큐브 `group_by=flow_row`)을 함께 알린다.
+- 수입은 `/transactions?type=수입&flow_row=income_undetermined`, 이체 세 줄과 이체 순액은 `/transfer-purposes/transactions`에서 거래를 읽는다.
+- T059부터 칸의 거래 목록은 금액과 같은 흐름표 줄 조건으로 거른다: `/transactions?type=지출&category_major=…&search=거래처&start_date…&end_date…`에 그 금액의 `flow_row`·`payment_form`·`adjustability`(`commitment_kind`는 `flow_row=committed_*`로)를 더하고, 거래처 이름이 정확히 같은 거래만 남긴다. 목록 위에 "아래 n건의 합계가 이 금액과 같습니다"를 보이고, 다르면(환불 일부만 이 줄에 들어간 경우, 다른 카테고리로 기록된 환불이 이 구매에 연결된 경우) 차이와 이유를 쓴다. 200건이 넘으면 같은 조건의 거래 화면 링크를 준다.
+
+## 공통: 거래 고치기 패널 (T059)
+
+`features/transactions/TransactionEditor.tsx` (`DetailPanel` 위). 금액 근거 패널, 사후 검토 목록, 약정 현황, 분류 큐, 거래 화면에서 같은 패널을 연다.
+
+```text
+[거래처 · 날짜 시각 · 금액 · 카테고리]                                   [닫기]
+결제수단 · 원본 설명 · 유형 · 출처(가져오기/직접 추가 → 고친 적 있음)
+분석용 거래처 [입력]       (열리면 여기로 초점)
+대분류 [선택]  소분류 [선택]
+(지출) 조정 가능성: ( ) 이 거래에서 따로 정하지 않음 — 적용되는 값: 정기 지급/카테고리 기본값/미정
+                    ( ) 보호   ( ) 조정 가능          지급 형태·지금 값·근거 표시. 대출·할부 연결이면 보호 고정
+(이체) 이체 목적 [따로 정하지 않음 / 투자 / 저축 / 그 밖의 계좌 간 이동]
+메모 [입력]
+[지우기(거래 화면에서만)]                                         [닫기] [저장]
+```
+
+- 저장: 거래처·카테고리·메모는 `PATCH /transactions/{id}`, 조정 가능성은 `PUT|DELETE /nature/transactions/{id}/adjustability`, 이체 목적은 `PUT|DELETE /transfer-purposes/transactions/{id}`. 바뀐 것만 보낸다. 예전 고정/변동·필수/재량·반복 입력은 없다(2.2).
+- 키보드: 열리면 첫 입력에 초점, Enter(입력칸)·Ctrl/⌘+Enter로 저장, Esc로 닫기, Tab은 패널 안에서만 돈다. 닫히면 연 버튼으로 초점이 돌아간다. 분석 화면에서는 화면을 떠나지 않으므로 고른 달, 열어 둔 근거 패널, 스크롤 위치가 그대로다.
 
 ## Month Close `/` (월 결산, 첫 화면)
 
@@ -168,43 +192,94 @@ Main blocks:
 - insurance summary or empty state
 - installment forecast link
 
-## Data Inbox `/data/inbox`
+## Commitments `/commitments` (약정 현황, T059)
 
 ```text
-[queue cards]
-
-[work list]
+[PageHeader: 약정 현황 · 관측을 볼 달(마감월·진행월)]
+[자료 현황 띠]
+[안내: 기록된 속성이며 전망이 아님 · "관측 안 됨"은 연결된 거래가 기록에 없다는 뜻]
+[이 달 관측된 약정 지급 (월 흐름표 약정 지급과 같은 거래)] [기록된 월 부담 합계 (진행 중 약정)]
+[기록이 덜 된 약정 안내 → 기본값·정기 지급]
+[약정 목록: 종류 거르기 · 관측 상태 거르기(건수) · 끝난 약정도 보기]
+  [종류 배지 · 이름 · (끝남)                     대출/할부 화면에서 열기 | 정기 지급 고치기]
+  월 부담 + 근거 | 주기 | 남은 회차·종료 시점 | 조정 가능성
+  [달 · 관측 상태 배지(아이콘+말) · 이유 · 관측 금액·건수 · 연결된/연결 미확인 거래 n건 보기]
 ```
 
-Main blocks:
+- 자료: `GET /read/commitments?period=` (대출·할부·정기 지급 묶음 한 목록). 주소 `?period=&kind=&state=&ended=1`로 조건이 남는다.
+- 관측 상태 표기: 관측됨 / 주기상 있어야 하는데 관측 안 됨 / 거래는 있으나 연결 미확인 / 이 달에는 예정 없음 / 판단할 기록 없음. "미납"이라는 말을 쓰지 않는다. 색만이 아니라 아이콘과 말로 구분한다.
+- 연결 미확인·연결된 거래는 그 자리에서 펼치고(`GET /transactions/{id}`), 거래마다 거래 고치기 패널을 연다. 연결 미확인 할부 거래는 할부 화면(`/data/installments?linked=unlinked`)으로 가서 사람이 연결한다.
+- 대출·할부 화면은 그대로 두고 링크로 잇는다. 정기 지급은 `/data/nature?tab=recurring&edit={id}`로 간다.
 
-- unclassified transactions
-- recurring review queue
-- loan mapping candidates
-- purchase gate candidates
-- links to focused data pages
+## Classification `/data/inbox` (작업대 · 분류, T059)
+
+```text
+[PageHeader: 작업대 · 분류 · 조정 가능성 미정 비중]
+[탭: 분류할 지출 | 대출 연결 후보 n]
+[분류할 지출: 묶는 방법(카테고리·거래처별 | 카테고리별) · 기간(모든 기간 | 최근 12개월)]
+  미정 지출 합계 · 묶음 수 · 전체 지출 대비 비중
+  1. 거래처 [카테고리/소분류]  미정 금액 · n건 · 미정 금액의 x%           [거래 보기]
+     카테고리 '…' 전체의 기본값: [보호] [조정 가능]
+     이 거래처의 미정 거래 n건만: [보호] [조정 가능]   정기 지급으로 등록
+     (펼치면) 미정 거래 50건까지: 날짜 · 거래처 · 금액 · [보호] [조정 가능] [고치기]
+  [쪽 넘기기: 25묶음씩]
+```
+
+- 큐: `GET /metrics/spend-cube?adjustability=undecided&group_by=effective_category_major,effective_category_minor,merchant&limit=2000` (카테고리별이면 `group_by=effective_category_major`). 금액(미정 순지출)이 큰 묶음부터. 조정 가능성이 미정인 지출만 오르고, 반복 여부만 빈 거래와 예전 반복 제안(승인 대기)은 오르지 않는다. 시스템이 값을 제안하거나 미리 고르지 않는다.
+- 카테고리 기본값 버튼: `PUT /nature/category-defaults` (대분류 전체, `category_minor=null`). 지난 거래와 앞으로 가져올 거래에 적용되고, 거래·정기 지급 단위 값이 먼저다. 알림의 "되돌리기"는 만든 기본값을 지운다.
+- 거래처 버튼: 그 묶음(같은 대분류·소분류·거래처, 고른 기간)의 지금 미정인 거래를 `/transactions?type=지출&adjustability=undecided&category_major=…&search=…`로 모두 모아 거래마다 `PUT /nature/transactions/{id}/adjustability` (한꺼번에 쓰는 API가 없어 6개씩 동시에). 진행 건수를 보이고, 알림의 "되돌리기"는 쓴 거래의 거래 단위 값을 지운다. 새로 가져올 거래에는 적용되지 않는다고 밝힌다(거래처 단위 기본값 API가 없다).
+- "정기 지급으로 등록"은 묶음의 대분류·소분류·거래처만 채워 `/data/nature?tab=recurring&new=1…`로 보낸다.
+- 대출 연결 후보 탭: 예전 인박스의 대출 연결 카드(`/loan-transaction-links?linked=unlinked`).
+- 주소 `?view=&range=&page=&tab=`로 조건이 남는다.
+
+## Nature Settings `/data/nature` (작업대 · 기본값·정기 지급, T059)
+
+```text
+[탭: 카테고리 기본값 | 정기 지급 묶음]
+[카테고리 기본값: 찾기 · 보호/조정 가능 뜻]
+  대분류  미정 ₩…          [정하지 않음(미정) | 보호 | 조정 가능]
+    소분류 n개 · 따로 정한 것 n개 ▸ (펼치면) 소분류 [대분류 값 따름(…) | 보호 | 조정 가능]
+  지금 거래에 없는 카테고리에 남은 기본값 [지우기]
+[정기 지급 묶음: 새 정기 지급 등록 · 진행 중/끝난 것/모두 · 찾기]
+  이름 [거래처 단위|카테고리 단위] [예전 분류에서 옮김]   [고치기] [끝내기] [지우기]
+  카테고리 · 주기 · 금액 · 조정 가능성 / 기간 · 속한 거래 n건(처음~마지막)
+  (등록·고치기 폼) 이름 · 묶는 기준 · 거래처 · 대분류 · 소분류(소분류까지 같은 거래만 묶임) · 주기 · 전체 횟수 · 금액 · 조정 가능성 · 시작일 · 종료일 · 메모
+```
+
+- 기본값: `GET|PUT /nature/category-defaults`, `DELETE /nature/category-defaults/{id}`(선택을 "정하지 않음"으로 돌릴 때, 알림에서 되돌리기). 카테고리 목록은 `/transactions/filter-options`, 미정 금액은 지출 큐브. 카테고리 이름은 바꾸지 않는다.
+- 묶음: `GET|POST /nature/recurring-commitments`, `PATCH …/{id}`, `POST …/{id}/end`(마지막 날), `DELETE …/{id}`(확인 문구 "지우기"). 끝남 여부는 오늘이 아니라 거래 기준일로 본다. 등록 폼의 값은 비어서 시작한다(분류 큐에서 넘어온 거래처·카테고리만 채움). 주소 `?tab=recurring&new=1&merchant=&category_major=&category_minor=`, `&edit={id}`.
+
+## Data Status `/data/status` (작업대 · 자료 현황, T059)
+
+```text
+[상태 안내: 정상이 아니면 이유 (달 목록은 3개까지, 많으면 n개월)]
+[거래 자료: 첫 거래일 · 거래 기준일 · 가져온 달 · 마감월/진행월]
+[스냅샷 기준일(종류별, 거래 기준일과의 차이)] [최근 가져오기(파일·상태·새 거래·스냅샷 기준일)]
+[분류 상태: 미정 지출 · 미분류 지출 · 할부 연결 미확인 · 주기 없는 정기 지급 · 조정 가능성 없는 정기 지급 — 남은 것은 고칠 곳 링크]
+[원화 외 n건 제외]
+[달별 상태 표: 달 · 마감월/진행월/거래 0건 · 거래 수 · 총지급 · 미정 비중, 거래 0건인 달 안내]
+```
+
+- 자료: `GET /read/data-status`, `GET /upload/logs`. 업로드 상태는 쉬운 말(반영됨, 일부만 반영, 실패, 처리 중, 되돌림)로 보인다.
 
 ## Transactions `/data/transactions`
 
 ```text
-[view switch: rows / groups]
+[조회 조건 (주소에 남음)]
 
-[filter panel]
+[transaction table: 날짜 · 거래처(버튼) · 카테고리 · 유형 · 상태 · 금액]
 
 [bulk bar]
 
-[transaction table]
-
-[edit detail panel]
+[거래 고치기 패널]
 ```
 
 Main blocks:
 
-- row view and recurring group view
-- filters for type, source, category, payment method, cost kind, necessity, recurring status, deleted/edited state
-- table with editable rows
-- bulk update/delete/restore with settings-driven preview/confirmation
-- detail panel for category, memo, merchant, cost kind, necessity, recurring metadata
+- 조회 조건: 찾기, 유형, 출처, 대분류, 결제수단, 지급 형태(약정/수시), 조정 가능성(보호/조정 가능/미정), 월 흐름표 줄, 기간, 삭제 포함, 고친 것만. 적용하면 주소(`?search=&type=&…&flow_row=&payment_form=&adjustability=&page=`)에 남아, 다른 화면에 다녀와도 같은 조건과 쪽으로 돌아온다. 지급 형태·조정 가능성·흐름표 줄로 거르면 분석에 들어가는 원화 거래만 나온다.
+- 거래처 버튼(Tab으로 가서 Enter)이나 행을 누르면 거래 고치기 패널. `?transaction_id=`로 목록 밖의 거래도 연다.
+- 일괄: 거래처, 대분류(`PATCH /transactions/bulk-update`), 조정 가능성(지출만, 거래마다 nature API), 삭제·복원(설정에 따른 미리보기·확인).
+- 예전 반복 결제 그룹 보기와 거래마다 묻던 고정/변동·필수/재량·반복 입력은 없다(`?view=groups`는 정기 지급 묶음으로 간다).
 
 ## Loans `/data/loans`
 
@@ -314,18 +389,18 @@ Main blocks:
 ```text
 [upload form]
 
-[recent upload logs]
+[recent upload logs (되돌리기 버튼 없음)]
 
-[danger zone]
+---- 위험한 작업 (닫힌 채 시작, "위험한 작업 열기") ----
+[가장 최근 업로드 되돌리기]  [자료 초기화: 범위 선택 · 초기화 실행]
 ```
 
 Main blocks:
 
 - BankSalad `.xlsx` upload
 - required snapshot date
-- upload result and recent logs
-- transaction reset
-- transaction + snapshot reset
+- upload result and recent logs (상태는 쉬운 말)
+- 위험한 작업(T059): 평소 업로드 흐름과 떼어 점선 아래 닫힌 칸에 둔다. 열어야 되돌리기·초기화 버튼이 보인다. 되돌리기는 확인 문구, 반영 뒤 바뀐 표가 있으면 두 번째 확인 문구를 거친다. 초기화는 범위를 고르고 확인 문구를 입력해야 실행된다. 쓰기 권한이 없으면 잠긴다.
 
 ## Reference `/data/reference`
 

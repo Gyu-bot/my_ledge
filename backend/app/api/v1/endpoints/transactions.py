@@ -17,7 +17,10 @@ from app.schemas.transaction import (
     TransactionCategoryLevel,
     TransactionCostKindFilter,
     TransactionCreateRequest,
+    TransactionAdjustabilityFilter,
     TransactionEditedFilter,
+    TransactionFlowRowFilter,
+    TransactionPaymentFormFilter,
     TransactionFixedCostNecessityFilter,
     TransactionFilterOptionsResponse,
     TransactionGroupBy,
@@ -72,6 +75,24 @@ async def get_transactions(
     search: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
+    flow_row: TransactionFlowRowFilter | None = Query(
+        default=None,
+        description=(
+            "Monthly-flow row of vw_metric_flow_lines. Keeps transactions with a "
+            "flow line in this row."
+        ),
+    ),
+    payment_form: TransactionPaymentFormFilter | None = Query(
+        default=None,
+        description="Payment form of a flow line (vw_metric_flow_lines).",
+    ),
+    adjustability: TransactionAdjustabilityFilter | None = Query(
+        default=None,
+        description=(
+            "Resolved adjustability of a flow line (vw_metric_flow_lines). "
+            "Combined filters must match on the same line."
+        ),
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> TransactionListResponse:
     return await list_transactions(
@@ -92,6 +113,9 @@ async def get_transactions(
         search=search,
         page=page,
         per_page=per_page,
+        flow_row=flow_row,
+        payment_form=payment_form,
+        adjustability=adjustability,
     )
 
 

@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { Badge } from '../../ds/Badge'
 import { Card } from '../../ds/Card'
 import { ListSkeleton } from '../../ds/Skeleton'
@@ -11,6 +11,7 @@ import { useReviewItems } from '../../hooks/useMetrics'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type { ReviewItem } from '../../types/metrics'
 import { loadErrorMessage, withoutCodeNames } from '../analysis/text'
+import { TransactionEditor } from '../transactions/TransactionEditor'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
   pending: '아직 안 봄',
@@ -60,6 +61,7 @@ function ReviewActions({ item }: { item: ReviewItem }) {
 
 function ReviewRow({ item }: { item: ReviewItem }) {
   const isTransaction = item.subject === 'transaction'
+  const [editing, setEditing] = useState(false)
   return (
     <li className="rounded-md border border-border bg-bg-inset px-3 py-2.5">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -90,12 +92,13 @@ function ReviewRow({ item }: { item: ReviewItem }) {
       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-caption">
         {item.review_status ? <span className="text-text-muted">검토: {REVIEW_STATUS_LABELS[item.review_status] ?? item.review_status}</span> : null}
         {isTransaction && item.transaction_id != null ? (
-          <Link to={`/data/transactions?transaction_id=${item.transaction_id}`} className="inline-flex items-center gap-0.5 font-medium text-transfer hover:underline">
-            거래 화면에서 열기
-            <ArrowRight className="h-3 w-3" />
-          </Link>
+          <button type="button" onClick={() => setEditing(true)} className="inline-flex items-center gap-0.5 font-medium text-transfer hover:underline">
+            <Pencil className="h-3 w-3" />
+            이 거래 고치기
+          </button>
         ) : null}
       </div>
+      {editing && item.transaction_id != null ? <TransactionEditor transactionId={item.transaction_id} onClose={() => setEditing(false)} /> : null}
       <ReviewActions item={item} />
     </li>
   )

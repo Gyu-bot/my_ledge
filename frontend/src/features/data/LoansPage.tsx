@@ -384,7 +384,7 @@ export function LoansPage() {
   return (
     <>
       <PageHeader
-        title="데이터 · 대출"
+        title="작업대 · 대출"
         controls={
           <SegmentedControl
             ariaLabel="대출 탭"

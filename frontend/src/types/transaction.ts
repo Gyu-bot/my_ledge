@@ -1,3 +1,5 @@
+import type { FlowRowKey } from './metrics'
+
 export type RecurringPaymentKind = 'installment' | 'monthly_recurring' | 'not_recurring'
 export type SpendNecessity = 'essential' | 'discretionary'
 
@@ -64,6 +66,10 @@ export interface TransactionListParams {
   start_month?: string
   end_month?: string
   include_income?: boolean
+  /** T059 월 흐름표 줄 필터 — vw_metric_flow_lines의 값 그대로 */
+  flow_row?: FlowRowKey
+  payment_form?: 'committed' | 'ad_hoc' | 'not_applicable'
+  adjustability?: 'protected' | 'adjustable' | 'undecided' | 'not_applicable'
 }
 
 export interface CategoryBreakdownParams {

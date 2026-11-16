@@ -57,6 +57,7 @@ Rules:
 - Do not use negative letter spacing.
 - Avoid arbitrary `text-[Npx]` unless a DS primitive explicitly needs it.
 - Dense operational surfaces should prefer `text-label`, `text-caption`, and `text-micro`.
+- 클래스는 `lib/utils.ts`의 `cn`으로 합친다. `cn`은 tailwind-merge에 이 표의 글자 크기 이름을 알려 두었으므로 `text-micro`와 `text-text-secondary` 같은 크기·색 클래스를 함께 써도 서로 지워지지 않는다. 글자 크기를 새로 더하면 `cn` 설정에도 더한다 (T059).
 
 ## Surface Tokens
 

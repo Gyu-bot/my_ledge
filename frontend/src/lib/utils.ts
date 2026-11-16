@@ -1,5 +1,16 @@
 import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
+
+// tailwind.config.js의 글자 크기 이름을 알려 준다. 모르면 `text-micro`와
+// `text-text-secondary`를 같은 무리로 보고 하나를 지워, 배지·버튼의 글자 크기나
+// 색이 빠진다.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: ['display', 'kpi', 'title', 'section', 'body', 'label', 'caption', 'micro'] }],
+    },
+  },
+})
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))

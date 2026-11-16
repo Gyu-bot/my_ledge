@@ -39,6 +39,10 @@ function renderPage() {
   return render(<MemoryRouter><ImportPage /><Toaster /></MemoryRouter>)
 }
 
+function openDanger() {
+  fireEvent.click(screen.getByRole('button', { name: '위험한 작업 열기' }))
+}
+
 const previewResponse: UploadPreviewResponse = {
   filename: 'finance.xlsx',
   snapshot_date: '2026-06-10',
@@ -187,12 +191,31 @@ describe('ImportPage', () => {
     mocks.resetMutateAsync.mockResolvedValue({ scope: 'transactions_only', deleted: { transactions: 0, asset_snapshots: 0, investments: 0, loans: 0 }, upload_logs_retained: true })
   })
 
-  it('업로드 카드, 관측 범위, 이력, Danger Zone을 렌더한다', () => {
+  it('업로드 카드, 관측 범위, 이력을 렌더하고 위험한 작업은 닫힌 채 따로 둔다', () => {
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: [] }])
     renderPage()
     expect(screen.getByText('업로드')).toBeInTheDocument()
     expect(screen.getByText(/관측 범위 2025-03-12 ~ 2026-06-10/)).toBeInTheDocument()
     expect(screen.getByText('finance.xlsx')).toBeInTheDocument()
-    expect(screen.getByText('Danger Zone')).toBeInTheDocument()
+    expect(screen.getByText('반영됨')).toBeInTheDocument()
+    // 평소 흐름(업로드·이력)에서는 되돌리기·초기화를 누를 수 없다
+    expect(screen.queryByRole('button', { name: '되돌리기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '초기화 실행' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Danger Zone')).not.toBeInTheDocument()
+    const danger = screen.getByRole('region', { name: '위험한 작업' })
+    const toggle = within(danger).getByRole('button', { name: '위험한 작업 열기' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(within(danger).getByRole('button', { name: '되돌리기' })).toBeInTheDocument()
+    expect(within(danger).getByRole('button', { name: '초기화 실행' })).toBeInTheDocument()
+    expect(within(danger).getByRole('button', { name: '위험한 작업 닫기' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('이력 표에는 되돌리기 버튼이 없다 (위험한 작업 칸에만 있다)', () => {
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: [] }])
+    renderPage()
+    const table = screen.getByRole('table')
+    expect(within(table).queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('파일과 기준일로 미리보기를 만든 뒤 기본 선택된 안전 변경을 적용한다', async () => {
@@ -255,19 +278,23 @@ describe('ImportPage', () => {
     expect(screen.getByText('되돌림')).toBeInTheDocument()
   })
 
-  it('복원 가능한 일치 행에만 버튼을 표시하고 쓰기 권한이 없으면 잠근다', () => {
-    mocks.rollbackPoints.mockReturnValue([{ upload_id: 2, can_rollback: true, changed_tables: [] }])
+  it('되돌릴 지점이 없으면 버튼 대신 안내를 보이고, 쓰기 권한이 없으면 잠근다', () => {
+    mocks.rollbackPoints.mockReturnValue([{ upload_id: 2, can_rollback: false, changed_tables: [] }])
     const { rerender } = renderPage()
+    openDanger()
     expect(screen.queryByRole('button', { name: '되돌리기' })).not.toBeInTheDocument()
+    expect(screen.getByText('지금 되돌릴 수 있는 업로드가 없습니다.')).toBeInTheDocument()
     mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: [] }])
     mocks.writeAccess.mockReturnValue(false)
     rerender(<MemoryRouter><ImportPage /><Toaster /></MemoryRouter>)
     expect(screen.getByRole('button', { name: '되돌리기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '초기화 실행' })).toBeDisabled()
   })
 
   it('이후 변경이 없으면 한 번 확인하고 accept_changes false를 보낸다', async () => {
     mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: [] }])
     renderPage()
+    openDanger()
     fireEvent.click(screen.getByRole('button', { name: '되돌리기' }))
     const dialog = screen.getByRole('alertdialog', { name: '업로드 되돌리기' })
     expect(within(dialog).getByText(/이 업로드 직전 상태로 장부를 되돌려요/)).toBeInTheDocument()
@@ -279,6 +306,7 @@ describe('ImportPage', () => {
   it('이후 변경이 있으면 별도 경고를 확인해야 accept_changes true를 보낸다', async () => {
     mocks.rollbackPoints.mockReturnValue([{ upload_id: 1, can_rollback: true, changed_tables: ['transactions', 'loans'] }])
     renderPage()
+    openDanger()
     fireEvent.click(screen.getByRole('button', { name: '되돌리기' }))
     const first = screen.getByRole('alertdialog', { name: '업로드 되돌리기' })
     fireEvent.change(within(first).getByPlaceholderText('확인 문구 입력'), { target: { value: '업로드 되돌리기' } })
@@ -292,12 +320,18 @@ describe('ImportPage', () => {
     await waitFor(() => expect(mocks.rollbackMutateAsync).toHaveBeenCalledWith({ uploadId: 1, acceptChanges: true }))
   })
 
-  it('초기화 실행 시 확인 문구 다이얼로그가 열린다 (스냅샷 포함 안내)', () => {
+  it('초기화 실행 시 확인 문구 다이얼로그가 열린다 (스냅샷 포함 안내)', async () => {
     renderPage()
+    openDanger()
     fireEvent.click(screen.getByText('거래 + 스냅샷 초기화').closest('button')!)
     fireEvent.click(screen.getByRole('button', { name: '초기화 실행' }))
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/자산·보험·투자·대출 스냅샷이 모두 삭제/)).toBeInTheDocument()
     expect(within(dialog).getByText(/소스 원본 관측, 계좌 연결 매핑, 소스 선택 설정도 함께 초기화/)).toBeInTheDocument()
+    // 확인 문구를 입력하기 전에는 실행되지 않는다
+    expect(within(dialog).getByRole('button', { name: '초기화 실행' })).toBeDisabled()
+    fireEvent.change(within(dialog).getByPlaceholderText('확인 문구 입력'), { target: { value: '거래 + 스냅샷 초기화' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '초기화 실행' }))
+    await waitFor(() => expect(mocks.resetMutateAsync).toHaveBeenCalledWith('transactions_and_snapshots'))
   })
 })
