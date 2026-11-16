@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from app.schemas.comparison import ComparisonBasis
 from app.schemas.metrics import MetricContract, MonthStatus
@@ -71,6 +71,12 @@ class FixedCostSummaryResponse(BaseModel):
     necessity_unclassified_count: int = 0
     contract: MetricContract | None = None
 
+    @computed_field
+    @property
+    def total_outflow(self) -> int:
+        """All effective KRW expense, including loan repayments (legacy alias)."""
+        return self.expense_total
+
 
 class FixedCostTrendItem(BaseModel):
     period: str
@@ -89,6 +95,12 @@ class FixedCostTrendItem(BaseModel):
     necessity_unclassified_count: int = 0
     fixed_ratio: float | None
     month_status: MonthStatus | None = None
+
+    @computed_field
+    @property
+    def total_outflow(self) -> int:
+        """All effective KRW expense, including loan repayments (legacy alias)."""
+        return self.expense_total
 
 
 class FixedCostTrendResponse(BaseModel):

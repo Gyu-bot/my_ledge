@@ -279,6 +279,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         columns=(
             SchemaColumnDefinition("period", String(length=7), nullable=False),
             SchemaColumnDefinition("expense_total", Integer(), nullable=False),
+            SchemaColumnDefinition("living_spend", Integer(), nullable=False),
             SchemaColumnDefinition("fixed_total", Integer(), nullable=False),
             SchemaColumnDefinition("variable_total", Integer(), nullable=False),
             SchemaColumnDefinition("essential_fixed_total", Integer(), nullable=False),
@@ -371,6 +372,8 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("period", String(length=7), nullable=False),
             SchemaColumnDefinition("income_total", Integer(), nullable=False),
             SchemaColumnDefinition("expense_total", Integer(), nullable=False),
+            SchemaColumnDefinition("total_outflow", Integer(), nullable=False),
+            SchemaColumnDefinition("living_spend", Integer(), nullable=False),
             SchemaColumnDefinition("non_loan_expense_total", Integer(), nullable=False),
             SchemaColumnDefinition(
                 "transfer_activity_total", Integer(), nullable=False

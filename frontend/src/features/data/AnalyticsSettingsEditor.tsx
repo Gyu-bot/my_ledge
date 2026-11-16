@@ -27,6 +27,7 @@ type AnalyticsSettingsEditorProps = {
 
 export function AnalyticsSettingsEditor({ analytics, hasWrite, isPending, onSave }: AnalyticsSettingsEditorProps) {
   const [draft, setDraft] = useState<AnalyticsDraft>(() => toAnalyticsDraft(analytics.effective))
+  const [baselineStart, setBaselineStart] = useState(analytics.effective.comparison?.baseline_start_date ?? '')
   const [isDirty, setIsDirty] = useState(false)
   const [validationErrors, setValidationErrors] = useState<readonly string[]>([])
   const setDirtyDraft: Dispatch<SetStateAction<AnalyticsDraft>> = (value) => {
@@ -35,12 +36,18 @@ export function AnalyticsSettingsEditor({ analytics, hasWrite, isPending, onSave
   }
 
   useEffect(() => {
-    if (!isDirty) setDraft(toAnalyticsDraft(analytics.effective))
+    if (!isDirty) {
+      setDraft(toAnalyticsDraft(analytics.effective))
+      setBaselineStart(analytics.effective.comparison?.baseline_start_date ?? '')
+    }
   }, [analytics.effective, isDirty])
 
   async function saveAnalytics() {
     const errors: string[] = []
-    const payload = buildAnalyticsPatch(draft, analytics.effective, errors)
+    const basePayload = buildAnalyticsPatch(draft, analytics.effective, errors)
+    const payload: AnalyticsSettingsPatchRequest = baselineStart !== (analytics.effective.comparison?.baseline_start_date ?? '')
+      ? { ...basePayload, comparison: { baseline_start_date: baselineStart || null } }
+      : basePayload
     setValidationErrors(errors)
     if (errors.length > 0) {
       toast.error('분석 설정 입력값을 확인하세요')
@@ -72,6 +79,21 @@ export function AnalyticsSettingsEditor({ analytics, hasWrite, isPending, onSave
         </div>
       ) : null}
       <div className="grid gap-4">
+        {analytics.comparison_guide ? (
+          <section aria-labelledby="analytics-comparison" className="rounded-md border border-border-subtle bg-bg-inset p-3">
+            <h3 id="analytics-comparison" className="text-label text-text-secondary">{analytics.comparison_guide.title}</h3>
+            <p className="mt-1 text-caption text-text-muted">{analytics.comparison_guide.summary}</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {analytics.comparison_guide.options.map((option) => (
+                <Field key={option.key} label={option.label} hint={option.description}>
+                  {option.key === 'baseline_start_date' && option.editable ? (
+                    <TextInput type="date" disabled={!hasWrite} value={baselineStart} onChange={(event) => { setBaselineStart(event.target.value); setIsDirty(true) }} />
+                  ) : <div className="text-caption text-text-secondary">{option.value_label}</div>}
+                </Field>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <section aria-labelledby="analytics-purchase-gate" className="rounded-md border border-border-subtle bg-bg-inset p-3">
           <h3 id="analytics-purchase-gate" className="text-label text-text-secondary">구매 검토 후보</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -109,8 +131,6 @@ export function AnalyticsSettingsEditor({ analytics, hasWrite, isPending, onSave
             <Field label="재량 속도 경고 (%)" help={settingHelp('velocityWarningRatio', triple({ defaults: analytics.defaults.discretionary_velocity.warning_velocity_ratio, saved: analytics.saved.discretionary_velocity.warning_velocity_ratio, effective: analytics.effective.discretionary_velocity.warning_velocity_ratio, format: formatRatio }))}><TextInput type="number" min={0} disabled={!hasWrite} value={draft.discretionary_velocity.warning_velocity_ratio} onChange={(event) => updateVelocity(setDirtyDraft, { warning_velocity_ratio: event.target.value })} /></Field>
             <Field label="재량 속도 높음 (%)" help={settingHelp('velocityHighRatio', triple({ defaults: analytics.defaults.discretionary_velocity.high_velocity_ratio, saved: analytics.saved.discretionary_velocity.high_velocity_ratio, effective: analytics.effective.discretionary_velocity.high_velocity_ratio, format: formatRatio }))}><TextInput type="number" min={0} disabled={!hasWrite} value={draft.discretionary_velocity.high_velocity_ratio} onChange={(event) => updateVelocity(setDirtyDraft, { high_velocity_ratio: event.target.value })} /></Field>
             <Field label="분류 커버리지 최소 (%)" help={settingHelp('velocityCoverage', triple({ defaults: analytics.defaults.discretionary_velocity.minimum_classification_coverage, saved: analytics.saved.discretionary_velocity.minimum_classification_coverage, effective: analytics.effective.discretionary_velocity.minimum_classification_coverage, format: formatRatio }))}><TextInput type="number" min={0} max={100} disabled={!hasWrite} value={draft.discretionary_velocity.minimum_classification_coverage} onChange={(event) => updateVelocity(setDirtyDraft, { minimum_classification_coverage: event.target.value })} /></Field>
-            <Field label="이상값 처리 방식" help={settingHelp('velocityOutlierPolicy', triple({ defaults: analytics.defaults.discretionary_velocity.outlier_policy, saved: analytics.saved.discretionary_velocity.outlier_policy, effective: analytics.effective.discretionary_velocity.outlier_policy, format: formatText }))}><TextInput disabled={!hasWrite} value={draft.discretionary_velocity.outlier_policy} onChange={(event) => updateVelocity(setDirtyDraft, { outlier_policy: event.target.value })} /></Field>
-            <Field label="비교 기준 방식" help={settingHelp('velocityBaselineMode', triple({ defaults: analytics.defaults.discretionary_velocity.baseline_mode, saved: analytics.saved.discretionary_velocity.baseline_mode, effective: analytics.effective.discretionary_velocity.baseline_mode, format: formatText }))}><TextInput disabled={!hasWrite} value={draft.discretionary_velocity.baseline_mode} onChange={(event) => updateVelocity(setDirtyDraft, { baseline_mode: event.target.value })} /></Field>
             <Field label="제외 카테고리" help={settingHelp('velocityExcludedCategories', triple({ defaults: analytics.defaults.discretionary_velocity.excluded_category_names, saved: analytics.saved.discretionary_velocity.excluded_category_names, effective: analytics.effective.discretionary_velocity.excluded_category_names, format: formatListDisplay }))}><TextInput disabled={!hasWrite} value={draft.discretionary_velocity.excluded_category_names} onChange={(event) => updateVelocity(setDirtyDraft, { excluded_category_names: event.target.value })} /></Field>
             <Field label="제외 가맹점" help={settingHelp('velocityExcludedMerchants', triple({ defaults: analytics.defaults.discretionary_velocity.excluded_merchants, saved: analytics.saved.discretionary_velocity.excluded_merchants, effective: analytics.effective.discretionary_velocity.excluded_merchants, format: formatListDisplay }))}><TextInput disabled={!hasWrite} value={draft.discretionary_velocity.excluded_merchants} onChange={(event) => updateVelocity(setDirtyDraft, { excluded_merchants: event.target.value })} /></Field>
           </div>

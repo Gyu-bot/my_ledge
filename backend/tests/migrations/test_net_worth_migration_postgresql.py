@@ -103,7 +103,7 @@ def test_downgrade_restores_0038_views_exactly(scratch_url: str) -> None:
     _alembic(scratch_url, "upgrade", BEFORE_T061)
     views_0038, tables_0038 = _catalog(scratch_url)
 
-    _alembic(scratch_url, "upgrade", "head")
+    _alembic(scratch_url, "upgrade", "20261116_0039")
     views_head, tables_head = _catalog(scratch_url)
     assert set(views_head) - set(views_0038) == {
         "vw_transfer_purpose",
@@ -123,7 +123,7 @@ def test_downgrade_restores_0038_views_exactly(scratch_url: str) -> None:
     assert views_down == views_0038
     assert tables_down == tables_0038
 
-    _alembic(scratch_url, "upgrade", "head")
+    _alembic(scratch_url, "upgrade", "20261116_0039")
     assert _catalog(scratch_url) == (views_head, tables_head)
 
 

@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal, NotRequired, TypedDict
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, case, func, not_, or_, select
+from sqlalchemy import and_, case, func, not_, or_, select, literal
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -1193,12 +1193,70 @@ async def get_discretionary_velocity(
     )
 
 
+async def _purchase_review_totals(
+    db_session: AsyncSession,
+    *,
+    start_date: date,
+    end_date: date,
+    cutoff_day: int | None = None,
+    group_by_period: bool = True,
+) -> list[RowMapping]:
+    """Positive purchase nets only: ad hoc, adjustable, effective KRW rows.
+
+    Distinct from cashflow: later allocated refunds reduce the original purchase;
+    standalone refund rows and zero/over-refunded purchases do not count.
+    """
+    tx = METRIC_TRANSACTIONS_VIEW
+    nature = TRANSACTION_NATURE_VIEW
+    filters = [
+        tx.c.type == EXPENSE,
+        func.upper(tx.c.currency) == METRIC_CURRENCY,
+        tx.c.date.between(start_date, end_date),
+        tx.c.purchase_net_amount < 0,
+        nature.c.loan_account_id.is_(None),
+        nature.c.commitment_kind.is_(None),
+        nature.c.adjustability == "adjustable",
+    ]
+    if cutoff_day is not None:
+        filters.append(day_of_month(tx.c.date) <= cutoff_day)
+    rows: list[RowMapping] = []
+    for dimension, key in (
+        (
+            "merchant",
+            func.coalesce(
+                func.nullif(tx.c.merchant, ""),
+                func.nullif(tx.c.description, ""),
+                "미분류",
+            ),
+        ),
+        (
+            "category",
+            func.coalesce(func.nullif(tx.c.effective_category_major, ""), "미분류"),
+        ),
+    ):
+        period = tx.c.period if group_by_period else literal("target")
+        result = await db_session.execute(
+            select(
+                literal(dimension).label("dimension"),
+                period.label("period"),
+                key.label("key"),
+                func.sum(-tx.c.purchase_net_amount).label("amount"),
+            )
+            .select_from(tx.join(nature, nature.c.transaction_id == tx.c.id))
+            .where(*filters)
+            .group_by(period, key)
+        )
+        rows.extend(result.mappings().all())
+    return rows
+
+
 async def get_purchase_gate_candidates(
     db_session: AsyncSession,
     *,
     start_date: date | None,
     end_date: date | None,
     settings: PurchaseGateSettings,
+    comparison_window: ComparisonWindow | None = None,
     review_status: str | None = None,
     page: int = 1,
     per_page: int = 10,
@@ -1206,6 +1264,13 @@ async def get_purchase_gate_candidates(
     ref_end = end_date or date.today()
     ref_start = start_date or date(ref_end.year, ref_end.month, 1)
     lookback_start = _add_months(ref_start, -settings.new_merchant_lookback_months)
+    if comparison_window is not None:
+        ref_start = comparison_window.target_start or ref_start
+        ref_end = comparison_window.target_end or ref_end
+        if comparison_window.baseline_periods:
+            lookback_start = min(
+                lookback_start, period_start(comparison_window.baseline_periods[0])
+            )
     rows = await _load_purchase_net_rows(
         db_session,
         start_date=lookback_start,
@@ -1226,22 +1291,61 @@ async def get_purchase_gate_candidates(
         for row in purchase_rows
         if row["date"] < ref_start
     }
+    # The purchase-net definition differs from posting-month cashflow. SQL
+    # aggregates view-provided per-purchase amounts; Python only detects candidates
+    # and takes the median/legacy mean of those monthly aggregates.
+    totals = await _purchase_review_totals(
+        db_session,
+        start_date=lookback_start,
+        end_date=ref_start - timedelta(days=1),
+        cutoff_day=comparison_window.cutoff_day if comparison_window else None,
+    )
     prior_merchant_monthly: dict[tuple[str, str], int] = defaultdict(int)
     prior_discretionary_monthly: dict[tuple[str, str], int] = defaultdict(int)
     current_merchant_total: dict[str, int] = defaultdict(int)
     current_discretionary_category_total: dict[str, int] = defaultdict(int)
+    for row in totals:
+        period = row["period"]
+        if comparison_window is None or period in comparison_window.baseline_periods:
+            if row["dimension"] == "merchant":
+                prior_merchant_monthly[(row["key"], period)] = int(row["amount"])
+            else:
+                prior_discretionary_monthly[(row["key"], period)] = int(row["amount"])
+    current_totals = await _purchase_review_totals(
+        db_session,
+        start_date=ref_start,
+        end_date=ref_end,
+        group_by_period=False,
+    )
+    for row in current_totals:
+        if row["dimension"] == "merchant":
+            current_merchant_total[row["key"]] = int(row["amount"])
+        else:
+            current_discretionary_category_total[row["key"]] = int(row["amount"])
+    if comparison_window is not None:
+        # Include real zero months, skip months without ledger data. Novelty is
+        # evaluated in the same closed-month window as spike comparisons.
+        prior_merchants = {
+            row["key"]
+            for row in totals
+            if row["dimension"] == "merchant"
+            and row["period"] in comparison_window.baseline_periods
+        }
 
-    for row in purchase_rows:
-        merchant = row["merchant"] or row["description"] or "미분류"
-        category = row["effective_category_major"] or "미분류"
-        amount = _purchase_gate_net_amount(row)
-        row_period = _month_key(row["date"])
-        if ref_start <= row["date"] <= ref_end:
-            current_merchant_total[merchant] += amount
-            current_discretionary_category_total[category] += amount
-        elif row["date"] < ref_start:
-            prior_merchant_monthly[(merchant, row_period)] += amount
-            prior_discretionary_monthly[(category, row_period)] += amount
+    def baseline(monthly: dict[tuple[str, str], int], key: str) -> int:
+        if comparison_window is not None:
+            return (
+                median_won(
+                    [
+                        monthly.get((key, period), 0)
+                        for period in comparison_window.baseline_periods
+                    ]
+                )
+                or 0
+            )
+        return _monthly_average(
+            value for (group, _), value in monthly.items() if group == key
+        )
 
     enabled = set(settings.enabled_candidate_types)
     excluded_categories = set(settings.excluded_category_names)
@@ -1278,17 +1382,28 @@ async def get_purchase_gate_candidates(
                 candidate_map,
                 candidate_type="new_merchant",
                 base=base,
-                signals={"lookback_months": settings.new_merchant_lookback_months},
+                signals={
+                    "lookback_months": settings.new_merchant_lookback_months,
+                    **(
+                        {
+                            "baseline_month_count": len(
+                                comparison_window.baseline_periods
+                            )
+                        }
+                        if comparison_window is not None
+                        else {}
+                    ),
+                },
                 risk_level="warning",
                 reasons=[
-                    f"최근 {settings.new_merchant_lookback_months}개월 내 처음 등장한 거래처입니다."
+                    (
+                        "비교 기준 기간에 같은 경과일까지의 구매 기록이 없는 거래처입니다."
+                        if comparison_window is not None
+                        else f"최근 {settings.new_merchant_lookback_months}개월 내 처음 등장한 거래처입니다."
+                    )
                 ],
             )
-        merchant_baseline = _monthly_average(
-            amount
-            for (baseline_merchant, _), amount in prior_merchant_monthly.items()
-            if baseline_merchant == merchant
-        )
+        merchant_baseline = baseline(prior_merchant_monthly, merchant)
         merchant_current = current_merchant_total[merchant]
         merchant_spike_ratio = _safe_ratio(merchant_current, merchant_baseline)
         if (
@@ -1304,19 +1419,23 @@ async def get_purchase_gate_candidates(
                 signals={
                     "baseline_avg": merchant_baseline,
                     "current_total": merchant_current,
-                    "ratio": merchant_spike_ratio,
+                    **(
+                        {"ratio": merchant_spike_ratio}
+                        if comparison_window is None or not comparison_window.is_partial
+                        else {}
+                    ),
                     "threshold_ratio": settings.merchant_spike_ratio,
                 },
                 risk_level="warning",
                 reasons=[
-                    f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."
+                    (
+                        f"{merchant} 지출이 기준값보다 {merchant_current - merchant_baseline:,}원 큽니다."
+                        if comparison_window is not None
+                        else f"{merchant} 지출이 baseline 대비 {merchant_spike_ratio:.2f}x입니다."
+                    )
                 ],
             )
-        discretionary_baseline = _monthly_average(
-            amount
-            for (baseline_category, _), amount in prior_discretionary_monthly.items()
-            if baseline_category == category
-        )
+        discretionary_baseline = baseline(prior_discretionary_monthly, category)
         discretionary_current = current_discretionary_category_total[category]
         discretionary_spike_ratio = _safe_ratio(
             discretionary_current,
@@ -1335,12 +1454,20 @@ async def get_purchase_gate_candidates(
                 signals={
                     "baseline_avg": discretionary_baseline,
                     "current_total": discretionary_current,
-                    "ratio": discretionary_spike_ratio,
+                    **(
+                        {"ratio": discretionary_spike_ratio}
+                        if comparison_window is None or not comparison_window.is_partial
+                        else {}
+                    ),
                     "threshold_ratio": settings.discretionary_spike_ratio,
                 },
                 risk_level="warning",
                 reasons=[
-                    f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."
+                    (
+                        f"{category} 재량 지출이 기준값보다 {discretionary_current - discretionary_baseline:,}원 큽니다."
+                        if comparison_window is not None
+                        else f"{category} 재량 지출이 baseline 대비 {discretionary_spike_ratio:.2f}x입니다."
+                    )
                 ],
             )
 

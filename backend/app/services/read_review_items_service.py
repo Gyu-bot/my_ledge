@@ -32,6 +32,10 @@ from app.services.analytics_service import (
     get_spending_anomalies,
 )
 from app.services.metrics_service import load_as_of
+from app.services.comparison_service import (
+    resolve_comparison_window,
+    build_comparison_basis,
+)
 from app.services.read_commitments_service import default_period
 from app.services.read_surface_service import (
     build_period_scope,
@@ -154,7 +158,14 @@ async def read_review_items(
     )
     period_state = scope.periods[0] if scope.periods else None
     items: list[ReviewItem] = []
-    comparison = None
+    window = None
+    if (
+        target is not None
+        and as_of.transaction_as_of is not None
+        and target <= as_of.transaction_as_of.strftime("%Y-%m")
+    ):
+        window = await resolve_comparison_window(db_session, target_period=target)
+    comparison = build_comparison_basis(window) if window is not None else None
     start_date = end_date = None
     if (
         target is not None
@@ -162,6 +173,7 @@ async def read_review_items(
         and period_state.coverage == "imported"
         and period_state.transaction_count > 0
         and as_of.transaction_as_of is not None
+        and window is not None
     ):
         start_date = date.fromisoformat(f"{target}-01")
         month_end = start_date.replace(
@@ -174,6 +186,7 @@ async def read_review_items(
             start_date=start_date,
             end_date=end_date,
             settings=settings.effective.purchase_gate,
+            comparison_window=window,
             per_page=ALL_ITEMS,
         )
         anomaly_settings = await resolve_spending_anomalies_settings(
@@ -185,12 +198,11 @@ async def read_review_items(
         anomalies = await get_spending_anomalies(
             db_session,
             end_date=end_date,
-            baseline_months=anomaly_settings.baseline_months,
+            baseline_months=window.baseline_months_requested,
             anomaly_threshold=anomaly_settings.anomaly_threshold,
             min_delta_amount=anomaly_settings.min_delta_amount,
             per_page=ALL_ITEMS,
         )
-        comparison = anomalies.comparison
         transaction_items = sorted(
             (_purchase_item(candidate) for candidate in candidates.items),
             key=lambda item: (-item.amount, item.transaction_id or 0),
@@ -239,8 +251,18 @@ async def read_review_items(
                 "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
                 "sources": (
                     "purchase_review_candidate: 기존 구매 단위 후보 검출기(큰 일회성 지출, "
-                    "처음 등장한 거래처, 거래처·카테고리 급증) 그대로. "
+                    "처음 등장한 거래처, 거래처·카테고리 급증). 구매 순액은 뷰에서 읽고, "
+                    "기준은 comparison의 마감월 중앙값·같은 경과일을 쓴다. "
                     "spending_anomaly: 기존 카테고리 지출 변화 검출기(비교 계약 기준값) 그대로."
+                ),
+                "purchase_amounts": (
+                    "vw_metric_transactions.purchase_net_amount의 양수 구매 순액(-purchase_net_amount). "
+                    "수시·조정 가능 KRW 구매만 포함하며 확정 환불은 원구매에 차감한다. "
+                    "현금흐름의 게시월 지출과 다르다. 자료 있는 기준월의 구매 없음은 0원, "
+                    "자료 없는 달·월중 시작 첫 달은 제외한다. 신규 거래처도 같은 기준월 창에서 판단한다. "
+                    "연간성 지출의 12개월 비교는 /read/comparison/contributions의 twelve_month_items에서 읽는다. "
+                    "개별 구매의 급증 검출은 월별 구매 순액 기준이다. "
+                    "new_merchant_lookback_months 신호는 기존 설정값으로 보존하며, 실제 신규 거래처 판단 기간은 comparison을 따른다."
                 ),
                 "ordering": (
                     "거래 항목을 먼저 금액이 큰 순으로, 그다음 카테고리·월 항목을 기준값 대비 "
@@ -256,7 +278,7 @@ async def read_review_items(
                 "구매 단위 후보 검출기는 지급 형태가 수시이고 조정 가능성이 "
                 "'조정 가능'인 거래만 본다(vw_transaction_nature). 조정 가능성이 "
                 "미정인 거래는 후보에 들어가지 않는다.",
-                "검출기 설정값(임계값, 기준 개월 수)은 분석 설정의 현재 값이다.",
+                "검출기 임계값은 분석 설정의 현재 값이고 기준 기간은 comparison을 따른다.",
             ],
         ),
         labels={

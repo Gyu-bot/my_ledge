@@ -82,7 +82,7 @@ export function ReferencePage() {
         <Card title="관측 실적 · 외부 에이전트와 같은 canonical 수치" meta={`${latestCashflow?.period ?? '관측 없음'} · ${latestCashflow?.is_complete_month ? '수집 확인된 마감월' : '부분 수집·진행월'}`}>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Stat label="관측 수입" value={money(latestCashflow?.income_total)} sub="실제 수입 거래 합계" />
-            <Stat label="관측 순지출" value={money(latestCashflow?.expense_total)} sub={`대출상환 포함 ${money(latestCashflow?.loan_repayment_total)}`} />
+            <Stat label="관측 순지출" value={money(latestCashflow?.total_outflow)} sub={`대출상환 포함 ${money(latestCashflow?.loan_repayment_total)}`} />
             <Stat label="관측 순현금흐름" value={money(latestCashflow?.net_cashflow)} sub="관측 수입 − 관측 순지출" subTone={(latestCashflow?.net_cashflow ?? 0) >= 0 ? 'good' : 'bad'} />
             <Stat label="관측 저축률" value={formatPct(latestCashflow?.savings_rate == null ? null : latestCashflow.savings_rate * 100)} sub={latestCashflow?.savings_rate_basis === 'insufficient_partial_month_income' ? '부분월 수입 부족으로 산출하지 않음' : '같은 기간의 관측 수입·순현금흐름 기준'} />
           </div>
@@ -124,7 +124,7 @@ export function ReferencePage() {
                         {!item.is_complete_month ? <Badge variant="warn" className="ml-1.5">부분 수집·진행월</Badge> : null}
                       </td>
                       <td className="tnum px-4 py-2 text-text-secondary">{money(item.income_total)}</td>
-                      <td className="tnum px-4 py-2 text-text-secondary">{money(item.expense_total)}</td>
+                      <td className="tnum px-4 py-2 text-text-secondary">{money(item.total_outflow)}</td>
                       <td className="tnum px-4 py-2 text-text-muted">{money(item.loan_repayment_total)}</td>
                       <td className="tnum px-4 py-2 text-text-muted">{money(item.discretionary_spend_total)}</td>
                       <td className="tnum px-4 py-2 text-text-secondary">{money(item.net_cashflow)}</td>

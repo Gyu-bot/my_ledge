@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from app.schemas.income_projection import MonthlyProjection
 from app.schemas.metrics import MetricAsOf
@@ -28,7 +28,7 @@ class CanonicalMonthlyCashflowItem(BaseModel):
     savings_rate: float | None = Field(
         description=(
             "net_cashflow ÷ income_total. 진행월(metric_as_of.last_closed_period 이후)은 "
-            "비교 계약(T057)에 따라 null. DB 뷰 vw_monthly_cashflow는 모든 달에 계산한다."
+            "비교 계약(T057)에 따라 null. DB 뷰 vw_monthly_cashflow도 진행월은 null이다."
         )
     )
     savings_rate_basis: Literal[
@@ -37,6 +37,16 @@ class CanonicalMonthlyCashflowItem(BaseModel):
         "insufficient_partial_month_income",
         "no_income",
     ] = "observed_closed_month"
+
+    @computed_field
+    @property
+    def total_outflow(self) -> int:
+        return self.expense_total
+
+    @computed_field
+    @property
+    def living_spend(self) -> int:
+        return self.non_loan_expense_total
 
 
 class CanonicalTrueSpendableMonthlyItem(BaseModel):
@@ -144,6 +154,12 @@ class CanonicalViewsDashboardResponse(BaseModel):
     unclassified_work_queue_page: int = 1
     unclassified_work_queue_per_page: int = 10
     unclassified_work_queue_total_pages: int = 0
+    field_scopes: dict[str, str] = Field(
+        default_factory=lambda: {
+            "monthly_cashflow[].expense_total": "total_outflow: 대출 포함 유효 KRW 지출 순액(환불 게시월 차감)",
+            "monthly_cashflow[].non_loan_expense_total": "living_spend: 총지급에서 대출 원리금 제외",
+        }
+    )
     monthly_cashflow: list[CanonicalMonthlyCashflowItem]
     true_spendable_monthly: list[CanonicalTrueSpendableMonthlyItem]
     loan_repayment_monthly: list[CanonicalLoanRepaymentMonthlyItem]
