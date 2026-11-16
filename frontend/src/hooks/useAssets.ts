@@ -11,7 +11,6 @@ export const assetKeys = {
   netWorthHistory: () => ['assets', 'netWorthHistory'] as const,
   snapshotCompare: (mode?: SnapshotComparisonMode) => ['assets', 'snapshotCompare', mode ?? 'default'] as const,
   netWorthBreakdown: () => ['assets', 'netWorthBreakdown'] as const,
-  liquidityHealth: () => ['assets', 'liquidityHealth'] as const,
   investments: () => ['assets', 'investments'] as const,
   insurance: () => ['assets', 'insurance'] as const,
   loans: () => ['assets', 'loans'] as const,
@@ -36,10 +35,6 @@ export function useNetWorthBreakdown() {
   return useQuery({ queryKey: assetKeys.netWorthBreakdown(), queryFn: assetApi.netWorthBreakdown })
 }
 
-export function useLiquidityHealth() {
-  return useQuery({ queryKey: assetKeys.liquidityHealth(), queryFn: assetApi.liquidityHealth })
-}
-
 export function useInvestmentSummary() {
   return useQuery({ queryKey: assetKeys.investments(), queryFn: assetApi.investments })
 }
@@ -61,6 +56,7 @@ export function usePatchAssetLiquidity() {
       void qc.invalidateQueries({ queryKey: ['assets'] })
       void qc.invalidateQueries({ queryKey: ['analytics'] })
       void qc.invalidateQueries({ queryKey: ['canonical-views'] })
+      void qc.invalidateQueries({ queryKey: ['read'] })
       void qc.invalidateQueries({ queryKey: ['transactions'] })
     },
   })
@@ -75,6 +71,7 @@ export function usePatchLoanRepaymentMetadata() {
       void qc.invalidateQueries({ queryKey: ['assets'] })
       void qc.invalidateQueries({ queryKey: ['analytics'] })
       void qc.invalidateQueries({ queryKey: ['canonical-views'] })
+      void qc.invalidateQueries({ queryKey: ['read'] })
       void qc.invalidateQueries({ queryKey: ['transactions'] })
     },
   })

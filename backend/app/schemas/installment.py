@@ -7,7 +7,6 @@ from app.schemas.common import PaginatedResponse
 
 
 InstallmentPlanStatus = Literal["active", "completed", "cancelled"]
-InstallmentForecastStatus = Literal["observed", "projected", "missed"]
 InstallmentLinkStateFilter = Literal["all", "linked", "unlinked"]
 InstallmentSuggestionConfidence = Literal["high", "medium", "low"]
 InstallmentSuggestionConflictReason = Literal[
@@ -160,32 +159,3 @@ class InstallmentTransactionSuggestionListResponse(PaginatedResponse):
 
 class TransactionInstallmentLinkResponse(BaseModel):
     link: InstallmentTransactionLinkItem | None
-
-
-class InstallmentForecastItem(BaseModel):
-    installment_plan_id: int
-    installment_plan_display_name: str
-    installment_number: int
-    total_installments: int
-    due_date: date
-    period: str
-    amount: int
-    status: InstallmentForecastStatus
-    status_label: str
-    is_future_obligation: bool
-    transaction_id: int | None
-
-
-class InstallmentForecastMonthlySummaryItem(BaseModel):
-    period: str
-    observed_total: int
-    projected_total: int
-    missed_total: int = Field(
-        description="Legacy alias for past_unconfirmed_total; not confirmed unpaid debt."
-    )
-    past_unconfirmed_total: int
-
-
-class InstallmentForecastResponse(BaseModel):
-    items: list[InstallmentForecastItem]
-    monthly_summary: list[InstallmentForecastMonthlySummaryItem]

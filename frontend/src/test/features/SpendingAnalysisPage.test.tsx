@@ -21,6 +21,7 @@ import {
 let statusState: ReturnType<typeof query> | ReturnType<typeof failed>
 let reviewState: ReturnType<typeof query> | ReturnType<typeof failed>
 let contributionsFails = false
+let previousMonthUnavailable = false
 const cubeCalls: SpendCubeQuery[] = []
 const contributionCalls: ContributionQuery[] = []
 const reviewMutate = vi.fn()
@@ -75,7 +76,16 @@ vi.mock('../../hooks/useMetrics', () => ({
         { ...contributionsFixture().items[0], merchant: '샘플 편의점', change_amount: 30_000 },
       ] })
     }
-    return query(contributionsFixture(params.adjustability))
+    const result = contributionsFixture(params.adjustability)
+    if (params.baseline === 'previous_month') {
+      return query({ ...result, comparison: { ...result.comparison,
+        baseline_method: 'previous_month', baseline_method_label: '직전 월',
+        baseline_periods: previousMonthUnavailable ? [] : ['2026-06'],
+        baseline_status: previousMonthUnavailable ? 'none' : 'full',
+        baseline_unavailable_reason: previousMonthUnavailable ? 'no_data' : null,
+      } })
+    }
+    return query(result)
   },
   useReviewItems: () => reviewState,
   useMonthlyFlowComparison: () => query({ contract: contractFixture(), comparison: basisFixture(), measures: [], residual_rate: null }),
@@ -86,6 +96,7 @@ beforeEach(() => {
   statusState = query(dataStatusFixture())
   reviewState = query(reviewItemsFixture())
   contributionsFails = false
+  previousMonthUnavailable = false
   cubeCalls.length = 0
   contributionCalls.length = 0
   reviewMutate.mockReset()
@@ -207,6 +218,25 @@ describe('SpendingAnalysisPage — 지출 분석', () => {
     renderPage()
     expect(screen.getByText('자료를 불러오지 못했습니다.')).toBeInTheDocument()
     expect(screen.getByRole('list', { name: '카테고리별 지출' })).toBeInTheDocument()
+  })
+
+  it('기준을 바꾸면 카테고리와 거래처 모두 같은 기준을 요청하고 서버 기간을 보인다', () => {
+    renderPage()
+    expect(screen.getByRole('combobox', { name: '비교 기준' })).toHaveValue('median_of_recent_closed_months')
+    fireEvent.change(screen.getByRole('combobox', { name: '비교 기준' }), { target: { value: 'previous_month' } })
+    expect(contributionCalls).toContainEqual(expect.objectContaining({ baseline: 'previous_month', level: 'category' }))
+    expect(screen.getByText(/기준 기간: 2026-06/)).toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('list', { name: '카테고리별 변화 기여' })).getAllByRole('button')[0])
+    expect(contributionCalls).toContainEqual(expect.objectContaining({ baseline: 'previous_month', level: 'merchant' }))
+    expect(screen.getByText('기준 금액')).toBeInTheDocument()
+  })
+
+  it('직전 월 기준이 없으면 서버 사유를 한국어로 보이고 기본 기준으로 대신하지 않는다', () => {
+    previousMonthUnavailable = true
+    renderPage()
+    fireEvent.change(screen.getByRole('combobox', { name: '비교 기준' }), { target: { value: 'previous_month' } })
+    expect(screen.getByText(/직전 월에 관측된 거래가 없어 비교할 수 없습니다/)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '비교 기준' })).toHaveValue('previous_month')
   })
 
   it('자료가 없으면 가져오기로 안내한다', () => {

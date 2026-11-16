@@ -10,7 +10,7 @@ let failPatch = false
 let monthProjection = projectionFixture()
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => writable }))
-vi.mock('../../hooks/useCanonicalViews', () => ({ useCanonicalViewsDashboard: () => ({ data: { month_projection: monthProjection } }) }))
+vi.mock('../../hooks/useMetrics', () => ({ useMonthProjection: () => ({ data: { data: monthProjection } }) }))
 
 beforeEach(() => {
   writable = true
@@ -59,7 +59,8 @@ describe('IncomeExpectationsEditor', () => {
     await screen.findByText('예상 수입 설정을 저장했습니다.')
     expect(JSON.parse(String(patches()[0][1]?.body))).toEqual({ items: [savedItems[0], { source_key: 'income:샘플 회사', merchant: '샘플 회사', expected_amount: 3_200_000, expected_day: 25, stopped: true }] })
     expect(new Headers(patches()[0][1]?.headers).get('X-API-Key')).toBe('synthetic-test-key')
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['canonical-views'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['read', 'month-projection'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['canonical-views', 'month-projection', 'accuracy'] })
   })
   it('2월 말일로 조정된 입금 날짜가 있어도 후보의 원래 예정일 31일을 보존해 저장한다', async () => {
     monthProjection.income_sources[0] = {

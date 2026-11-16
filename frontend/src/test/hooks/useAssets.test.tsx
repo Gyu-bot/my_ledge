@@ -8,7 +8,7 @@ vi.mock('../../api/assets', () => ({ assetApi: { patchAssetLiquidity: vi.fn().mo
 
 function harness() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const keys = [['assets', 'loans'], ['assets', 'liquidityHealth'], ['canonical-views', 'dashboard'], ['analytics', 'summary'], ['transactions', 'loanAccounts']]
+  const keys = [['assets', 'loans'], ['read', 'month-projection', {}], ['canonical-views', 'month-projection', 'accuracy'], ['analytics', 'summary'], ['transactions', 'loanAccounts']]
   for (const key of [...keys, ['profile']]) client.setQueryData(key, { value: 'prior' })
   function Wrapper({ children }: PropsWithChildren) { return <QueryClientProvider client={client}>{children}</QueryClientProvider> }
   return { client, keys, Wrapper }

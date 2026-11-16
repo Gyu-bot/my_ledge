@@ -6,6 +6,8 @@ import { Badge } from '../../ds/Badge'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { ErrorState } from '../../ds/States'
 import { formatNetWon, formatSignedWon } from '../../ds/format'
+import { BaselineControl, BasisNote } from './ComparisonBasis'
+import type { BaselineMethod } from '../../types/metrics'
 import { useMonthlyFlowComparison, useSpendCube, useTransferTransactions } from '../../hooks/useMetrics'
 import { useTransactionList } from '../../hooks/useTransactions'
 import { cn } from '../../lib/utils'
@@ -366,27 +368,21 @@ function OutflowRowsPicker({ range }: { range: DateRange }) {
 }
 
 function ComparisonLine({ period, comparisonKey }: { period: string; comparisonKey: string }) {
-  const comparison = useMonthlyFlowComparison(period)
-  if (comparison.isLoading) return <ListSkeleton rows={1} />
-  if (comparison.error || !comparison.data) return <p className="text-text-muted">비교를 불러오지 못했습니다.</p>
+  const [baseline, setBaseline] = useState<BaselineMethod>('median_of_recent_closed_months')
+  const comparison = useMonthlyFlowComparison(period, baseline)
+  const control = <BaselineControl value={baseline} onChange={setBaseline} />
+  if (comparison.isLoading) return <div>{control}<ListSkeleton rows={1} /></div>
+  if (comparison.error || !comparison.data) return <div>{control}<p className="text-text-muted">비교를 불러오지 못했습니다.</p></div>
   const measure = comparison.data.measures.find((item) => item.key === comparisonKey)
   const basis = comparison.data.comparison
-  if (!measure || measure.baseline_amount == null) {
-    return <p className="text-text-muted">비교할 기준 기간(이전 마감월)이 없습니다.</p>
-  }
-  const periods = basis.baseline_periods
   return (
-    <div className="space-y-1">
-      <p className="tnum">
+    <div className="space-y-2">
+      {control}
+      {measure?.baseline_amount != null ? <p className="tnum">
         {basis.baseline_method_label} {formatNetWon(measure.baseline_amount)}
         {measure.change_amount != null ? ` · 차이 ${formatSignedWon(measure.change_amount)}` : ''}
-      </p>
-      <p className="text-text-muted">
-        기준 기간 {periods.length > 0 ? `${periods[0]} ~ ${periods[periods.length - 1]} (${basis.baseline_month_count}개월)` : '없음'}
-        {basis.skipped_periods.length > 0 ? ` · 자료 없는 달 제외 ${basis.skipped_periods.map((item) => item.period).join(', ')}` : ''}
-        {' · '}
-        {basis.partial_month_note}
-      </p>
+      </p> : <p>비교할 기준 금액이 없습니다.</p>}
+      <BasisNote basis={basis} />
     </div>
   )
 }

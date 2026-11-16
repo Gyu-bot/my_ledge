@@ -195,13 +195,15 @@ async def test_pg_metric_and_analytics_api_equal_the_views(
 
     category = (
         await pg_client.get(
-            "/api/v1/analytics/category-mom", params={"end_date": "2026-02-28"}
+            "/api/v1/metrics/comparison/contributions",
+            params={"period": "2026-02"},
+            headers=HEADERS,
         )
     ).json()
     assert {
-        item["category"]: item["current_amount"]
+        item["category"]: item["target_amount"]
         for item in category["items"]
-        if item["current_amount"] or item["category"] in cube_by_category
+        if item["target_amount"] or item["category"] in cube_by_category
     } == dict(cube_by_category)
 
     merchants = (
@@ -250,7 +252,7 @@ async def test_pg_metric_and_analytics_api_equal_the_views(
     assert projection.observed_income == summary["2026-03"]["income_total"]
 
 
-async def test_pg_legacy_views_and_dashboard_equal_the_flow(
+async def test_pg_legacy_views_and_read_surface_equal_the_flow(
     pg_session: AsyncSession, pg_client: AsyncClient
 ) -> None:
     await build_synthetic_ledger(pg_session)
@@ -294,16 +296,15 @@ async def test_pg_legacy_views_and_dashboard_equal_the_flow(
 
     dashboard = (
         await pg_client.get(
-            "/api/v1/canonical-views/dashboard",
-            params={"reference_date": AS_OF.isoformat()},
+            "/api/v1/read/monthly-flow",
             headers=HEADERS,
         )
     ).json()
     assert {
-        item["period"]: item["expense_total"] for item in dashboard["monthly_cashflow"]
+        item["period"]: item["total_outflow"] for item in dashboard["data"]["items"]
     } == {period: row["total_outflow"] for period, row in summary.items()}
-    assert dashboard["data_coverage"]["last_transaction_date"] == AS_OF.isoformat()
-    assert dashboard["metric_as_of"]["last_closed_period"] == "2026-02"
+    assert dashboard["as_of"]["transaction_as_of"] == AS_OF.isoformat()
+    assert dashboard["as_of"]["last_closed_period"] == "2026-02"
 
 
 async def test_pg_flow_lines_have_no_duplicate_single_lines(
@@ -406,12 +407,6 @@ async def test_pg_expense_aliases_and_view_ratios(pg_session, pg_client):
         body = (await pg_client.get(f"/api/v1/analytics/{path}")).json()
         for item in body.get("items", [body]):
             assert item["total_outflow"] == item["expense_total"]
-    dashboard = (
-        await pg_client.get("/api/v1/canonical-views/dashboard", headers=HEADERS)
-    ).json()
-    for item in dashboard["monthly_cashflow"]:
-        assert item["total_outflow"] == item["expense_total"]
-        assert item["living_spend"] == item["non_loan_expense_total"]
 
 
 async def test_pg_remaining_view_migration_roundtrip(pg_session, migrated_url):

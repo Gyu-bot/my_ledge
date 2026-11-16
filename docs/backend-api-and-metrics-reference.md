@@ -137,26 +137,15 @@
   - built from `Base.metadata`
   - canonical views come from `app.services.canonical_views.CANONICAL_VIEWS`
 
-#### `GET /api/v1/canonical-views/dashboard`
+#### `GET /api/v1/canonical-views/dashboard` — removed
 
-- Auth: API key required. Reads allowlisted canonical views and a separate read-only monthly projection; it is not an arbitrary SQL interface.
-- Query:
-  - `months`: default `12`, range `1..36`; `merchant_limit`: default `10`, range `1..50`.
-  - `queue_limit`: default `10`, range `1..100`; `queue_page`: default `1`, minimum `1`.
-  - `search`: optional, maximum 200 characters; searches queue merchant/effective category text with literal LIKE escaping.
-  - `issue_types`: comma-separated OR of `cost_kind`, `spend_necessity`, `recurring_kind`, `loan_link`; unknown-only values match no rows.
-  - `period_from`, `period_to`: optional `YYYY-MM`; `current_only`: default false, restricts queue to the reference calendar month.
-  - `reference_date`: optional, default server date; fixes projection and current-month queue interpretation, not a historical snapshot of all canonical rows.
-- Response (`CanonicalViewsDashboardResponse`):
-  - `monthly_cashflow[]`, `true_spendable_monthly[]`, `loan_repayment_monthly[]`: observed canonical monthly rows.
-  - `merchant_monthly_baseline[]`, `recurring_merchant_monthly[]` plus `merchant_monthly_baseline_total`, `recurring_merchant_monthly_total`: limited rows and full view row counts (not distinct merchants).
-  - `unclassified_work_queue[]` plus `unclassified_work_queue_total`, `_page`, `_per_page`, `_total_pages`: queue filters apply in SQL before count/limit/offset. Total pages is ceiling(total/per-page); an out-of-range page is empty, not clamped. Items include current nullable cost/necessity/recurring classifications alongside issue fields.
-  - `data_coverage`: first/last valid observed transaction dates; this range alone does not prove complete data.
-  - `month_projection`: the reference month's observed-plus-remaining scenario, described below.
-- Both observed monthly groups use the same `is_complete_month` transaction-density heuristic, assessed for returned closed months independently of the projection's six-month learning window. Current/future months are false. This is not source completeness certification. Cashflow `savings_rate_basis` is `no_income`, `observed_closed_month`, or `observed_partial_month`.
-- Legacy true-spendable forecast fields remain in the schema for compatibility but are no longer populated: `income_basis='observed'`, `is_income_estimated=false`, `observed_income_total=income_total`, `estimated_*`/`income_estimate_source=null`, count zero and excluded periods empty. Consumers must use `month_projection` for forecasts, without replacing observed canonical values.
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
 #### Monthly Projection (`month_projection`)
+
+Current home: **`GET /api/v1/read/month-projection` → `data`**. The former dashboard path is removed. Requires `X-API-Key`; optional ISO date `reference_date`; no other query parameters. `ReadMonthProjectionResponse` uses the shared `/read/*` envelope (401 auth first; unified 422 `detail` array for invalid/unknown parameters; 503 `query_failed`). `as_of` is overall effective data context, `data.as_of_date` is the forecast reference date; scope/classification refer to that month. Existing `get_monthly_projection` remains the single calculation. Values, including coverage, omissions, and reference-date semantics, are unchanged.
+
+Read `data.completeness.full_projection_available`, `amount_scope`, and `left_out[]` before calling a numeric value a full projection. `status=ok` describes the read/classification scope, not forecast completeness.
 
 Source: `app.services.monthly_projection_service`; model: `MonthlyProjection`. No GET persists expectations, classifications, links or derived forecasts.
 
@@ -209,11 +198,11 @@ Each flow line belongs to one model partition. Known portions survive a componen
 
 #### `GET /api/v1/canonical-views/month-projection/accuracy`
 
-- T064 R12. Requires `X-API-Key`; read-only (no writes, no cache). Optional `reference_date`; without it the same default as the dashboard forecast (transaction as-of date, R11).
+- T064 R12. Requires `X-API-Key`; read-only (no writes, no cache). Optional `reference_date`; without it the same default as the focused forecast (transaction as-of date, R11).
 - Replays `get_monthly_projection` at days 5, 10, 15, 20, 25 of up to three closed months before the reference month (months before the first transaction month are skipped) and compares the month-end net forecast with that month's `residual` from `vw_metric_flow_lines`.
 - Response `ProjectionAccuracy`: `definition`, `reference_period`, `evaluated_periods`, `as_of_days`, `current_band` (band of the reference day), `bands[]` (`band` = `day_01_10` | `day_11_20` | `day_21_31`, `as_of_days`, `points`, `withheld_points`, `evaluated_points`, `net_median_signed_error`, `net_median_absolute_error` (won), `net_median_signed_error_pct_of_income`, `expense_median_signed_error`), `limitations`. Signed error = forecast − actual (positive = over-forecast). Withheld points are counted, not given an error.
 - Same replay limits as `app.tools.forecast_backtest`: classifications, links, plan status and income expectations are current values; every transaction dated on or before an as-of day is assumed known then.
-- Kept out of the dashboard response because it runs the forecast 15 times (on the synthetic test ledger about 15× one forecast).
+- Kept out of the focused projection response because it runs the forecast 15 times (on the synthetic test ledger about 15× one forecast).
 
 #### `GET /api/v1/settings/income-expectations` / `PATCH /api/v1/settings/income-expectations`
 
@@ -899,23 +888,9 @@ Single and bulk PATCH share field-presence semantics: omitted fields preserve st
 - Behavior: for an existing transaction, deleting a missing link returns `204` after any `require_inactive` guard. A missing transaction returns `404`.
 - Optional query `require_inactive` defaults false. With true, the linked transaction must still be deleted/merged; a restored/active row returns `409`. Inactive links remain stored for audit/restore until explicitly removed, and continue to block reuse of their installment slot. Suggestions identify the conflict and transaction; plan linked counts and forecast observations exclude inactive transactions.
 
-#### `GET /api/v1/installments/forecast`
+#### `GET /api/v1/installments/forecast` — removed
 
-- Purpose: project installment schedule status without changing observed cashflow views.
-- Auth: none
-- Query params:
-  - `as_of_date`: defaults to server date
-  - `months`: default `12`, range `1..120`
-- Response model: `InstallmentForecastResponse`
-- Response shape:
-  - `items[]`: plan id/display name, installment number, due date, `period`, `amount`, `status`, `status_label`, `is_future_obligation`, optional linked `transaction_id`
-  - `monthly_summary[]`: `observed_total`, `projected_total`, `past_unconfirmed_total`, compatibility `missed_total` per `period`
-- Status behavior:
-  - linked schedule entries are `observed`
-  - unlinked entries before `as_of_date` are `missed`
-  - unlinked entries on or after `as_of_date` are `projected`
-  - projected totals are a separate planning surface and should not be double-counted with observed transactions
-  - `missed`/`past_unconfirmed_total` means a past schedule entry without a confirmed link, not proven unpaid debt. `missed_total` is an alias for that value; only projected entries are future obligations.
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
 ### Assets / Snapshots
 
@@ -1217,28 +1192,9 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
   - `review_required` and `rejected` settlement matches are treated as unconfirmed and remain on raw signed basis.
   - positive `type='지출'` rows are retained as refund/cancellation offsets on raw surfaces unless a confirmed settlement match applies netting.
 
-#### `GET /api/v1/analytics/category-mom`
+#### `GET /api/v1/analytics/category-mom` — removed
 
-- Purpose: compare current month vs previous month by category
-- Query params:
-  - `start_date`
-  - `end_date`
-  - `level` default `major`
-  - `type` default `지출`
-- Response model: `CategoryMoMResponse`
-- Metadata: `reference_date`, `is_partial_period`, `comparison_basis` (`same_day_previous_month` or `full_previous_month`). An explicit partial `end_date` selects that month even with no rows and compares only the same day range in the previous month. T057: an in-progress target month is always `same_day_previous_month` through the transaction as-of date.
-- Response shape:
-  - `items[]`
-    - `period`
-    - `previous_period`
-    - `category`
-    - `current_amount`
-    - `previous_amount`
-    - `delta_amount`
-    - `delta_pct`
-    - `baseline_amount` (T057, nullable): comparison-contract median for the category
-    - `baseline_change_amount` (T057, nullable): `current_amount − baseline_amount`
-  - `comparison` (T057, nullable): comparison-contract basis (null when the target month is after the data as-of month or there is no data)
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
 #### `GET /api/v1/analytics/fixed-cost-summary`
 
@@ -1384,79 +1340,21 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
   - `activity_status` is `active_candidate`, `historical`, `irregular`, `non_positive`, or `not_recurring`. `activity=active` includes only active candidates; `history` includes the other statuses. Reference is `end_date` or today; recentness uses the smaller of `recent_days` and a cadence-aware window. Explicit installment/not-recurring classifications are not active subscription candidates.
   - an active candidate is an observation signal, not confirmation of a subscription contract
 
-#### `GET /api/v1/analytics/spending-anomalies`
+#### `GET /api/v1/analytics/spending-anomalies` — removed
 
-- Purpose: detect unusual category spend
-- Query params:
-  - `end_date`
-  - `baseline_months` optional override; default resolves from analytics settings, then code default `6` (T057; was `3`)
-  - `anomaly_threshold` optional override; default resolves from analytics settings, then code default `0.5`
-  - `min_delta_amount` optional override; default resolves from analytics settings, then code default `100000`
-  - `page`
-  - `per_page`
-- Response model: `SpendingAnomaliesResponse`
-- Response shape:
-  - `total`
-  - `page`
-  - `per_page`
-  - `items[]`
-    - `period`
-    - `category`
-    - `amount`
-    - `baseline_avg`
-    - `delta_pct`
-    - `delta_pct_raw`
-    - `delta_pct_display`
-    - `delta_display_capped`
-    - `baseline_quality`
-    - `anomaly_mode`
-    - `direction`: `increase` or `decrease`
-    - `anomaly_score`
-    - `reason`
-  - `comparison_mode`
-  - `reference_date` (T057: never later than the transaction as-of date inside the as-of month)
-  - `is_partial_period`
-  - `assumptions`
-  - `comparison` (T057, nullable): comparison-contract basis; see [Comparison Contract](#comparison-contract-t057)
-- Behavior:
-  - if `end_date` omitted, uses last closed month end
-  - if partial date provided, baseline months use same day cutoff
-  - setting precedence is explicit query param, then persisted analytics setting, then code default
-  - sparse baseline spikes keep raw `delta_pct`/`delta_pct_raw` for machines but cap or null `delta_pct_display` and use a stable user-facing `reason`
-  - refunds remain signed. Direction comes from the signed delta; sparse drops use a drop mode instead of an increase label, and negative net expense identifies refund/cancellation effect.
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
-#### `GET /api/v1/analytics/discretionary-velocity`
+#### `GET /api/v1/analytics/discretionary-velocity` — removed
 
-- Purpose: compare current-month discretionary spend pace with a prorated closed-month baseline.
-- Query params:
-  - `as_of_date` optional; omitted uses server date
-- Response includes `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_monthly_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level`, `confidence`, `classification_coverage_ratio`, `unclassified_spend`, `reasons[]`, and `assumptions[]`.
-- Calculation excludes loan-linked repayments. Discretionary spend is the resolved T056 adjustability `adjustable` (`vw_transaction_nature`: transaction value > commitment value > category default; installment-linked rows are fixed `protected`), and "classified" for coverage means `protected` or `adjustable`; `undecided` rows count as unclassified spend. The old `spend_necessity` column is not read. Classification coverage below the configured minimum lowers confidence instead of producing a strong warning.
-- Current/baseline/unclassified spend use signed net expense. Coverage uses positive charge amounts only, so refunds do not make coverage ratios misleading. A nonpositive prorated baseline yields a null velocity ratio.
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
-#### `GET /api/v1/analytics/purchase-gate-candidates`
+#### `GET /api/v1/analytics/purchase-gate-candidates` — removed
 
-Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/analytics/spending-review-candidates` for new clients.
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
-#### `GET /api/v1/analytics/spending-review-candidates`
+#### `GET /api/v1/analytics/spending-review-candidates` — removed
 
-- Purpose: expose a discretionary purchase review queue without deciding whether a purchase is allowed.
-- Query params:
-  - `start_date`, `end_date`
-  - `review_status`
-  - `page`, `per_page`
-- Candidate types: `large_oneoff`, `new_merchant`, `merchant_spike`, `discretionary_spike`.
-- Candidate scope (T056 axes from `vw_transaction_nature`; the old `cost_kind`/`spend_necessity` columns are not read):
-  - `loan_account_id is null`
-  - `payment_form = 'ad_hoc'` (`commitment_kind is null`: no loan/installment link and not a member of a recurring commitment; the old "not fixed cost")
-  - resolved `adjustability = 'adjustable'` (the old `spend_necessity = 'discretionary'`); `protected` and `undecided` rows are not candidates
-  - amount meets the effective minimum candidate amount
-- The same candidate rules feed `/api/v1/read/review-items` (`subject=transaction`), with the shared comparison window and median baseline instead of the deprecated endpoint's lookback/mean.
-- Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing='post_transaction'`, `candidate_purpose='future_friction_rule_candidate'`, and `future_friction_suggestion`.
-- `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
-- Confirmed settlement refunds are netted before scoring. Fully refunded purchases are excluded; partial refunds are scored by net spend and expose `refund_netting_refund_total`.
-- Candidate scoring uses shared settlement netting metadata from analytics service, so confirmed refunds are not double-netted by a separate pass.
-- Response `start_date`/`end_date` identify the evaluated window. An unconfirmed unique one-charge/one-refund pair with the same date, merchant, payment method and amount can expose `possible_cancellation=true` and `cancellation_evidence_transaction_ids`. It remains a low-confidence review hint (`risk_level='unknown'`, normal priority, no future-friction suggestion), not a confirmed settlement or GET-side write.
+Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final migration/field map](agents/read-surface-migration.md).
 
 #### `PATCH /api/v1/analytics/purchase-gate-candidates/{candidate_key}/review`
 
@@ -1659,7 +1557,7 @@ Monthly income composition surface sourced from non-deleted, non-merged income t
 
 ### Advisor canonical read model expansion
 
-These views are live DB read surfaces created by Alembic and registered in `CANONICAL_VIEWS` for schema documentation. The main P0/P0.5 values are also exposed through `GET /api/v1/canonical-views/dashboard` for the frontend canonical dashboard; arbitrary SQL access remains limited to readonly DB users.
+These views are live DB read surfaces created by Alembic and registered in `CANONICAL_VIEWS` for schema documentation. The legacy dashboard GET is removed; current metric/read surfaces expose their own definitions (the legacy SQL views remain); arbitrary SQL access remains limited to readonly DB users.
 
 Direction:
 
@@ -2030,13 +1928,13 @@ Readers whose decision has an exact counterpart in the mapping read the resolved
 
 | Reader | Endpoint(s) | Old decision | Now |
 |---|---|---|---|
-| `get_discretionary_velocity` | `/analytics/discretionary-velocity` | 재량 = `spend_necessity='discretionary'`, 분류됨 = essential/discretionary | `vw_transaction_nature.adjustability` = `adjustable` / `protected`+`adjustable` |
+| Removed `get_discretionary_velocity` (historical) | `/analytics/discretionary-velocity` | 재량 = `spend_necessity='discretionary'`, 분류됨 = essential/discretionary | `vw_transaction_nature.adjustability` = `adjustable` / `protected`+`adjustable` |
 | `_is_purchase_gate_base_row` | `/analytics/purchase-gate-candidates`, `/analytics/spending-review-candidates`, `/read/review-items` | no loan link, `cost_kind<>'fixed'`, `spend_necessity='discretionary'` | no loan link, `commitment_kind is null` (ad hoc), adjustability `adjustable` |
 | `_derive_liquidity_health_defaults` | `/analytics/liquidity-health` (derived required spend) | essential = `spend_necessity='essential'`; loan lines not essential added as debt | `vw_metric_flow_lines.adjustability='protected'`; loan lines not protected (none since loan lines are fixed `protected`) |
 
 Where the two disagree the new axes decide, for example: a loan- or installment-linked row is `protected` whatever its old necessity; `cost_kind='variable'` + `monthly_recurring` (or `monthly_recurring` without `cost_kind`) is a committed recurring payment and is not a review candidate; `cost_kind='fixed'` + `not_recurring` is ad hoc and can be one.
 
-Left on the old columns (no exact counterpart, or a database view that would need a migration): `/analytics/fixed-cost-summary` and `/analytics/fixed-cost-trend` (fixed/variable/unclassified `cost_kind` split and `fixed_cost_necessity` vs `spend_necessity` buckets; the new payment form has no "unclassified" state); `/analytics/recurring-payments` (per-merchant counts of `recurring_payment_kind` values, including `not_recurring`/unclassified, and the `activity_status` rule that reads them); the PostgreSQL legacy views `vw_monthly_cashflow` (fixed/variable/essential columns), `vw_true_spendable_monthly`, `vw_fixed_cost_monthly_summary`, `vw_recurring_merchant_monthly` and the `needs_cost_kind`/`needs_fixed_cost_necessity` flags of `vw_unclassified_work_queue` (read through `/canonical-views/dashboard`); the installment-link candidate list (`/installment-transaction-links`, `recurring_payment_kind='installment'`); the `GET /transactions` old-column filters and the `is_edited` flag (stored-value filters; the flow-row filters `flow_row`/`payment_form`/`adjustability` already read the new axes). The old columns are therefore not read-only yet (plan criterion "읽기 전용으로 남고" is only partly met until T059 replaces the frontend workflow).
+Left on the old columns (no exact counterpart, or a database view that would need a migration): `/analytics/fixed-cost-summary` and `/analytics/fixed-cost-trend` (fixed/variable/unclassified `cost_kind` split and `fixed_cost_necessity` vs `spend_necessity` buckets; the new payment form has no "unclassified" state); `/analytics/recurring-payments` (per-merchant counts of `recurring_payment_kind` values, including `not_recurring`/unclassified, and the `activity_status` rule that reads them); the PostgreSQL legacy views `vw_monthly_cashflow` (fixed/variable/essential columns), `vw_true_spendable_monthly`, `vw_fixed_cost_monthly_summary`, `vw_recurring_merchant_monthly` and the `needs_cost_kind`/`needs_fixed_cost_necessity` flags of `vw_unclassified_work_queue` (DB-only legacy views; dashboard HTTP endpoint removed); the installment-link candidate list (`/installment-transaction-links`, `recurring_payment_kind='installment'`); the `GET /transactions` old-column filters and the `is_edited` flag (stored-value filters; the flow-row filters `flow_row`/`payment_form`/`adjustability` already read the new axes). The old columns are therefore not read-only yet (plan criterion "읽기 전용으로 남고" is only partly met until T059 replaces the frontend workflow).
 
 ### Work queue (`vw_unclassified_work_queue`, 0038)
 
@@ -2109,8 +2007,8 @@ Plan reference: `Implentation-plan.md` section 2.4. Code: `backend/app/services/
 Not migrated in T057 (each keeps its own baseline, stated here so consumers do not mistake it for the contract):
 
 - `vw_merchant_monthly_baseline` and dashboard `merchant_monthly_baseline[]`: trailing 3-month mean (`trailing_3_month_avg`, `baseline_delta`, `baseline_delta_pct`). Column names encode the method and readonly SQL consumers depend on them; use `/metrics/comparison/contributions?level=merchant` for the contract view. Removal belongs to `T060`.
-- `discretionary-velocity`: prorated outlier-trimmed mean, slated for removal by plan 3.3 (not removed here).
-- `purchase-gate-candidates`/`spending-review-candidates` `merchant_spike`/`discretionary_spike`: monthly mean of prior months on the `purchase_net.v1` basis; to be merged into the post-transaction review list (`T058`).
+- `discretionary-velocity`: removed with its unused calculation.
+- `purchase-gate-candidates`/`spending-review-candidates` `merchant_spike`/`discretionary_spike`: monthly mean of prior months on the `purchase_net.v1` basis; HTTP paths removed; the detector remains inside `/read/review-items`.
 - `fixed-cost-summary.fixed_ratio` and `payment-method-patterns.pct_of_total`: composition shares of the requested range, not month comparisons; unchanged.
 - `income-stability`: variability of observed months, not a baseline comparison; unchanged (its default reference date still uses today's date).
 - Monthly projection baselines (`T064`) and snapshot comparisons (`T061`).
@@ -2334,3 +2232,13 @@ A broader remaining Python aggregate was found in `_load_linked_repayment_observ
 POST는 이미 마감된 달을 거절한다(422). 같은 대상의 마지막 버전보다 뒤인 월만 추가한다(409). 업데이트·삭제 API는 없다. 이전 버전의 값과 효력이 과거 비교에 남는다. 적용 시작월·금액을 고르는 자동 기본값은 없으며, 사용자가 열린 달에 정해 두면 해당 달이 마감된 뒤 비교한다. PostgreSQL에서는 가져오기/되돌리기와 같은 advisory transaction lock으로 쓰기와 기준일 검사를 직렬화한다. 새 표는 기존 `Base.metadata` 기반 검토 fingerprint·되돌리기 snapshot에 포함되므로 스키마 변경 전 준비 자료는 재준비가 필요할 수 있다. HTTP 가져오기 계약은 그대로다.
 
 비교 불가 이유는 행별로 반환한다: `no_limit_set`, `month_in_progress`, `not_imported`, `no_transactions`, `partial_month`. 이유가 있으면 차이는 null이다. 달에 자료가 있지만 대상 거래가 없는 0원과 달 자체에 거래가 없는 상태는 다르다. 분류 미정은 기존 봉투에서 드러내며 조정 가능성 `undecided`도 사람이 한도를 정할 수 있다. 대분류와 조정 가능성 결과는 서로 겹치므로 합산할 수 없다.
+
+## T060 approved removal (2026-11-17)
+
+The seven deprecated GET contracts above are removed, not redirected. The migration guide lists all replacements and changed discovery keys. The review PATCH, income-expectations settings and `/canonical-views/month-projection/accuracy` are retained unchanged. No DB view/column or Alembic migration changes. Candidate and anomaly detectors remain because `/read/review-items` uses them; the removed dashboard, category-MoM, discretionary-velocity, installment-forecast-only services and schemas are deleted.
+
+Liquidity health is retained and now deprecated through OpenAPI and successor headers pointing at `/metrics/net-worth/emergency-fund`; no body/status changes. Formula descriptions of the reused anomaly detector below describe internal service behavior, not a surviving `/analytics/spending-anomalies` route. Historical dashboard/category-MoM tables describe the former contract, whose live successors are in the migration guide.
+
+Discovery-only changed keys: `/read/index.entries[key=month_end_projection]` changes `path`, `response_field`, `notes`; `/read/data-status.data.month_end_forecast` changes `path`, `field`, `note`. Remaining financial response values and keys are unchanged. Synthetic snapshot tooling asserts removed paths 404, exact retained response bytes except these precise metadata replacements, and former projection object equality.
+
+전용 전망 응답은 예전 객체의 단위를 보존한다. `data.remaining_expense_adjustability.undecided_share_pct`는 백분율(0–100)이고, 봉투의 분류·기간 비중은 0–1이다. 새 응답의 `basis.rules.projection_ratio_units`와 `labels`가 단위 예외와 열거값 한국어 이름을 밝힌다.

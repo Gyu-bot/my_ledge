@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { MonthClosePage } from '../../features/monthclose/MonthClosePage'
-import type { MonthlyProjection } from '../../types/canonicalViews'
+import type { MonthlyProjection } from '../../types/incomeProjection'
 import type { SpendCubeQuery } from '../../types/metrics'
 import type { TransactionListParams, TransactionResponse } from '../../types/transaction'
+import { readDataStatusFixture } from './workbenchFixtures'
 import { projectionFixture } from './projectionFixtures'
 import {
   accuracyFixture,
@@ -42,6 +43,8 @@ function inProgressProjection(): MonthlyProjection {
 let statusState: ReturnType<typeof query> | ReturnType<typeof failed> | ReturnType<typeof loading>
 let flowState: ReturnType<typeof query> | ReturnType<typeof failed> | ReturnType<typeof loading>
 let dashboardState: ReturnType<typeof query> | ReturnType<typeof failed>
+let coverageState = readDataStatusFixture()
+const comparisonCalls: Array<{ period: string; baseline?: string }> = []
 let accuracyState: ReturnType<typeof query> | ReturnType<typeof failed>
 const cubeCalls: SpendCubeQuery[] = []
 const txCalls: TransactionListParams[] = []
@@ -61,10 +64,6 @@ vi.mock('../../ds/charts/CashflowChart', () => ({
   CashflowChart: ({ items }: { items: { period: string }[] }) => <div data-testid="trend-chart">{items.map((item) => item.period).join(',')}</div>,
 }))
 
-vi.mock('../../hooks/useCanonicalViews', () => ({
-  useCanonicalViewsDashboard: () => dashboardState,
-}))
-
 vi.mock('../../hooks/useTransactions', () => ({
   useTransactionList: (params: TransactionListParams) => {
     txCalls.push(params)
@@ -78,6 +77,8 @@ vi.mock('../../hooks/useTransactions', () => ({
 
 vi.mock('../../hooks/useMetrics', () => ({
   useDataStatus: () => statusState,
+  useMonthProjection: () => dashboardState,
+  useReadDataStatus: () => query(coverageState),
   useMonthlyFlow: () => flowState,
   useSpendCube: (params: SpendCubeQuery | null) => {
     if (!params) return loading()
@@ -93,17 +94,22 @@ vi.mock('../../hooks/useMetrics', () => ({
       { effective_category_major: '샘플 생활', merchant: '샘플 마트', amount: 0, transaction_count: 1 },
     ], ['effective_category_major', 'merchant']))
   },
-  useMonthlyFlowComparison: () => query({
+  useMonthlyFlowComparison: (period: string, baseline?: string) => {
+    comparisonCalls.push({ period, baseline })
+    return query({
     contract: contractFixture(),
     comparison: basisFixture(),
     measures: [{ key: 'undecided_total', label: '미정', target_amount: 60_000, baseline_amount: 50_000, change_amount: 10_000, baseline_values: [] }],
     residual_rate: null,
-  }),
+  })
+  },
   useTransferTransactions: () => query({ total_count: 0, undecided_count: 0, undecided_activity_total: 0, activity_total: 0, items: [] }),
   useProjectionAccuracy: () => accuracyState,
 }))
 
 beforeEach(() => {
+  coverageState = readDataStatusFixture()
+  comparisonCalls.length = 0
   statusState = query(dataStatusFixture())
   flowState = query({
     contract: contractFixture(),
@@ -113,7 +119,7 @@ beforeEach(() => {
       monthFixture('2026-08', 'in_progress', 0.5),
     ],
   })
-  dashboardState = query({ month_projection: inProgressProjection() })
+  dashboardState = query({ data: inProgressProjection() })
   accuracyState = query(accuracyFixture())
   cubeCalls.length = 0
   txCalls.length = 0
@@ -208,7 +214,7 @@ describe('MonthClosePage — 월 결산', () => {
 
   it('남은 지출을 추정하지 못하면 월말 값 대신 보류와 이유를 보인다', () => {
     dashboardState = query({
-      month_projection: { ...inProgressProjection(), projected_month_end_net: null, expected_remaining_expense: null, missing_reasons: ['변동 지출 기준 달이 부족함'] },
+      data: { ...inProgressProjection(), projected_month_end_net: null, expected_remaining_expense: null, missing_reasons: ['변동 지출 기준 달이 부족함'] },
     })
     renderPage()
     const result = screen.getByRole('region', { name: '월말 전망 값' })
@@ -278,6 +284,41 @@ describe('MonthClosePage — 월 결산', () => {
     expect(within(table).getAllByText('가져오기 전').length).toBe(4)
     fireEvent.click(within(table).getByRole('button', { name: '2026-06' }))
     expect(screen.getByText('2026년 6월 월 흐름표')).toBeInTheDocument()
+  })
+
+  it('전망 숫자가 있어도 서버가 부분 합계라고 하면 전체 전망으로 부르지 않는다', () => {
+    const projection = inProgressProjection()
+    dashboardState = query({ data: { ...projection, completeness: {
+      status: 'known_components_only', status_label: '일부 구성 요소만 반영', full_projection_available: false,
+      amount_scope: 'known_components', basis: '합성',
+      left_out: [{ component: 'loan', key: '1', name: '샘플 대출', reason_code: 'no_expense_line_in_recent_month', reason: '관측된 지출 줄이 없어 더하지 않았습니다.' }],
+    } } })
+    renderPage()
+    expect(screen.getByText('전체 전망 아님')).toBeInTheDocument()
+    expect(screen.getByText(/반영 가능한 항목의 부분 합계/)).toBeInTheDocument()
+    expect(screen.getByText(/전망 기준일: 2026년 8월 14일/)).toBeInTheDocument()
+    expect(screen.getByText(/샘플 대출: 관측된 지출 줄이 없어/)).toBeInTheDocument()
+    expect(screen.getByText('금액 범위: 반영 가능한 구성 요소만의 부분 합계')).toBeInTheDocument()
+  })
+
+  it('월중 시작과 기록 없는 달은 서버의 자료 범위에 따라 문자로 표시한다', () => {
+    coverageState = readDataStatusFixture({ periods: [
+      { ...readDataStatusFixture().data.periods[1], period: '2026-06', data_coverage: 'partial', data_coverage_reasons: ['first_month_starts_mid_month'] },
+      { ...readDataStatusFixture().data.periods[0], data_coverage: 'no_transactions_observed' },
+    ] })
+    renderPage()
+    const table = screen.getByRole('table', { name: '최근 12개월 월 흐름' })
+    expect(within(table).getByText('월중 시작 · 월초 자료 없음')).toBeInTheDocument()
+    expect(within(table).getByText('거래 기록 없음 · 추정')).toBeInTheDocument()
+    expect(screen.getByText(/거래 기록 없는 달은 추정이며 확인되지 않았습니다/)).toBeInTheDocument()
+  })
+
+  it('금액 근거의 월 비교도 직전 월 기준을 서버에 요청한다', () => {
+    renderPage()
+    const table = screen.getByRole('list', { name: '2026-07 월 흐름표' })
+    fireEvent.click(within(table).getByRole('button', { name: /^−?\s*미정/ }))
+    fireEvent.change(screen.getByRole('combobox', { name: '비교 기준' }), { target: { value: 'previous_month' } })
+    expect(comparisonCalls).toContainEqual({ period: '2026-07', baseline: 'previous_month' })
   })
 
   it('자료가 없으면 가져오기로 안내한다', () => {

@@ -46,8 +46,6 @@ describe('frontend query contract adapters', () => {
     await analyticsApi.fixedCostTrend({ start_month: '2026-01', end_month: '2026-03' })
     await analyticsApi.merchantSpend({ start_month: '2026-01', end_month: '2026-03', limit: 5 })
     await analyticsApi.merchantSpend({ months: 3, limit: 5 })
-    await analyticsApi.discretionaryVelocity({ as_of_date: '2026-04-08' })
-    await analyticsApi.purchaseGateCandidates({ status: 'pending', limit: 5 })
     await transactionApi.recurringCategoryRulesDryRun()
     await transactionApi.applyRecurringDryRun({
       merchant: '왓챠',
@@ -71,14 +69,9 @@ describe('frontend query contract adapters', () => {
     expect(fetchMock.mock.calls[3][0]).not.toContain('months=')
     expect(fetchMock.mock.calls[4][0]).toContain('limit=5')
     expect(fetchMock.mock.calls[4][0]).not.toContain('months=')
-    expect(fetchMock.mock.calls[5][0]).toContain('/analytics/discretionary-velocity?')
-    expect(fetchMock.mock.calls[5][0]).toContain('as_of_date=2026-04-08')
-    expect(fetchMock.mock.calls[6][0]).toContain('/analytics/spending-review-candidates?')
-    expect(fetchMock.mock.calls[6][0]).toContain('review_status=pending')
-    expect(fetchMock.mock.calls[6][0]).toContain('per_page=5')
-    expect(fetchMock.mock.calls[7][0]).toContain('/auto-classification/recurring-category-rules/dry-run')
-    expect(fetchMock.mock.calls[8][0]).toContain('/auto-classification/apply/recurring-dry-run')
-    expect(fetchMock.mock.calls[8][1]).toMatchObject({ method: 'POST' })
+    expect(fetchMock.mock.calls[5][0]).toContain('/auto-classification/recurring-category-rules/dry-run')
+    expect(fetchMock.mock.calls[6][0]).toContain('/auto-classification/apply/recurring-dry-run')
+    expect(fetchMock.mock.calls[6][1]).toMatchObject({ method: 'POST' })
   })
 
   it('replaces missing daily-spend endpoint with transactions list query', async () => {

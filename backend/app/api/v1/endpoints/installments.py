@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.installment import (
-    InstallmentForecastResponse,
     InstallmentLinkStateFilter,
     InstallmentPlanCreateRequest,
     InstallmentPlanListResponse,
@@ -27,7 +26,6 @@ from app.services.installment_service import (
     bulk_upsert_transaction_installment_links,
     create_installment_plan,
     delete_transaction_installment_link,
-    get_installment_forecast,
     get_transaction_installment_link,
     list_installment_plans,
     list_installment_transaction_mappings,
@@ -167,16 +165,3 @@ async def delete_installment_link_for_transaction(
         db_session, transaction_id, require_inactive=require_inactive
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get("/installments/forecast", response_model=InstallmentForecastResponse)
-async def get_installments_forecast(
-    as_of_date: date | None = Query(default=None),
-    months: int = Query(default=12, ge=1, le=120),
-    db_session: AsyncSession = Depends(get_db_session),
-) -> InstallmentForecastResponse:
-    return await get_installment_forecast(
-        db_session,
-        as_of_date=as_of_date or date.today(),
-        months=months,
-    )

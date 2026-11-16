@@ -8,7 +8,6 @@ from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.transaction import Transaction
 from app.services.installment_service import (
-    get_installment_forecast,
     list_installment_transaction_mappings,
 )
 from app.services.installment_suggestion_service import (
@@ -177,72 +176,3 @@ async def test_two_transactions_for_one_slot_are_not_usable_recommendations(
         for item in response.items
     )
     assert {item.transaction.time for item in response.items} == {time(9), time(11)}
-
-
-async def test_deleted_link_is_not_continuity_evidence_or_observed_forecast(
-    db_session: AsyncSession,
-) -> None:
-    plan = _plan()
-    linked = _tx(date(2026, 4, 30), merchant="쇼핑몰")
-    linked.is_deleted = True
-    candidate = _tx(date(2026, 5, 30))
-    db_session.add_all([plan, linked, candidate])
-    await db_session.flush()
-    db_session.add(
-        InstallmentTransactionLink(
-            transaction_id=linked.id, installment_plan_id=plan.id, installment_number=1
-        )
-    )
-    await db_session.commit()
-    response = await list_installment_transaction_suggestions(
-        db_session, installment_plan_id=None, page=1, per_page=40
-    )
-    assert response.total == 0
-    forecast = await get_installment_forecast(
-        db_session, as_of_date=date(2026, 5, 15), months=1
-    )
-    assert forecast.items[0].status == "missed"
-    assert forecast.items[0].transaction_id is None
-
-
-async def test_full_schedule_separates_unconfirmed_past_from_future_obligations(
-    db_session: AsyncSession,
-) -> None:
-    plan = _plan(first=date(2026, 1, 30))
-    linked = _tx(date(2026, 1, 30), merchant="쇼핑몰")
-    db_session.add_all([plan, linked])
-    await db_session.flush()
-    db_session.add(
-        InstallmentTransactionLink(
-            transaction_id=linked.id, installment_plan_id=plan.id, installment_number=1
-        )
-    )
-    await db_session.commit()
-    forecast = await get_installment_forecast(
-        db_session, as_of_date=date(2026, 9, 24), months=6
-    )
-    assert len(forecast.items) == 12
-    assert [
-        item.installment_number for item in forecast.items if item.is_future_obligation
-    ] == [9, 10, 11, 12]
-    assert (
-        sum(month.projected_total for month in forecast.monthly_summary) == 4 * 120000
-    )
-    assert (
-        sum(month.past_unconfirmed_total for month in forecast.monthly_summary)
-        == 7 * 120000
-    )
-    assert all(
-        month.past_unconfirmed_total == month.missed_total
-        for month in forecast.monthly_summary
-    )
-    assert all(
-        item.status_label == "과거 연결 미확인"
-        for item in forecast.items
-        if item.status == "missed"
-    )
-    assert all(
-        not item.is_future_obligation
-        for item in forecast.items
-        if item.status != "projected"
-    )

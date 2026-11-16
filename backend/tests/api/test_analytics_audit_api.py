@@ -42,32 +42,9 @@ async def test_all_signal_read_surfaces_accept_explicit_historical_cutoff(
     await sync_legacy_classification()
     for endpoint, params, expected in [
         (
-            "category-mom",
-            {"end_date": "2026-03-15"},
-            {
-                "reference_date": "2026-03-15",
-                "comparison_basis": "same_day_previous_month",
-            },
-        ),
-        (
             "income-stability",
             {"end_date": "2026-03-15"},
             {"reference_date": "2026-03-15", "is_partial_period": True},
-        ),
-        (
-            "spending-anomalies",
-            {"end_date": "2026-03-15"},
-            {"reference_date": "2026-03-15", "is_partial_period": True},
-        ),
-        (
-            "discretionary-velocity",
-            {"as_of_date": "2026-03-15"},
-            {"as_of_date": "2026-03-15", "discretionary_spend": 150_000},
-        ),
-        (
-            "spending-review-candidates",
-            {"start_date": "2026-03-01", "end_date": "2026-03-15"},
-            {"start_date": "2026-03-01", "end_date": "2026-03-15"},
         ),
         (
             "recurring-payments",
@@ -96,29 +73,6 @@ async def test_recurring_filters_validate_before_querying(
             "/api/v1/analytics/recurring-payments", params=params
         )
         assert response.status_code == 422
-
-
-async def test_cancellation_evidence_is_serialized_without_confident_warning(
-    async_client: AsyncClient,
-    db_session: AsyncSession,
-    sync_legacy_classification,
-) -> None:
-    charge = _expense(date(2026, 3, 5), -150_000, "주유")
-    refund = _expense(date(2026, 3, 5), 150_000, "주유")
-    db_session.add_all([charge, refund])
-    await db_session.flush()
-    await sync_legacy_classification()
-    response = await async_client.get(
-        "/api/v1/analytics/spending-review-candidates",
-        params={"start_date": "2026-03-01", "end_date": "2026-03-31"},
-    )
-    assert response.status_code == 200
-    item = response.json()["items"][0]
-    assert item["possible_cancellation"] is True
-    assert item["cancellation_evidence_transaction_ids"] == [charge.id, refund.id]
-    assert item["risk_level"] == "unknown"
-    assert item["confidence"] == "low"
-    assert item["future_friction_suggestion"] is None
 
 
 async def test_income_expense_filter_excludes_account_movements(

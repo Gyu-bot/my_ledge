@@ -7,12 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.purchase_gate_review import PurchaseGateReview
-from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
+from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction
-from app.schemas.settings import DiscretionaryVelocitySettings, PurchaseGateSettings
+from app.schemas.settings import PurchaseGateSettings
 from app.services.analytics_service import (
-    get_category_mom,
-    get_discretionary_velocity,
     get_fixed_cost_summary,
     get_fixed_cost_trend,
     get_income_stability,
@@ -51,19 +49,6 @@ def _expense(
         spend_necessity=necessity,
         recurring_payment_kind=kind,
         source="import",
-    )
-
-
-def _velocity_settings() -> DiscretionaryVelocitySettings:
-    return DiscretionaryVelocitySettings(
-        baseline_months=2,
-        outlier_policy="exclude_extreme_months",
-        warning_velocity_ratio=1.2,
-        high_velocity_ratio=1.5,
-        minimum_classification_coverage=0.5,
-        baseline_mode="same_progress",
-        excluded_category_names=[],
-        excluded_merchants=[],
     )
 
 
@@ -145,92 +130,6 @@ async def test_necessity_buckets_are_exhaustive_separate_from_missing_cost_kind(
             + result.necessity_unclassified_total
             == result.expense_total
         )
-
-
-@pytest.mark.parametrize("confirmed", [False, True])
-async def test_velocity_nets_refunds_in_target_and_baseline_once(
-    db_session: AsyncSession,
-    confirmed: bool,
-    sync_legacy_classification,
-) -> None:
-    pairs = []
-    for month in [1, 2, 3]:
-        charge = _expense(date(2026, month, 5), -200_000)
-        refund = _expense(date(2026, month, 10), 50_000)
-        pairs.append((charge, refund))
-        db_session.add_all([charge, refund])
-    await db_session.flush()
-    if confirmed:
-        for charge, refund in pairs:
-            db_session.add(
-                SettlementMatch(
-                    original_transaction_id=charge.id,
-                    settlement_transaction_id=refund.id,
-                    matched_amount=50_000,
-                    status=SettlementMatchStatus.USER_CONFIRMED.value,
-                )
-            )
-        await db_session.flush()
-    await sync_legacy_classification()
-    response = await get_discretionary_velocity(
-        db_session, as_of_date=date(2026, 3, 31), settings=_velocity_settings()
-    )
-    assert response.discretionary_spend == 150_000
-    assert response.baseline_monthly_spend == 150_000
-    assert response.velocity_ratio == 1
-    assert response.classification_coverage_ratio == 1
-
-
-async def test_velocity_preserves_net_refund_and_uses_charge_coverage(
-    db_session: AsyncSession,
-    sync_legacy_classification,
-) -> None:
-    db_session.add_all(
-        [
-            _expense(date(2026, 1, 5), -100_000),
-            _expense(date(2026, 2, 5), -100_000),
-            _expense(date(2026, 3, 5), -100_000),
-            _expense(date(2026, 3, 5), -100_000, necessity=None),
-            _expense(date(2026, 3, 10), 300_000),
-        ]
-    )
-    await db_session.flush()
-    await sync_legacy_classification()
-    response = await get_discretionary_velocity(
-        db_session, as_of_date=date(2026, 3, 31), settings=_velocity_settings()
-    )
-    assert response.discretionary_spend == -200_000
-    assert response.velocity_ratio == -2
-    assert response.classification_coverage_ratio == 0.5
-    assert response.unclassified_spend == 100_000
-    assert response.risk_level == "normal"
-
-
-async def test_mom_explicit_cutoff_anchors_empty_target_and_same_day_baseline(
-    db_session: AsyncSession,
-) -> None:
-    db_session.add_all(
-        [
-            _expense(date(2026, 2, 5), -100),
-            _expense(date(2026, 2, 20), -200),
-            _expense(date(2026, 4, 5), -400),
-        ]
-    )
-    await db_session.flush()
-    response = await get_category_mom(
-        db_session,
-        start_date=None,
-        end_date=date(2026, 3, 10),
-        level="major",
-        tx_type="지출",
-    )
-    assert response.reference_date == date(2026, 3, 10)
-    assert response.is_partial_period
-    assert response.comparison_basis == "same_day_previous_month"
-    assert [
-        (item.period, item.current_amount, item.previous_amount)
-        for item in response.items
-    ] == [("2026-03", 0, 100)]
 
 
 async def test_recurring_active_filter_excludes_history_and_zero_only_groups_before_paging(

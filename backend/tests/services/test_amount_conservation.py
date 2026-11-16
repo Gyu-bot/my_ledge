@@ -20,7 +20,6 @@ from app.parsers.transactions import TransactionRow
 from app.schemas.settlement import SettlementMatchUpsertRequest
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
 from app.services.analytics_service import (
-    get_category_mom,
     get_merchant_spend,
     get_monthly_cashflow,
 )
@@ -166,14 +165,17 @@ async def test_f02_multiple_refund_allocation_preserves_signed_net(
 
     # 15,000 charged - 12,000 refunded; 2,000 of the refund is unallocated.
     assert await _cashflow_by_period(db_session) == {"2026-03": 3_000}
-    categories = await get_category_mom(
+    from app.services.metrics_service import get_spend_cube
+
+    categories = await get_spend_cube(
         db_session,
-        start_date=None,
-        end_date=date(2026, 3, 31),
-        level="major",
-        tx_type="지출",
+        start_period="2026-03",
+        end_period="2026-03",
+        group_by=["effective_category_major"],
+        filters={},
+        limit=200,
     )
-    assert sum(item.current_amount for item in categories.items) == 3_000
+    assert categories.total_amount == 3_000
 
 
 async def test_f03_month_boundary_refund_stays_in_posting_month(

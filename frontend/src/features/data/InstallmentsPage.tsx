@@ -7,34 +7,27 @@ import { Field, Select, TextInput } from '../../ds/Field'
 import { SegmentedControl } from '../../ds/SegmentedControl'
 import { Stat } from '../../ds/Stat'
 import { ListSkeleton } from '../../ds/Skeleton'
-import { EmptyState } from '../../ds/States'
+import { EmptyState, ErrorState } from '../../ds/States'
 import { toast } from '../../ds/toastStore'
-import { EM_DASH, formatWon, formatWonCompact } from '../../ds/format'
+import { formatWon } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import { InstallmentLinksTab } from './InstallmentLinksTab'
 import {
   useCreateInstallmentPlan,
-  useInstallmentForecast,
   useInstallmentPlans,
   useInstallmentTransactionMappings,
   usePatchInstallmentPlan,
 } from '../../hooks/useTransactions'
+import { useCommitments, useReadDataStatus } from '../../hooks/useMetrics'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type {
-  InstallmentForecastStatus,
   InstallmentPlanResponse,
   InstallmentPlanStatus,
 } from '../../types/transaction'
 
-type Tab = 'plans' | 'links' | 'forecast'
+type Tab = 'plans' | 'links' | 'observations'
 
 const PLAN_STATUS_LABEL: Record<InstallmentPlanStatus, string> = { active: '진행 중', completed: '완료', cancelled: '중단' }
-const FORECAST_STATUS: Record<InstallmentForecastStatus, { label: string; variant: 'accent' | 'warn' | 'expense' }> = {
-  observed: { label: '관측됨', variant: 'accent' },
-  projected: { label: '예정', variant: 'warn' },
-  missed: { label: '과거 연결 미확인', variant: 'warn' },
-}
-
 function localDate() {
   const now = new Date()
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
@@ -127,57 +120,37 @@ function PlansTab() {
   )
 }
 
-function ForecastTab() {
-  const [asOf, setAsOf] = useState(localDate())
-  const [months, setMonths] = useState('6')
-  const forecast = useInstallmentForecast({ as_of_date: asOf || undefined, months: Number.parseInt(months, 10) || 6 })
-  const summary = forecast.data?.monthly_summary ?? []
-
-  const inputCls = 'rounded-md border border-border bg-bg-inset px-2.5 py-1.5 text-caption text-text-secondary'
-
+function ObservationsTab() {
+  const [period, setPeriod] = useState<string | null>(null)
+  const status = useReadDataStatus()
+  const commitments = useCommitments(period)
+  const items = (commitments.data?.data.items ?? []).filter((item) => item.kind === 'installment')
+  const periods = status.data?.data.periods ?? []
   return (
-    <Card title="월별 남은 할부 예측" meta={`${months}개월`} action={
-      <div className="flex items-center gap-2">
-        <input type="date" className={inputCls} value={asOf} onChange={(e) => setAsOf(e.target.value)} aria-label="기준일" />
-        <input type="number" min={1} max={24} className={`${inputCls} w-20`} value={months} onChange={(e) => setMonths(e.target.value)} aria-label="개월 수" />
-      </div>
-    } bodyClassName="p-0">
-      {forecast.isLoading ? <div className="p-4"><ListSkeleton rows={5} /></div> :
-       summary.length > 0 ? (
-        <>
-          <p className="px-4 py-3 text-caption text-text-muted">과거 연결 미확인은 결제 거래가 아직 연결되지 않은 회차입니다. 실제 미납이나 앞으로 다시 출금될 금액을 뜻하지 않습니다.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-label">
-              <thead className="bg-bg-inset"><tr>{['월', '연결된 결제', '미래 예정', '과거 연결 미확인'].map((h) => <th key={h} className="px-4 py-2 text-left text-micro font-medium text-text-muted">{h}</th>)}</tr></thead>
-              <tbody className="divide-y divide-border-subtle">
-                {summary.map((item) => (
-                  <tr key={item.period}>
-                    <td className="tnum px-4 py-2 font-semibold text-text-primary">{item.period}</td>
-                    <td className="tnum px-4 py-2 text-text-secondary">{formatWonCompact(item.observed_total)}</td>
-                    <td className="tnum px-4 py-2 text-text-muted">{formatWonCompact(item.projected_total)}</td>
-                    <td className="tnum px-4 py-2 text-warn">{formatWonCompact(item.past_unconfirmed_total ?? item.missed_total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {forecast.data && forecast.data.items.length > 0 ? (
-            <div className="grid gap-2 p-4 xl:grid-cols-2">
-              {forecast.data.items.map((item) => (
-                <div key={`${item.installment_plan_id}-${item.installment_number}`} className="rounded-md border border-border-subtle bg-bg-inset px-3 py-2.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2"><span className="truncate text-label font-semibold text-text-primary">{item.installment_plan_display_name}</span><Badge variant={FORECAST_STATUS[item.status].variant}>{FORECAST_STATUS[item.status].label}</Badge></div>
-                      <div className="tnum mt-1 text-micro text-text-muted">{item.installment_number} / {item.total_installments}회차 · 예정 {item.due_date}</div>
-                    </div>
-                    <span className="tnum shrink-0 text-label font-semibold text-text-secondary">{formatWon(item.amount)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </>
-      ) : <EmptyState className="py-10" message="표시할 할부 예측이 없습니다" />}
+    <Card title="할부 관측 여부" meta="기록된 속성과 선택한 달의 연결 기록입니다. 앞으로의 출금 예측이나 미납 판정이 아닙니다.">
+      <label className="mb-3 flex flex-wrap items-center gap-2 text-caption text-text-muted">
+        관측할 달
+        <Select aria-label="할부 관측할 달" value={period ?? commitments.data?.data.period ?? ''} onChange={(event) => setPeriod(event.target.value)}>
+          {[...periods].reverse().map((item) => <option key={item.period} value={item.period}>{item.period}</option>)}
+        </Select>
+      </label>
+      {commitments.isLoading ? <ListSkeleton rows={3} /> : commitments.error ? (
+        <ErrorState message="할부 관측 기록을 불러오지 못했습니다." onRetry={() => void commitments.refetch()} />
+      ) : items.length === 0 ? <EmptyState message="기록된 할부가 없습니다" /> : (
+        <ul className="divide-y divide-border-subtle">
+          {items.map((item) => (
+            <li key={item.commitment_key} className="space-y-1 py-3 text-caption text-text-secondary">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong className="text-label text-text-primary">{item.name}</strong>
+                <Badge variant="neutral">{item.observation.state_label}</Badge>
+              </div>
+              <p>월 부담 {item.monthly_burden == null ? '기록 없음' : formatWon(item.monthly_burden)} · {item.monthly_burden_basis_label}</p>
+              <p>남은 회차 {item.remaining_count == null ? '확인 불가' : `${item.remaining_count}회`} · 마지막 회차 예정일 {item.end_date ?? '확인 불가'}</p>
+              <p>이 달 연결된 결제 {formatWon(item.observation.observed_amount)} · {item.observation.reason_label}</p>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }
@@ -186,11 +159,8 @@ export function InstallmentsPage() {
   const [tab, setTab] = useState<Tab>('plans')
   const plans = useInstallmentPlans()
   const mappings = useInstallmentTransactionMappings({ page: 1, per_page: 1 })
-  const forecast = useInstallmentForecast({ months: 6 })
 
   const activePlans = (plans.data?.items ?? []).filter((p) => p.status === 'active').length
-  const totalRemaining = (forecast.data?.monthly_summary ?? []).reduce((sum, i) => sum + i.projected_total, 0)
-  const totalMissed = (forecast.data?.monthly_summary ?? []).reduce((sum, i) => sum + (i.past_unconfirmed_total ?? i.missed_total), 0)
 
   return (
     <>
@@ -199,20 +169,19 @@ export function InstallmentsPage() {
         controls={
           <SegmentedControl
             ariaLabel="할부 탭"
-            options={[{ value: 'plans', label: '계획' }, { value: 'links', label: '거래 연결' }, { value: 'forecast', label: '예측' }] as const}
+            options={[{ value: 'plans', label: '계획' }, { value: 'links', label: '거래 연결' }, { value: 'observations', label: '관측 여부' }] as const}
             value={tab}
             onChange={setTab}
           />
         }
       />
       <div className="flex flex-col gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Stat label="진행 중 계획" value={String(activePlans)} sub={`전체 ${plans.data?.items.length ?? 0}개`} />
           <Stat label="연결 후보" value={String(mappings.data?.total ?? 0)} sub="현재 필터" />
-          <Stat label="미래 예정" value={forecast.data ? formatWonCompact(totalRemaining) : EM_DASH} sub="향후 6개월" subTone={totalRemaining > 0 ? 'bad' : 'neutral'} />
-          <Stat label="과거 연결 미확인" value={totalMissed > 0 ? formatWonCompact(totalMissed) : '없음'} sub="미납 여부는 별도 확인" />
+
         </div>
-        {tab === 'plans' ? <PlansTab /> : tab === 'links' ? <InstallmentLinksTab /> : <ForecastTab />}
+        {tab === 'plans' ? <PlansTab /> : tab === 'links' ? <InstallmentLinksTab /> : <ObservationsTab />}
       </div>
     </>
   )

@@ -197,31 +197,3 @@ export interface NetWorthBreakdownResponse {
   net_worth: string
   items: NetWorthBreakdownItem[]
 }
-
-export interface AssetLiabilityHealthResponse {
-  snapshot_date: string | null
-  cash_equivalent_total: string
-  asset_total: string
-  negative_asset_excluded_total: string
-  liability_total: string
-  net_worth: string
-  monthly_required_spend: string
-  monthly_required_spend_source: string
-  emergency_fund_months: number | null
-  emergency_fund_target_months: number
-  target_progress_ratio: number | null
-  monthly_debt_payment: string
-  monthly_income: string
-  monthly_income_source: string
-  derived_from_periods: string[]
-  input_as_of_date?: string | null
-  required_spend_period?: string | null
-  required_spend_essential_total?: string
-  required_spend_additional_debt_total?: string
-  debt_payment_snapshot_date?: string | null
-  manual_input_overrides: string[]
-  debt_payment_ratio: number | null
-  debt_to_asset_ratio: number | null
-  confidence: string
-  assumptions: string[]
-}

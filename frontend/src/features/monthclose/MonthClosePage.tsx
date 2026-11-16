@@ -6,8 +6,7 @@ import { Card } from '../../ds/Card'
 import { Select } from '../../ds/Field'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { EmptyState, ErrorState } from '../../ds/States'
-import { useCanonicalViewsDashboard } from '../../hooks/useCanonicalViews'
-import { useDataStatus, useMonthlyFlow } from '../../hooks/useMetrics'
+import { useDataStatus, useMonthlyFlow, useMonthProjection, useReadDataStatus } from '../../hooks/useMetrics'
 import { PageHeader } from '../../shell/PageHeader'
 import type { MonthlyFlowMonth } from '../../types/metrics'
 import { AmountDrilldown, type DrillTarget } from '../analysis/AmountDrilldown'
@@ -16,6 +15,7 @@ import { DataStatusStrip } from '../analysis/DataStatusStrip'
 import type { FlowMeasureKey } from '../analysis/flowMeasures'
 import { formatDateKo, formatPeriodKo } from '../analysis/periods'
 import { loadErrorMessage } from '../analysis/text'
+import { MonthCoverageLabel } from '../analysis/MonthCoverageLabel'
 import { FlowTable } from './FlowTable'
 import { ForecastCard } from './ForecastCard'
 import { TrendCard } from './TrendCard'
@@ -32,7 +32,8 @@ export function MonthClosePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const status = useDataStatus()
   const flow = useMonthlyFlow()
-  const dashboard = useCanonicalViewsDashboard({ months: 1, merchant_limit: 1, queue_limit: 1 })
+  const projection = useMonthProjection()
+  const coverage = useReadDataStatus()
   const [drill, setDrill] = useState<DrillState | null>(null)
 
   const closedPeriods = status.data?.closed_periods ?? []
@@ -123,6 +124,7 @@ export function MonthClosePage() {
               <span className="inline-flex flex-wrap items-center gap-1.5">
                 {selectedPeriod ? `${formatPeriodKo(selectedPeriod)} 월 흐름표` : '월 흐름표'}
                 {selectedMonth ? <Badge variant="neutral">마감월</Badge> : null}
+                <MonthCoverageLabel month={coverage.data?.data.periods.find((month) => month.period === selectedPeriod)} />
               </span>
             }
             meta="모든 거래가 정확히 한 줄에 들어갑니다. 금액을 누르면 산식, 포함·제외, 해당 거래가 그 자리에서 열립니다."
@@ -168,10 +170,10 @@ export function MonthClosePage() {
               )}
             </Card>
             <ForecastCard
-              projection={dashboard.data?.month_projection}
-              isLoading={dashboard.isLoading}
-              error={dashboard.error}
-              onRetry={() => void dashboard.refetch()}
+              projection={projection.data?.data}
+              isLoading={projection.isLoading}
+              error={projection.error}
+              onRetry={() => void projection.refetch()}
               inProgressPeriod={inProgressPeriod}
             />
           </div>
@@ -181,6 +183,8 @@ export function MonthClosePage() {
             {items.length > 0 ? (
               <TrendCard
                 items={items}
+                coveragePeriods={coverage.data?.data.periods}
+                coverageError={coverage.error}
                 endPeriod={inProgressPeriod ?? lastClosed ?? items[items.length - 1].period}
                 firstPeriod={status.data?.as_of.first_transaction_date?.slice(0, 7) ?? null}
                 selectedPeriod={selectedPeriod}

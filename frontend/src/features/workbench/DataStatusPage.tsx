@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
+import { MonthCoverageLabel } from '../analysis/MonthCoverageLabel'
 import { Badge } from '../../ds/Badge'
 import { Card } from '../../ds/Card'
 import { ListSkeleton } from '../../ds/Skeleton'
@@ -163,7 +164,7 @@ function Periods({ data }: { data: ReadDataStatusResponse['data'] }) {
           <tbody className="divide-y divide-border-subtle">
             {periods.map((period) => (
               <tr key={period.period}>
-                <th scope="row" className="px-4 py-1.5 text-left font-medium text-text-primary">{formatPeriodKo(period.period)}</th>
+                <th scope="row" className="px-4 py-1.5 text-left font-medium text-text-primary">{formatPeriodKo(period.period)}<MonthCoverageLabel month={period} /></th>
                 <td className="px-4 py-1.5">
                   {period.transaction_count === 0 ? (
                     <Badge variant="warn">거래 0건</Badge>

@@ -16,6 +16,7 @@ import { contractFixture } from './metricsFixtures'
 export function reconciliationFixture(status: ReconciliationStatus = 'complete'): NetWorthReconciliationResponse {
   const base: NetWorthReconciliationResponse = {
     status: 'complete',
+    status_note: '모든 대조 항목을 계산했다는 뜻이며 순자산 변화가 전부 설명되었다는 뜻은 아닙니다.',
     status_reasons: [],
     identity: 'net_worth_change = residual + loan_balance_decrease + investment_valuation_change + unexplained_difference',
     interval: {
@@ -54,6 +55,10 @@ export function reconciliationFixture(status: ReconciliationStatus = 'complete')
       unexplained_difference: 200_000,
       investment_value_change: 1_700_000,
       investment_net_transfer_in: 1_000_000,
+      unexplained_share_of_change: 0.0571,
+      unexplained_share_withheld_reason: null,
+      investment_valuation_change_provisional: false,
+      investment_valuation_change_provisional_reason: null,
     },
     contract: contractFixture(),
   }

@@ -1,6 +1,7 @@
 import { apiFetch } from '../lib/apiClient'
 import type {
   ComparisonMonthlyFlowResponse,
+  BaselineMethod,
   ContributionQuery,
   ContributionResponse,
   MetricDataStatusResponse,
@@ -12,7 +13,7 @@ import type {
   TransferPurpose,
   TransferPurposeListResponse,
 } from '../types/metrics'
-import type { ReadCommitmentsResponse, ReadDataStatusResponse } from '../types/readSurface'
+import type { ReadCommitmentsResponse, ReadDataStatusResponse, ReadMonthProjectionResponse } from '../types/readSurface'
 
 function buildQuery(params: object): string {
   const q = new URLSearchParams()
@@ -34,14 +35,17 @@ export const metricsApi = {
   spendCube: (params: SpendCubeQuery) =>
     apiFetch<SpendCubeResponse>(`/metrics/spend-cube${buildQuery(params)}`),
 
-  comparisonMonthlyFlow: (period?: string) =>
-    apiFetch<ComparisonMonthlyFlowResponse>(`/metrics/comparison/monthly-flow${buildQuery({ period })}`),
+  comparisonMonthlyFlow: (period?: string, baseline?: BaselineMethod) =>
+    apiFetch<ComparisonMonthlyFlowResponse>(`/metrics/comparison/monthly-flow${buildQuery({ period, baseline })}`),
 
   contributions: (params: ContributionQuery) =>
     apiFetch<ContributionResponse>(`/metrics/comparison/contributions${buildQuery(params)}`),
 
   reviewItems: (params: { period?: string; limit?: number } = {}) =>
     apiFetch<ReadReviewItemsResponse>(`/read/review-items${buildQuery(params)}`),
+
+  monthProjection: (params: { reference_date?: string } = {}) =>
+    apiFetch<ReadMonthProjectionResponse>(`/read/month-projection${buildQuery(params)}`),
 
   projectionAccuracy: () =>
     apiFetch<ProjectionAccuracy>('/canonical-views/month-projection/accuracy'),

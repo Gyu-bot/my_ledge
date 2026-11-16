@@ -6,7 +6,7 @@ import { ListSkeleton } from '../../ds/Skeleton'
 import { EmptyState, ErrorState } from '../../ds/States'
 import { formatSignedWon, formatWon } from '../../ds/format'
 import { useProjectionAccuracy } from '../../hooks/useMetrics'
-import type { ExpenseProjectionComponent, MonthlyProjection, ProjectionConfidence } from '../../types/canonicalViews'
+import type { ExpenseProjectionComponent, MonthlyProjection, ProjectionConfidence } from '../../types/incomeProjection'
 import type { ProjectionAccuracyBandKey } from '../../types/metrics'
 import { formatDateKo, formatPeriodKo } from '../analysis/periods'
 import { loadErrorMessage, withoutCodeNames } from '../analysis/text'
@@ -147,6 +147,7 @@ export function ForecastCard({ projection, isLoading, error, onRetry, inProgress
   }
 
   const withheld = projection.projected_month_end_net == null
+  const complete = projection.completeness?.full_projection_available === true
   const adjustability = projection.remaining_expense_adjustability
   const asOfBasis = projection.as_of_basis ? AS_OF_BASIS_LABELS[projection.as_of_basis] : null
 
@@ -163,6 +164,14 @@ export function ForecastCard({ projection, isLoading, error, onRetry, inProgress
       }
     >
       <div className="space-y-4 text-caption">
+        <p>전망 기준일: {formatDateKo(projection.as_of_date)}</p>
+        <section aria-label="전망에 포함된 범위" className="space-y-1 rounded-md border border-border p-3">
+          <Badge variant={complete ? 'neutral' : 'warn'}>{complete ? '알려진 구성 요소 전체 반영' : '전체 전망 아님'}</Badge>
+          <p>금액 범위: {projection.completeness?.amount_scope === 'all_known_components' ? '알려진 모든 구성 요소' : projection.completeness?.amount_scope === 'known_components' ? '반영 가능한 구성 요소만의 부분 합계' : '전망 금액 없음'}</p>
+          {(projection.completeness?.left_out.length ?? 0) > 0 ? <ul className="list-inside list-disc">
+            {projection.completeness?.left_out.map((item, index) => <li key={`${item.component}-${item.key ?? index}`}>{item.name ?? ({ income_source: '수입 출처', loan: '대출', installment: '할부', recurring: '정기 지급', variable: '그 밖의 지출' })[item.component]}: {item.reason}</li>)}
+          </ul> : null}
+        </section>
         <section aria-label="전망의 관측 부분">
           <h3 className="text-label font-semibold text-text-primary">① 관측 ({formatDateKo(projection.as_of_date)}까지)</h3>
           <dl className="tnum mt-1.5 space-y-1 text-text-secondary">
@@ -235,7 +244,7 @@ export function ForecastCard({ projection, isLoading, error, onRetry, inProgress
 
         <section aria-label="월말 전망 값">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-label font-semibold text-text-primary">③ 월말 순현금흐름 (① + ②)</h3>
+            <h3 className="text-label font-semibold text-text-primary">③ {complete ? '월말 순현금흐름' : '반영 가능한 항목의 부분 합계'} (① + ②)</h3>
             {withheld ? (
               <Badge variant="warn">전망 보류</Badge>
             ) : (

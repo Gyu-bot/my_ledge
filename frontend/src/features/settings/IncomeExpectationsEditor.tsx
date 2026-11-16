@@ -6,10 +6,10 @@ import { Field, TextInput, Toggle } from '../../ds/Field'
 import { ListSkeleton } from '../../ds/Skeleton'
 import { ErrorState } from '../../ds/States'
 import { formatWon } from '../../ds/format'
-import { useCanonicalViewsDashboard } from '../../hooks/useCanonicalViews'
+import { useMonthProjection } from '../../hooks/useMetrics'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import { apiFetch } from '../../lib/apiClient'
-import type { IncomeProjectionSource } from '../../types/canonicalViews'
+import type { IncomeProjectionSource } from '../../types/incomeProjection'
 
 interface IncomeExpectation {
   source_key: string
@@ -55,7 +55,7 @@ export function IncomeExpectationsEditor() {
   const hasWrite = useWriteAccess()
   const client = useQueryClient()
   const saved = useQuery({ queryKey: QUERY_KEY, queryFn: incomeExpectationsApi.get, enabled: hasWrite })
-  const canonical = useCanonicalViewsDashboard()
+  const projection = useMonthProjection()
   const [draft, setDraft] = useState<ExpectationDraft[] | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -64,11 +64,14 @@ export function IncomeExpectationsEditor() {
     onSuccess: async (response) => {
       client.setQueryData(QUERY_KEY, response)
       setDraft(response.items.map(asDraft))
-      await client.invalidateQueries({ queryKey: ['canonical-views'] })
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['read', 'month-projection'] }),
+        client.invalidateQueries({ queryKey: ['canonical-views', 'month-projection', 'accuracy'] }),
+      ])
     },
   })
   const items = draft ?? saved.data?.items.map(asDraft) ?? []
-  const suggestions = (canonical.data?.month_projection?.income_sources ?? []).filter((source) =>
+  const suggestions = (projection.data?.data.income_sources ?? []).filter((source) =>
     !items.some((item) => item.source_key === source.source_key || sourceKey(item.merchant) === source.source_key),
   )
   const disabled = !hasWrite || patch.isPending || saved.isLoading || saved.isError

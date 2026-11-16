@@ -1,3 +1,4 @@
+import type { MonthlyProjection } from './incomeProjection'
 // /api/v1/read/commitments, /api/v1/read/data-status (T060) — 화면이 쓰는 부분만.
 // backend/app/schemas/read_surface.py
 
@@ -17,6 +18,9 @@ export interface ReadPeriodState {
   period: string
   coverage: 'imported' | 'not_imported'
   coverage_label: string
+  data_coverage: 'full' | 'partial' | 'no_transactions_observed' | 'outside_data'
+  data_coverage_label: string
+  data_coverage_reasons: Array<'first_month_starts_mid_month' | 'data_ends_before_month_end'>
   month_status: MonthStatus | null
   status: ReadStatus
   status_label: string
@@ -132,4 +136,9 @@ export interface ReadDataStatusResponse extends ReadEnvelope {
     excluded_currency: ExcludedCurrencyItem[]
     non_krw_transaction_count: number
   }
+}
+
+export interface ReadMonthProjectionResponse extends ReadEnvelope {
+  as_of: ReadAsOf & { transaction_as_of_basis: 'max_effective_transaction_date' }
+  data: MonthlyProjection
 }

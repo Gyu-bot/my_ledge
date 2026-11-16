@@ -22,6 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.income_projection import MonthlyProjection
 from app.schemas.comparison import (
     ComparisonBasis,
     ComparisonMeasure,
@@ -875,3 +876,16 @@ class ReadSurfaceIndexResponse(BaseModel):
         default_factory=list,
         description="/read/*와 지표 응답(/metrics/net-worth/* 등)의 같은 뜻 다른 이름.",
     )
+
+
+class ReadProjectionAsOf(ReadAsOf):
+    transaction_as_of_basis: Literal["max_effective_transaction_date"] = (
+        "max_effective_transaction_date"
+    )
+
+
+class ReadMonthProjectionResponse(ReadEnvelope):
+    """Same projection object as the removed dashboard.month_projection."""
+
+    as_of: ReadProjectionAsOf
+    data: MonthlyProjection

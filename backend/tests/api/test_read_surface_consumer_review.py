@@ -926,8 +926,8 @@ async def test_index_lists_projection_and_signed_ratio_fields(
     body = (await async_client.get("/api/v1/read/index", headers=api_headers)).json()
     entries = {entry["key"]: entry for entry in body["entries"]}
     projection = entries["month_end_projection"]
-    assert projection["path"] == "/api/v1/canonical-views/dashboard"
-    assert projection["response_field"] == "month_projection"
+    assert projection["path"] == "/api/v1/read/month-projection"
+    assert projection["response_field"] == "data"
     assert projection["definition"] and projection["notes"]
     accuracy = entries["month_projection_accuracy"]
     assert accuracy["path"] == "/api/v1/canonical-views/month-projection/accuracy"

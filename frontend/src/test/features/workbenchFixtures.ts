@@ -161,9 +161,9 @@ export function readDataStatusFixture(overrides: Partial<ReadDataStatusResponse[
       },
       coverage_gaps: [{ period: '2026-05', status: 'no_transactions', status_label: '가져온 기간이지만 거래 0건' }],
       periods: [
-        { period: '2026-05', coverage: 'imported', coverage_label: '가져온 기간', month_status: 'closed', status: 'no_transactions', status_label: '', transaction_count: 0, total_outflow: 0, adjustability_undecided_total: 0, adjustability_undecided_share: null },
-        { period: '2026-07', coverage: 'imported', coverage_label: '가져온 기간', month_status: 'closed', status: 'ok', status_label: '', transaction_count: 120, total_outflow: 1_000_000, adjustability_undecided_total: 100_000, adjustability_undecided_share: 0.1 },
-        { period: '2026-08', coverage: 'imported', coverage_label: '가져온 기간', month_status: 'in_progress', status: 'ok', status_label: '', transaction_count: 40, total_outflow: 400_000, adjustability_undecided_total: 80_000, adjustability_undecided_share: 0.2 },
+        { period: '2026-05', coverage: 'imported', coverage_label: '가져온 기간', data_coverage: 'full', data_coverage_label: '달 전체 범위', data_coverage_reasons: [], month_status: 'closed', status: 'no_transactions', status_label: '', transaction_count: 0, total_outflow: 0, adjustability_undecided_total: 0, adjustability_undecided_share: null },
+        { period: '2026-07', coverage: 'imported', coverage_label: '가져온 기간', data_coverage: 'full', data_coverage_label: '달 전체 범위', data_coverage_reasons: [], month_status: 'closed', status: 'ok', status_label: '', transaction_count: 120, total_outflow: 1_000_000, adjustability_undecided_total: 100_000, adjustability_undecided_share: 0.1 },
+        { period: '2026-08', coverage: 'imported', coverage_label: '가져온 기간', data_coverage: 'full', data_coverage_label: '달 전체 범위', data_coverage_reasons: [], month_status: 'in_progress', status: 'ok', status_label: '', transaction_count: 40, total_outflow: 400_000, adjustability_undecided_total: 80_000, adjustability_undecided_share: 0.2 },
       ],
       excluded_currency: [],
       non_krw_transaction_count: 1,

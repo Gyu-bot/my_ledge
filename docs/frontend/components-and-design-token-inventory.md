@@ -198,3 +198,7 @@ Current frontend server state is TanStack Query based.
 
 - `features/analysis/SpendingReferenceCard`: 월 결산·지출 분석 공용. `/read/spending-reference`의 총지급·12개월 월 환산 참고·한도 대비를 그대로 표시한다. 한도와 환산을 실적에 합산하지 않는다. 창/적용월/조회 불가 이유와 계산 근거를 함께 표시한다. 유효 대분류 › 소분류(없으면 소분류 없음), 출처(관측 패턴/사람이 등록한 연간 약정), 양수 순지출 관측월·개월 수, 12개월 순액과 월 환산을 보인다. 등록 약정 줄을 패턴 금액에서 빼는 규칙과 지출 합계에 포함하지 않는 참고값이라는 문장을 제공한다. 항목이 없으면 빈 상태 문장을 보인다.
 - `features/settings/SpendingLimitsEditor`: `/data/settings#spending-limits`, 직접 입력/새 버전/해제/변경 이력. 추천값이나 미리 고른 분류·한도 없음. 기존 Ledger DS 컴포넌트와 토큰만 사용한다.
+
+## T060 기존 화면 읽기 보완 (2026-11-17)
+
+`features/analysis/ComparisonBasis.tsx`의 `BaselineControl`과 `BasisNote`는 기존 `Select`로 두 기준 선택·서버 기준 기간·불가 사유를 표시한다. `MonthCoverageLabel`은 서버 월별 범위를 읽어 부분 자료·월중 시작·거래 없음(추정)을 문자로 표시한다. 월 결산, 데이터 사전, 자료 현황이 재사용한다. `ForecastCard`와 데이터 사전은 전망 기준일·포함 범위·누락 이유를 표시하며 부분 합계를 전체 전망으로 부르지 않는다. 순자산 대조는 서버 잠정 여부·이유·설명되지 않는 비중·상태 안내를 표시한다. 할부 작업대는 `ObservationsTab`으로 기록된 약정과 선택월 관측을 읽는다. 새 토큰·CSS·차트 라이브러리는 없다.

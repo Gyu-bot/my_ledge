@@ -7,13 +7,12 @@ import { MonthClosePage } from '../../features/monthclose/MonthClosePage'
 import { AppShell } from '../../shell/AppShell'
 import type { SpendCubeQuery } from '../../types/metrics'
 import type { TransactionResponse } from '../../types/transaction'
-import { contractFixture, cubeFixture, dataStatusFixture, monthFixture, query } from './metricsFixtures'
+import { basisFixture, contractFixture, cubeFixture, dataStatusFixture, monthFixture, query } from './metricsFixtures'
 import { txFixture } from './workbenchFixtures'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn() }))
 
 vi.mock('../../ds/charts/CashflowChart', () => ({ CashflowChart: () => <div /> }))
-vi.mock('../../hooks/useCanonicalViews', () => ({ useCanonicalViewsDashboard: () => query({ month_projection: null }) }))
 
 const rows: Record<number, TransactionResponse> = {
   21: txFixture(21, { merchant: '샘플 마트', effective_category_major: '샘플 식비', category_major: '샘플 식비', amount: -40_000, date: '2026-06-10' }),
@@ -37,13 +36,15 @@ vi.mock('../../hooks/useNature', () => ({
 }))
 
 vi.mock('../../hooks/useMetrics', () => ({
+  useMonthProjection: () => query(undefined),
+  useReadDataStatus: () => query({ data: { periods: [] } }),
   useDataStatus: () => query(dataStatusFixture()),
   useMonthlyFlow: () => query({ contract: contractFixture(), items: [monthFixture('2026-06', 'closed'), monthFixture('2026-07', 'closed')] }),
   useSpendCube: (params: SpendCubeQuery | null) => query(cubeFixture(
     params?.group_by.join(',') === 'flow_row' ? [] : [{ effective_category_major: '샘플 식비', merchant: '샘플 마트', amount: 60_000, transaction_count: 2 }],
     params?.group_by ?? [],
   )),
-  useMonthlyFlowComparison: () => query({ contract: contractFixture(), comparison: null, measures: [], residual_rate: null }),
+  useMonthlyFlowComparison: () => query({ contract: contractFixture(), comparison: basisFixture(), measures: [], residual_rate: null }),
   useTransferTransactions: () => query({ total_count: 0, undecided_count: 0, undecided_activity_total: 0, activity_total: 0, items: [] }),
   useProjectionAccuracy: () => query(null),
 }))

@@ -177,6 +177,8 @@ export interface MetricDataStatusResponse {
   non_krw_transaction_count: number
 }
 
+export type BaselineMethod = 'median_of_recent_closed_months' | 'previous_month'
+
 export interface ComparisonBasis {
   definition: string
   target_period: string | null
@@ -184,7 +186,8 @@ export interface ComparisonBasis {
   target_coverage: 'observed' | 'no_data' | null
   target_start_date: string | null
   target_end_date: string | null
-  baseline_method: string
+  baseline_method: BaselineMethod
+  baseline_unavailable_reason: 'baseline_start_date' | 'data_start' | 'no_data' | null
   baseline_method_label: string
   baseline_months_requested: number
   baseline_periods: string[]
@@ -250,6 +253,7 @@ export interface TwelveMonthWindowBasis {
 }
 
 export interface ContributionQuery {
+  baseline?: BaselineMethod
   period?: string
   adjustability?: ContributionAdjustability
   level?: 'category' | 'merchant'

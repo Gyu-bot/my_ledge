@@ -215,8 +215,8 @@ def build_index() -> ReadSurfaceIndexResponse:
             ReadSurfaceEntry(
                 key="month_end_projection",
                 name="진행월 월말 순현금흐름 전망",
-                path="/api/v1/canonical-views/dashboard",
-                response_field="month_projection",
+                path=f"{READ_PREFIX}/month-projection",
+                response_field="data",
                 questions=[],
                 definition="monthly_projection (T064)",
                 availability="live",
@@ -224,10 +224,10 @@ def build_index() -> ReadSurfaceIndexResponse:
                 provided_by="T064",
                 parameters=["reference_date"],
                 notes=(
-                    "대시보드 응답의 month_projection 필드. 진행월의 관측값 + 남은 기간 가정 "
+                    "공통 읽기 봉투의 data에 기존과 같은 전망 객체. 진행월의 관측값 + 남은 기간 가정 "
                     "= 월말 순현금흐름(projected_month_end_net). 월말을 넘는 전망은 없다. "
                     "completeness가 빠진 구성 요소(남은 금액을 0으로 둔 수입 출처, 지출 가정에 "
-                    "넣지 않은 대출, 추정 못 한 지출)를 밝힌다. 공통 봉투 없이 그대로 준다."
+                    "넣지 않은 대출, 추정 못 한 지출)를 밝힌다. as_of는 전체 자료 기준일이고 data.as_of_date는 전망 기준일이다."
                 ),
             ),
             ReadSurfaceEntry(

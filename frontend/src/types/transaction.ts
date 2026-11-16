@@ -267,7 +267,6 @@ export interface LoanTransactionMappingParams {
 
 export type InstallmentPlanStatus = 'active' | 'completed' | 'cancelled'
 export type InstallmentLinkStateFilter = 'all' | 'linked' | 'unlinked'
-export type InstallmentForecastStatus = 'observed' | 'projected' | 'missed'
 export type InstallmentSuggestionConfidence = 'high' | 'medium' | 'low'
 export type InstallmentSuggestionConflictReason = 'installment_number_already_linked' | 'ambiguous_plan_match' | 'competing_transactions' | 'inactive_installment_link'
 
@@ -424,38 +423,6 @@ export interface InstallmentTransactionLinkBulkRequest {
 
 export interface InstallmentTransactionLinkBulkResponse {
   updated: number
-}
-
-export interface InstallmentForecastItem {
-  installment_plan_id: number
-  installment_plan_display_name: string
-  installment_number: number
-  total_installments: number
-  due_date: string
-  period: string
-  amount: number
-  status: InstallmentForecastStatus
-  status_label?: string
-  is_future_obligation?: boolean
-  transaction_id: number | null
-}
-
-export interface InstallmentForecastMonthlySummaryItem {
-  period: string
-  observed_total: number
-  projected_total: number
-  missed_total: number
-  past_unconfirmed_total?: number
-}
-
-export interface InstallmentForecastResponse {
-  items: InstallmentForecastItem[]
-  monthly_summary: InstallmentForecastMonthlySummaryItem[]
-}
-
-export interface InstallmentForecastParams {
-  as_of_date?: string
-  months?: number
 }
 
 export interface CategoryTimelineItem {

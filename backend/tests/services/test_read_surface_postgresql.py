@@ -117,7 +117,7 @@ async def test_q1_to_q6_on_postgresql_without_raw_transactions(pg_client: AsyncC
     assert len(log.paths) <= 16
 
 
-async def test_read_surface_is_small_next_to_dashboard_and_raw_listing(
+async def test_read_surface_is_small_next_to_raw_listing(
     pg_client: AsyncClient,
 ):
     sizes = {}
@@ -125,12 +125,6 @@ async def test_read_surface_is_small_next_to_dashboard_and_raw_listing(
         response = await pg_client.get(path, params=params, headers=HEADERS)
         assert response.status_code == 200, (path, response.text)
         sizes[path] = len(response.content)
-    dashboard = await pg_client.get(
-        "/api/v1/canonical-views/dashboard",
-        params={"months": 24, "merchant_limit": 50, "queue_limit": 100},
-        headers=HEADERS,
-    )
-    assert dashboard.status_code == 200
     raw_total, page = 0, 1
     while True:
         response = await pg_client.get(
@@ -143,10 +137,8 @@ async def test_read_surface_is_small_next_to_dashboard_and_raw_listing(
             break
         page += 1
     assert response.json()["total"] > 3_900
-    for path, size in sizes.items():
-        assert size < len(dashboard.content), (path, size, len(dashboard.content))
     assert sum(sizes.values()) < raw_total / 10, (sizes, raw_total)
-    print({"read": sizes, "dashboard_24m": len(dashboard.content), "raw": raw_total})
+    print({"read": sizes, "raw": raw_total})
 
 
 async def test_read_surface_matches_screen_endpoints_on_postgresql(
