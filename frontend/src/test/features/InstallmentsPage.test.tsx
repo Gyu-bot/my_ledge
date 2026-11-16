@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { metricsApi } from '../../api/metrics'
+import { commitmentsFixture, commitmentItem, readDataStatusFixture } from './workbenchFixtures'
 import { transactionApi } from '../../api/transactions'
 import { InstallmentsPage } from '../../features/data/InstallmentsPage'
 import type {
-  InstallmentForecastResponse,
   InstallmentPlansResponse,
   InstallmentTransactionLinkItem,
   InstallmentTransactionMappingListResponse,
@@ -43,10 +44,6 @@ function buildPlan(id: number, displayName: string) {
 
 function buildPlansResponse(items = [buildPlan(3, '맥북 3개월')]): InstallmentPlansResponse {
   return { items }
-}
-
-function buildForecastResponse(): InstallmentForecastResponse {
-  return { items: [], monthly_summary: [{ period: '2026-06', observed_total: 0, projected_total: 300000, missed_total: 0 }] }
 }
 
 function buildSuggestion(
@@ -165,9 +162,6 @@ function installApiMocks(options?: {
       per_page: 40,
       items: suggestionItems,
     } satisfies InstallmentTransactionSuggestionListResponse))
-  const forecastSpy = vi
-    .spyOn(transactionApi, 'installmentForecast')
-    .mockImplementation(async () => buildForecastResponse())
   const linkSpy = vi
     .spyOn(transactionApi, 'linkTransactionToInstallment')
     .mockImplementation(async (id, data) => {
@@ -193,7 +187,7 @@ function installApiMocks(options?: {
       return linkedItem
     })
 
-  return { forecastSpy, linkSpy, mappingsSpy, plansSpy, suggestionsSpy }
+  return {  linkSpy, mappingsSpy, plansSpy, suggestionsSpy }
 }
 
 function renderPage(queryClient: QueryClient) {
@@ -243,13 +237,13 @@ describe('InstallmentsPage', () => {
     expect(screen.getByRole('button', { name: '애플 케어 추천 연결' })).toBeDisabled()
   })
 
-  it('links a suggestion with the suggested number and refetches suggestions, list, and forecast', async () => {
+  it('links a suggestion with the suggested number and refetches suggestions and list', async () => {
     const queryClient = createQueryClient()
     const invalidateQueries = queryClient.invalidateQueries.bind(queryClient)
     const invalidateSpy = vi
       .spyOn(queryClient, 'invalidateQueries')
       .mockImplementation((...args) => invalidateQueries(...args))
-    const { forecastSpy, linkSpy, mappingsSpy, suggestionsSpy } = installApiMocks()
+    const {  linkSpy, mappingsSpy, suggestionsSpy } = installApiMocks()
 
     renderPage(queryClient)
     await openLinksTab()
@@ -257,7 +251,6 @@ describe('InstallmentsPage', () => {
 
     const initialSuggestionCalls = suggestionsSpy.mock.calls.length
     const initialMappingCalls = mappingsSpy.mock.calls.length
-    const initialForecastCalls = forecastSpy.mock.calls.length
 
     fireEvent.click(screen.getByRole('button', { name: '애플 스토어 추천 연결' }))
 
@@ -272,7 +265,6 @@ describe('InstallmentsPage', () => {
     await waitFor(() => {
       expect(suggestionsSpy.mock.calls.length).toBeGreaterThan(initialSuggestionCalls)
       expect(mappingsSpy.mock.calls.length).toBeGreaterThan(initialMappingCalls)
-      expect(forecastSpy.mock.calls.length).toBeGreaterThan(initialForecastCalls)
     })
 
     await waitFor(() => {
@@ -341,29 +333,15 @@ describe('InstallmentsPage', () => {
       memo: null,
     })
   })
-  it('미래 예정 합계에 과거 연결 미확인을 더하지 않고 8회차 이후도 표시한다', async () => {
+  it('계획을 완료 처리한다', async () => {
     const queryClient = createQueryClient()
-    const { forecastSpy } = installApiMocks()
-    forecastSpy.mockResolvedValue({ monthly_summary: [{ period: '2026-06', observed_total: 0, projected_total: 300000, missed_total: 100000, past_unconfirmed_total: 100000 }], items: Array.from({ length: 10 }, (_, index) => ({ installment_plan_id: 3, installment_plan_display_name: '10개월 계획', installment_number: index + 1, total_installments: 10, due_date: `2026-${String(index + 1).padStart(2, '0')}-05`, amount: 300000, status: index < 6 ? 'missed' as const : 'projected' as const, period: `2026-${String(index + 1).padStart(2, '0')}`, transaction_id: null })) })
-    renderPage(queryClient)
-    await screen.findByText('₩30만')
-    expect(screen.queryByText('₩40만')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: '예측' }))
-    expect(await screen.findByText('10 / 10회차 · 예정 2026-10-05')).toBeInTheDocument()
-    expect(screen.getAllByText('과거 연결 미확인').length).toBeGreaterThan(0)
-    expect(screen.getByText(/실제 미납이나 앞으로 다시 출금될 금액/)).toBeInTheDocument()
-  })
-
-  it('계획을 완료 처리하고 예측을 갱신한다', async () => {
-    const queryClient = createQueryClient()
-    const { forecastSpy } = installApiMocks()
+    installApiMocks()
     const patchSpy = vi.spyOn(transactionApi, 'patchInstallmentPlan').mockResolvedValue({ ...buildPlan(3, '맥북 3개월'), status: 'completed' })
     renderPage(queryClient)
     const select = await screen.findByLabelText('맥북 3개월 진행 상태')
     fireEvent.change(select, { target: { value: 'completed' } })
     fireEvent.click(screen.getByRole('button', { name: '저장' }))
     await waitFor(() => expect(patchSpy).toHaveBeenCalledWith(3, { display_name: '맥북 3개월', memo: null, status: 'completed' }))
-    await waitFor(() => expect(forecastSpy.mock.calls.length).toBeGreaterThan(1))
     expect(document.body.textContent).not.toContain('₩₩')
   })
 
@@ -391,4 +369,22 @@ describe('InstallmentsPage', () => {
     expect(linkSpy).not.toHaveBeenCalled()
   })
 
+})
+
+
+it('할부의 월별 관측과 남은 회차를 읽고 미래 예측은 표시하지 않는다', async () => {
+  installApiMocks()
+  const read = vi.spyOn(metricsApi, 'commitments').mockResolvedValue(commitmentsFixture([
+    commitmentItem({ kind: 'installment', kind_label: '할부', name: '샘플 할부', remaining_count: 2, end_date: '2026-09-15', state: 'expected_not_observed' }),
+  ]))
+  vi.spyOn(metricsApi, 'readDataStatus').mockResolvedValue(readDataStatusFixture())
+  renderPage(createQueryClient())
+  expect(screen.queryByRole('tab', { name: '예측' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('tab', { name: '관측 여부' }))
+  expect(await screen.findByText('샘플 할부')).toBeInTheDocument()
+  expect(screen.getByText('남은 회차 2회 · 마지막 회차 예정일 2026-09-15')).toBeInTheDocument()
+  expect(screen.getByText(/앞으로의 출금 예측이나 미납 판정이 아닙니다/)).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('combobox', { name: '할부 관측할 달' }), { target: { value: '2026-08' } })
+  await waitFor(() => expect(read).toHaveBeenLastCalledWith('2026-08'))
+  expect(screen.queryByText('미래 예정')).not.toBeInTheDocument()
 })

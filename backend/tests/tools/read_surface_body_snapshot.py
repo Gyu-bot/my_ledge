@@ -10,7 +10,7 @@ database (``alembic upgrade head``); never at a live server.
         --url $URL --out before.json
     PYTHONPATH=. python tests/tools/read_surface_body_snapshot.py dump \\
         --url $URL --out after.json
-    # 3. compare (pre-existing paths must be byte-identical)
+    # 3. compare (removed paths 404, retained values byte-identical)
     python tests/tools/read_surface_body_snapshot.py compare before.json after.json
     # 4. response sizes of the read surface vs the big dashboard and raw listing
     PYTHONPATH=. python tests/tools/read_surface_body_snapshot.py measure --url $URL
@@ -62,6 +62,16 @@ VARIANTS: dict[str, list[dict[str, str]]] = {
 }
 # Fields whose value is the wall-clock time of the request.
 VOLATILE_KEYS = {"generated_at"}
+REMOVED_PATHS = {
+    "/api/v1/analytics/discretionary-velocity",
+    "/api/v1/analytics/purchase-gate-candidates",
+    "/api/v1/analytics/spending-review-candidates",
+    "/api/v1/analytics/spending-anomalies",
+    "/api/v1/analytics/category-mom",
+    "/api/v1/installments/forecast",
+    "/api/v1/canonical-views/dashboard",
+}
+METADATA_PATHS = {"/api/v1/read/index", "/api/v1/read/data-status"}
 
 
 def _connect(url: str):  # type: ignore[no-untyped-def]
@@ -72,7 +82,10 @@ def _connect(url: str):  # type: ignore[no-untyped-def]
         create_async_engine,
     )
 
-    if make_url(url).host not in ("localhost", "127.0.0.1", "::1"):
+    parsed = make_url(url)
+    if (parsed.database or "").startswith("live_copy"):
+        raise SystemExit("refusing a live-copy database")
+    if parsed.host not in ("localhost", "127.0.0.1", "::1"):
         raise SystemExit("refusing a non-loopback database")
     engine = create_async_engine(url)
     return engine, async_sessionmaker(
@@ -153,9 +166,7 @@ async def dump(url: str, out: Path) -> None:
     headers = {"X-API-Key": API_KEY}
     results: dict[str, dict[str, Any]] = {}
     async with client:
-        for path in _get_paths(app):
-            if path.startswith("/api/v1/read"):
-                continue  # new in T060; nothing to compare against
+        for path in sorted(set(_get_paths(app)) | REMOVED_PATHS):
             concrete = re.sub(r"\{transaction_id\}", str(transaction_id), path)
             concrete = re.sub(r"\{[a-z_]+\}", "999999", concrete)
             for params in [{}, *VARIANTS.get(path, [])]:
@@ -176,25 +187,82 @@ async def dump(url: str, out: Path) -> None:
     print(json.dumps({"endpoints_called": len(results), "out": str(out)}))
 
 
+def _expected_metadata(path: str, body: dict) -> dict:
+    """The only allowed changes to retained read bodies: discovery pointers."""
+    if path == "/api/v1/read/index":
+        from app.services.read_surface_index import build_index
+
+        replacement = next(
+            entry.model_dump(mode="json")
+            for entry in build_index().entries
+            if entry.key == "month_end_projection"
+        )
+        for index, entry in enumerate(body["entries"]):
+            if entry["key"] == "month_end_projection":
+                assert set(entry) == set(replacement)
+                assert all(
+                    entry[key] == replacement[key]
+                    for key in entry
+                    if key not in {"path", "response_field", "notes"}
+                )
+                body["entries"][index] = replacement
+    elif path == "/api/v1/read/data-status":
+        from app.services.read_surface_service import MONTH_END_FORECAST_LOCATION
+
+        body["data"]["month_end_forecast"] = MONTH_END_FORECAST_LOCATION
+    return body
+
+
 def compare(before: Path, after: Path) -> int:
     old = json.loads(before.read_text())
     new = json.loads(after.read_text())
     missing = sorted(set(old) - set(new))
-    changed = [
-        key
-        for key in sorted(set(old) & set(new))
-        if (old[key]["status"], old[key]["sha256"])
-        != (new[key]["status"], new[key]["sha256"])
-    ]
-    normalized = sorted(key for key in old if old[key].get("volatile_normalized"))
+    changed, removed, metadata = [], [], []
+    for key in sorted(set(old) & set(new)):
+        path = key.split("?", 1)[0]
+        if path in REMOVED_PATHS:
+            if new[key]["status"] != 404:
+                changed.append(key)
+            else:
+                removed.append(key)
+        elif (old[key]["status"], old[key]["sha256"]) != (
+            new[key]["status"],
+            new[key]["sha256"],
+        ):
+            if path in METADATA_PATHS and old[key]["status"] == new[key]["status"]:
+                expected = _expected_metadata(path, json.loads(old[key]["body"]))
+                # Exact serialization as Pydantic/FastAPI, not an unordered comparison.
+                expected_bytes = json.dumps(
+                    expected, ensure_ascii=False, separators=(",", ":")
+                ).encode()
+                if hashlib.sha256(expected_bytes).hexdigest() == new[key]["sha256"]:
+                    metadata.append(key)
+                    continue
+            changed.append(key)
+    # Projection has a new envelope, with the former object unchanged in data.
+    projection_unchanged = None
+    dashboard = old.get("/api/v1/canonical-views/dashboard")
+    projection = new.get("/api/v1/read/month-projection")
+    if dashboard and projection:
+        old_projection = json.loads(dashboard["body"])["month_projection"]
+        new_projection = json.loads(projection["body"])["data"]
+        projection_unchanged = old_projection == new_projection
+        if not projection_unchanged:
+            changed.append("/api/v1/read/month-projection.data")
     print(
         json.dumps(
             {
                 "compared": len(set(old) & set(new)),
-                "identical": len(set(old) & set(new)) - len(changed),
+                "identical": len(set(old) & set(new))
+                - len(changed)
+                - len(removed)
+                - len(metadata),
+                "removed_404": removed,
+                "metadata_pointers_only": metadata,
+                "projection_object_unchanged": projection_unchanged,
                 "changed": changed,
                 "missing_after": missing,
-                "volatile_fields_normalized_in": normalized,
+                "added": sorted(set(new) - set(old)),
                 "volatile_keys": sorted(VOLATILE_KEYS),
             },
             indent=1,
@@ -229,11 +297,7 @@ async def measure(url: str) -> None:
             ("/api/v1/read/comparison/contributions", {}),
             ("/api/v1/read/review-items", {}),
             ("/api/v1/read/commitments", {}),
-            ("/api/v1/canonical-views/dashboard", {}),
-            (
-                "/api/v1/canonical-views/dashboard",
-                {"months": "24", "merchant_limit": "50", "queue_limit": "100"},
-            ),
+            ("/api/v1/read/month-projection", {}),
         ]:
             response = await client.get(path, params=params, headers=headers)
             assert response.status_code == 200, (path, response.status_code)

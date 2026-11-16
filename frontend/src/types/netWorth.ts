@@ -87,10 +87,15 @@ export interface ReconciliationItems {
   investment_valuation_change: number | null
   unexplained_difference: number | null
   investment_value_change: number | null
+  unexplained_share_of_change: number | null
+  unexplained_share_withheld_reason: 'net_worth_change_zero' | 'unexplained_not_computable' | null
+  investment_valuation_change_provisional: boolean
+  investment_valuation_change_provisional_reason: string | null
   investment_net_transfer_in: number
 }
 
 export interface NetWorthReconciliationResponse {
+  status_note: string
   status: ReconciliationStatus
   status_reasons: string[]
   identity: string

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { metricsApi } from '../api/metrics'
-import type { ContributionQuery, SpendCubeQuery, TransferPurpose } from '../types/metrics'
+import type { BaselineMethod, ContributionQuery, SpendCubeQuery, TransferPurpose } from '../types/metrics'
 
 export function useDataStatus() {
   return useQuery({
@@ -25,10 +25,10 @@ export function useSpendCube(params: SpendCubeQuery | null) {
   })
 }
 
-export function useMonthlyFlowComparison(period: string | null) {
+export function useMonthlyFlowComparison(period: string | null, baseline?: BaselineMethod) {
   return useQuery({
-    queryKey: ['metrics', 'comparison', 'monthly-flow', period],
-    queryFn: () => metricsApi.comparisonMonthlyFlow(period ?? undefined),
+    queryKey: ['metrics', 'comparison', 'monthly-flow', period, baseline],
+    queryFn: () => metricsApi.comparisonMonthlyFlow(period ?? undefined, baseline),
     enabled: period !== null,
   })
 }
@@ -88,5 +88,15 @@ export function useTransferPurposeList(params: { start_date?: string; end_date?:
   return useQuery({
     queryKey: ['transfer-purposes', 'transactions', 'list', params],
     queryFn: () => metricsApi.transferTransactions(params),
+  })
+}
+
+
+export function useMonthProjection(params: { reference_date?: string } = {}) {
+  return useQuery({
+    queryKey: ['read', 'month-projection', params],
+    queryFn: () => metricsApi.monthProjection(params),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
   })
 }

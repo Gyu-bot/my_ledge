@@ -146,6 +146,7 @@ function ReconciliationBody({
         <Badge variant={status.variant}>{data.status === 'complete' ? '✓ ' : '! '}{status.label}</Badge>
         <span className="text-caption text-text-secondary">{status.description}</span>
       </div>
+      <p className="text-caption text-text-muted">{data.status_note?.replace(/status=complete/g, '대조 항목 계산 완료').replace(/unexplained_difference/g, '설명되지 않는 차이').replace(/unexplained_share_of_change/g, '설명되지 않는 차이의 비중')}</p>
       {reasons.length > 0 ? (
         <ul aria-label="상태의 이유" className="list-inside list-disc space-y-0.5 text-caption text-text-secondary">
           {reasons.map((reason) => <li key={reason}>{reason}</li>)}
@@ -252,7 +253,7 @@ function ReconciliationBody({
           />
           <EquationRow
             sign="+"
-            label="투자 평가 변동"
+            label={items.investment_valuation_change_provisional ? '투자 평가 변동 · 잠정' : '투자 평가 변동'}
             description={
               items.investment_value_change != null
                 ? `투자 평가액 변화 ${formatSignedWon(items.investment_value_change)} − 투자 이체로 들어간 돈 ${formatSignedWon(items.investment_net_transfer_in)}. 시세를 따로 조회하지 않고 스냅샷 값만 씁니다.`
@@ -269,6 +270,14 @@ function ReconciliationBody({
             withheldReason={withheldUnexplainedReason(data.status)}
           />
         </ul>
+        {items.investment_valuation_change_provisional ? (
+          <p className="mt-2 text-caption text-warn"><Badge variant="warn">잠정</Badge> {items.investment_valuation_change_provisional_reason}</p>
+        ) : null}
+        <p className="mt-2 text-caption text-text-secondary">
+          설명되지 않는 차이의 비중 (순자산 변동 절댓값 대비): {sharePct(items.unexplained_share_of_change)}
+          {items.unexplained_share_withheld_reason === 'net_worth_change_zero' ? ' · 순자산 변동이 0원이어서 비중을 내지 않습니다.' : null}
+          {items.unexplained_share_withheld_reason === 'unexplained_not_computable' ? ' · 설명되지 않는 차이를 계산할 수 없어 비중을 내지 않습니다.' : null}
+        </p>
         {allPresent ? (
           <p className="mt-1.5 text-micro text-text-muted">
             {addsUp ? '네 항목을 더하면 순자산 변동과 같습니다.' : '네 항목의 합이 순자산 변동과 다릅니다. 응답 값을 그대로 보이고 있으니 알려 주세요.'}

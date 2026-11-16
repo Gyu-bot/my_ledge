@@ -1,6 +1,7 @@
 """Agent read surface endpoints (T060). Reads only; every path needs X-API-Key."""
 
 import logging
+from datetime import date
 from collections.abc import Awaitable, Callable
 from typing import get_args
 
@@ -33,6 +34,7 @@ from app.schemas.read_surface import (
     ReadDataStatusResponse,
     ReadErrorResponse,
     ReadMonthlyFlowResponse,
+    ReadMonthProjectionResponse,
     ReadReviewItemsResponse,
     ReadSpendCubeResponse,
     ReadSurfaceIndexResponse,
@@ -49,6 +51,7 @@ from app.services.read_surface_service import (
     read_contributions,
     read_data_status,
     read_monthly_flow,
+    read_month_projection,
     read_spend_cube,
 )
 
@@ -324,4 +327,20 @@ async def get_read_spending_reference(
         "spending_reference",
         db_session,
         lambda: read_spending_reference(db_session, period=period),
+    )
+
+
+@router.get(
+    "/month-projection",
+    response_model=ReadMonthProjectionResponse,
+    responses=_ERROR_RESPONSES,
+)
+async def get_read_month_projection(
+    reference_date: date | None = Query(default=None),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> ReadMonthProjectionResponse | JSONResponse:
+    return await _guard(
+        "month_end_projection",
+        db_session,
+        lambda: read_month_projection(db_session, reference_date=reference_date),
     )

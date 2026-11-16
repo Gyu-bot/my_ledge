@@ -1,125 +1,70 @@
 # 에이전트 읽기 표면 이전 안내 (T060)
 
-작성: 2026-11-15
-상태: 새 읽기 표면 제공 중. 기존 엔드포인트는 하나도 지우지 않았다.
+작성: 2026-11-15 · 최종 상태: 2026-11-17 승인된 제거 구현, PR 검토·병합 전. 이 문서는 저장소 계약이며 배포 완료를 뜻하지 않는다.
 
-이 문서는 상담 에이전트의 읽기 도구가 지금 쓰는 엔드포인트와 필드를 새 읽기 표면(`/api/v1/read/*`)의 무엇으로 바꾸면 되는지, 아직 바꿀 곳이 없는 것은 무엇인지, 기존 엔드포인트를 언제 어떤 순서로 정리할지를 적는다. 계약의 자세한 내용은 [backend-api-ssot.md](../backend-api-ssot.md#agent-read-surface-t060)와 [canonical-read-surface-reference.md](canonical-read-surface-reference.md#에이전트-읽기-표면-t060)에 있다.
+소비 에이전트 전환과 소유자 승인이라는 T060 제거 조건이 충족되어, 폐기 예고했던 GET 7개를 제거했다. 가져오기·검토 적용·되돌리기·쓰기·`/schema` 계약, DB 뷰와 컬럼은 그대로다. 기존 값의 정의를 새 값과 같다고 가정하지 않는다.
 
-## 1. 원칙
+## 1. 제거된 경로와 후속 표면
 
-- **지우지 않는다.** 기존 엔드포인트는 소비하는 에이전트 쪽 전환이 끝나고 사용자가 승인한 뒤에만 지운다. 이번 단계는 새 표면을 더하고, 정리 대상에 "폐기 예정" 표시만 붙였다.
-- **본문과 상태 코드는 그대로다.** 폐기 예정 표시는 OpenAPI의 `deprecated: true`와 응답 헤더 두 개(`Deprecation: true`, `Link: <대체 경로>; rel="successor-version"`)뿐이다. 같은 합성 장부에서 기존 GET 엔드포인트 71개 호출의 본문이 바뀌기 전후 바이트 단위로 같음을 확인했다(`backend/tests/tools/read_surface_body_snapshot.py`).
-- **가져오기 계약은 건드리지 않는다.** 아래 엔드포인트는 외부 가져오기 자동화가 엄격하게 검증하므로 표시도, 변경도 하지 않았다.
-  - `POST /api/v1/upload`, `POST /api/v1/upload/preview`, `POST /api/v1/upload/apply`
-  - `POST /api/v1/upload/review/prepare`, `GET /api/v1/upload/review/{operation_id}`, `POST /api/v1/upload/review/{operation_id}/decisions`, `POST /api/v1/upload/review/{operation_id}/apply`
-  - `GET /api/v1/upload/rollback-points`, `POST /api/v1/upload/{upload_id}/rollback`
-  - `GET /api/v1/upload/logs`
-- 화면(프론트엔드)도 아직 폐기 예정 엔드포인트 일부를 쓴다. `T059` 뒤에는 `canonical-views/dashboard`(월 결산의 월말 전망 `month_projection`, 데이터 사전·가져오기의 관측 범위·수입 예상 설정)와 `installments/forecast`(할부·자산·부채)가 남았다. 작업대의 분류 큐는 `/metrics/spend-cube?adjustability=undecided`를, 약정 현황과 자료 현황은 `/read/commitments`와 `/read/data-status`를 읽으므로 인박스가 쓰던 `canonical-views/dashboard`의 작업 큐와 `discretionary-velocity`는 화면이 더는 부르지 않는다. `purchase-gate-candidates`·`spending-review-candidates`, `spending-anomalies`, `category-mom`도 화면이 부르지 않는다.
+모두 `/api/v1` 아래다. 제거된 경로는 인증 여부와 관계없이 404다. 구현 순서는 재량 속도 → 후보·이상 지출 → 카테고리 전월비 → 할부 전망 → 큰 대시보드다.
 
-## 2. 새 읽기 표면
-
-모든 경로는 `X-API-Key`가 필요하고 읽기 전용이다. `GET /api/v1/read/index`가 아래 목록을 그대로 돌려준다.
-
-| 이름 | 경로 | 답하는 질문 | 정의 |
-|---|---|---|---|
-| 색인 | `/api/v1/read/index` | — | `read_surface.v1` |
-| 월 흐름표 | `/api/v1/read/monthly-flow` | Q1 | `monthly_flow.v2` |
-| 지출 큐브 질의 | `/api/v1/read/spend-cube` | Q1, Q3 | `spend_cube.v2` |
-| 월 흐름표 비교 | `/api/v1/read/comparison/monthly-flow` | Q1, Q2 | `comparison.v1` |
-| 변화 기여 | `/api/v1/read/comparison/contributions` | Q2, Q3 | `comparison.v1` |
-| 사후 검토할 거래 | `/api/v1/read/review-items` | Q2, Q3 | `review_items.v1` |
-| 약정 목록 | `/api/v1/read/commitments` | Q4 | `commitments.v1` |
-| 스냅샷 구간 목록 | `/api/v1/metrics/net-worth/intervals` | Q5 | `net_worth_reconciliation.v1` |
-| 순자산 대조 | `/api/v1/metrics/net-worth/reconciliation` | Q5 | `net_worth_reconciliation.v1` |
-| 비상금 개월 수 | `/api/v1/metrics/net-worth/emergency-fund` | Q5 | `emergency_fund.v1` |
-| 자료 현황 | `/api/v1/read/data-status` | Q6 | `data_status.v1` |
-
-## 3. 지금 읽기 도구가 기대하는 것과 바꿀 곳
-
-읽기 도구의 요약 단계는 큰 대시보드 응답의 구역 이름(목록마다 `count`와 앞쪽 몇 줄)과, 자산·대출·투자·보험·프로필 응답의 스냅샷 날짜를 따로 읽는다. 아래 표는 엔드포인트와 필드 단위로 바꿀 곳을 적는다. "대체 없음"은 아직 새 표면에 자리가 없다는 뜻이며, 그 엔드포인트는 계속 쓴다.
-
-### 3.1 큰 대시보드 `GET /api/v1/canonical-views/dashboard` (폐기 예정)
-
-| 지금 쓰는 구역·필드 | 새 표면 | 비고 |
+| 제거된 GET | 후속 GET | 읽을 값과 차이 |
 |---|---|---|
-| `data_coverage`, `reference_date`, `generated_at` | `/read/data-status`의 `as_of`(거래 기준일, 마감월, 진행월, 종류별 스냅샷 기준일), `data.transaction_coverage`, `data.coverage_gaps` | 모든 새 응답이 같은 `as_of`를 싣는다. 생성 시각은 싣지 않는다. |
-| `monthly_cashflow[]` | `/read/monthly-flow`의 `data.items[]` | 이름이 바뀐다: `expense_total` → `total_outflow`(대출 포함 총지급), `non_loan_expense_total` → `living_spend`, `loan_repayment_total` → `committed_loan_total`, `net_cashflow` → `residual`, `savings_rate` → `residual_rate`(마감월만), `unclassified_expense_total` → `adjustability_undecided_total`. 고정비·변동비 합계는 `committed_total`과 수시 지출 줄로 대신한다. |
-| `true_spendable_monthly[]` | 대체 없음(정리 대상). `residual`과 `adjustable_spend`로 대신한다. | 계획 3.3. |
-| `loan_repayment_monthly[]` | `/read/commitments`의 대출 항목(기간별 `observation.observed_amount`), `/read/monthly-flow`의 `committed_loan_total` | 상환 유형(원금·이자) 구분 합계는 새 표면에 없다. 원리금을 나누지 않는다는 계획 2.3을 따른다. |
-| `merchant_monthly_baseline[]` | `/read/comparison/contributions?level=merchant` | 3개월 평균 대신 비교 계약(최근 마감월 중앙값). |
-| `recurring_merchant_monthly[]` | `/read/commitments`의 정기 지급 항목 | 사람이 등록한 묶음만 나온다. 등록되지 않은 반복 거래처를 찾아 주는 목록은 없다(추천 금지). |
-| `unclassified_work_queue[]` | `/read/data-status`의 `data.classification`(미정 금액·비중·건수) | 거래별 작업 목록은 작업대 기능이라 읽기 표면에 두지 않는다. 목록이 필요하면 이 구역을 계속 쓴다. |
-| `month_projection`, 진행월 예상 수입 필드(`income_basis` 등) | 대체 없음 | 월말 순현금흐름 전망은 유지 대상이다. 수정 단계(`T064`)가 승인되기 전까지 이 응답에만 있다. 이 때문에 대시보드는 전망이 옮겨질 때까지 지울 수 없다. |
+| `/analytics/discretionary-velocity` | `/read/comparison/monthly-flow` | `data.comparison`, `data.measures[]`. 진행월은 같은 경과일 누적 비교. 예전 구매 순액의 월평균 속도 비율과 같지 않다. |
+| `/analytics/purchase-gate-candidates` | `/read/review-items` | `data.items[]`, `subject=transaction`, `listed_because[]`. 사후 검토 이유이며 구매 허용 판단이 아니다. |
+| `/analytics/spending-review-candidates` | `/read/review-items` | 위와 같다. `candidate_key`로 검토 상태를 쓸 때의 PATCH 경로는 유지한다. |
+| `/analytics/spending-anomalies` | `/read/review-items`, `/read/comparison/contributions` | 카테고리 항목은 `subject=category_month`. 상세 변화는 `data.items[]`, `data.twelve_month_items[]`. 검출 서비스는 재사용하므로 보존했다. |
+| `/analytics/category-mom` | `/read/comparison/contributions?baseline=previous_month` | `data.comparison.baseline_periods`, `data.items[].target_amount/baseline_amount/change_amount`. 기본은 최근 마감월 중앙값이다. |
+| `/installments/forecast` | `/read/commitments?period=YYYY-MM` | `data.items[kind=installment]`: `monthly_burden`, `remaining_count`, `end_date`, `observation`. 앞으로의 회차별 출금 전망은 제거했다. 관측 안 됨·연결 미확인은 미납 증거가 아니다. |
+| `/canonical-views/dashboard` | `/read/index`로 필요한 작은 표면 탐색 | 아래 필드 대응표. 전망도 전용 표면으로 옮겼으므로 큰 응답이 더 필요 없다. |
 
-### 3.2 분석 엔드포인트
+## 2. 큰 대시보드의 필드 대응
 
-| 지금 | 새 표면 | 폐기 예정 표시 |
+| 예전 필드 | 현재 위치 | 의미 |
 |---|---|---|
-| `GET /analytics/discretionary-velocity` | `/read/comparison/monthly-flow`(진행월은 같은 경과일 누적 비교) | 표시함 |
-| `GET /analytics/spending-anomalies` | `/read/review-items`의 `subject=category_month` 항목, `/read/comparison/contributions` | 표시함 |
-| `GET /analytics/purchase-gate-candidates`, `GET /analytics/spending-review-candidates` | `/read/review-items`의 `subject=transaction` 항목 | 표시함. 검토 상태를 쓰는 `PATCH .../review`는 쓰기라 그대로 둔다. |
-| `GET /analytics/category-mom` | `/read/comparison/contributions` | 표시함(분석별 기준선 정리) |
-| `GET /installments/forecast` | `/read/commitments`의 할부 항목 | 표시함. `missed`는 관측 여부 상태로 바뀐다. 앞으로의 회차(`projected`)는 내지 않는다(전망 아님). 남은 회차와 마지막 회차 예정일은 `remaining_count`, `end_date`로 읽는다. |
-| `GET /analytics/liquidity-health` | 대체 없음 | 표시하지 않음. 계획 3.3에 따라 재무상태(`T061`)로 옮겨진 뒤 표시한다. |
-| `GET /analytics/monthly-cashflow` | `/read/monthly-flow` | 표시하지 않음(3.3 목록 밖). 다음 정리 단계에서 정한다. |
-| `GET /analytics/fixed-cost-summary`, `GET /analytics/fixed-cost-trend` | `/read/monthly-flow`의 약정 지급 줄 | 표시하지 않음. "고정비"의 뜻이 약정 지급으로 바뀌어 값이 같지 않다. |
-| `GET /analytics/merchant-spend` | `/read/spend-cube?group_by=effective_category_major,merchant` | 표시하지 않음 |
-| `GET /analytics/recurring-payments` | 부분: `/read/commitments`(등록된 묶음) | 표시하지 않음. 반복 탐지 목록은 대체 없음. |
-| `GET /analytics/income-stability` | 대체 없음 | 표시하지 않음. 수입의 정기·비정기 구분 근거가 아직 없다. |
-| `GET /analytics/payment-method-patterns` | 대체 없음 | 표시하지 않음. 지출 큐브에 결제 수단 차원이 없다. |
+| `month_projection` | `GET /api/v1/read/month-projection`의 **`data`** | 동일한 `MonthlyProjection` 객체. 단일 `get_monthly_projection` 계산을 그대로 호출한다. |
+| `metric_as_of` | 같은 응답의 `as_of` | 거래 기준일·첫 거래일·마감월·진행월·종류별 스냅샷 날짜. `transaction_as_of_basis`도 그대로 `as_of` 안에 보존했다. |
+| `data_coverage.first_transaction_date` | 같은 응답의 `as_of.first_transaction_date` 또는 `/read/data-status.data.transaction_coverage.first_transaction_date` | 전체 유효 자료의 첫 날짜. |
+| `data_coverage.last_transaction_date` | 같은 응답의 `as_of.transaction_as_of` 또는 `/read/data-status.data.transaction_coverage.transaction_as_of` | 이름이 바뀐다. 사이 기간의 수집 완전성을 보증하지 않는다. |
+| `monthly_cashflow[]` | `/read/monthly-flow.data.items[]` | `expense_total` → `total_outflow`, `non_loan_expense_total` → `living_spend`, `loan_repayment_total` → `committed_loan_total`, `net_cashflow` → `residual`, `savings_rate` → `residual_rate`(마감월만). 고정/변동 분해 대신 약정/수시와 보호/조정 가능/미정을 쓴다. |
+| `true_spendable_monthly[]` | 제거. `/read/monthly-flow.data.items[].residual`, `adjustable_spend` | 실제 잔액·구매 가능액으로 대응시키지 않는다. |
+| `loan_repayment_monthly[]`, `recurring_merchant_monthly[]` | `/read/commitments.data.items[]` | 등록한 약정과 선택 월의 관측. 대출의 원금·이자를 추정해서 나누지 않는다. |
+| `merchant_monthly_baseline[]` | `/read/comparison/contributions?level=merchant`의 `data.items[]` | 카테고리를 유지한 거래처 비교. 예전 앞선 3행 평균과 정의가 다르다. |
+| `unclassified_work_queue[]`와 페이지 정보 | `/read/data-status.data.classification`, 작업대 `/metrics/spend-cube?adjustability=undecided`, 필요 거래 `/transactions` | 옛 분류 큐는 제거. 사람이 분류하며 시스템이 값을 제안하거나 미리 고르지 않는다. |
+| `generated_at` | 없음 | 요청 생성 시각을 자료 기준일로 쓰지 않는다. |
 
-### 3.3 스냅샷·약정 원천 엔드포인트
+## 3. 전용 월말 전망 계약
 
-| 지금 | 새 표면 | 비고 |
-|---|---|---|
-| `GET /loans/summary`, `GET /loan-accounts` | 부분: `/read/commitments`의 대출 항목(월 부담, 만기, 진행·종료), `/read/data-status`의 대출 스냅샷 기준일 | 잔액과 금리는 재무상태 쪽(`T061`). 계속 쓴다. |
-| `GET /assets/snapshot-compare`, `GET /assets/snapshots`, `GET /assets/net-worth-history`, `GET /analytics/net-worth-breakdown`, `GET /investments/summary`, `GET /insurance/summary`, `GET /profile` | 대체 없음(Q5는 `T061`). 종류별 기준일만 `/read/data-status`의 `data.snapshots[]` | 계속 쓴다. |
-| `GET /installment-plans`, `GET /installment-transaction-links`, `GET /loan-transaction-links` | 부분: `/read/commitments` | 연결 단위 목록은 작업대 용도로 남는다. |
-| `GET /transactions` 및 `/transactions/summary` 등 | 집계는 `/read/monthly-flow`, `/read/spend-cube` | 거래 목록 자체는 특정 거래를 확인할 때만 쓴다. 전체 수집은 더 필요 없다. |
-| `GET /schema`, `GET /health`, `GET /settings/analytics`, `GET /auto-classification/settings` | 해당 없음 | 분석 값이 아니다. 그대로 쓴다. |
-| `GET /upload/logs` | 해당 없음 | 가져오기 계약. 그대로 쓴다. |
+`GET /api/v1/read/month-projection?reference_date=YYYY-MM-DD`는 `X-API-Key`가 필요하며 읽기 전용이다. `ReadMonthProjectionResponse`는 `/read/*`와 같은 봉투(`surface`, `status`, `status_reasons`, `as_of`, `period_scope`, `classification`, `basis`, `labels`, `data`)를 쓴다.
 
-## 4. 기존 응답의 형식 불일치(고치지 않고 기록만)
+- `reference_date`를 주면 `data.as_of_basis=requested_date`. 생략하면 기존과 같이 거래 기준일을 따르고, 같은 달의 더 늦은 성공 업로드 기준일이 있으면 그날까지다. 자료가 없으면 `today_no_data`다.
+- **`data.as_of_date`는 전망 기준일**, 봉투 `as_of`는 전체 반영 자료의 기준일이다. 과거 날짜 요청으로 현재 분류·연결 설정까지 과거로 되돌리지는 않는다.
+- `data.coverage`는 전망 근거 기간과 관측 범위다. `period_scope.periods[].data_coverage`는 달 전체/부분/거래 기록 없음(추정)/범위 밖을 구분한다.
+- `status=ok`는 전체 전망 보증이 아니다. 반드시 `data.completeness.full_projection_available`, `amount_scope`, `left_out[]`를 함께 읽는다. `false`인데 숫자가 있으면 일부 구성 요소만의 합이다. `null`은 0원이 아니다.
+- 같은 관측·가정·누락 이유·분류 미정 비중을 보존했다. 두 번째 전망 계산은 없다. 전망은 해당 월말을 넘지 않는다.
+- 인증 실패 401, 조회 실패 503(`status=query_failed`), 잘못된 날짜·알 수 없는 인자 422. 422는 다른 읽기 표면과 같은 `detail` 오류 배열이다. 비교의 틀린 `baseline` 등 열거값도 같은 배열로 거절한다.
+- `GET /api/v1/canonical-views/month-projection/accuracy`는 **폐기 대상이 아니며 경로와 본문을 그대로 유지**했다.
 
-새 표면 밖의 기존 응답은 필드 이름과 타입을 바꾸지 않았다. 새 표면으로 옮기면 아래가 해소된다.
+## 4. 남긴 표면
 
-- 금액 타입이 섞여 있다. 대출·스냅샷 응답의 `Decimal` 필드(예: `latest_balance`, `latest_interest_rate`, 스냅샷 금액)는 JSON에서 문자열로 나가고, 거래 집계는 정수다.
-- 비율 표기가 섞여 있다. 대부분 0–1 비율이지만 `spending-anomalies`의 `delta_pct`는 백분율 값이다.
-- 가정 표기가 섞여 있다. `spending-anomalies`의 `assumptions`는 문자열 하나, 다른 분석은 문자열 목록이다.
-- 기준일 이름이 제각각이다: `reference_date`, `as_of_date`, `transaction_as_of`, `snapshot_date`.
-- 기간 파라미터가 둘이다: 분석은 `start_date`/`end_date`, 지표는 `start_period`/`end_period`.
-- 언어가 섞여 있다. 영문 열거값(`risk_level`, `baseline_quality`, `status`)에 한국어 이름이 없거나, 한국어 문장(`reason`)만 있고 안정 키가 없다.
-- 할부 전망의 `missed`는 "연결 미확인"인데 이름이 미납처럼 읽힌다.
-- 목록 형식이 둘이다: `total/page/per_page` 페이지와 `limit`.
-- 상태 구분이 없다. 자료가 없을 때 빈 목록이나 0을 돌려주는 응답이 많아, 가져오지 않은 기간과 거래 0건인 기간과 분류 미완을 구분할 수 없다.
-- 인증이 섞여 있다. 많은 분석 읽기가 `X-API-Key` 없이 열린다(정리는 `T063`).
+`GET /api/v1/analytics/liquidity-health`는 제거하지 않았다. 화면이 `/metrics/net-worth/emergency-fund`를 쓰므로 이번에 OpenAPI `deprecated: true`, `Deprecation: true`, `Link: </api/v1/metrics/net-worth/emergency-fund>; rel="successor-version"`를 붙였다. 본문과 상태 코드는 그대로다. 후속의 분모는 월 보호 지급이며 예전 분모와 같지 않다.
 
-## 5. 정리 순서(제안)
+정리 대상 밖의 분석·스냅샷·원천 조회, 소득 예상 설정 GET/PATCH, 검토 상태 PATCH는 유지했다. `/upload/*`의 요청·응답과 상태값, `/schema`와 모든 쓰기 API는 변경하지 않았다. DB 뷰·컬럼 제거와 인증 경계(T063)는 후속 범위다.
 
-1. **지금**: 새 표면 제공, 정리 대상 7개에 폐기 예정 표시. 아무것도 지우지 않는다.
-2. **읽기 도구 전환**: 상담 에이전트의 요약 단계를 `index` → `data-status` → `monthly-flow` → `commitments` → `review-items` → `comparison/contributions` 순으로 바꾼다. 가져오기·검토·되돌리기 도구는 바꾸지 않는다. 전환 뒤 폐기 예정 경로 호출이 남지 않았는지 응답 헤더(`Deprecation`)나 서버 로그로 확인한다.
-3. **화면 전환**: `T058`, `T059`에서 화면이 폐기 예정 경로를 더는 부르지 않게 한다.
-4. **재무상태**: `T061`의 순자산 대조가 들어와 색인의 Q5 항목을 채웠다(공통 봉투 없이 지표 응답 그대로). `liquidity-health`의 폐기 예정 표시는 소비 쪽이 비상금 개월 수로 옮긴 뒤에 단다.
-5. **전망 자리 정하기**: `T064` 수정 단계가 승인되면 월말 순현금흐름 전망을 읽을 자리를 정한다. 그 전에는 대시보드를 지우지 않는다.
-6. **제거**: 위가 끝난 묶음부터 사용자 승인을 받아 한 묶음씩 지운다. 순서는 (가) `discretionary-velocity`, (나) `purchase-gate-candidates`·`spending-review-candidates`·`spending-anomalies`, (다) `category-mom`, (라) `installments/forecast`, (마) 큰 대시보드.
+## 5. 에이전트 클라이언트가 바꿀 것
 
-## 6. 바꾸면서 확인할 것
+1. `/canonical-views/dashboard` → `/read/month-projection`. `response.month_projection` → **`response.data`**. `reference_date`는 그대로 전달한다.
+2. `response.metric_as_of` → `response.as_of`; `response.data_coverage.first_transaction_date` → `response.as_of.first_transaction_date`; `response.data_coverage.last_transaction_date` → `response.as_of.transaction_as_of`.
+3. `/canonical-views/month-projection/accuracy`는 그대로 호출한다.
+4. 남은 옛 명령은 1절의 작은 표면으로 바꾸거나 삭제한다. import/review/approval/rollback/mail/cron 작업은 이 PR의 변경 대상이 아니다. 외부 에이전트 저장소는 별도 검토자가 처리한다.
+5. 봉투 상태와 전망 완성도는 서로 다른 사실이다. 부분 합계·누락 이유, 진행월 부분 기록, 비중 보류 사유를 답에 함께 밝힌다. 순자산 `status=complete`도 모든 차이가 설명되었다는 뜻은 아니다.
 
-- 새 응답의 `status`가 `ok`가 아니면 그 이유(`status_reasons`)를 답에 함께 밝힌다. 특히 `classification_incomplete`는 보호·조정 가능 합계가 미정 금액만큼 덜 잡혔다는 뜻이다.
-- 진행월은 부분 기록이다. 비율 지표와 전월 전체 대비 증감을 내지 않는다.
-- 약정 목록의 "관측 안 됨"은 연결된 거래가 기록에 없다는 뜻이다. 지급하지 않았다는 증거로 쓰지 않는다.
-- 스냅샷 기준일은 종류마다 다르다. 하나로 합치지 않는다.
+## 6. 검증과 변경 키
 
-## 7. T054/T057 잔여 완료 조건 (2026-11-17)
+합성 장부로 제거 전후 GET 응답을 비교한다(`backend/tests/tools/read_surface_body_snapshot.py`). 제거된 경로는 404를 확인하고, 남은 응답은 바이트 동등성을 확인한다. 허용한 본문 차이는 금융 값이 아닌 다음 발견용 메타데이터뿐이다.
 
-폐기 예정 응답의 기준선은 제거 시점까지 유지한다. 기존 소비자의 금액·필터·상태 코드를 바꾸어 이행을 강제하지 않는다.
+- `/read/index.entries[key=month_end_projection]`: `path`, `response_field`, `notes`.
+- `/read/data-status.data.month_end_forecast`: `path`, `field`, `note`.
+- 새 경로의 `data`는 제거 전 `dashboard.month_projection` 객체와 같다. 정확도와 나머지 금융 값은 바꾸지 않았다.
 
-| 기존 표면 (예전 기준선 유지) | 사용할 후속 표면 (비교 계약) |
-|---|---|
-| `vw_merchant_monthly_baseline`, 대시보드 `merchant_monthly_baseline[]`: 거래가 있는 앞선 3개 행의 평균 | `/read/comparison/contributions?level=merchant`: 카테고리 유지, 마감월 중앙값·자료 공백 구분·진행월 같은 경과일, 연간성은 12개월 창 |
-| `/analytics/discretionary-velocity`: 과거 구매 순액 월평균 × 월 진행률 | `/read/comparison/monthly-flow`: `adjustable_spend` 등 게시월 실적, 마감월 중앙값·진행월 같은 경과일. 두 금액 정의가 다르므로 비율을 그대로 대응시키지 않음 |
-| `/analytics/purchase-gate-candidates`, `/analytics/spending-review-candidates`: 탐지기 조회창의 관측 월평균 | `/read/review-items`: 거래·카테고리 항목 모두 `data.comparison`의 기간 계약 사용. 거래 후보는 구매 순액의 마감월 중앙값, 카테고리는 게시월 지출 기준 |
-
-후속 응답은 기본 6개 마감월, 기준 구간 시작일, 자료 없음/항목 0원 구분, 진행월 같은 경과일 처리를 밝힌다. 구매 탐지의 신규 거래처도 같은 기준 기간을 쓴다. 후보 구성·이유·신호는 이에 따라 달라질 수 있고 진행월의 계산된 구매 급증 비율은 내지 않는다. 개별 구매 급증은 월 구매 순액 판정이며, 연간성 지출의 12개월 비교는 `/read/comparison/contributions.data.twelve_month_items`가 제공한다. 폐기 예정 경로의 제거는 별도 작업이다.
-
-추가된 범위별 이름과 기존 이름의 대응은 [SSOT 대응표](../backend-api-ssot.md#t054t057-remaining-acceptance-2026-11-17)에 있다. 1절의 “본문 그대로”는 T060 당시의 폐기 표시 변경에 대한 검증이다. 이번 보완은 기존 값은 유지하면서 별칭과 설명을 더하고, SQL 현금흐름 뷰의 진행월 저축률만 null로 바꾼다. `/read/*`의 봉투, 색인 인자, 422 검증 규칙은 그대로다.
+예전 폐기 예고 시점(2026-11-15)의 71회 본문 동등성 검증과 T054/T057의 기준선 호환 예외는 당시 이력이다. 이번 제거로 HTTP 호환 예외는 끝났고, 남겨 둔 SQL 뷰는 그대로다.

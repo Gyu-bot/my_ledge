@@ -40,6 +40,18 @@ describe('metricsApi — T058 화면이 읽는 지표 계약', () => {
     }
   })
 
+  it('전망과 두 비교의 선택 인자를 서버로 보내고 정확도 경로는 유지한다', async () => {
+    const fetchMock = stubFetch()
+    await metricsApi.monthProjection({ reference_date: '2026-07-15' })
+    await metricsApi.comparisonMonthlyFlow('2026-07', 'previous_month')
+    await metricsApi.contributions({ period: '2026-07', baseline: 'previous_month' })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/read/month-projection?reference_date=2026-07-15',
+      '/api/v1/metrics/comparison/monthly-flow?period=2026-07&baseline=previous_month',
+      '/api/v1/metrics/comparison/contributions?period=2026-07&baseline=previous_month',
+    ])
+  })
+
   it('조회 실패는 상태코드를 담은 오류로 던진다', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"detail":"Invalid API key."}', { status: 401 })))
     await expect(metricsApi.dataStatus()).rejects.toThrow(/^401:/)

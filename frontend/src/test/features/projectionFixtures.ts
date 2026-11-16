@@ -1,7 +1,8 @@
-import type { MonthlyProjection } from '../../types/canonicalViews'
+import type { MonthlyProjection } from '../../types/incomeProjection'
 
 export function projectionFixture(): MonthlyProjection {
   return {
+    completeness: { status: 'all_known_components', status_label: '알려진 구성 요소 전체 반영', full_projection_available: true, amount_scope: 'all_known_components', left_out: [], basis: '합성 자료' },
     period: '2026-06',
     as_of_date: '2026-06-10',
     observed_through: '2026-06-10',

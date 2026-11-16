@@ -235,29 +235,6 @@ async def scenario_in_progress_month(
     ratios = {row["period"]: row["fixed_ratio"] for row in trend["items"]}
     assert ratios["2026-06"] is None
 
-    mom = (await client.get("/api/v1/analytics/category-mom")).json()
-    assert mom["is_partial_period"] is True
-    assert mom["comparison_basis"] == "same_day_previous_month"
-    assert mom["reference_date"] == "2026-06-10"
-    assert mom["comparison"]["partial_month_handling"] == "same_elapsed_days"
-    mom_item = next(row for row in mom["items"] if row["category"] == "category-a")
-    # Previous month through the same day, never the full previous month.
-    assert mom_item["previous_amount"] == 100_000
-    assert mom_item["current_amount"] == 150_000
-    assert mom_item["baseline_amount"] == 100_000
-    assert mom_item["baseline_change_amount"] == 50_000
-
-    anomalies = (
-        await client.get(
-            "/api/v1/analytics/spending-anomalies",
-            params={"end_date": "2026-06-10", "min_delta_amount": 1},
-        )
-    ).json()
-    assert anomalies["is_partial_period"] is True
-    assert anomalies["comparison"]["elapsed_day"] == 10
-    anomaly = next(row for row in anomalies["items"] if row["category"] == "category-a")
-    assert anomaly["baseline_avg"] == 100_000
-
 
 # --------------------------------------------------------------------------
 # Scenario: a month with no data vs a month with a zero amount.
@@ -342,44 +319,18 @@ async def scenario_baseline_start_date(
     async def snapshot() -> dict[str, object]:
         flow = await get(client, "/metrics/comparison/monthly-flow")
         contributions = await get(client, "/metrics/comparison/contributions")
-        mom = (
-            await client.get(
-                "/api/v1/analytics/category-mom", params={"end_date": "2026-08-31"}
-            )
-        ).json()
-        anomalies = (
-            await client.get(
-                "/api/v1/analytics/spending-anomalies",
-                params={
-                    "end_date": "2026-08-31",
-                    "min_delta_amount": 1,
-                    "anomaly_threshold": 0,
-                },
-            )
-        ).json()
-        anomaly = next(
-            row for row in anomalies["items"] if row["category"] == "category-a"
-        )
         return {
             "periods": {
                 tuple(flow["comparison"]["baseline_periods"]),
                 tuple(contributions["comparison"]["baseline_periods"]),
-                tuple(mom["comparison"]["baseline_periods"]),
-                tuple(anomalies["comparison"]["baseline_periods"]),
             },
             "start": {
                 flow["comparison"]["baseline_start_date"],
                 contributions["comparison"]["baseline_start_date"],
-                mom["comparison"]["baseline_start_date"],
-                anomalies["comparison"]["baseline_start_date"],
             },
             "baseline": {
                 measure(flow, "total_outflow")["baseline_amount"],
                 item(contributions, "category-a")["baseline_amount"],
-                next(row for row in mom["items"] if row["category"] == "category-a")[
-                    "baseline_amount"
-                ],
-                anomaly["baseline_avg"],
             },
         }
 

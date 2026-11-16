@@ -22,38 +22,6 @@ class MonthlyCashflowResponse(BaseModel):
     contract: MetricContract | None = None
 
 
-class CategoryMoMItem(BaseModel):
-    period: str
-    previous_period: str
-    category: str
-    current_amount: int
-    previous_amount: int
-    delta_amount: int
-    delta_pct: float | None
-    baseline_amount: int | None = Field(
-        default=None,
-        description=(
-            "비교 계약(comparison.v1) 기준값: 기준 기간 월별 금액의 중앙값. "
-            "previous_*는 기존 전월 비교로 유지."
-        ),
-    )
-    baseline_change_amount: int | None = Field(
-        default=None,
-        description="current_amount − baseline_amount (원). 기준 기간이 없으면 null.",
-    )
-
-
-class CategoryMoMResponse(BaseModel):
-    items: list[CategoryMoMItem]
-    reference_date: date | None = None
-    is_partial_period: bool = False
-    comparison_basis: Literal["same_day_previous_month", "full_previous_month"] = (
-        "full_previous_month"
-    )
-    contract: MetricContract | None = None
-    comparison: ComparisonBasis | None = None
-
-
 class FixedCostSummaryResponse(BaseModel):
     expense_total: int
     fixed_total: int
@@ -216,24 +184,6 @@ class SpendingAnomaliesResponse(BaseModel):
     assumptions: str
     contract: MetricContract | None = None
     comparison: ComparisonBasis | None = None
-
-
-class DiscretionaryVelocityResponse(BaseModel):
-    period: str
-    as_of_date: date
-    month_progress_ratio: float
-    discretionary_spend: int
-    baseline_monthly_spend: int
-    baseline_spend_at_same_progress: int
-    velocity_ratio: float | None
-    risk_level: str
-    confidence: str
-    classification_coverage_ratio: float | None
-    unclassified_spend: int
-    income_basis: str | None
-    reasons: list[str]
-    assumptions: list[str]
-    contract: MetricContract | None = None
 
 
 class PurchaseGateCandidateItem(BaseModel):

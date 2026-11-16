@@ -31,8 +31,6 @@ import type {
   InstallmentTransactionMappingParams,
   InstallmentTransactionSuggestionListResponse,
   InstallmentTransactionSuggestionParams,
-  InstallmentForecastResponse,
-  InstallmentForecastParams,
   InstallmentPlanResponse,
   CategoryTimelineItem,
   CategoryBreakdownItem,
@@ -235,9 +233,6 @@ export const transactionApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
-
-  installmentForecast: (params: InstallmentForecastParams = {}) =>
-    apiFetch<InstallmentForecastResponse>(`/installments/forecast${buildQuery(params)}`),
 
   autoClassificationSettings: () =>
     apiFetch<AutoClassificationSettings>('/auto-classification/settings'),

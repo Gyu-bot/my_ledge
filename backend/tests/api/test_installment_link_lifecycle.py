@@ -57,9 +57,12 @@ async def test_inactive_installment_link_preserved_until_explicit_unlink_and_rep
 
     initial_plans = await async_client.get("/api/v1/installment-plans")
     assert initial_plans.json()["items"][0]["linked_installment_count"] == 1
-    forecast_path = "/api/v1/installments/forecast?as_of_date=2026-05-15&months=2"
-    initial_forecast = await async_client.get(forecast_path)
-    assert initial_forecast.json()["items"][0]["status"] == "observed"
+    forecast_path = "/api/v1/read/commitments?period=2026-04"
+    initial_forecast = await async_client.get(forecast_path, headers=api_headers)
+    assert (
+        initial_forecast.json()["data"]["items"][0]["observation"]["state"]
+        == "observed"
+    )
 
     if inactive_state == "deleted":
         original.is_deleted = True
@@ -76,9 +79,8 @@ async def test_inactive_installment_link_preserved_until_explicit_unlink_and_rep
     )
     assert patched.status_code == 200
     assert patched.json()["linked_installment_count"] == 0
-    forecast = await async_client.get(forecast_path)
-    assert forecast.json()["items"][0]["status"] == "missed"
-    assert forecast.json()["items"][0]["transaction_id"] is None
+    forecast = await async_client.get(forecast_path, headers=api_headers)
+    assert forecast.json()["data"]["items"][0]["observation"]["transaction_ids"] == []
     suggestions = await async_client.get("/api/v1/installment-transaction-suggestions")
     candidate = suggestions.json()["items"][0]
     assert candidate["transaction"]["transaction_id"] == replacement.id
@@ -137,9 +139,12 @@ async def test_inactive_installment_link_preserved_until_explicit_unlink_and_rep
     original.merged_into_id = None
     await db_session.commit()
     restored_plans = await async_client.get("/api/v1/installment-plans")
-    restored_forecast = await async_client.get(forecast_path)
+    restored_forecast = await async_client.get(forecast_path, headers=api_headers)
     assert restored_plans.json()["items"][0]["linked_installment_count"] == 1
-    assert restored_forecast.json()["items"][0]["status"] == "observed"
+    assert (
+        restored_forecast.json()["data"]["items"][0]["observation"]["state"]
+        == "observed"
+    )
     guarded_delete_path = (
         f"/api/v1/transactions/{original.id}/installment-link?require_inactive=true"
     )
@@ -192,8 +197,10 @@ async def test_inactive_installment_link_preserved_until_explicit_unlink_and_rep
     original.is_deleted = False
     original.merged_into_id = None
     await db_session.commit()
-    replacement_forecast = await async_client.get(forecast_path)
-    assert replacement_forecast.json()["items"][0]["transaction_id"] == replacement.id
+    replacement_forecast = await async_client.get(forecast_path, headers=api_headers)
+    assert replacement_forecast.json()["data"]["items"][0]["observation"][
+        "transaction_ids"
+    ] == [replacement.id]
     replacement_plans = await async_client.get("/api/v1/installment-plans")
     assert replacement_plans.json()["items"][0]["linked_installment_count"] == 1
     reverse_conflict = await async_client.put(

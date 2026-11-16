@@ -24,7 +24,7 @@ export function useApplySourcePolicy() {
     mutationFn: sourcePolicyApi.apply,
     onSuccess: (policy) => {
       client.setQueryData(sourcePolicyKeys.policy, policy)
-      for (const key of ['assets', 'analytics', 'canonical-views']) {
+      for (const key of ['assets', 'analytics', 'canonical-views', 'read']) {
         void client.invalidateQueries({ queryKey: [key] })
       }
     },

@@ -29,8 +29,8 @@ vi.mock('../../hooks/useUpload', () => ({
   useUploadLogs: () => query(mocks.logs()),
 }))
 
-vi.mock('../../hooks/useCanonicalViews', () => ({
-  useCanonicalViewsDashboard: () => query({ data_coverage: { first_transaction_date: '2025-03-12', last_transaction_date: '2026-06-10' } }),
+vi.mock('../../hooks/useMetrics', () => ({
+  useReadDataStatus: () => query({ data: { transaction_coverage: { first_transaction_date: '2025-03-12', transaction_as_of: '2026-06-10' } } }),
 }))
 
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => mocks.writeAccess() }))

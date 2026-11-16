@@ -1,5 +1,4 @@
 import calendar
-from collections import defaultdict
 from datetime import date
 
 from fastapi import HTTPException, status
@@ -12,9 +11,6 @@ from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.installment import (
-    InstallmentForecastItem,
-    InstallmentForecastMonthlySummaryItem,
-    InstallmentForecastResponse,
     InstallmentLinkStateFilter,
     InstallmentPlanCreateRequest,
     InstallmentPlanListResponse,
@@ -296,83 +292,6 @@ async def delete_transaction_installment_link(
     await db_session.delete(link)
     await db_session.commit()
     return True
-
-
-async def get_installment_forecast(
-    db_session: AsyncSession,
-    *,
-    as_of_date: date,
-    months: int,
-) -> InstallmentForecastResponse:
-    result = await db_session.execute(
-        select(InstallmentPlan).where(InstallmentPlan.status == "active")
-    )
-    plans = list(result.scalars().all())
-    if not plans:
-        return InstallmentForecastResponse(items=[], monthly_summary=[])
-
-    link_result = await db_session.execute(
-        select(InstallmentTransactionLink)
-        .join(Transaction, Transaction.id == InstallmentTransactionLink.transaction_id)
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
-        .where(
-            InstallmentTransactionLink.installment_plan_id.in_(
-                [plan.id for plan in plans]
-            )
-        )
-    )
-    links_by_plan_number = {
-        (link.installment_plan_id, link.installment_number): link
-        for link in link_result.scalars().all()
-    }
-    horizon = _add_months(as_of_date, months)
-    items: list[InstallmentForecastItem] = []
-    for plan in plans:
-        for installment_number in range(1, plan.total_installments + 1):
-            due_date = _add_months(plan.first_payment_date, installment_number - 1)
-            if due_date > horizon:
-                continue
-            link = links_by_plan_number.get((plan.id, installment_number))
-            if link is not None:
-                forecast_status = "observed"
-                transaction_id = link.transaction_id
-            elif due_date >= as_of_date:
-                forecast_status = "projected"
-                transaction_id = None
-            else:
-                forecast_status = "missed"
-                transaction_id = None
-            items.append(
-                InstallmentForecastItem(
-                    installment_plan_id=plan.id,
-                    installment_plan_display_name=plan.display_name,
-                    installment_number=installment_number,
-                    total_installments=plan.total_installments,
-                    due_date=due_date,
-                    period=due_date.strftime("%Y-%m"),
-                    amount=plan.monthly_amount,
-                    status=forecast_status,
-                    status_label={
-                        "observed": "연결 확인",
-                        "projected": "향후 예정",
-                        "missed": "과거 연결 미확인",
-                    }[forecast_status],
-                    is_future_obligation=forecast_status == "projected",
-                    transaction_id=transaction_id,
-                )
-            )
-    items.sort(
-        key=lambda item: (
-            item.due_date,
-            item.installment_plan_display_name,
-            item.installment_number,
-        )
-    )
-    return InstallmentForecastResponse(
-        items=items,
-        monthly_summary=_build_monthly_summary(items),
-    )
 
 
 def _build_mapping_query(
@@ -722,26 +641,6 @@ def _serialize_mapping_row(row: RowMapping) -> InstallmentTransactionMappingItem
         recurring_payment_kind=row["recurring_payment_kind"],
         link=link,
     )
-
-
-def _build_monthly_summary(
-    items: list[InstallmentForecastItem],
-) -> list[InstallmentForecastMonthlySummaryItem]:
-    grouped: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"observed": 0, "projected": 0, "missed": 0}
-    )
-    for item in items:
-        grouped[item.period][item.status] += item.amount
-    return [
-        InstallmentForecastMonthlySummaryItem(
-            period=period,
-            observed_total=values["observed"],
-            projected_total=values["projected"],
-            missed_total=values["missed"],
-            past_unconfirmed_total=values["missed"],
-        )
-        for period, values in sorted(grouped.items())
-    ]
 
 
 def _add_months(value: date, months: int) -> date:

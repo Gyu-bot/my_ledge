@@ -353,3 +353,26 @@ describe('NetWorthPage (재무상태)', () => {
     expect(screen.getByText('비상금 개월 수 계산 보류')).toBeInTheDocument()
   })
 })
+
+
+it('투자 평가 변동의 잠정 사유·서버 비중·대조 완료의 한계를 함께 보인다', () => {
+  const data = reconciliationFixture()
+  state.reconciliation = { ...data, status_note: '합성 안내: 계산 완료가 차이의 해소를 뜻하지 않습니다.', items: {
+    ...data.items!, investment_valuation_change_provisional: true,
+    investment_valuation_change_provisional_reason: '목적 미정 이체의 분류 후 투자 변동이 달라질 수 있습니다.',
+    unexplained_share_of_change: -1.2345,
+  } }
+  render(<MemoryRouter><NetWorthPage /></MemoryRouter>)
+  expect(screen.getByText('투자 평가 변동 · 잠정')).toBeInTheDocument()
+  expect(screen.getByText('잠정')).toBeInTheDocument()
+  expect(screen.getByText(/목적 미정 이체의 분류 후/)).toBeInTheDocument()
+  expect(screen.getByText(/순자산 변동 절댓값 대비.*-123.4%/)).toBeInTheDocument()
+  expect(screen.getByText('합성 안내: 계산 완료가 차이의 해소를 뜻하지 않습니다.')).toBeInTheDocument()
+})
+
+it('순자산 변동이 0이면 비중을 새로 계산하지 않고 보류 사유를 표시한다', () => {
+  const data = reconciliationFixture()
+  state.reconciliation = { ...data, items: { ...data.items!, net_worth_change: 0, unexplained_share_of_change: null, unexplained_share_withheld_reason: 'net_worth_change_zero' } }
+  render(<MemoryRouter><NetWorthPage /></MemoryRouter>)
+  expect(screen.getByText(/순자산 변동이 0원이어서 비중을 내지 않습니다/)).toBeInTheDocument()
+})

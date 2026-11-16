@@ -7,7 +7,8 @@ import { EmptyState, ErrorState } from '../../ds/States'
 import { formatNetWon, formatSignedWon } from '../../ds/format'
 import { useContributions } from '../../hooks/useMetrics'
 import { cn } from '../../lib/utils'
-import type { ComparisonBasis, ContributionAdjustability, ContributionItem } from '../../types/metrics'
+import type { BaselineMethod, ContributionAdjustability, ContributionItem } from '../../types/metrics'
+import { BaselineControl, BasisNote } from '../analysis/ComparisonBasis'
 import { loadErrorMessage } from '../analysis/text'
 
 const VIEW_OPTIONS = [
@@ -20,21 +21,6 @@ function changeText(change: number | null): string {
   if (change == null) return '비교 불가'
   if (change === 0) return '변화 없음'
   return `${formatSignedWon(change)} ${change > 0 ? '늘어남' : '줄어듦'}`
-}
-
-export function BasisNote({ basis }: { basis: ComparisonBasis }) {
-  const periods = basis.baseline_periods
-  return (
-    <p className="text-caption text-text-muted">
-      비교 기준: {basis.baseline_method_label}
-      {periods.length > 0 ? ` (${periods[0]} ~ ${periods[periods.length - 1]}, ${basis.baseline_month_count}개월)` : ' — 기준으로 쓸 이전 마감월이 없습니다'}
-      {basis.baseline_status === 'fewer_than_requested' ? ` · 요청한 ${basis.baseline_months_requested}개월보다 적음` : ''}
-      {basis.baseline_start_date ? ` · 기준 구간 시작일 ${basis.baseline_start_date}` : ''}
-      {basis.skipped_periods.length > 0 ? ` · 자료 없는 달 제외: ${basis.skipped_periods.map((item) => item.period).join(', ')}` : ''}
-      {' · '}
-      {basis.partial_month_note}
-    </p>
-  )
 }
 
 function ContributionRow({ item, expandable, open, onToggle }: { item: ContributionItem; expandable: boolean; open: boolean; onToggle: () => void }) {
@@ -62,8 +48,8 @@ function ContributionRow({ item, expandable, open, onToggle }: { item: Contribut
   )
 }
 
-function MerchantContributions({ period, view, category }: { period: string; view: ContributionAdjustability; category: string }) {
-  const query = useContributions({ period, adjustability: view, level: 'merchant', category, limit: 30 })
+function MerchantContributions({ period, view, category, baseline }: { period: string; view: ContributionAdjustability; category: string; baseline: BaselineMethod }) {
+  const query = useContributions({ period, adjustability: view, level: 'merchant', category, baseline, limit: 30 })
   if (query.isLoading) return <ListSkeleton rows={3} />
   if (query.error || !query.data) return <ErrorState message={loadErrorMessage(query.error)} onRetry={() => void query.refetch()} />
   const items = [...query.data.items, ...query.data.twelve_month_items]
@@ -81,13 +67,15 @@ function MerchantContributions({ period, view, category }: { period: string; vie
 
 /** 기준 대비 변화 기여 (Q2·Q3). 정렬은 백엔드의 금액 기여 절댓값 순 그대로. */
 export function ContributionsCard({ period }: { period: string }) {
+  const [baseline, setBaseline] = useState<BaselineMethod>('median_of_recent_closed_months')
   const [view, setView] = useState<ContributionAdjustability>('all')
   const [expanded, setExpanded] = useState<string | null>(null)
-  const query = useContributions({ period, adjustability: view, level: 'category', limit: 100 })
+  const query = useContributions({ period, adjustability: view, level: 'category', baseline, limit: 100 })
   const data = query.data
 
   return (
     <Card title="무엇이 변했나" meta="기준 기간 대비 금액 기여가 큰 순서입니다. 증감률이 아니라 원 단위 차이로 정렬합니다.">
+      <div className="mb-3"><BaselineControl value={baseline} onChange={(value) => { setBaseline(value); setExpanded(null) }} /></div>
       <SegmentedControl
         className="mb-3"
         ariaLabel="변화를 볼 지출 범위"
@@ -109,7 +97,7 @@ export function ContributionsCard({ period }: { period: string }) {
               <dd className="font-semibold text-text-primary">{data.target_total == null ? '—' : formatNetWon(data.target_total)}</dd>
             </div>
             <div>
-              <dt className="text-text-muted">기준 (중앙값)</dt>
+              <dt className="text-text-muted">기준 금액</dt>
               <dd className="font-semibold text-text-primary">{data.baseline_total == null ? '없음' : formatNetWon(data.baseline_total)}</dd>
             </div>
             <div>
@@ -127,7 +115,7 @@ export function ContributionsCard({ period }: { period: string }) {
                 return (
                   <li key={item.category}>
                     <ContributionRow item={item} expandable open={open} onToggle={() => setExpanded(open ? null : item.category)} />
-                    {open ? <MerchantContributions period={period} view={view} category={item.category} /> : null}
+                    {open ? <MerchantContributions period={period} view={view} category={item.category} baseline={baseline} /> : null}
                   </li>
                 )
               })}

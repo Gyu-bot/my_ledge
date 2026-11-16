@@ -49,6 +49,8 @@ from app.schemas.read_surface import (
     ReadDataStatusResponse,
     ReadMonthlyFlowData,
     ReadMonthlyFlowResponse,
+    ReadMonthProjectionResponse,
+    ReadProjectionAsOf,
     ReadPeriodScope,
     ReadPeriodState,
     ReadSpendCubeData,
@@ -72,8 +74,18 @@ from app.services.metrics_service import (
     get_monthly_flow,
     get_spend_cube,
     month_data_coverage,
+    build_flow_contract,
     ratio,
 )
+
+MONTH_END_FORECAST_LOCATION = {
+    "path": "/api/v1/read/month-projection",
+    "field": "data",
+    "note": (
+        "진행월 월말 순현금흐름 전망은 전용 읽기 응답이 같은 T064 계산으로 낸다. "
+        "이 표면은 전망을 다시 계산하거나 관측값과 합치지 않는다."
+    ),
+}
 
 MAX_PERIOD_SPAN = 240
 UNCATEGORIZED_NAMES = ("", "미분류")
@@ -1075,17 +1087,159 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
             periods=scope.periods,
             excluded_currency=base.excluded_currency,
             non_krw_transaction_count=base.non_krw_transaction_count,
-            month_end_forecast={
-                "path": "/api/v1/canonical-views/dashboard",
-                "field": "month_projection",
-                "note": (
-                    "진행월 월말 순현금흐름 전망은 기존 응답이 그대로 낸다(로직 점검·수정은 "
-                    "T064 별도 승인). 이 표면은 전망을 다시 계산하거나 관측값과 합치지 않는다."
-                ),
-            },
+            month_end_forecast=dict(MONTH_END_FORECAST_LOCATION),
         ),
     )
 
 
 def question_labels() -> dict[str, str]:
     return dict(QUESTION_LABELS)
+
+
+async def read_month_projection(
+    db_session: AsyncSession, *, reference_date: date | None = None
+) -> ReadMonthProjectionResponse:
+    """Wrap the single T064 calculation; do not recompute projection values."""
+    from app.services.monthly_projection_service import (
+        get_monthly_projection,
+        resolve_projection_reference_date,
+    )
+
+    if reference_date is None:
+        reference_date, as_of_basis = await resolve_projection_reference_date(
+            db_session
+        )
+    else:
+        as_of_basis = "requested_date"
+    projection = await get_monthly_projection(
+        db_session, reference_date=reference_date, as_of_basis=as_of_basis
+    )
+    contract = await build_flow_contract(
+        db_session,
+        definition="monthly_projection (T064)",
+        scope="거래 기준일까지의 관측과 같은 달 남은 기간의 가정. 월말을 넘는 전망은 없다.",
+        start_date=reference_date.replace(day=1),
+        end_date=reference_date,
+    )
+    as_of = contract.as_of
+    period = period_of(reference_date)
+    scope = build_period_scope(
+        as_of=as_of,
+        summaries=await load_period_summaries(db_session),
+        start_period=period,
+        end_period=period,
+    )
+    classification = scope_classification(scope)
+    state, reasons = resolve_status(
+        as_of=as_of,
+        scope=scope,
+        classification=classification,
+        non_krw_count=contract.non_krw_transaction_count,
+    )
+    basis = basis_from_contract(
+        contract,
+        [
+            "전망 기준일은 data.as_of_date다. as_of는 전체 반영 자료의 기준일이다.",
+            "data.completeness.full_projection_available이 false면 전체 전망이 아니다. "
+            "amount_scope와 left_out을 함께 읽는다.",
+            *projection.limitations,
+        ],
+    )
+    basis.rules["projection_ratio_units"] = (
+        "기존 전망 객체의 remaining_expense_adjustability.undecided_share_pct는 "
+        "백분율(0–100)이다. 봉투의 classification과 period_scope 비중은 0–1이다."
+    )
+    return ReadMonthProjectionResponse(
+        surface="month_end_projection",
+        surface_label="진행월 월말 순현금흐름 전망",
+        questions=[],
+        status=state,
+        status_label=STATUS_LABELS[state],
+        status_reasons=reasons,
+        as_of=ReadProjectionAsOf(**as_of.model_dump()),
+        period_scope=scope,
+        classification=classification,
+        basis=basis,
+        labels={
+            **common_labels(),
+            **{
+                f"confidence.{key}": label
+                for key, label in {
+                    "high": "높음",
+                    "medium": "보통",
+                    "low": "낮음",
+                    "unavailable": "낼 수 없음",
+                }.items()
+            },
+            **{
+                f"income_status.{key}": label
+                for key, label in {
+                    "expected": "들어올 예정",
+                    "received": "들어옴",
+                    "partial": "일부 들어옴",
+                    "late": "예정일 지남",
+                    "stopped": "중단",
+                    "uncertain": "확인 필요",
+                }.items()
+            },
+            **{
+                f"source_status.{key}": label
+                for key, label in {
+                    "expected": "남은 지급 가정",
+                    "observed": "관측됨",
+                    "review": "확인 필요",
+                }.items()
+            },
+            **{
+                f"component.{key}": label
+                for key, label in {
+                    "income_source": "수입 출처",
+                    "loan": "대출 원리금",
+                    "installment": "할부 회차",
+                    "recurring": "정기 지급",
+                    "variable": "그 밖의 지출",
+                }.items()
+            },
+            **{
+                f"cycle_anchor.{key}": label
+                for key, label in {
+                    "calendar_month": "달력 월",
+                    "month_end": "월말 지급 주기",
+                    "month_start": "월초 지급 주기",
+                }.items()
+            },
+            **{
+                f"cycle.{key}": label
+                for key, label in {
+                    "monthly": "매월",
+                    "yearly": "매년",
+                    "n_times": "정해진 회차",
+                }.items()
+            },
+            **{
+                f"match_method.{key}": label
+                for key, label in {
+                    "loan_link": "대출 계좌 연결",
+                    "loan_merchant_rule_unconfirmed": "등록된 거래처 규칙 · 연결 미확인",
+                    "loan_link_and_merchant_rule": "대출 연결과 등록된 거래처 규칙",
+                    "no_repayment_this_month": "이번 달 관측 상환 없음",
+                }.items()
+            },
+            **{
+                f"unavailable_reason.{key}": label
+                for key, label in {
+                    "no_data": "자료 없는 달이 있음",
+                    "data_start": "자료 시작 전",
+                    "baseline_start_date": "기준 구간 시작일 전",
+                }.items()
+            },
+            "transaction_as_of_basis.max_effective_transaction_date": "유효 거래의 마지막 날짜",
+            "as_of_basis.transaction_as_of": "거래 기준일",
+            "as_of_basis.requested_date": "요청한 날짜",
+            "as_of_basis.today_no_data": "자료가 없어 오늘 날짜",
+            "amount_scope.all_known_components": "알려진 모든 구성 요소",
+            "amount_scope.known_components": "반영 가능한 구성 요소만",
+            "amount_scope.none": "전망 금액 없음",
+        },
+        data=projection,
+    )

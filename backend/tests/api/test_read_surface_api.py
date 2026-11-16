@@ -297,7 +297,7 @@ async def test_index_lists_surface_with_questions_and_versions(
         for name in ("intervals", "reconciliation", "emergency-fund")
     }
     projection = {
-        "/api/v1/canonical-views/dashboard",
+        "/api/v1/read/month-projection",
         "/api/v1/canonical-views/month-projection/accuracy",
     }
     assert paths == set(ENVELOPE_PATHS) | net_worth | projection

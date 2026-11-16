@@ -32,7 +32,7 @@ def _expense(
     )
 
 
-async def test_installment_plan_crud_linking_and_forecast(
+async def test_installment_plan_crud_linking_and_observation(
     async_client: AsyncClient,
     api_headers: dict[str, str],
     db_session: AsyncSession,
@@ -110,71 +110,16 @@ async def test_installment_plan_crud_linking_and_forecast(
         item["link"]["installment_number"] for item in mappings.json()["items"]
     } == {1, 2}
 
-    forecast = await async_client.get(
-        "/api/v1/installments/forecast",
-        params={"as_of_date": "2026-06-15", "months": 3},
-    )
-    assert forecast.status_code == 200
-    payload = forecast.json()
-    assert [item["status"] for item in payload["items"]] == [
-        "observed",
-        "observed",
-        "projected",
-    ]
-    assert payload["items"][2]["due_date"] == "2026-07-10"
-    assert payload["monthly_summary"] == [
-        {
-            "period": "2026-05",
-            "observed_total": 100000,
-            "projected_total": 0,
-            "missed_total": 0,
-            "past_unconfirmed_total": 0,
-        },
-        {
-            "period": "2026-06",
-            "observed_total": 100000,
-            "projected_total": 0,
-            "missed_total": 0,
-            "past_unconfirmed_total": 0,
-        },
-        {
-            "period": "2026-07",
-            "observed_total": 0,
-            "projected_total": 100000,
-            "missed_total": 0,
-            "past_unconfirmed_total": 0,
-        },
-    ]
-
-
-async def test_installment_forecast_marks_past_unlinked_installments_as_missed(
-    async_client: AsyncClient,
-    api_headers: dict[str, str],
-) -> None:
-    created = await async_client.post(
-        "/api/v1/installment-plans",
+    observed = await async_client.get(
+        "/api/v1/read/commitments",
+        params={"period": "2026-06"},
         headers=api_headers,
-        json={
-            "display_name": "가전 2개월 할부",
-            "merchant": "가전",
-            "payment_method": "카드",
-            "total_installments": 2,
-            "monthly_amount": 50000,
-            "first_payment_date": "2026-04-10",
-        },
     )
-    assert created.status_code == 201
-
-    forecast = await async_client.get(
-        "/api/v1/installments/forecast",
-        params={"as_of_date": "2026-06-15", "months": 3},
-    )
-
-    assert forecast.status_code == 200
-    assert [item["status"] for item in forecast.json()["items"]] == [
-        "missed",
-        "missed",
-    ]
+    assert observed.status_code == 200
+    item = observed.json()["data"]["items"][0]
+    assert item["observation"]["state"] == "observed"
+    assert item["remaining_count"] == 1
+    assert item["end_date"] == "2026-07-10"
 
 
 async def test_installment_link_validates_installment_number(

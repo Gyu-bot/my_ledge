@@ -17,7 +17,6 @@ import type {
   InstallmentTransactionLinkBulkRequest,
   InstallmentTransactionMappingParams,
   InstallmentTransactionSuggestionParams,
-  InstallmentForecastParams,
   CategoryBreakdownParams,
   SubcategoryBreakdownParams,
   MerchantTreemapNode,
@@ -40,8 +39,6 @@ export const txKeys = {
     ['transactions', 'installmentTransactionMappings', params] as const,
   installmentTransactionSuggestions: (params: InstallmentTransactionSuggestionParams) =>
     ['transactions', 'installmentTransactionSuggestions', params] as const,
-  installmentForecast: (params: InstallmentForecastParams) =>
-    ['transactions', 'installmentForecast', params] as const,
   autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
   categoryClassificationRules: () => ['transactions', 'categoryClassificationRules'] as const,
   merchantAliasRules: () => ['transactions', 'merchantAliasRules'] as const,
@@ -117,13 +114,6 @@ export function useInstallmentTransactionSuggestions(params: InstallmentTransact
   return useQuery({
     queryKey: txKeys.installmentTransactionSuggestions(params),
     queryFn: () => transactionApi.installmentTransactionSuggestions(params),
-  })
-}
-
-export function useInstallmentForecast(params: InstallmentForecastParams = {}) {
-  return useQuery({
-    queryKey: txKeys.installmentForecast(params),
-    queryFn: () => transactionApi.installmentForecast(params),
   })
 }
 

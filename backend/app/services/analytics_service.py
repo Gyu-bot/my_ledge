@@ -12,9 +12,6 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.schemas.analytics import (
-    CategoryMoMItem,
-    CategoryMoMResponse,
-    DiscretionaryVelocityResponse,
     FixedCostSummaryResponse,
     FixedCostTrendItem,
     FixedCostTrendResponse,
@@ -35,8 +32,8 @@ from app.schemas.analytics import (
     SpendingAnomalyItem,
     SpendingAnomaliesResponse,
 )
-from app.schemas.settings import DiscretionaryVelocitySettings, PurchaseGateSettings
-from app.schemas.transaction import TransactionCategoryLevel, TransactionTypeFilter
+from app.schemas.settings import PurchaseGateSettings
+from app.schemas.transaction import TransactionTypeFilter
 from app.services.metric_views import (
     EXPENSE,
     FLOW_LINES_VIEW,
@@ -168,171 +165,6 @@ async def get_monthly_cashflow(
             )
         )
     return MonthlyCashflowResponse(items=items, contract=contract)
-
-
-async def get_category_mom(
-    db_session: AsyncSession,
-    *,
-    start_date: date | None,
-    end_date: date | None,
-    level: TransactionCategoryLevel,
-    tx_type: TransactionTypeFilter,
-) -> CategoryMoMResponse:
-    scope_filters = [
-        *_date_filters(start_date, end_date),
-        *_type_filters(tx_type),
-    ]
-    as_of = await load_as_of(db_session)
-    data_as_of = as_of.transaction_as_of
-    if end_date is not None:
-        ref_date: date | None = end_date
-        # Never count days the transaction data has not reached yet.
-        if (
-            data_as_of is not None
-            and data_as_of < end_date
-            and _month_key(end_date) == _month_key(data_as_of)
-        ):
-            ref_date = data_as_of
-        is_partial_period = ref_date is not None and not _is_month_end(ref_date)
-    else:
-        max_line_date = await db_session.scalar(
-            select(func.max(_LINES.c.date)).where(*scope_filters)
-        )
-        ref_date = _as_date(max_line_date) if max_line_date is not None else None
-        # An in-progress month is compared only through the as-of day.
-        is_partial_period = (
-            ref_date is not None
-            and data_as_of is not None
-            and month_status(_month_key(ref_date), as_of) == "in_progress"
-        )
-        if is_partial_period:
-            ref_date = data_as_of
-    response_basis = {
-        "reference_date": ref_date,
-        "is_partial_period": is_partial_period,
-        "comparison_basis": (
-            "same_day_previous_month" if is_partial_period else "full_previous_month"
-        ),
-    }
-    contract = await build_flow_contract(
-        db_session,
-        definition="category_change.legacy_v1",
-        scope=(
-            "기준월과 전월의 카테고리별 금액. 지출은 순지출(환불 차감), 수입은 수입액, "
-            "이체는 절댓값. 부분월(진행월 포함)이면 전월도 같은 날짜까지만 집계"
-        ),
-        start_date=start_date,
-        end_date=end_date,
-        field_scopes={
-            "previous_*": (
-                "기존 전월 비교. 부분월이면 전월 같은 경과일 누적이며 진행월에 전월 "
-                "전체와 비교하지 않는다"
-            ),
-            "baseline_amount": (
-                "비교 계약 기준값: 최근 마감월 중앙값(기준 기간은 comparison 참조). "
-                "날짜 범위(start_date)와 무관하게 기준 기간 전체에서 집계"
-            ),
-            "delta_pct": "delta_amount ÷ previous_amount (같은 경과일끼리의 증감률)",
-        },
-    )
-    if ref_date is None:
-        return CategoryMoMResponse(items=[], contract=contract, **response_basis)
-
-    current_period = _month_key(ref_date)
-    previous_period = _previous_period(current_period)
-    category = func.coalesce(
-        func.nullif(
-            _LINES.c.effective_category_major
-            if level == "major"
-            else _LINES.c.effective_category_minor,
-            "",
-        ),
-        "미분류",
-    )
-    period_filters: list[ColumnElement[bool]] = [
-        _LINES.c.period.in_([current_period, previous_period]),
-        _LINES.c.date <= ref_date,
-    ]
-    if is_partial_period:
-        period_filters.append(
-            not_(
-                and_(
-                    _LINES.c.period == previous_period,
-                    day_of_month(_LINES.c.date) > ref_date.day,
-                )
-            )
-        )
-    result = await db_session.execute(
-        select(
-            _LINES.c.period,
-            category.label("category"),
-            func.coalesce(func.sum(_analytics_amount()), 0).label("amount"),
-        )
-        .where(*scope_filters, *period_filters)
-        .group_by(_LINES.c.period, category)
-    )
-    grouped: dict[tuple[str, str], int] = defaultdict(int)
-    categories: set[str] = set()
-    for row in result.mappings():
-        grouped[(row["period"], row["category"])] = int(row["amount"])
-        categories.add(row["category"])
-
-    window = await _legacy_comparison_window(
-        db_session,
-        as_of_period=_month_key(data_as_of) if data_as_of is not None else None,
-        target_period=current_period,
-        through_date=ref_date,
-    )
-    baseline: dict[tuple, int] = {}
-    if window is not None:
-        baseline = await grouped_period_amounts(
-            db_session,
-            window,
-            keys=[category],
-            amount=_analytics_amount(),
-            filters=_type_filters(tx_type),
-        )
-
-    items = []
-    for category_name in categories:
-        current_amount = grouped[(current_period, category_name)]
-        previous_amount = grouped[(previous_period, category_name)]
-        delta_amount = current_amount - previous_amount
-        baseline_amount = (
-            median_won(
-                [
-                    baseline.get((period, category_name), 0)
-                    for period in window.baseline_periods
-                ]
-            )
-            if window is not None
-            else None
-        )
-        items.append(
-            CategoryMoMItem(
-                period=current_period,
-                previous_period=previous_period,
-                category=category_name,
-                current_amount=current_amount,
-                previous_amount=previous_amount,
-                delta_amount=delta_amount,
-                delta_pct=_safe_ratio(delta_amount, previous_amount),
-                baseline_amount=baseline_amount,
-                baseline_change_amount=(
-                    current_amount - baseline_amount
-                    if baseline_amount is not None
-                    else None
-                ),
-            )
-        )
-
-    items.sort(key=lambda item: (-item.delta_amount, item.category))
-    return CategoryMoMResponse(
-        items=items,
-        contract=contract,
-        comparison=build_comparison_basis(window) if window is not None else None,
-        **response_basis,
-    )
 
 
 async def _legacy_comparison_window(
@@ -1063,136 +895,6 @@ async def get_spending_anomalies(
     )
 
 
-async def get_discretionary_velocity(
-    db_session: AsyncSession,
-    *,
-    as_of_date: date | None,
-    settings: DiscretionaryVelocitySettings,
-) -> DiscretionaryVelocityResponse:
-    ref_date = as_of_date or date.today()
-    period = _month_key(ref_date)
-    month_start = date(ref_date.year, ref_date.month, 1)
-    month_end = _last_day_of_month(ref_date)
-    month_progress_ratio = round(ref_date.day / month_end.day, 4)
-    baseline_start = _add_months(month_start, -settings.baseline_months)
-
-    rows = await _load_purchase_net_rows(
-        db_session,
-        start_date=baseline_start,
-        end_date=ref_date,
-        tx_type="지출",
-    )
-
-    baseline_monthly: dict[str, int] = defaultdict(int)
-    current_discretionary_spend = 0
-    current_total_classifiable_spend = 0
-    current_classified_spend = 0
-    current_unclassified_spend = 0
-
-    excluded_categories = set(settings.excluded_category_names)
-    excluded_merchants = set(settings.excluded_merchants)
-    for row in rows:
-        if row["loan_account_id"] is not None:
-            continue
-        merchant = row["merchant"] or row["description"] or "미분류"
-        category = row["effective_category_major"] or "미분류"
-        if merchant in excluded_merchants or category in excluded_categories:
-            continue
-        amount = -row["amount"]
-        if amount == 0:
-            continue
-
-        row_period = _month_key(row["date"])
-        # T056: 재량 = 조정 가능성 `adjustable`, 분류됨 = `protected`/`adjustable`
-        # (vw_transaction_nature). `undecided` stays unclassified.
-        is_discretionary = row["adjustability"] == "adjustable"
-        is_classified = row["adjustability"] in {"protected", "adjustable"}
-
-        if row_period == period:
-            # Coverage describes classified charge volume; refunds must not make
-            # the ratio negative or exceed one. Spend itself remains signed/net.
-            charge_amount = max(0, amount)
-            current_total_classifiable_spend += charge_amount
-            if is_classified:
-                current_classified_spend += charge_amount
-            else:
-                current_unclassified_spend += amount
-            if is_discretionary:
-                current_discretionary_spend += amount
-        elif is_discretionary:
-            baseline_monthly[row_period] += amount
-
-    baseline_values = _exclude_outlier_amounts(list(baseline_monthly.values()))
-    baseline_monthly_spend = (
-        round(sum(baseline_values) / len(baseline_values)) if baseline_values else 0
-    )
-    baseline_spend_at_same_progress = round(
-        baseline_monthly_spend * month_progress_ratio
-    )
-    velocity_ratio = (
-        _safe_ratio(current_discretionary_spend, baseline_spend_at_same_progress)
-        if baseline_spend_at_same_progress > 0
-        else None
-    )
-    classification_coverage_ratio = _safe_ratio(
-        current_classified_spend,
-        current_total_classifiable_spend,
-    )
-
-    if classification_coverage_ratio is not None and (
-        classification_coverage_ratio < settings.minimum_classification_coverage
-    ):
-        risk_level = "needs_classification"
-        confidence = "low"
-        reasons = ["분류 커버리지가 낮아 재량 지출 속도 해석 신뢰도가 낮습니다."]
-    elif velocity_ratio is None:
-        risk_level = "unknown"
-        confidence = "low"
-        reasons = ["비교 가능한 재량 지출 baseline이 없습니다."]
-    elif velocity_ratio >= settings.high_velocity_ratio:
-        risk_level = "high"
-        confidence = "medium"
-        reasons = [f"재량 지출 속도가 baseline 대비 {velocity_ratio:.2f}x입니다."]
-    elif velocity_ratio >= settings.warning_velocity_ratio:
-        risk_level = "warning"
-        confidence = "medium"
-        reasons = [f"재량 지출 속도가 baseline 대비 {velocity_ratio:.2f}x입니다."]
-    else:
-        risk_level = "normal"
-        confidence = "medium"
-        reasons = [f"재량 지출 속도가 baseline 대비 {velocity_ratio:.2f}x입니다."]
-
-    return DiscretionaryVelocityResponse(
-        period=period,
-        as_of_date=ref_date,
-        month_progress_ratio=month_progress_ratio,
-        discretionary_spend=current_discretionary_spend,
-        baseline_monthly_spend=baseline_monthly_spend,
-        baseline_spend_at_same_progress=baseline_spend_at_same_progress,
-        velocity_ratio=velocity_ratio,
-        risk_level=risk_level,
-        confidence=confidence,
-        classification_coverage_ratio=classification_coverage_ratio,
-        unclassified_spend=current_unclassified_spend,
-        income_basis=None,
-        reasons=reasons,
-        assumptions=[
-            f"최근 {settings.baseline_months}개 마감월 중 데이터가 있는 월의 재량 지출을 사용합니다.",
-            "baseline_spend_at_same_progress는 마감월 월평균에 월 진행률을 곱한 값입니다.",
-            "현재 지출과 기준월 모두 환급을 차감한 순지출이며, 확정 정산은 원거래에 반영합니다.",
-            "분류 커버리지는 환급을 제외한 결제액 중 필요도가 분류된 금액의 비율입니다.",
-        ],
-        contract=await build_purchase_net_contract(
-            db_session,
-            definition=f"discretionary_velocity.{PURCHASE_NET_DEFINITION}",
-            scope=(
-                "진행월 재량 지출 속도(대출 제외). 구매 단위 순액 기준이며 3.3에 따라 "
-                "같은 경과일 비교로 대체될 예정"
-            ),
-        ),
-    )
-
-
 async def _purchase_review_totals(
     db_session: AsyncSession,
     *,
@@ -1792,32 +1494,12 @@ def _build_income_stability_assumptions(
     return ", ".join(parts)
 
 
-def _previous_period(period: str) -> str:
-    year, month = period.split("-")
-    year_int = int(year)
-    month_int = int(month)
-    if month_int == 1:
-        return f"{year_int - 1:04d}-12"
-    return f"{year_int:04d}-{month_int - 1:02d}"
-
-
 def _add_months(value: date, months: int) -> date:
     month_index = value.month - 1 + months
     year = value.year + month_index // 12
     month = month_index % 12 + 1
     day = min(value.day, _last_day_of_month(date(year, month, 1)).day)
     return date(year, month, day)
-
-
-def _exclude_outlier_amounts(values: list[int]) -> list[int]:
-    if len(values) < 3:
-        return values
-    ordered = sorted(values)
-    median = ordered[len(ordered) // 2]
-    if median <= 0:
-        return values
-    filtered = [value for value in values if abs(value - median) / median <= 0.3]
-    return filtered or values
 
 
 def _monthly_average(values: Iterable[int]) -> int:

@@ -150,6 +150,7 @@ export function basisFixture(overrides: Partial<ComparisonBasis> = {}): Comparis
     target_start_date: '2026-07-01',
     target_end_date: '2026-07-31',
     baseline_method: 'median_of_recent_closed_months',
+    baseline_unavailable_reason: null,
     baseline_method_label: '최근 6개 마감월 중앙값',
     baseline_months_requested: 6,
     baseline_periods: ['2026-01', '2026-02', '2026-03', '2026-04', '2026-06'],

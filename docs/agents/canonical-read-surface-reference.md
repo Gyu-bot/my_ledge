@@ -64,19 +64,19 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 
 | 질문 유형 | 우선 surface | 보조 surface |
 |---|---|---|
-| 최근 canonical row를 화면처럼 보고 싶다 | `GET /api/v1/canonical-views/dashboard` | readonly DB의 `vw_*` |
+| 최근 월 흐름표·전망 | `/read/monthly-flow`, `/read/month-projection` | `/read/index`로 필요한 작은 응답 탐색 |
 | 거래 drill-down이 필요하다 | `vw_transactions_effective` 또는 `GET /api/v1/transactions` | raw `transactions` |
-| 월별 현금흐름/저축률 | `vw_monthly_cashflow` 또는 `GET /api/v1/analytics/monthly-cashflow` | `GET /api/v1/canonical-views/dashboard` |
+| 월별 현금흐름/저축률 | `vw_monthly_cashflow` 또는 `GET /api/v1/analytics/monthly-cashflow` | `GET /api/v1/read/monthly-flow` |
 | 고정비/변동비 구조 | `vw_fixed_cost_monthly_summary` 또는 fixed-cost analytics endpoints | `vw_unclassified_work_queue` |
 | 대출 상환 부담 | `vw_loan_repayment_monthly` | `GET /api/v1/loan-transaction-links` |
 | 대출 구조/금리/만기 | `GET /api/v1/loans/summary` 또는 `vw_loan_account_canonical` | 숨김 계좌 복구/감사는 `GET /api/v1/loan-accounts?include_hidden=true`, schema 확인은 `GET /api/v1/schema` |
 | 보험 계약/추정 보험료 | `GET /api/v1/insurance/summary` | raw `insurance_contracts`; 보험 적정성 판단은 에이전트 해석이다. |
-| 할부 잔여 현금흐름 | `GET /api/v1/installments/forecast` | `/operations/installments`. canonical cashflow view는 관측 거래만 유지하고, 할부 예측은 별도 projection surface로 읽는다. |
-| 수입 구성 | `vw_income_monthly_by_category` | `vw_monthly_cashflow`, `GET /api/v1/canonical-views/dashboard` |
-| 실제 가용 현금 | `vw_true_spendable_monthly` | dashboard endpoint의 estimated enrichment. 구매 가능 판단이 아니라 계산 surface다. |
+| 할부 속성과 관측 | `/read/commitments`의 `kind=installment` | 남은 회차·마지막 회차일·월 부담·선택월 관측. 미래 출금 전망은 제거. |
+| 수입 구성 | `vw_income_monthly_by_category` | `vw_monthly_cashflow`, `GET /api/v1/read/monthly-flow` |
+| 잔여와 조정 가능 지출 | `/read/monthly-flow` | `residual`, `adjustable_spend`; 은행 잔액이나 구매 가능액이 아니다. |
 | 거래처 baseline 변화 | `vw_merchant_monthly_baseline` | `GET /api/v1/analytics/merchant-spend` |
-| 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/canonical-views/dashboard` |
-| 분류 품질 개선 대상 | `vw_unclassified_work_queue` 또는 dashboard `unclassified_work_queue[]` | operations APIs. `issue_types[]`와 `recurrence_signal`을 보고 정리 작업을 고르며, 재무 위험 우선순위로 말하지 않는다. |
+| 반복 거래처 월별 지출 | `vw_recurring_merchant_monthly` | `GET /api/v1/read/monthly-flow` |
+| 분류 품질 개선 대상 | `/read/data-status.data.classification`, `/metrics/spend-cube?adjustability=undecided` | 작업대에서 사람이 정한다. |
 | 거래 한 건의 지급 형태·조정 가능성과 그 근거 | `GET /api/v1/nature/transactions/{id}` 또는 `vw_transaction_nature` | `GET /api/v1/nature/recurring-commitments`(정기 지급 묶음과 주기·금액 고정/변동·종료), `GET /api/v1/nature/category-defaults`. 모두 `X-API-Key` 필요. 에이전트는 쓰기 API를 쓰지 않는다. |
 | 약정 지급·수시·미정 월 합계 | `GET /api/v1/metrics/monthly-flow` 또는 `vw_monthly_flow_summary` | `GET /api/v1/metrics/spend-cube`(`group_by=payment_form,adjustability` 등) |
 | 자산/부채 snapshot 표준값 | `vw_asset_snapshot_canonical` | `GET /api/v1/analytics/net-worth-breakdown`, `GET /api/v1/analytics/liquidity-health` |
@@ -86,38 +86,17 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 권장 조회 순서:
 
 1. `GET /api/v1/schema`로 사용 가능한 view/endpoint를 확인한다.
-2. 질문별로 analytics 또는 dashboard로 결론을 먼저 내려도 되는지 판단한다.
+2. 질문별로 질문에 맞는 작은 읽기 표면로 결론을 먼저 내려도 되는지 판단한다.
 3. 부족하면 readonly DB의 canonical view를 조회한다.
 4. raw `transactions`는 삭제/병합/수정 이력 같은 감사성 목적으로만 추가 조회한다.
 
-## `GET /api/v1/canonical-views/dashboard`
+## `GET /api/v1/read/month-projection`
 
-관측 canonical row와 기준월 전망을 함께 반환한다. `X-API-Key`가 필요하며 GET은 설정·거래·연결을 저장하지 않는다. 임의 SQL 실행 surface가 아니다.
+소유자 승인으로 2026-11-17에 큰 대시보드 GET을 제거했다. 전용 읽기 응답의 **`data`가 예전 `month_projection`과 같은 객체**다. `X-API-Key`, 선택 인자 `reference_date=YYYY-MM-DD`, 공통 읽기 봉투와 422 `detail` 배열을 쓴다. 단일 `get_monthly_projection` 서비스가 계산하며 거래·설정·연결을 저장하지 않는다.
 
-| 파라미터 | 의미 |
-|---|---|
-| `months` | 월별 row 범위. 기본 `12`, 범위 `1..36`. |
-| `merchant_limit` | 거래처 baseline/반복분류 row 상한. 기본 `10`, 범위 `1..50`. |
-| `queue_limit`, `queue_page` | queue 페이지 크기(기본 10, 1–100), 페이지(기본 1). |
-| `search` | queue 거래처/effective category 검색, 최대 200자. |
-| `issue_types` | `cost_kind,spend_necessity,recurring_kind,loan_link` 중 쉼표로 구분한 OR 필터. T056부터 `recurring_kind`는 항상 빈 결과다. |
-| `period_from`, `period_to`, `current_only` | queue 월 범위(`YYYY-MM`), 또는 기준일이 속한 월만 선택. |
-| `reference_date` | 전망과 현재 월 필터의 기준일. 기본 서버 날짜. canonical 전체를 과거 시점으로 복원하는 옵션은 아니다. |
+봉투 `as_of`는 전체 거래·종류별 스냅샷 기준일이다. 전망 기준일은 `data.as_of_date`, 전망 근거 범위는 `data.coverage`다. 인자 생략 시 거래 기준일(같은 달의 더 늦은 성공 업로드일 포함), 명시하면 요청 날짜를 쓴다. `status`와 `completeness`는 별도로 읽는다. 일부 구성 요소가 빠졌는데 값이 있으면 부분 합계다. 정확도는 기존 `/canonical-views/month-projection/accuracy`에서 그대로 읽는다.
 
-| 응답 | 의미 |
-|---|---|
-| `monthly_cashflow[]` | `vw_monthly_cashflow`의 관측 월별 수입/순지출/상환/이체 활동/저축률. |
-| `true_spendable_monthly[]` | `vw_true_spendable_monthly`의 관측 수입에서 상환·고정/변동 지출을 뺀 계산값. 실제 은행 잔액이 아니다. |
-| `loan_repayment_monthly[]` | 대출 계좌·상환 유형별 관측 월상환액. |
-| `merchant_monthly_baseline[]`, `recurring_merchant_monthly[]` | 제한된 거래처 baseline/저장 반복분류 row. 각각의 `_total`은 제한 전 view row 수이며 distinct 거래처 수가 아니다. |
-| `unclassified_work_queue[]` | 필터링·페이지 적용된 검토 거래와 현재 nullable 비용/필수성/반복 분류값. |
-| `unclassified_work_queue_total`, `_page`, `_per_page`, `_total_pages` | 필터 후 전체 queue 크기와 페이지 정보. 배열 길이와 전체 건수를 혼동하지 않는다. |
-| `data_coverage` | 전체 유효 거래의 최초/최종 관측일. 두 날짜 사이의 수집 완전성을 보장하지 않는다. |
-| `month_projection` | 아래의 독립적인 기준월 수입·지출 시나리오. |
-
-Queue 필터는 count/limit/offset 전에 적용된다. 월별 두 관측 배열의 `is_complete_month`는 같은 거래 관측밀도 기준으로 계산된다: 마감월에 관측일 8개 이상, 첫 주/마지막 주 관측, 관측일 사이 최대 공백 10일 이하. 반환된 월 범위를 평가하며 전망의 6개월 학습 범위와 별개다. 이는 수집 완료 인증이 아니다. 현재 월은 false이고 `savings_rate_basis`는 `no_income|observed_closed_month|observed_partial_month`다.
-
-기존 true-spendable forecast 필드는 호환용으로 남아 있지만 새 예상값을 채우지 않는다. `income_basis='observed'`, `is_income_estimated=false`, `observed_income_total=income_total`이며 `estimated_*`/`income_estimate_source`는 null이다. `income_estimate_month_count`는 0, `excluded_income_periods`는 빈 배열이다. 기존 `income_total`을 예상수입으로 바꾸거나 null 예상 필드를 0으로 해석하지 않는다.
+제거된 7개 경로와 필드별 이행은 [최종 이전 안내](read-surface-migration.md)에 있다. 가져오기·쓰기·`/schema`, DB 뷰·컬럼은 그대로다. `/analytics/liquidity-health`는 제거하지 않고 비상금 개월 수 후속 경로로 폐기 예고했다.
 
 ### `month_projection`: 관측값과 전망 분리
 
@@ -243,7 +222,7 @@ Queue 필터는 count/limit/offset 전에 적용된다. 월별 두 관측 배열
 | `discretionary_spend_total` | `discretionary_fixed_total + discretionary_variable_total`. |
 | `unclassified_expense_total` | 일반 지출 중 `cost_kind is null`인 금액 합계. |
 | `net_cashflow` | `income_total - expense_total`. 대출 상환은 expense에 이미 포함된다. |
-| `savings_rate` | `net_cashflow / income_total`. 수입이 0이면 `null`. DB 뷰에서는 모든 달에 계산되지만, 대시보드 응답은 T057 비교 계약에 따라 진행월(`metric_as_of.last_closed_period` 이후)에 `null`을 준다. |
+| `savings_rate` | `net_cashflow / income_total`. 수입이 0이면 `null`. DB 뷰에서도 진행월은 null이다(T054/T057). 대시보드 GET은 제거됐다. |
 
 ### Raw signed vs settlement-netted surfaces
 
@@ -280,7 +259,7 @@ Queue 필터는 count/limit/offset 전에 적용된다. 월별 두 관측 배열
 | `spendable_before_variable_spend` | `income_total - loan_repayment_total - fixed_commitment_total`. |
 | `remaining_after_variable_spend` | `income_total - loan_repayment_total - fixed_commitment_total - variable_total`. |
 
-진행월 수입 미관측 보정은 DB view가 아니라 dashboard API의 `estimated_*` 필드로만 제공된다.
+DB view는 관측값이다. 진행월 수입 가정은 `/read/month-projection.data`에만 있다. 옛 대시보드 `estimated_*` 필드는 제거됐다.
 
 ### `vw_loan_repayment_monthly`
 
@@ -333,7 +312,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `monthly_debt_payment_total` | `loans.monthly_payment` 합계. `monthly_payment_source='manual'`이면 사용자 확정값이고, `estimated_from_linked_transactions`이면 My Ledge가 완료된 월의 대출 연결 거래로 보강한 추정값이다. 마이너스 통장(`loan_kind='overdraft'`)은 최근 완료월 평균, 그 외 대출은 완료월 중앙값을 사용한다. |
 | `asset_row_count`, `loan_row_count` | snapshot 원천 row 수. 데이터 완성도 확인용이다. |
 
-`vw_asset_snapshot_canonical`은 자산 상태를 계산한 표준값이지 "건강/위험" 최종 label이 아니다. 유동성 판단은 `/analytics/liquidity-health`의 `confidence`, `assumptions`, 사용자 목표/예정 지출과 함께 해석한다.
+`vw_asset_snapshot_canonical`은 자산 상태를 계산한 표준값이지 "건강/위험" 최종 label이 아니다. 비상금 개월 수는 `/metrics/net-worth/emergency-fund`의 산식·미정 비중·기준일과 함께 해석한다.
 
 ### `vw_merchant_monthly_baseline`
 
@@ -443,6 +422,8 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 
 ## Analytics API 값 사전
 
+아래에서 제거된 GET은 이전 값의 설명만 남긴 것이다. 현재 호출은 [이전 안내](read-surface-migration.md)의 후속 경로를 쓴다. 검토 PATCH와 폐기 예고한 liquidity-health는 유지한다.
+
 | Endpoint | 주요 값 | 의미 |
 |---|---|---|
 | `/analytics/monthly-cashflow` | `income`, `expense`, `transfer`, `net_cashflow`, `savings_rate` | 월별 수입/지출/이체 활동량과 저축률. `transfer`는 `abs(amount)` 활동량이다. `savings_rate`는 마감월에만 내고 진행월은 `null`(T057). |
@@ -453,12 +434,12 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
 | `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 관측된 수입월의 변동성. 누락 월을 0으로 채우거나 완전한 수집으로 가정하지 않는다. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
 | `/analytics/discretionary-velocity` | `period`, `discretionary_spend`, `baseline_monthly_spend`, `velocity_ratio`, `risk_level`, `classification_coverage_ratio`, `assumptions`, `reasons` | 환급을 반영한 순액 지출 속도이며 coverage는 양의 결제 기준이다. 재량 = 조정 가능성 `adjustable`, 분류됨 = `protected` 또는 `adjustable`(`vw_transaction_nature`). `undecided`는 미분류 지출로 남는다. nonpositive baseline이면 ratio는 null이다. `risk_level`은 최종 구매 허용 판단이 아니라 후보 강도와 분류 신뢰도 안내용이다. |
-| `/analytics/spending-review-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing`, `candidate_purpose`, `future_friction_suggestion`, `assumptions`, `reasons` | preferred name for post-transaction discretionary review queue. 후보는 지급 형태 수시(대출·할부 연결이나 정기 지급 묶음이 아님)이고 조정 가능성이 `adjustable`인 지출뿐이다(`vw_transaction_nature`). Legacy `/analytics/purchase-gate-candidates` is kept for compatibility. Confirmed refunds use net spend. `possible_cancellation`/`cancellation_evidence_transaction_ids`는 미확정 취소 검토 힌트이며 조회로 settlement를 만들지 않는다. |
+| `/analytics/spending-review-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing`, `candidate_purpose`, `future_friction_suggestion`, `assumptions`, `reasons` | preferred name for post-transaction discretionary review queue. 후보는 지급 형태 수시(대출·할부 연결이나 정기 지급 묶음이 아님)이고 조정 가능성이 `adjustable`인 지출뿐이다(`vw_transaction_nature`). 두 GET 경로는 제거됐고 `/read/review-items`에서 검출기를 재사용한다. Confirmed refunds use net spend. `possible_cancellation`/`cancellation_evidence_transaction_ids`는 미확정 취소 검토 힌트이며 조회로 settlement를 만들지 않는다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 순지출/반복분류와 `activity_status`. `activity=active`는 active candidate만 반환하고 historical/irregular/non_positive/not_recurring과 구분한다. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
 | `/installments/forecast` | `items[]`, `monthly_summary[]`, `status` | 할부 원장 기준 회차별 예측. `observed`는 이미 거래가 연결된 회차, `projected`는 미래/현재 미연결 회차, `missed`/`past_unconfirmed_total`은 지난 미연결 회차이며 미납 확정이 아니다. `is_future_obligation`을 구분하고 projected total은 미래 계획용이며 관측 거래와 이중 계산하지 않는다. |
 | `/analytics/spending-anomalies` | `amount`, `baseline_avg`, `delta_pct`, `delta_pct_raw`, `delta_pct_display`, `baseline_quality`, `anomaly_mode`, `anomaly_score` | 기준 월과 비교 계약 기준 기간(T057: 자료 있는 최근 마감월 최대 6개의 중앙값, 기준 구간 시작일 적용, 진행월은 같은 경과일)의 category 지출 차이. `baseline_avg`는 이름과 달리 중앙값이다. `direction`은 signed delta의 증가/감소를 구분하고 sparse baseline에서는 raw percent와 표시용 percent를 구분한다. 환급 순감소를 증가로 말하지 않는다. anomaly는 변화 후보이지 문제 지출 확정이 아니다. |
 | `/analytics/net-worth-breakdown` | `asset_total`, `liability_total`, `net_worth`, `items[]` | 최신 또는 지정 snapshot의 자산/부채 구성. snapshot/history/compare/health와 공통의 `aggregation_basis` 및 `negative_asset_excluded_total`을 제공한다. |
-| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `emergency_fund_target_months`, `target_progress_ratio`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 목표 대비 진행률, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. `input_as_of_date`, `required_spend_period`, 필수/추가상환 금액, `debt_payment_snapshot_date`를 확인한다. 필수 지출은 조정 가능성 `protected`인 지출이며 대출 연결 상환은 항상 `protected`라 `required_spend_additional_debt_total`은 0이다. `undecided` 지출은 필수로 가정하지 않는다. 선택 snapshot 이후 거래를 섞지 않으며 이미 필수인 상환을 다시 더하지 않는다. T061부터 비상금 개월 수는 legacy이며 바뀌지 않았다. 새 값은 `/metrics/net-worth/emergency-fund`. |
+| `/analytics/liquidity-health` | `cash_equivalent_total`, `emergency_fund_months`, `emergency_fund_target_months`, `target_progress_ratio`, `monthly_debt_payment`, `debt_payment_ratio`, `debt_to_asset_ratio`, `confidence`, `assumptions` | 현금성 자산, 비상금 개월 수, 목표 대비 진행률, 부채 부담 추정. `health`는 계산 묶음 이름이며, 실제 재무 건강/위험 판정은 에이전트 해석이다. `input_as_of_date`, `required_spend_period`, 필수/추가상환 금액, `debt_payment_snapshot_date`를 확인한다. 필수 지출은 조정 가능성 `protected`인 지출이며 대출 연결 상환은 항상 `protected`라 `required_spend_additional_debt_total`은 0이다. `undecided` 지출은 필수로 가정하지 않는다. 선택 snapshot 이후 거래를 섞지 않으며 이미 필수인 상환을 다시 더하지 않는다. 비상금 개월 수는 legacy이고, 이 GET은 폐기 예고했으나 본문은 바뀌지 않았다. 새 값은 `/metrics/net-worth/emergency-fund`. |
 
 ## 에이전트 답변 시 주의사항
 
@@ -528,7 +509,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | 약정 `monthly_burden` | 기록된 월 부담이다: 대출 스냅샷의 월 상환액, 할부 계획의 월 금액, 매월 묶음은 최근 마감월에 관측된 합계. 매년·회차 묶음은 월 부담을 내지 않는다(월 환산은 `T062`). 근거는 `monthly_burden_basis`. 전망이 아니다. |
 | 대출의 주기 | 대출에는 주기 기록이 없다. 최신 스냅샷에 월 상환액이 있을 때만 매월로 보고, 없으면 `cycle=null`, 관측 판단은 `not_determinable`이다. |
 | 사후 검토 `listed_because` | 어느 검출기가 어떤 사유 코드로 올렸는지와 비교 계약에 맞춘 기준값·금액 차이 설명. 새 점수나 위험 등급이 아니다. 이미 일어난 거래의 사후 검토용이며 구매 전 판단이 아니다. 구매 단위 후보 검출기는 지급 형태 수시이고 조정 가능성이 `adjustable`인 거래만 본다(`vw_transaction_nature`). 미정 거래는 후보가 아니다. |
-| 월말 순현금흐름 전망 | 읽기 표면은 다시 계산하지 않는다. 기존 대시보드 응답의 `month_projection`에 그대로 있다(`T064` 2차 수정 반영). 최근 마감월 되짚기 오차는 `GET /api/v1/canonical-views/month-projection/accuracy`. |
+| 월말 순현금흐름 전망 | 읽기 표면은 다시 계산하지 않는다. `/read/month-projection.data`에서 같은 단일 계산으로 읽는다(`T064` 2차 수정 반영). 최근 마감월 되짚기 오차는 `GET /api/v1/canonical-views/month-projection/accuracy`. |
 
 ### 소비자 검토 반영 (읽기 표면 보강)
 
@@ -544,7 +525,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | 약정 | `end_date_status`가 `end_date=null`의 이유를 준다: `open_ended`(정기 지급 묶음은 끝이 정해지지 않음), `not_recorded`(대출 만기 등 기록 없음), `not_applicable`(회차 약정은 횟수로 끝남). 종료일은 추정하지 않는다. `monthly_burden_origin`은 월 부담 값을 사람이 넣었는지(`entered_by_person`) 연결 거래로 추정해 저장했는지(`estimated_from_linked_transactions`) 등을 구분한다. `status=active|ended`, `view=summary`로 응답을 줄일 수 있다. 요약 행에도 `cycle`, `monthly_burden_basis`, `adjustability`, `end_date_reason`이 있어, "매달 나가는 약정이 몇 건"처럼 주기별로 세는 일은 요약만으로 할 수 있다. |
 | 거래 | `GET /transactions`와 사후 검토 거래 항목(`axes`)이 지급 형태·조정 가능성·흐름표 줄과 각 출처를 준다(`vw_transaction_nature`, `vw_metric_flow_lines` 값 그대로). 출처 `none`은 아무도 정하지 않았다는 뜻이다. |
 | 순자산 대조 | `status=complete`는 항목을 모두 계산할 수 있었다는 뜻이지 변화가 설명되었다는 뜻이 아니다. `unexplained_share_of_change`(설명되지 않은 차이 ÷ 순자산 변화의 절댓값)로 크기를 본다. 목적 미정 이체가 있으면 `investment_valuation_change_provisional=true`: 그 이체가 투자 입금일 수 있어 투자 평가 변동이 잠정값이다. |
-| 색인 | `/read/index`에 월말 전망(대시보드 `month_projection`)과 오차 경로 항목, 부호가 있어 0–1 밖일 수 있는 비율 목록(`signed_ratio_fields`), 어휘 대응표(`vocabulary_mapping`)가 있다. |
+| 색인 | `/read/index`에 월말 전망(`/read/month-projection.data`)과 오차 경로 항목, 부호가 있어 0–1 밖일 수 있는 비율 목록(`signed_ratio_fields`), 어휘 대응표(`vocabulary_mapping`)가 있다. |
 
 같은 뜻 다른 이름(이름은 바꾸지 않는다):
 
@@ -560,7 +541,16 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 
 기존 `expense_total`은 유지한다. 명확한 이름은 분석의 고정비 요약·추이와 대시보드 월 흐름에서는 `total_outflow`, 대출을 제외하는 `vw_fixed_cost_monthly_summary`에서는 `living_spend`다. 대시보드의 `non_loan_expense_total`도 `living_spend`를 함께 준다. 거래 작업 미리보기의 `expense_total`은 `selected_raw_expense_net`(선택 원본 지출 순액, 원통화 그대로)이며 월 흐름표 총지급으로 쓰면 안 된다. 응답 `contract.field_scopes` 또는 `field_scopes`가 이 대응을 명시한다. [전체 대응표](../backend-api-ssot.md#t054t057-remaining-acceptance-2026-11-17)를 따른다.
 
-`vw_monthly_cashflow.savings_rate`는 이제 진행월에 null이다. 홈은 서버의 `residual_rate`를 표시한다. 폐기 예정인 거래처 3개월 평균·재량 속도·구매 후보의 예전 기준선은 제거 승인 때까지 유지한다. 아래 [이전 안내](read-surface-migration.md#7-t054t057-잔여-완료-조건-2026-11-17)의 후속 경로를 사용한다.
+`vw_monthly_cashflow.savings_rate`는 이제 진행월에 null이다. 홈은 서버의 `residual_rate`를 표시한다. 예전 기준선의 HTTP 호환 경로는 승인 후 제거했다. SQL 뷰는 남아 있다. 아래 [이전 안내](read-surface-migration.md#6-검증과-변경-키)의 후속 경로를 사용한다.
+
+
+## 2026-11-17 제거 후 읽기 규칙
+
+위의 Analytics 값 사전 중 `category-mom`, `discretionary-velocity`, 구매 후보 GET 두 개, `spending-anomalies`, `installments/forecast`는 **제거된 이전 계약 설명**이다. 현재 호출 경로가 아니다. 대시보드와 함께 총 7개 GET이 404다. 현재 대체 경로·필드는 [이전 안내](read-surface-migration.md#1-제거된-경로와-후속-표면)를 따른다. 재사용하는 검출기의 내부 값은 남아 있고 공개 HTTP 목록은 `/read/review-items`로 통합했다.
+
+에이전트의 전망 읽기는 `/canonical-views/dashboard.month_projection` → `/read/month-projection.data`, `metric_as_of` → `as_of`, `data_coverage.last_transaction_date` → `as_of.transaction_as_of`로 바꾼다. 최초 날짜는 `as_of.first_transaction_date`. 정확도 경로는 유지한다. 색인의 `month_end_projection`과 자료 현황의 `month_end_forecast`도 이 새 위치를 가리킨다. 금액·비율·분류는 클라이언트가 다시 계산하지 않는다.
+
+전용 전망 응답은 예전 객체의 단위를 보존한다. `data.remaining_expense_adjustability.undecided_share_pct`는 백분율(0–100)이고, 봉투의 분류·기간 비중은 0–1이다. 새 응답의 `basis.rules.projection_ratio_units`와 `labels`가 단위 예외와 열거값 한국어 이름을 밝힌다.
 
 ## T062 — 연간성 지출 참고와 사람이 정한 한도
 

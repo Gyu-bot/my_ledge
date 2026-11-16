@@ -11,7 +11,7 @@ import { Provenance } from '../../ds/Provenance'
 import { toast } from '../../ds/toastStore'
 import { PageHeader } from '../../shell/PageHeader'
 import { useApplyUploadPreview, useResetData, useRollbackPoints, useRollbackUpload, useUploadLogs, useUploadPreview } from '../../hooks/useUpload'
-import { useCanonicalViewsDashboard } from '../../hooks/useCanonicalViews'
+import { useReadDataStatus } from '../../hooks/useMetrics'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type { DataResetScope, UploadPreviewResponse, UploadRollbackPoint } from '../../types/upload'
 import { ImportPreviewPanel } from './ImportPreviewPanel'
@@ -49,7 +49,7 @@ export function ImportPage() {
   const logs = useUploadLogs(10)
   const rollbackPoints = useRollbackPoints()
   const rollback = useRollbackUpload()
-  const canonical = useCanonicalViewsDashboard()
+  const dataStatus = useReadDataStatus()
 
   const [file, setFile] = useState<File | null>(null)
   const [snapshotDate, setSnapshotDate] = useState('')
@@ -140,7 +140,7 @@ export function ImportPage() {
     }
   }
 
-  const coverage = canonical.data?.data_coverage
+  const coverage = dataStatus.data?.data.transaction_coverage
   const availablePoint = rollbackPoints.data?.find((point) => point.can_rollback)
 
   return (
@@ -220,7 +220,7 @@ export function ImportPage() {
           meta={
             coverage ? (
               <span className="inline-flex items-center gap-1.5">
-                관측 범위 {coverage.first_transaction_date ?? '—'} ~ {coverage.last_transaction_date ?? '—'}
+                관측 범위 {coverage.first_transaction_date ?? '—'} ~ {coverage.transaction_as_of ?? '—'}
                 <Provenance title="관측 데이터 범위" note="이 범위 밖의 월은 미완성으로 표시됩니다." />
               </span>
             ) : '최근 10건'

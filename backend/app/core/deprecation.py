@@ -1,6 +1,7 @@
 """Deprecation marks for read endpoints the read surface replaces (T060).
 
-Nothing is removed. A deprecated endpoint keeps its body and status code; it
+The seven former deprecated reads have been removed with owner approval.
+The remaining liquidity-health endpoint keeps its body and status code; it
 only gets ``deprecated: true`` in OpenAPI and two response headers:
 ``Deprecation: true`` and ``Link: <successor>; rel="successor-version"``.
 Removal waits until the consuming agent has switched and the user approves
@@ -14,22 +15,10 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # (method, path) -> successor path in the read surface.
 DEPRECATED_READ_ENDPOINTS: dict[tuple[str, str], str] = {
-    ("GET", "/api/v1/canonical-views/dashboard"): "/api/v1/read/index",
     (
         "GET",
-        "/api/v1/analytics/discretionary-velocity",
-    ): "/api/v1/read/comparison/monthly-flow",
-    ("GET", "/api/v1/analytics/purchase-gate-candidates"): "/api/v1/read/review-items",
-    (
-        "GET",
-        "/api/v1/analytics/spending-review-candidates",
-    ): "/api/v1/read/review-items",
-    ("GET", "/api/v1/analytics/spending-anomalies"): "/api/v1/read/review-items",
-    (
-        "GET",
-        "/api/v1/analytics/category-mom",
-    ): "/api/v1/read/comparison/contributions",
-    ("GET", "/api/v1/installments/forecast"): "/api/v1/read/commitments",
+        "/api/v1/analytics/liquidity-health",
+    ): "/api/v1/metrics/net-worth/emergency-fund",
 }
 
 

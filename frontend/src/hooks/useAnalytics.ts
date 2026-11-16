@@ -1,9 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { analyticsApi } from '../api/analytics'
 import type {
-  AnalyticsDateRange, MerchantSpendQuery, MonthlyCashflowQuery, RecurringPaymentsQuery,
-  CategoryMoMQuery, SpendingAnomaliesQuery, IncomeStabilityQuery,
-  DiscretionaryVelocityQuery, PurchaseGateCandidatesQuery,
+  AnalyticsDateRange, MerchantSpendQuery, MonthlyCashflowQuery, RecurringPaymentsQuery, IncomeStabilityQuery,
   PurchaseGateReviewPatchRequest,
 } from '../types/analytics'
 
@@ -12,13 +10,6 @@ export function useMonthlyCashflow(monthsOrParams: number | MonthlyCashflowQuery
   return useQuery({
     queryKey: ['analytics', 'cashflow', params],
     queryFn: () => analyticsApi.monthlyCashflow(params),
-  })
-}
-
-export function useCategoryMoM(params: CategoryMoMQuery = { months: 2 }) {
-  return useQuery({
-    queryKey: ['analytics', 'categoryMoM', params],
-    queryFn: () => analyticsApi.categoryMoM(params),
   })
 }
 
@@ -56,27 +47,6 @@ export function useRecurringPayments(page = 1, perPage = 10, params: Omit<Recurr
   return useQuery({
     queryKey: ['analytics', 'recurringPayments', page, perPage, params],
     queryFn: () => analyticsApi.recurringPayments({ ...params, page, per_page: perPage }),
-  })
-}
-
-export function useSpendingAnomalies(params: SpendingAnomaliesQuery = {}) {
-  return useQuery({
-    queryKey: ['analytics', 'spendingAnomalies', params],
-    queryFn: () => analyticsApi.spendingAnomalies(params),
-  })
-}
-
-export function useDiscretionaryVelocity(params: DiscretionaryVelocityQuery = {}) {
-  return useQuery({
-    queryKey: ['analytics', 'discretionaryVelocity', params],
-    queryFn: () => analyticsApi.discretionaryVelocity(params),
-  })
-}
-
-export function usePurchaseGateCandidates(params: PurchaseGateCandidatesQuery = { status: 'pending', limit: 5 }) {
-  return useQuery({
-    queryKey: ['analytics', 'purchaseGateCandidates', params],
-    queryFn: () => analyticsApi.purchaseGateCandidates(params),
   })
 }
 

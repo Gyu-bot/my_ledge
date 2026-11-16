@@ -11,33 +11,6 @@ export interface MonthlyCashflowResponse {
   items: MonthlyCashflowItem[]
 }
 
-export interface CategoryMoMItem {
-  period: string
-  previous_period: string
-  category: string
-  current_amount: number
-  previous_amount: number
-  delta_amount: number
-  delta_pct: number | null
-}
-
-export interface CategoryMoMResponse {
-  reference_date?: string | null
-  is_partial_period?: boolean
-  comparison_basis?: 'same_day_previous_month' | 'full_previous_month'
-  items: CategoryMoMItem[]
-}
-
-export interface CategoryMoMQuery {
-  months?: number
-  start_month?: string
-  end_month?: string
-  base_month?: string
-  start_date?: string
-  end_date?: string
-  include_income?: boolean
-}
-
 export interface FixedCostSummaryResponse {
   expense_total: number
   fixed_total: number
@@ -156,80 +129,9 @@ export interface RecurringPaymentsResponse {
   assumptions: string
 }
 
-export interface SpendingAnomalyItem {
-  period: string
-  category: string
-  amount: number
-  baseline_avg: number
-  delta_pct: number | null
-  delta_pct_raw?: number | null
-  delta_pct_display?: number | null
-  delta_display_capped?: boolean
-  baseline_quality?: string
-  anomaly_mode?: string
-  direction?: 'increase' | 'decrease'
-  anomaly_score: number
-  reason: string
-}
-
-export interface SpendingAnomaliesResponse {
-  total: number
-  page: number
-  per_page: number
-  items: SpendingAnomalyItem[]
-  comparison_mode: 'closed' | 'partial'
-  reference_date: string
-  is_partial_period: boolean
-  assumptions: string
-}
-
 export interface IncomeStabilityQuery {
   end_date?: string
 }
-
-export interface SpendingAnomaliesQuery {
-  page?: number
-  per_page?: number
-  end_date?: string
-}
-
-export type AnalyticsRiskLevel =
-  | 'normal'
-  | 'low'
-  | 'watch'
-  | 'warning'
-  | 'high'
-  | 'critical'
-  | 'needs_classification'
-  | 'unknown'
-
-export interface DiscretionaryVelocityResponse {
-  period: string
-  as_of_date: string
-  month_progress_ratio: number
-  discretionary_spend: number
-  baseline_monthly_spend: number
-  baseline_spend_at_same_progress: number
-  velocity_ratio: number | null
-  risk_level: AnalyticsRiskLevel
-  review_priority?: number | null
-  confidence: string
-  reasons: string[]
-  assumptions: string[]
-  unclassified_spend: number
-  classification_coverage_ratio: number | null
-  income_basis?: 'observed' | 'estimated' | string | null
-}
-
-export interface DiscretionaryVelocityQuery {
-  as_of_date?: string
-}
-
-export type PurchaseGateCandidateType =
-  | 'large_oneoff'
-  | 'new_merchant'
-  | 'merchant_spike'
-  | 'discretionary_spike'
 
 export type PurchaseGateCandidateStatus =
   | 'pending'
@@ -237,36 +139,6 @@ export type PurchaseGateCandidateStatus =
   | 'ignored'
   | 'snoozed'
   | 'dismissed'
-
-export interface PurchaseGateCandidateItem {
-  candidate_type: PurchaseGateCandidateType
-  candidate_types: string[]
-  possible_cancellation?: boolean
-  cancellation_evidence_transaction_ids?: number[]
-  transaction_id: number
-  candidate_key: string
-  date: string
-  merchant: string
-  amount: number
-  category: string
-  signals: Record<string, number | string | boolean>
-  risk_level: AnalyticsRiskLevel
-  review_priority: string
-  confidence: string
-  suggested_review_window: string
-  review_status: PurchaseGateCandidateStatus
-  review_memo?: string | null
-  reviewed_at?: string | null
-  cooldown_until?: string | null
-  review_timing?: 'post_transaction'
-  candidate_purpose?: 'future_friction_rule_candidate'
-  future_friction_suggestion?: {
-    condition?: Record<string, unknown>
-    action?: string
-  } | null
-  reasons: string[]
-  assumptions: string[]
-}
 
 export interface PurchaseGateReviewPatchRequest {
   review_status: PurchaseGateCandidateStatus
@@ -282,21 +154,4 @@ export interface PurchaseGateReviewResponse {
   memo: string | null
   reviewed_at: string | null
   cooldown_until: string | null
-}
-
-export interface PurchaseGateCandidatesResponse {
-  start_date?: string
-  end_date?: string
-  total: number
-  page: number
-  per_page: number
-  items: PurchaseGateCandidateItem[]
-  assumptions: string[]
-}
-
-export interface PurchaseGateCandidatesQuery {
-  start_date?: string
-  end_date?: string
-  status?: PurchaseGateCandidateStatus
-  limit?: number
 }
