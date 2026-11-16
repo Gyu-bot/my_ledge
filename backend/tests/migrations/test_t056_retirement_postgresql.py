@@ -92,6 +92,20 @@ def test_views_roundtrip_and_read_values_are_identical(scratch_url):
         engine = create_async_engine(scratch_url)
         try:
             async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                # 현재 앱으로 과거의 뷰 전용 이행을 검증한다. 새 메타데이터만
+                # 빈 상태로 준비하고, 0041 전후 표·행 보존 대조에 포함한다.
+                await db.execute(
+                    text(
+                        "ALTER TABLE transactions ADD COLUMN legacy_classification_edited "
+                        "BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                )
+                await db.execute(
+                    text(
+                        "ALTER TABLE recurring_commitments ADD COLUMN attributes_confirmed_at "
+                        "TIMESTAMPTZ"
+                    )
+                )
                 await build_read_surface_ledger(db, purchases_per_month=8)
         finally:
             await engine.dispose()

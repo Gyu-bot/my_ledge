@@ -196,6 +196,14 @@ def _ledger() -> dict[str, Transaction]:
 
 
 async def _seed(session: AsyncSession) -> dict[str, int]:
+    # 현재 ORM으로 0035 장부를 심기 위한 추가 이력 컬럼이다. 이 테스트가
+    # 검증하는 과거 축 이행은 이 컬럼을 읽거나 쓰지 않는다.
+    await session.execute(
+        text(
+            "ALTER TABLE transactions ADD COLUMN legacy_classification_edited "
+            "BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+    )
     rows = _ledger()
     session.add_all(rows.values())
     await session.flush()

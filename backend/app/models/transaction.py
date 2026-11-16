@@ -48,6 +48,9 @@ class Transaction(TimestampMixin, Base):
     spend_necessity: Mapped[str | None] = mapped_column(String(20))
     cost_classification_source: Mapped[str | None] = mapped_column(String(20))
     recurring_payment_kind: Mapped[str | None] = mapped_column(String(30))
+    legacy_classification_edited: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=false()
+    )
     memo: Mapped[str | None] = mapped_column(Text)
     is_deleted: Mapped[bool] = mapped_column(
         nullable=False,

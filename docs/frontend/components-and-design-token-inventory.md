@@ -202,3 +202,7 @@ Current frontend server state is TanStack Query based.
 ## T060 기존 화면 읽기 보완 (2026-11-17)
 
 `features/analysis/ComparisonBasis.tsx`의 `BaselineControl`과 `BasisNote`는 기존 `Select`로 두 기준 선택·서버 기준 기간·불가 사유를 표시한다. `MonthCoverageLabel`은 서버 월별 범위를 읽어 부분 자료·월중 시작·거래 없음(추정)을 문자로 표시한다. 월 결산, 데이터 사전, 자료 현황이 재사용한다. `ForecastCard`와 데이터 사전은 전망 기준일·포함 범위·누락 이유를 표시하며 부분 합계를 전체 전망으로 부르지 않는다. 순자산 대조는 서버 잠정 여부·이유·설명되지 않는 비중·상태 안내를 표시한다. 할부 작업대는 `ObservationsTab`으로 기록된 약정과 선택월 관측을 읽는다. 새 토큰·CSS·차트 라이브러리는 없다.
+
+### T056 이행 약정 확인
+
+T056 확인 보완: `CommitmentsPage`와 `RecurringCommitmentsEditor`는 기존 Badge·Toggle·SegmentedControl·Button으로 확인 필요 상태·수·필터를 표시한다. 편집 저장과 현재 주기·금액 그대로 확인을 기존 PATCH로 보낸다. 확인 대기는 끝난 약정도 포함한다. 새 토큰·컴포넌트 체계·페이지는 추가하지 않는다.

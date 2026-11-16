@@ -149,3 +149,17 @@ describe('CommitmentsPage — 약정 현황', () => {
     expect(screen.queryByRole('list', { name: '약정' })).not.toBeInTheDocument()
   })
 })
+
+it('확인 대기 필터는 끝난 약정도 포함하고 기존 편집 화면으로 연결한다', () => {
+  const data = commitmentsFixture()
+  const pending = data.data.items.find((item) => item.commitment_key === 'recurring:9')!
+  pending.needs_attribute_confirmation = true
+  data.data.pending_confirmation_count = 1
+  commitmentsState = query(data)
+  renderPage()
+  fireEvent.click(screen.getByLabelText('확인 필요한 약정만 보기 (1)'))
+  const list = screen.getByRole('list', { name: '약정' })
+  expect(within(list).getAllByRole('listitem')).toHaveLength(1)
+  expect(within(list).getByText('확인 필요')).toBeInTheDocument()
+  expect(within(list).getByRole('link', { name: '주기·금액 확인하기' })).toHaveAttribute('href', '/data/nature?tab=recurring&edit=9')
+})

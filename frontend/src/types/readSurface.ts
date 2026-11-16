@@ -61,6 +61,8 @@ export interface CommitmentObservation {
 export type CommitmentItemKind = 'loan' | 'installment' | 'recurring'
 
 export interface CommitmentItem {
+  attributes_confirmed_at: string | null
+  needs_attribute_confirmation: boolean
   commitment_key: string
   kind: CommitmentItemKind
   kind_label: string
@@ -94,6 +96,7 @@ export interface ReadCommitmentsResponse extends ReadEnvelope {
     period_month_status: MonthStatus | null
     totals: Record<string, number>
     counts_by_state: Record<string, number>
+    pending_confirmation_count: number
     items: CommitmentItem[]
   }
 }

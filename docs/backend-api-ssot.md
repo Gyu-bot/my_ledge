@@ -238,6 +238,8 @@ All aggregate analytics responses above now also carry an optional `contract` ob
 
 Every route requires `X-API-Key` (reads included). Writes are explicit human input only; nothing here proposes or fills a value.
 
+T056 확인 보완: 약정 행에 `attributes_confirmed_at`, `needs_attribute_confirmation`을 추가한다. 이행 출처이고 확인 시각이 없으면 대기다. 목록은 끝난 약정까지 포함한 `pending_confirmation_count`를 준다. `/read/commitments`는 상세 행에 같은 두 필드, 요약 행에 대기 여부, data에 필터 전 대기 수를 추가한다. 확인된 빈 주기는 그대로 빈 값이며 관측·월 부담 계산은 바꾸지 않는다. `transactions.legacy_classification_edited`는 이전 manual 분류 이력을 보존하며 HTTP `is_edited`에만 더한다. 축 지정 출처는 바꾸지 않는다. 이행 전 준비된 검토는 재준비하며, 이전 컬럼 집합의 되돌리기는 목록에서 불가 표시하고 `schema_changed`로 거절한다. [상세·후속 삭제 조건](agents/t056-classification-retirement.md).
+
 | Method | Path | Status | Notes |
 |---|---|---|---|
 | `GET` | `/api/v1/nature/category-defaults` | live | Category adjustability defaults (`category_minor=null` = whole major category) |
@@ -245,10 +247,10 @@ Every route requires `X-API-Key` (reads included). Writes are explicit human inp
 | `DELETE` | `/api/v1/nature/category-defaults/{id}` | live | `204`; `404` when missing |
 | `GET` | `/api/v1/nature/recurring-commitments` | live | Recurring-payment bundles (정기 지급) with attributes and `member_transaction_count`, `first_member_date`, `last_member_date` (effective rows resolved to the bundle) |
 | `POST` | `/api/v1/nature/recurring-commitments` | live | `201`. `match_scope=merchant\|category`, `merchant` (required for merchant scope, null for category scope), `category_major`, `category_minor?`, `cycle=monthly\|yearly\|n_times\|null`, `total_count` (n_times only), `amount_kind=fixed\|variable\|null`, `adjustability=protected\|adjustable\|null`, `start_date?`, `end_date?`, `label?`, `memo?`; `origin='user'` |
-| `PATCH` | `/api/v1/nature/recurring-commitments/{id}` | live | Partial update; fields present in the body change, `null` clears; same validation (`422`) |
+| `PATCH` | `/api/v1/nature/recurring-commitments/{id}` | live | 부분 수정. 명시한 필드만 변경하고 null은 비운다. 이행 약정의 `cycle`/`amount_kind` 저장 또는 `{confirm_attributes: true}`는 현재 두 속성의 사용자 확인을 기록한다. 메모·종료는 확인하지 않는다. 허용 주기는 기존 그대로, 잘못된 값은 422. |
 | `POST` | `/api/v1/nature/recurring-commitments/{id}/end` | live | `{end_date}` (not before `start_date`); later transactions stop matching |
 | `DELETE` | `/api/v1/nature/recurring-commitments/{id}` | live | `204`; explicit memberships pointing to it are cleared |
-| `GET` | `/api/v1/nature/transactions/{id}` | live | Resolved axes with the value at every precedence level, the commitment and how it matched (`rule`/`explicit`), flags, override source, and the legacy columns. `effective=false` (axes null) for deleted/merged/superseded rows |
+| `GET` | `/api/v1/nature/transactions/{id}` | live | Resolved axes with the value at every precedence level, the commitment and how it matched (`rule`/`explicit`), flags and override source. `effective=false` (axes null) for deleted/merged/superseded rows |
 | `PUT` | `/api/v1/nature/transactions/{id}/adjustability` | live | Transaction-level `{adjustability: protected\|adjustable}` (highest precedence); `422` for 수입/이체; clears `necessity_conflict` |
 | `DELETE` | `/api/v1/nature/transactions/{id}/adjustability` | live | Clears the transaction-level value; the commitment or category default applies again |
 

@@ -347,6 +347,7 @@ def _copy_user_managed_fields(
         "category_major_user",
         "category_minor_user",
         "memo",
+        "legacy_classification_edited",
         "is_deleted",
         "merged_into_id",
     ):

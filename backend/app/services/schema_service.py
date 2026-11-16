@@ -101,6 +101,10 @@ def build_schema_document(metadata: MetaData) -> SchemaDocumentResponse:
                                 "cost_classification_source",
                                 "recurring_payment_kind",
                             }
+                            else "이전 수동 분류 편집 이력. is_edited에만 사용하며 새 분류 입력이 아니다."
+                            if column.name == "legacy_classification_edited"
+                            else "사람이 이행 약정의 주기·금액을 확인한 시각. 이행 출처이고 null이면 확인 대기."
+                            if column.name == "attributes_confirmed_at"
                             else None
                         ),
                     )

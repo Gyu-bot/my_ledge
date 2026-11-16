@@ -42,6 +42,7 @@ class SchemaViewDefinition:
 
 def transaction_is_edited_clause() -> ColumnElement[bool]:
     return or_(
+        Transaction.legacy_classification_edited.is_(True),
         Transaction.category_major_user.is_not(None),
         Transaction.category_minor_user.is_not(None),
         Transaction.merchant != Transaction.description,

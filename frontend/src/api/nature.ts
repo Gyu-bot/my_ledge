@@ -29,7 +29,7 @@ export const natureApi = {
 
   deleteCategoryDefault: (id: number) => apiFetch<void>(`/nature/category-defaults/${id}`, { method: 'DELETE' }),
 
-  commitments: () => apiFetch<{ items: RecurringCommitment[] }>('/nature/recurring-commitments'),
+  commitments: () => apiFetch<{ items: RecurringCommitment[]; pending_confirmation_count: number }>('/nature/recurring-commitments'),
 
   createCommitment: (data: RecurringCommitmentCreateRequest) =>
     apiFetch<RecurringCommitment>('/nature/recurring-commitments', {

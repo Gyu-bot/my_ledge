@@ -5,7 +5,7 @@
 - Resolution (precedence) lives in SQL: ``vw_transaction_nature``.
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, exists, func, inspect, select, update
@@ -290,6 +290,10 @@ def _serialize_commitment(
         end_date=row.end_date,
         origin=row.origin,  # type: ignore[arg-type]
         memo=row.memo,
+        attributes_confirmed_at=row.attributes_confirmed_at,
+        needs_attribute_confirmation=(
+            row.origin == "migration" and row.attributes_confirmed_at is None
+        ),
         member_transaction_count=count,
         first_member_date=first,
         last_member_date=last,
@@ -306,7 +310,11 @@ async def list_commitments(db_session: AsyncSession) -> RecurringCommitmentListR
     ).all()
     stats = await _member_stats(db_session)
     return RecurringCommitmentListResponse(
-        items=[_serialize_commitment(row, stats) for row in rows]
+        items=[_serialize_commitment(row, stats) for row in rows],
+        pending_confirmation_count=sum(
+            row.origin == "migration" and row.attributes_confirmed_at is None
+            for row in rows
+        ),
     )
 
 
@@ -345,6 +353,7 @@ async def update_commitment(
 ) -> RecurringCommitmentResponse:
     row = await _commitment_or_404(db_session, commitment_id)
     changes = payload.model_dump(exclude_unset=True)
+    confirm_attributes = changes.pop("confirm_attributes", False)
     if changes.get("category_major", "set") is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, "category_major cannot be null"
@@ -367,6 +376,10 @@ async def update_commitment(
     except ValueError as exc:
         await db_session.rollback()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    if row.origin == "migration" and (
+        confirm_attributes or {"cycle", "amount_kind"}.intersection(changes)
+    ):
+        row.attributes_confirmed_at = datetime.now(timezone.utc)
     return await _respond(db_session, row)
 
 

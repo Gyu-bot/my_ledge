@@ -231,3 +231,73 @@ async def test_transaction_adjustability_set_and_clear(
     assert income_body["payment_form"] == "not_applicable"
     missing = await async_client.get(f"{BASE}/transactions/999999", headers=api_headers)
     assert missing.status_code == 404
+
+
+async def test_migrated_attributes_require_person_action(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+) -> None:
+    from app.models.nature_axes import RecurringCommitment
+
+    migrated = RecurringCommitment(
+        match_scope="category", category_major="synthetic", origin="migration"
+    )
+    db_session.add(migrated)
+    await db_session.commit()
+    path = f"{BASE}/recurring-commitments/{migrated.id}"
+
+    async def pending():
+        result = await async_client.get(
+            BASE + "/recurring-commitments", headers=api_headers
+        )
+        return result.json()
+
+    assert (await pending())["pending_confirmation_count"] == 1
+    assert (await pending())["items"][0]["needs_attribute_confirmation"] is True
+    for view in ("detail", "summary"):
+        result = await async_client.get(
+            f"/api/v1/read/commitments?view={view}", headers=api_headers
+        )
+        assert result.status_code == 200
+        data = result.json()["data"]
+        assert data["pending_confirmation_count"] == 1
+        items = data["items"] if view == "detail" else data["item_summaries"]
+        assert items[0]["needs_attribute_confirmation"] is True
+    # 조회·메모·종료 조작은 속성 확인이 아니다.
+    response = await async_client.patch(
+        path, json={"memo": "synthetic"}, headers=api_headers
+    )
+    assert response.json()["attributes_confirmed_at"] is None
+    response = await async_client.post(
+        path + "/end", json={"end_date": "2026-12-31"}, headers=api_headers
+    )
+    assert response.json()["needs_attribute_confirmation"] is True
+    assert (
+        await async_client.patch(path, json={"confirm_attributes": True})
+    ).status_code == 401
+    assert (
+        await async_client.patch(path, json={"cycle": "irregular"}, headers=api_headers)
+    ).status_code == 422
+    assert (await pending())["pending_confirmation_count"] == 1
+    # 빈 주기와 빈 금액도 사람이 그대로 확인할 수 있다.
+    confirmed = await async_client.patch(
+        path, json={"confirm_attributes": True}, headers=api_headers
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["attributes_confirmed_at"] is not None
+    assert confirmed.json()["cycle"] is None
+    assert confirmed.json()["amount_kind"] is None
+    assert confirmed.json()["origin"] == "migration"
+    assert (await pending())["pending_confirmation_count"] == 0
+
+    migrated.attributes_confirmed_at = None
+    await db_session.commit()
+    updated = await async_client.patch(
+        path, json={"cycle": "yearly", "amount_kind": "variable"}, headers=api_headers
+    )
+    assert updated.status_code == 200
+    assert updated.json()["attributes_confirmed_at"] is not None
+    assert updated.json()["needs_attribute_confirmation"] is False
+    rejected = await async_client.patch(
+        path, json={"attributes_confirmed_at": "2026-01-01"}, headers=api_headers
+    )
+    assert rejected.status_code == 422

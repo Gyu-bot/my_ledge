@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AdjustabilityValue = Literal["protected", "adjustable"]
 ResolvedAdjustability = Literal[
@@ -52,7 +52,8 @@ class CategoryAdjustabilityDefaultListResponse(BaseModel):
 class _CommitmentAttributes(BaseModel):
     label: str | None = Field(default=None, max_length=200)
     cycle: CommitmentCycle | None = Field(
-        default=None, description="Null means the cycle is not recorded yet (미정)."
+        default=None,
+        description="Null keeps the cycle empty; confirmation is recorded separately.",
     )
     total_count: int | None = Field(
         default=None, ge=1, description="Number of payments; only for cycle=n_times."
@@ -103,6 +104,9 @@ class RecurringCommitmentCreateRequest(_CommitmentAttributes):
 class RecurringCommitmentUpdateRequest(BaseModel):
     """Partial update. Only fields present in the body change; null clears."""
 
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_attributes: bool = False
     label: str | None = Field(default=None, max_length=200)
     match_scope: CommitmentScope | None = None
     merchant: str | None = Field(default=None, max_length=500)
@@ -136,6 +140,8 @@ class RecurringCommitmentResponse(BaseModel):
     end_date: date | None
     origin: NatureOrigin
     memo: str | None
+    attributes_confirmed_at: datetime | None
+    needs_attribute_confirmation: bool
     member_transaction_count: int = Field(
         description="Effective transactions currently resolved to this commitment."
     )
@@ -147,6 +153,7 @@ class RecurringCommitmentResponse(BaseModel):
 
 class RecurringCommitmentListResponse(BaseModel):
     items: list[RecurringCommitmentResponse]
+    pending_confirmation_count: int
 
 
 class TransactionAdjustabilityRequest(BaseModel):

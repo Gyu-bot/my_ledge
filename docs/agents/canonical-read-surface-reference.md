@@ -571,3 +571,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 - 차이가 null이면 `missing_reason`을 먼저 읽는다. `no_limit_set`은 미설정/해제, `month_in_progress`는 진행월, `partial_month`는 월중 시작, `no_transactions`는 거래 없는 달, `not_imported`는 아직 가져오지 않은 기간이다. **미설정을 0원 한도로 간주하지 않는다.** 진행월 실적이 있어도 한도 대비나 남은 예산을 계산하지 않는다.
 - 사람이 설정하는 API는 별도 `GET/POST /api/v1/spending-limits`다. 모든 쓰기는 인증 API로만 하며 직접 DB 쓰기는 금지다. `target_kind=category|adjustability`, 정확한 `target_value`(미분류는 빈 문자열), `effective_from_period`, `amount`를 사람이 입력한다. `null`은 한도 해제, 0은 실제 0원 한도다. 시스템은 한도·분류를 미리 고르거나 추천하지 않는다.
 - 한도 이력은 추가만 가능하다. 이미 마감된 월에는 설정/변경할 수 없고, 같은 대상의 마지막 적용 시작월보다 뒤인 월이어야 한다. 각 마감월은 자기 월 이하의 최신 버전을 읽는다. 한도 미만·초과는 기록 비교이며 최종 조언이나 건강/위험 판정이 아니다.
+
+### T056 이행 약정 확인
+
+T056 확인 보완: `/read/commitments` 상세 행은 `attributes_confirmed_at`과 `needs_attribute_confirmation`, 요약 행은 대기 여부, data는 필터 전 전체 `pending_confirmation_count`를 추가한다. 이행 출처이고 확인 시각이 없는 정기 지급만 대기이며 끝난 것도 센다. 대출·할부는 false다. 빈 주기를 확인해도 계산 근거가 채워지는 것은 아니다. 기존 값·계산·상태는 유지한다. 사람의 결정을 전달할 때만 인증된 기존 PATCH에서 주기·금액을 저장하거나 `confirm_attributes=true`를 보낸다. 직접 DB 쓰기는 금지한다. 이전 수동 분류 이력은 별도 거래 표시로 HTTP `is_edited`에 보존한다.

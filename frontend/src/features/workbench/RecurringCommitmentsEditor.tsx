@@ -146,7 +146,7 @@ function CommitmentForm({
 
   return (
     <form onSubmit={submit} aria-label={submitLabel} className="flex flex-col gap-3 rounded-md border border-border bg-bg-inset p-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 [&_input]:min-w-0 [&_select]:min-w-0 [&_select]:max-w-full">
         <Field label="이름 (선택)">
           <TextInput value={form.label} disabled={!hasWrite} onChange={(event) => set('label', event.target.value)} placeholder="비우면 거래처·카테고리로 표시" />
         </Field>
@@ -175,9 +175,9 @@ function CommitmentForm({
             {minors.map((minor) => <option key={minor} value={minor}>{minor}</option>)}
           </Select>
         </Field>
-        <Field label="주기">
+        <Field label="주기" hint="빈 값으로 저장하면 주기를 기록하지 않은 상태로 확인합니다.">
           <Select value={form.cycle} disabled={!hasWrite} onChange={(event) => set('cycle', event.target.value as FormState['cycle'])}>
-            <option value="">아직 정하지 않음</option>
+            <option value="">기록하지 않음</option>
             <option value="monthly">{CYCLE_TEXT.monthly}</option>
             <option value="yearly">{CYCLE_TEXT.yearly}</option>
             <option value="n_times">{CYCLE_TEXT.n_times}</option>
@@ -248,6 +248,16 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
     }
   }
 
+  async function confirmAttributes() {
+    try {
+      await update.mutateAsync({ id: item.id, data: { confirm_attributes: true } })
+      toast.success('주기와 금액을 확인했습니다', { description: bundleName(item) })
+      onDone()
+    } catch (error) {
+      toast.error('확인 내용을 저장하지 못했습니다', { description: writeErrorMessage(error) })
+    }
+  }
+
   async function finish() {
     if (!endDate) return
     try {
@@ -276,11 +286,12 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="break-all text-label font-semibold text-text-primary">{bundleName(item)}</h3>
             <Badge variant="neutral">{SCOPE_TEXT[item.match_scope]}</Badge>
+            {item.needs_attribute_confirmation ? <Badge variant="warn">확인 필요</Badge> : null}
             {item.origin !== 'user' ? <Badge variant="neutral">{ORIGIN_TEXT[item.origin]}</Badge> : null}
           </div>
           <p className="mt-0.5 text-caption text-text-muted">
             {categoryText(item.category_major, item.category_minor)}
-            {' · '}주기 {item.cycle ? CYCLE_TEXT[item.cycle] : '미정'}
+            {' · '}주기 {item.cycle ? CYCLE_TEXT[item.cycle] : item.attributes_confirmed_at ? '기록하지 않음 (확인함)' : '미정'}
             {item.cycle === 'n_times' && item.total_count != null ? ` (${item.total_count}회)` : ''}
             {' · '}{item.amount_kind ? AMOUNT_KIND_TEXT[item.amount_kind] : '금액 미정'}
             {' · '}조정 가능성 {item.adjustability ? ADJUSTABILITY_TEXT[item.adjustability] : '미정'}
@@ -297,6 +308,12 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
           <Button size="sm" variant="danger" disabled={!hasWrite} onClick={() => setConfirmDelete(true)}>지우기</Button>
         </div>
       </div>
+      {item.needs_attribute_confirmation ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-text-secondary">
+          <p>예전 분류에서 옮긴 주기와 금액을 확인해 주세요. 빈 주기는 그대로 둘 수 있습니다. 바꾸려면 고치기를 누르세요.</p>
+          <Button size="sm" variant="secondary" disabled={!hasWrite || update.isPending} onClick={() => void confirmAttributes()}>지금 주기·금액 그대로 확인</Button>
+        </div>
+      ) : null}
       {ending ? (
         <div className="mt-2 flex flex-wrap items-end gap-2 rounded-md border border-border-subtle bg-bg-inset px-3 py-2">
           <Field label="마지막 날">
@@ -308,6 +325,7 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
       ) : null}
       {editing ? (
         <div className="mt-2">
+          {item.needs_attribute_confirmation ? <p className="mb-2 text-caption text-text-secondary">저장하면 표시된 주기와 금액을 확인한 것으로 기록합니다. 빈 값도 그대로 확인할 수 있습니다.</p> : null}
           <CommitmentForm initial={formFrom(item)} submitLabel="고친 내용 저장" pending={update.isPending} onSubmit={(form) => void save(form)} onCancel={onDone} />
         </div>
       ) : null}
@@ -325,14 +343,14 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
   )
 }
 
-type ListFilter = 'active' | 'ended' | 'all'
+type ListFilter = 'active' | 'ended' | 'all' | 'pending'
 
 /** 정기 지급 묶음 등록·고치기·끝내기 (2.2 지급 형태 "약정"). 후보를 자동으로 등록하지 않는다. */
 export function RecurringCommitmentsEditor({ today }: { today: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const commitments = useRecurringCommitments()
   const create = useCreateRecurringCommitment()
-  const [filter, setFilter] = useState<ListFilter>('active')
+  const [filter, setFilter] = useState<ListFilter>(searchParams.get('confirmation') === 'pending' ? 'pending' : 'active')
   const [search, setSearch] = useState('')
   const creating = searchParams.get('new') === '1'
   const editId = Number(searchParams.get('edit')) || null
@@ -367,7 +385,7 @@ export function RecurringCommitmentsEditor({ today }: { today: string }) {
 
   const items = commitments.data?.items ?? []
   const visible = items
-    .filter((item) => filter === 'all' || (filter === 'ended' ? isEnded(item, today) : !isEnded(item, today)) || item.id === editId)
+    .filter((item) => filter === 'all' || (filter === 'pending' ? item.needs_attribute_confirmation : filter === 'ended' ? isEnded(item, today) : !isEnded(item, today)) || item.id === editId)
     .filter((item) => !search || bundleName(item).includes(search))
     .sort((a, b) => Number(isEnded(a, today)) - Number(isEnded(b, today)) || bundleName(a).localeCompare(bundleName(b), 'ko'))
 
@@ -392,7 +410,7 @@ export function RecurringCommitmentsEditor({ today }: { today: string }) {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <SegmentedControl
           ariaLabel="정기 지급 보기"
-          options={[{ value: 'active', label: '진행 중' }, { value: 'ended', label: '끝난 것' }, { value: 'all', label: '모두' }] as const}
+          options={[{ value: 'active', label: '진행 중' }, { value: 'ended', label: '끝난 것' }, { value: 'all', label: '모두' }, { value: 'pending', label: `확인 필요 ${commitments.data?.pending_confirmation_count ?? 0}` }] as const}
           value={filter}
           onChange={setFilter}
         />
