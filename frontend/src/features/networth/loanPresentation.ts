@@ -2,7 +2,7 @@ import type { LoanItem } from '../../types/asset'
 
 const MISSING_REASON_LABELS: Record<string, string> = {
   recalculation_required: '추정값을 다시 계산해야 합니다. 자동 추정으로 전환해 갱신하세요',
-  no_linked_transactions: '연결된 상환 거래가 없습니다',
+  no_linked_transactions: '집계 가능한 원화 상환 기록이 없습니다',
   insufficient_observations: '완료월 관측이 부족합니다',
   current_month_excluded: '진행월 거래만 있어 완료월을 기다립니다',
   no_observations_in_window: '산정 기간 안에 완료월 상환 거래가 없습니다',
@@ -22,8 +22,9 @@ export function monthlyPaymentMissingLabel(loan: LoanItem): string | null {
 
 export function monthlyPaymentEvidence(loan: LoanItem): string[] {
   const evidence: string[] = []
-  if (loan.monthly_payment_estimate_basis === 'median_closed_month_linked_repayments') evidence.push('완료월별 상환액 중앙값')
-  if (loan.monthly_payment_estimate_basis === 'mean_recent_three_closed_month_linked_repayments') evidence.push('최근 완료월 3개월 상환액 평균')
+  if (loan.monthly_payment_estimate_basis) evidence.push('재계산 기준: 월 흐름표의 원화 대출 지급 순액 · 환불은 기록된 달에 차감')
+  if (loan.monthly_payment_estimate_basis === 'median_closed_month_linked_repayments') evidence.push('완료월별 순상환액 중앙값')
+  if (loan.monthly_payment_estimate_basis === 'mean_recent_three_closed_month_linked_repayments') evidence.push('최근 관측 완료월 최대 3개월 순상환액 평균')
   if (loan.monthly_payment_estimate_window_start && loan.monthly_payment_estimate_window_end) evidence.push(`산정 기간 ${loan.monthly_payment_estimate_window_start} ~ ${loan.monthly_payment_estimate_window_end}`)
   if (loan.monthly_payment_observation_months) evidence.push(`관측 ${loan.monthly_payment_observation_months.length}개월${loan.monthly_payment_min_observations != null ? ` / 최소 ${loan.monthly_payment_min_observations}개월` : ''}${loan.monthly_payment_observation_months.length ? ` (${loan.monthly_payment_observation_months.join(', ')})` : ''}`)
   return evidence

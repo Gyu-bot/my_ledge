@@ -18,6 +18,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.services.metric_views import metric_view_ddl
 from app.models import Base
 from app.models.transaction import Transaction
 from app.models.upload_log import UploadLog
@@ -54,6 +55,8 @@ async def pg_factory():
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for statement in metric_view_ddl(conn.dialect):
+            await conn.exec_driver_sql(statement)
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:

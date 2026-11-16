@@ -77,6 +77,8 @@ export function ImportPreviewPanel({
         <SummaryTile label="선택 가능" value={applyableCount} />
       </div>
 
+      <p className="mt-3 text-caption text-text-muted">거래 변경 미리보기입니다. 대출 자동 추정값은 적용 후 대출 화면에서 확인하세요. 재계산은 월 흐름표의 원화 대출 지급 순액을 쓰고, 환불은 기록된 달에 차감합니다.</p>
+
       <PreviewBucket
         title="안전 적용"
         description="기본 선택됨 · 적용 전 체크를 해제할 수 있습니다"

@@ -2218,11 +2218,30 @@ On `/read/review-items`, both detectors use the same `ComparisonWindow` rules (d
 - Expense assumption sources read `vw_metric_flow_lines` and partition by recorded loan rules, installment-plan rules, registered recurring commitments, then variable remainder. The local sums are matched-payment/refund amounts, source-period evidence, same-remaining-day tails, and known remaining assumptions. A rule-matched unlinked payment can belong to a projection's loan/installment source while still being ad hoc in the canonical ledger. Consequently these source subtotals are not aliases for canonical `committed_loan_total` / `committed_installment_total` and cannot be replaced with them. The code does not persist those matches or classify records.
 - Remaining assumptions, medians, receipt timing, clipping, and error replay remain Python logic. No forecast beyond month end is added. The synthetic parity tests compare overall observed actuals with the view on SQLite and migrated PostgreSQL, including linked, refunded, superseded, merged, deleted and foreign-currency cases.
 
-### Loan-link candidates and the remaining exception
+### 대출 연결 후보와 월상환 추정의 공통 실적 (T054 마지막 보완)
 
-`list_loan_transaction_mappings` / `_build_loan_transaction_mapping_query` select individual original records by link, text predicate, dates and human review state; Python serializes them and does not calculate a monthly actual. `amount` is the original source-currency signed record amount (not purchase net); `currency` stays attached. On the synthetic ledger, each linked candidate amount equals the matching metric transaction's raw amount and their KRW monthly sum equals `committed_loan_total`. Candidate selection itself is distinct from accounting totals and does not assign a link.
+대출 연결 후보 목록은 원본 행과 사람의 검토 상태를 고르는 경로다. 후보의 `amount`는 원통화 원본 부호 금액이며 월 실적이 아니다. 후보 선택·연결·분류 계약은 바꾸지 않는다.
 
-A broader remaining Python aggregate was found in `_load_linked_repayment_observations` (`loan_mapping_service.py`): it sums raw linked records per month before calculating historical payment metadata. Its normal path and `transaction_overrides` upload-preview path do not read the canonical flow totals. In particular the raw selection does not impose the full metric lifecycle/currency/refund-attribution rules. This is **not** loan-link candidate detection. Changing it would change persisted/import-preview loan estimates and requires that contract impact to be settled; this PR preserves those values and the import contract. T054's global “no duplicate actual aggregate” checkbox therefore stays partial with this exact remaining path. No claim is made that all Python amount sums in the repository have been eliminated.
+`_load_linked_repayment_observations`는 `vw_metric_flow_lines`의 `flow_row='committed_loan'`을 대출 계좌·게시월로 묶는다. `loan_repayment_total`이 월 흐름표의 `committed_loan_total`과 대출 추정에 같은 SQL 합계(`SUM(-amount)`)를 제공한다. 관측 월·상환 성격은 같은 줄 집합에서 읽는다. 확정 배분 환불의 상환 성격은 원 상환 거래의 연결을 따른다. `vw_loan_repayment_monthly`는 원본 연결 중심의 이전 읽기 뷰이므로 이번 추정의 입력으로 쓰지 않는다.
+
+이전 Python 원본 합계와 달라질 수 있는 조건은 다음과 같다.
+
+| 조건 | 이전 | 공통 월 흐름표 정의 |
+|---|---|---|
+| 원화 외 통화 | 연결돼 있으면 원본 숫자를 더함 | 대소문자를 무시한 KRW만 포함. 환산하지 않음 |
+| 수입·이체·기타 유형에 남은 연결 | 연결돼 있으면 포함 | 지출 대출 줄만 포함. 이체는 자산 이동으로 분리 |
+| 대체된 원본 | 삭제·병합만 제외 | 대체 ID가 있거나 생애주기가 superseded인 원본도 제외 |
+| 확정 배분 환불 | 환불 행 자체의 연결에 귀속. 미연결 환불은 빠짐 | 확정 배분분은 원 상환의 대출·성격에 귀속하고 남은 금액은 환불 행의 연결에 남음. 달은 환불 게시월 유지 |
+| 환불 초과·환불만 있는 달 | 월 원본 순액을 0으로 잘라 관측값에 저장 | 음수 순지급을 그대로 유지. 0 하한은 중앙값·평균을 낸 최종 월상환 추정에만 적용 |
+| 관측 월·상환 성격 | 원본 연결이 있던 달·성격 | 공통 대출 줄이 있는 달·귀속 연결의 성격. 제외 조건과 환불 때문에 관측 수·추정 가능 여부·상환 방식도 달라질 수 있음 |
+
+삭제·병합 제외는 유지된다. 최근 내보내기 누락·원천 변경·중복 후보 상태는 유효 조건을 만족하면 계속 포함한다. 연결 여부가 대출 줄을 정하므로 카테고리 사용자 수정은 연결된 상환액을 바꾸지 않는다. 분류 표시는 사용자 수정 우선이며, 금액은 구매 순액 대신 게시월 원본 지급·환불 줄을 쓴다. 순액이 0인 관측월은 남기고 대출 줄이 없는 달을 0원으로 채우지 않는다.
+
+미리보기 `transaction_overrides`는 기존 거래의 날짜·금액만 바꾼 읽기 전용 CTE를 만든다. 환불 배분 → 유효 거래 → 성격 축 → 흐름표 줄의 **동일 SQL 생성 함수**를 이 거래 집합에 적용하고 마지막에 계좌·관측 기간을 고른다. 기존 날짜로 미리 자르거나 연결된 거래만 바꾸지 않는다. 기간 밖 원 상환·미연결 환불의 변경도 반영한다. 확정 배분 유효성도 변경된 금액 부호로 다시 판정한다. 미리보기 월 합계와 실제 적용 후 뷰 합계, 검토 수정 후 대출 스냅샷 값의 일치를 SQLite·PostgreSQL에서 검증한다. 쓰기·시퀀스 변경은 없고 검토/승인/적용/롤백 계약은 유지한다.
+
+관측 기간·최소 관측 완료월·마이너스 통장의 최근 관측 완료월 최대 3개 평균·그 외 중앙값·수동값 보존은 추정 규칙이다. 수동 금액·수동 상환 방식은 자동 추정으로 덮지 않는다. 저장된 과거 추정값을 읽기만 해서 갱신하지 않는다. 기존의 명시 재계산, 연결·삭제·복원·대출 성격 변경, 스냅샷 가져오기에서 갱신한다. 새로운 이행이나 테이블·컬럼 변경은 없다. 설치된 뷰 SQL이 기존 이행의 고정 SQL과 같다는 테스트를 유지한다.
+
+대출 화면과 재무상태 대출 카드는 `/loans/summary`, 약정의 월 부담은 저장된 같은 `loans.monthly_payment`를 읽는다. 자산·부채 요약의 월 부담 파생값도 그 값을 사용한다. 대출 잔액·순자산 스냅샷 자체는 이 추정과 별도다. 근거 문구는 재계산 기준이 원화 대출 지급 순액이며 환불을 기록된 달에 차감함을 밝힌다. `POST /upload/review`와 검토 수정 응답의 스냅샷 상세는 새 예상 추정값을 준다. 현재 `/data/import` 화면은 `/upload/preview`의 거래 변경 목록만 표시하므로 대출 예상 금액을 보여주는 화면으로 설명하지 않는다. 적용 후 대출 화면에서 확인하도록 안내한다. 새 검토 UI나 계약 확장은 이번 범위에 넣지 않는다.
 
 ## T062: spending_reference.v1 and spending_limit_revisions
 

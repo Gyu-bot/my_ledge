@@ -1,5 +1,4 @@
 import calendar
-from collections import defaultdict
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from statistics import median
@@ -33,6 +32,7 @@ from app.schemas.loan_mapping import (
     LoanTransactionLinkUpsertRequest,
     TransactionLoanLinkResponse,
 )
+from app.services.metric_views import loan_repayment_total, repayment_flow_lines
 from app.services.settings_service import get_analytics_settings
 
 
@@ -528,22 +528,15 @@ async def get_loan_repayment_estimate_metadata(
         elif observations["monthly_totals"]:
             missing_reason = "insufficient_observations"
         else:
+            lines = repayment_flow_lines()
             dates = list(
                 (
                     await db_session.scalars(
-                        select(Transaction.date)
-                        .join(
-                            LoanTransactionLink,
-                            LoanTransactionLink.transaction_id == Transaction.id,
-                        )
-                        .join(
-                            LoanAccount,
-                            LoanAccount.id == LoanTransactionLink.loan_account_id,
-                        )
+                        select(lines.c.date)
+                        .join(LoanAccount, LoanAccount.id == lines.c.loan_account_id)
                         .where(LoanAccount.lender == loan.lender)
                         .where(LoanAccount.product_name == loan.product_name)
-                        .where(Transaction.is_deleted.is_(False))
-                        .where(Transaction.merged_into_id.is_(None))
+                        .where(lines.c.flow_row == "committed_loan")
                     )
                 ).all()
             )
@@ -1095,61 +1088,42 @@ async def _load_linked_repayment_observations(
             "observation_months": [],
         }
 
-    query = (
-        select(
-            Transaction.id,
-            Transaction.date,
-            Transaction.amount,
-            LoanTransactionLink.repayment_type,
-        )
-        .join(
-            LoanTransactionLink,
-            LoanTransactionLink.transaction_id == Transaction.id,
-        )
-        .join(
-            LoanAccount,
-            LoanAccount.id == LoanTransactionLink.loan_account_id,
-        )
+    lines = repayment_flow_lines(transaction_overrides)
+    scope = (
+        select(lines)
+        .join(LoanAccount, LoanAccount.id == lines.c.loan_account_id)
         .where(LoanAccount.lender == lender)
         .where(LoanAccount.product_name == product_name)
-        .where(Transaction.is_deleted.is_(False))
-        .where(Transaction.merged_into_id.is_(None))
-        .order_by(Transaction.date.asc(), Transaction.id.asc())
+        .where(lines.c.flow_row == "committed_loan")
+        .where(lines.c.date.between(window_start, window_end))
+        .subquery("loan_observations")
     )
-    in_window = Transaction.date.between(window_start, window_end)
-    if transaction_overrides:
-        query = query.where(or_(in_window, Transaction.id.in_(transaction_overrides)))
-    else:
-        query = query.where(in_window)
-    result = await db_session.execute(query)
-
-    monthly_amounts: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
-    monthly_types: dict[tuple[int, int], set[str]] = defaultdict(set)
-    for transaction_id, transaction_date, amount, repayment_type in result.all():
-        # Apply the exact chosen source update before windowing: an update may
-        # move a linked transaction into or out of the closed-month window.
-        override = (transaction_overrides or {}).get(transaction_id, {})
-        transaction_date = override.get("date", transaction_date)
-        amount = override.get("amount", amount)
-        if not window_start <= transaction_date <= window_end:
-            continue
-        month_key = (transaction_date.year, transaction_date.month)
-        monthly_amounts[month_key] += Decimal(str(amount or 0))
-        monthly_types[month_key].add(repayment_type or "unknown")
-
-    monthly_totals = [
-        max(-total, Decimal("0")).quantize(Decimal("0.01"))
-        for _month_key, total in sorted(monthly_amounts.items())
-    ]
-    monthly_type_sets = [
-        monthly_types[month_key] for month_key in sorted(monthly_types.keys())
-    ]
+    totals = (
+        await db_session.execute(
+            select(scope.c.period, loan_repayment_total(scope))
+            .group_by(scope.c.period)
+            .order_by(scope.c.period)
+        )
+    ).all()
+    # Repayment type follows the attributed purchase, including allocated refunds.
+    # This is evidence for the estimator, not another amount aggregation.
+    type_rows = await db_session.execute(
+        select(scope.c.period, LoanTransactionLink.repayment_type)
+        .join(
+            LoanTransactionLink,
+            LoanTransactionLink.transaction_id == scope.c.attributed_transaction_id,
+        )
+        .distinct()
+    )
+    monthly_types: dict[str, set[str]] = {}
+    for period, repayment_type in type_rows:
+        monthly_types.setdefault(period, set()).add(repayment_type or "unknown")
     return {
-        "monthly_totals": monthly_totals,
-        "monthly_types": monthly_type_sets,
-        "observation_months": [
-            f"{year:04d}-{month:02d}" for year, month in sorted(monthly_amounts)
+        "monthly_totals": [
+            Decimal(str(total)).quantize(Decimal("0.01")) for _, total in totals
         ],
+        "monthly_types": [monthly_types[period] for period, _ in totals],
+        "observation_months": [period for period, _ in totals],
     }
 
 
@@ -1187,10 +1161,10 @@ def _estimate_monthly_payment(
         return None
     if loan_kind == "overdraft":
         recent_totals = monthly_totals[-3:]
-        return (sum(recent_totals, Decimal("0")) / len(recent_totals)).quantize(
-            Decimal("0.01")
-        )
-    return Decimal(median(monthly_totals)).quantize(Decimal("0.01"))
+        return max(
+            sum(recent_totals, Decimal("0")) / len(recent_totals), Decimal("0")
+        ).quantize(Decimal("0.01"))
+    return max(Decimal(median(monthly_totals)), Decimal("0")).quantize(Decimal("0.01"))
 
 
 def _infer_repayment_method(monthly_type_sets: list[set[str]]) -> str | None:

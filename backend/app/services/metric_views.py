@@ -167,9 +167,10 @@ def _is_metric_currency(currency_column) -> ColumnElement[bool]:  # type: ignore
     return func.upper(currency_column) == METRIC_CURRENCY
 
 
-def _refund_allocations_select() -> Select:
-    original = _transactions.alias("original_tx")
-    refund = _transactions.alias("refund_tx")
+def _refund_allocations_select(transactions=_transactions) -> Select:
+    prefix = "" if transactions is _transactions else "preview_source_"
+    original = transactions.alias(f"{prefix}original_tx")
+    refund = transactions.alias(f"{prefix}refund_tx")
     return (
         select(
             _matches.c.id.label("settlement_match_id"),
@@ -213,8 +214,9 @@ REFUND_ALLOCATIONS_VIEW = view_table(
 )
 
 
-def _metric_transactions_select() -> Select:
-    allocations = REFUND_ALLOCATIONS_VIEW
+def _metric_transactions_select(
+    transactions=_transactions, allocations=REFUND_ALLOCATIONS_VIEW
+) -> Select:
     received = (
         select(
             allocations.c.original_transaction_id.label("transaction_id"),
@@ -231,7 +233,7 @@ def _metric_transactions_select() -> Select:
         .group_by(allocations.c.refund_transaction_id)
         .subquery("allocated_refunds")
     )
-    tx = _transactions
+    tx = transactions
     return (
         select(
             tx.c.id.label("id"),
@@ -348,14 +350,14 @@ def category_default_order(defaults) -> tuple[ColumnElement, ...]:  # type: igno
     return (case((defaults.c.category_minor.is_(None), 1), else_=0),)
 
 
-def _transaction_nature_select() -> Select:
+def _transaction_nature_select(transactions=METRIC_TRANSACTIONS_VIEW) -> Select:
     """Resolved payment form and adjustability per effective transaction.
 
     Adjustability precedence for 지출: loan/installment link (fixed protected)
     > transaction-level value > recurring-commitment value > category default
     > undecided. 수입/이체 and other types are ``not_applicable``.
     """
-    tx = METRIC_TRANSACTIONS_VIEW
+    tx = transactions
     overrides = _overrides
     rule = _commitments.alias("rule_commitment")
     default = _defaults.alias("category_default")
@@ -651,9 +653,11 @@ ATTRIBUTED_COLUMNS = (
 )
 
 
-def _flow_lines_select() -> Select:
-    tx = METRIC_TRANSACTIONS_VIEW
-    allocations = REFUND_ALLOCATIONS_VIEW
+def _flow_lines_select(
+    tx=METRIC_TRANSACTIONS_VIEW,
+    allocations=REFUND_ALLOCATIONS_VIEW,
+    nature=TRANSACTION_NATURE_VIEW,
+) -> Select:
     self_lines = (
         select(
             tx.c.id.label("transaction_id"),
@@ -704,7 +708,6 @@ def _flow_lines_select() -> Select:
     # transaction whose meaning the line carries (the original purchase for an
     # allocated refund part). Old classification columns are carried only for
     # the legacy aggregate views.
-    nature = TRANSACTION_NATURE_VIEW
     purposes = TRANSFER_PURPOSE_VIEW
     is_expense = lines.c.type == EXPENSE
     axes = (
@@ -813,6 +816,54 @@ FLOW_LINES_DEFINITION = _flow_lines_select()
 FLOW_LINES_VIEW = view_table("vw_metric_flow_lines", FLOW_LINES_DEFINITION)
 
 
+def repayment_flow_lines(transaction_overrides: dict[int, dict] | None = None):
+    """Read persisted flow lines, or evaluate the SAME SQL over hypothetical rows.
+
+    Import review updates only date/amount on existing transactions. Apply those
+    before lifecycle, refund validation, attribution and month/window selection;
+    even an unlinked refund or a purchase outside the window can affect a loan.
+    CTEs are read-only and do not change the installed views or persisted data.
+    Transfer-purpose metadata cannot affect loan lines, so its view is reused.
+    """
+    if not transaction_overrides:
+        return FLOW_LINES_VIEW
+    expressions = []
+    for field in _transactions.c:
+        changes = {
+            transaction_id: values[field.name]
+            for transaction_id, values in transaction_overrides.items()
+            if field.name in {"date", "amount"} and field.name in values
+        }
+        expressions.append(
+            case(changes, value=_transactions.c.id, else_=field).label(field.name)
+            if changes
+            else field
+        )
+    transactions = select(*expressions).cte("preview_transactions")
+    allocations = _refund_allocations_select(transactions).cte("preview_allocations")
+    metrics = _metric_transactions_select(transactions, allocations).cte(
+        "preview_metrics"
+    )
+    nature = _transaction_nature_select(metrics).cte("preview_nature")
+    return _flow_lines_select(metrics, allocations, nature).cte("preview_flow_lines")
+
+
+def loan_repayment_total(lines=FLOW_LINES_VIEW) -> ColumnElement:
+    """Posting-month signed net outflow, shared with the monthly-flow summary."""
+    return func.coalesce(
+        func.sum(
+            case(
+                (
+                    and_(lines.c.type == EXPENSE, lines.c.flow_row == "committed_loan"),
+                    -lines.c.amount,
+                ),
+                else_=0,
+            )
+        ),
+        0,
+    )
+
+
 def _as_of_select() -> Select:
     tx = METRIC_TRANSACTIONS_VIEW
     bounds = select(
@@ -893,7 +944,7 @@ def flow_summary_columns(lines: TableClause = FLOW_LINES_VIEW) -> list[ColumnEle
     """
     is_expense = lines.c.type == EXPENSE
     income = _signed_sum(lines.c.type == INCOME)
-    committed_loan = _expense_sum(lines.c.flow_row == "committed_loan")
+    committed_loan = loan_repayment_total(lines)
     total_outflow = _expense_sum()
     return [
         income.label("income_total"),

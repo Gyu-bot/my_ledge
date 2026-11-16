@@ -54,7 +54,9 @@ function burdenText(item: CommitmentItem): string {
 function burdenBasis(item: CommitmentItem): string {
   switch (item.monthly_burden_basis) {
     case 'recorded_monthly_payment':
-      return item.monthly_burden_source === 'manual' ? '대출 월 상환액 (직접 입력한 값)' : '대출 스냅샷의 월 상환액'
+      if (item.monthly_burden_source === 'manual') return '대출 월 상환액 (직접 입력한 값)'
+      if (item.monthly_burden_source === 'estimated_from_linked_transactions') return '저장된 자동 추정값 · 재계산 시 월 흐름표의 원화 대출 지급 순액 기준'
+      return '대출 스냅샷의 월 상환액'
     case 'plan_monthly_amount':
       return '할부 계획의 월 금액'
     case 'last_observed_closed_month':
