@@ -36,15 +36,16 @@
 ### `navigation`
 
 - Source: `frontend/src/shell/navigation.ts`
-- Canonical main nav (T058, T059):
+- Canonical main nav (T058, T059, T061):
   - `/` 월 결산
   - `/analysis` 지출 분석
   - `/commitments` 약정 현황
-  - `/net-worth` 자산·부채
-- 작업대 nav (예전 "데이터", T059):
+  - `/net-worth` 재무상태 (T061, 예전 이름 자산·부채)
+- 작업대 nav (예전 "데이터", T059, T061):
   - `/data/inbox` 분류
   - `/data/transactions` 거래
   - `/data/nature` 기본값·정기 지급
+  - `/data/transfers` 이체 목적 (T061)
   - `/data/loans`
   - `/data/installments`
   - `/data/assets`
@@ -112,11 +113,12 @@
 | --- | --- | --- |
 | Month close (월 결산) | `features/monthclose/MonthClosePage.tsx` (+ `FlowTable`, `ForecastCard`, `TrendCard`) | `/` |
 | Spending analysis (지출 분석) | `features/spending-analysis/SpendingAnalysisPage.tsx` (+ `CategoryBreakdownCard`, `ContributionsCard`, `NewPurchaseCard`, `ReviewItemsCard`) | `/analysis` |
-| Net worth | `features/networth/NetWorthPage.tsx` | `/net-worth` |
+| Net worth (재무상태, T061) | `features/networth/NetWorthPage.tsx` (+ `SnapshotDatesCard`, `ReconciliationSection`, `EmergencyFundCard`) | `/net-worth` |
 | Commitments (약정 현황) | `features/commitments/CommitmentsPage.tsx` | `/commitments` |
 | Classification (작업대 · 분류) | `features/workbench/ClassificationPage.tsx` (+ `ClassificationQueue`, `LoanCandidateCard`) | `/data/inbox` |
 | Transactions | `features/data/TransactionsPage.tsx` | `/data/transactions` |
 | Nature settings (기본값·정기 지급) | `features/workbench/NatureSettingsPage.tsx` (+ `CategoryDefaultsEditor`, `RecurringCommitmentsEditor`) | `/data/nature` |
+| Transfer purpose (작업대 · 이체 목적, T061) | `features/workbench/TransferPurposePage.tsx` | `/data/transfers` |
 | Data status (자료 현황) | `features/workbench/DataStatusPage.tsx` | `/data/status` |
 | Loans | `features/data/LoansPage.tsx` | `/data/loans` |
 | Installments | `features/data/InstallmentsPage.tsx` | `/data/installments` |
@@ -131,10 +133,22 @@
 | Piece | Source | Responsibility | Main tokens |
 | --- | --- | --- | --- |
 | `DataStatusStrip` | `features/analysis/DataStatusStrip.tsx` | 화면 머리의 자료 현황: 거래 기준일, 마감월·진행월, 종류별 스냅샷 기준일, 미정 비중(보는 달·전체), 원화 외 제외 건수 | `bg-bg-surface`, `border-border`, `warn` badge |
-| `AmountDrilldown` | `features/analysis/AmountDrilldown.tsx` | 금액 아래에 그 자리에서 열리는 근거 패널: 산식, 포함·제외, 기준 비교, 카테고리 × 거래처 구성, 금액과 같은 흐름표 줄로 거른 거래 목록(합계 대조)과 그 자리 고치기 | `bg-bg-raised`, `border-accent-border`, `shadow-raised` |
+| `AmountDrilldown` | `features/analysis/AmountDrilldown.tsx` | 금액 아래에 그 자리에서 열리는 근거 패널: 산식, 포함·제외, 기준 비교, 카테고리 × 거래처 구성, 금액과 같은 흐름표 줄로 거른 거래 목록(합계 대조)과 그 자리 고치기. T061: 스냅샷 구간(`kind='interval'`)은 달 대신 날짜 범위로 거래를 연다 | `bg-bg-raised`, `border-accent-border`, `shadow-raised` |
 | `flowMeasures` | `features/analysis/flowMeasures.ts` | 월 흐름표 금액별 이름·산식·포함/제외 문장과 내역을 여는 조회 조건(`lineFiltersFor`: 금액 조건 → 거래 목록 줄 필터). 값은 응답에서 그대로 읽는다 | — |
 | `FlowTable` | `features/monthclose/FlowTable.tsx` | 월 흐름표 줄(연산 기호 −, = 를 글자로 표시해 색에만 의존하지 않음), 전체/간단(진행월) 두 모양 | `text-label`, `bg-bg-selected` |
 | `ForecastCard` | `features/monthclose/ForecastCard.tsx` | 진행월 월말 순현금흐름 전망 전용 카드. 추정 색은 이 카드의 가정·전망 값에만 | `border-t-estimate`, `bg-estimate-bg`, `text-estimate` |
+
+### 재무상태 pieces (T061)
+
+| Piece | Source | Responsibility | Main tokens |
+| --- | --- | --- | --- |
+| `ReconciliationSection` | `features/networth/ReconciliationSection.tsx` | 순자산 대조 카드(구간 선택, 상태 배지 ✓/!와 이유, 구간 규칙, 대조식 줄 — 앞 기호 =, + 를 글자로, 보류 값은 "계산 보류" 배지와 보류 이유, 잔여의 행방, 이체 미정 비중과 이체 목적 링크, 종류별 짝 표)와 스냅샷 구간 목록 | `bg-bg-inset`, `bg-bg-selected`, `warn`/`accent` badge |
+| `EmergencyFundCard` | `features/networth/EmergencyFundCard.tsx` | 비상금 개월 수 = 현금성 자산 ÷ 월 보호 지급, 기준 기간·미정 비중·근거와 한계, "조언이 아님" 문장 | `text-kpi`, `bg-bg-inset` |
+| `SnapshotDatesCard` | `features/networth/SnapshotDatesCard.tsx` | 종류별 스냅샷 날짜(합치지 않음)와 대조에 쓰는지 | `bg-bg-inset` |
+| `intervalMeasures` | `features/networth/intervalMeasures.ts` | 구간 금액(잔여·수입·총지급·이체 세 줄)의 이름·산식·포함/제외 문장과 거래를 여는 조회. 값은 대조 응답에서 그대로 | — |
+| `netWorthText`, `pairs` | `features/networth/netWorthText.ts`, `features/networth/pairs.ts` | 상태·종류·짝 상태의 화면 말, 구조화된 응답에서 만든 이유 문장, 대조 구간과 이체 목적 화면 사이의 주소 규칙 | — |
+
+추정 색(`estimate`)은 재무상태와 이체 목적 화면에 쓰지 않는다(추정 값이 없다).
 
 ### Shared classification pieces (T059)
 
@@ -167,6 +181,8 @@ Current frontend server state is TanStack Query based.
 - Schema/canonical reference: `src/api/schema.ts`, `src/api/canonicalViews.ts`, corresponding hooks
 - Metric contract (T058): `src/api/metrics.ts`, `src/hooks/useMetrics.ts`, `src/types/metrics.ts` — `/metrics/data-status`, `/metrics/monthly-flow`, `/metrics/spend-cube`, `/metrics/comparison/*`, `/read/review-items`, `/canonical-views/month-projection/accuracy`, `/transfer-purposes/transactions`; T059: `/read/commitments`, `/read/data-status` (`src/types/readSurface.ts`)
 - Nature axes and transfer purpose (T059): `src/api/nature.ts`, `src/hooks/useNature.ts`, `src/types/nature.ts` — `/nature/category-defaults`, `/nature/recurring-commitments`, `/nature/transactions/{id}(/adjustability)`, `/transfer-purposes/transactions/{id}`. 쓰기가 성공하면 `nature`·`metrics`·`read`·`transactions`·`canonical-views`·`analytics`·`transfer-purposes` 질의를 다시 읽는다. 거래 단위 조정 가능성을 한꺼번에 쓰는 API가 없어 `useBulkTransactionAdjustability`가 거래마다 6개씩 동시에 쓴다.
+- Net worth (T061): `src/api/netWorth.ts`, `src/hooks/useNetWorth.ts`, `src/types/netWorth.ts` — `/metrics/net-worth/intervals`, `/metrics/net-worth/reconciliation`, `/metrics/net-worth/emergency-fund`. 질의 키가 `metrics`로 시작해 분류(이체 목적·조정 가능성)를 바꾸면 같이 다시 읽힌다.
+- Transfer purpose rules (T061): `natureApi.transferRules|createTransferRule|updateTransferRule|deleteTransferRule`, `useTransferPurposeRules`, `useCreate|Update|DeleteTransferPurposeRule` — `/transfer-purposes/rules(/{id})`. 목록은 `useTransferPurposeList`(`/transfer-purposes/transactions`, 기간 선택적, `purpose_source`·`transaction_purpose`·`rule_id` 포함).
 - Transactions list (T059): `TransactionListParams`에 `flow_row`, `payment_form`, `adjustability` (백엔드 줄 필터)
 - `lib/utils.ts`의 `cn`은 tailwind-merge에 디자인 글자 크기(`display`…`micro`)를 알려 `text-micro`와 `text-text-*` 색이 서로 지워지지 않게 한다(T059)
 

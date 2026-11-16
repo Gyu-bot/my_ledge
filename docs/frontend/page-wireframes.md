@@ -10,10 +10,11 @@
 - `/` — 월 결산 (T058)
 - `/analysis` — 지출 분석 (T058)
 - `/commitments` — 약정 현황 (T059)
-- `/net-worth`
+- `/net-worth` — 재무상태 (T061: 스냅샷 순자산과 구성, 구간별 순자산 대조, 비상금 개월 수). 대조 구간은 `?start=YYYY-MM-DD&end=YYYY-MM-DD`(자산 스냅샷 날짜 두 개)
 - `/data/inbox` — 작업대 · 분류 (T059: 분류 큐 + 대출 연결 후보)
 - `/data/transactions`
 - `/data/nature` — 작업대 · 기본값·정기 지급 (T059)
+- `/data/transfers` — 작업대 · 이체 목적 (T061: 이체 목적 정하기와 목적 규칙)
 - `/data/status` — 작업대 · 자료 현황 (T059)
 - `/data/loans`
 - `/data/installments`
@@ -57,7 +58,7 @@
 
 Shell rules:
 
-- `AppShell` owns navigation and content frame. 분석 메뉴: 월 결산, 지출 분석, 약정 현황, 자산·부채. 작업대 메뉴: 분류, 거래, 기본값·정기 지급, 대출, 할부, 자산 메타, 규칙, 자료 현황, 가져오기, 설정, 데이터 사전 (모바일 하단 탭의 "작업대"는 `/data/inbox`).
+- `AppShell` owns navigation and content frame. 분석 메뉴: 월 결산, 지출 분석, 약정 현황, 재무상태. 작업대 메뉴: 분류, 거래, 기본값·정기 지급, 이체 목적, 대출, 할부, 자산 메타, 규칙, 자료 현황, 가져오기, 설정, 데이터 사전 (모바일 하단 탭의 "작업대"는 `/data/inbox`).
 - 뒤로 가기로 돌아오면 그 기록 항목에서 보던 스크롤 위치(데스크톱은 창, 모바일은 본문)를 되살리고, 다른 화면으로 새로 갈 때는 맨 위에서 시작한다. 같은 화면에서 필터만 바뀌는 주소 교체(replace)는 위치를 그대로 둔다.
 - `PageHeader` owns page title, meta, and page-level controls.
 - Page sections are regular content bands/cards, not marketing hero sections.
@@ -65,7 +66,7 @@ Shell rules:
 
 ## 공통: 자료 현황 띠와 금액 근거 패널 (T058)
 
-모든 분석 화면(월 결산, 지출 분석)의 머리, `PageHeader` 바로 아래에 자료 현황 띠(`features/analysis/DataStatusStrip.tsx`, `/metrics/data-status`)를 둔다.
+모든 분석 화면(월 결산, 지출 분석, 재무상태)의 머리, `PageHeader` 바로 아래에 자료 현황 띠(`features/analysis/DataStatusStrip.tsx`, `/metrics/data-status`)를 둔다.
 
 ```text
 [거래 기준일] [가장 최근 마감월] [진행월 · 부분 기록] [스냅샷 기준일: 자산 · 대출 · 투자 · 보험 · 프로필 (종류별, 합치지 않음)]
@@ -85,7 +86,8 @@ Shell rules:
 ```
 
 - 지출 금액의 구성은 `/metrics/spend-cube`를 그 줄의 조건(`flow_row`, `payment_form`, `adjustability`)으로 읽는다. 생활 지출은 흐름표 줄별로 보여 주고 대출 줄을 "빠짐"으로 표시한다. 잔여는 수입·총지급으로 옮겨 가는 버튼을 준다.
-- 수입은 `/transactions?type=수입&flow_row=income_undetermined`, 이체 세 줄과 이체 순액은 `/transfer-purposes/transactions`에서 거래를 읽는다.
+- 수입은 `/transactions?type=수입&flow_row=income_undetermined`, 이체 세 줄과 이체 순액은 `/transfer-purposes/transactions`에서 거래를 읽는다. 이체 목록 아래에 그 기간으로 거른 이체 목적 화면(`/data/transfers?start=&end=`) 링크를 둔다.
+- T061: 재무상태의 대조 구간 금액(잔여, 수입, 총지급, 투자·저축 이체, 그 밖의 계좌 간 이동, 목적 미정 이체)도 같은 패널을 연다(`DrillTarget.kind='interval'`, 이름·산식·포함/제외 문장은 `features/networth/intervalMeasures.ts`). 머리에 달 대신 거래 날짜 범위(시작 스냅샷 다음 날 ~ 끝 스냅샷일)와 "스냅샷 구간" 배지를 보인다. 잔여는 수입·총지급으로 옮겨 가고, 수입은 `/transactions?flow_row=income_undetermined&start_date&end_date`, 총지급은 흐름표 지출 줄 여섯 개 중 하나를 골라 `/transactions?flow_row=…&start_date&end_date`(200건까지, 넘으면 거래 화면 링크), 이체 줄은 `/transfer-purposes/transactions?start_date&end_date`에서 읽는다. 구간별 줄 금액은 응답에 없으므로 줄마다 금액을 만들어 보이지 않는다.
 - T059부터 칸의 거래 목록은 금액과 같은 흐름표 줄 조건으로 거른다: `/transactions?type=지출&category_major=…&search=거래처&start_date…&end_date…`에 그 금액의 `flow_row`·`payment_form`·`adjustability`(`commitment_kind`는 `flow_row=committed_*`로)를 더하고, 거래처 이름이 정확히 같은 거래만 남긴다. 목록 위에 "아래 n건의 합계가 이 금액과 같습니다"를 보이고, 다르면(환불 일부만 이 줄에 들어간 경우, 다른 카테고리로 기록된 환불이 이 구매에 연결된 경우) 차이와 이유를 쓴다. 200건이 넘으면 같은 조건의 거래 화면 링크를 준다.
 
 ## 공통: 거래 고치기 패널 (T059)
@@ -160,37 +162,72 @@ Shell rules:
 - "기존 할부 회차를 뺀 지출"은 읽기 색인(`/read/index`)이 적은 정의 그대로 `total_outflow − committed_installment_total`이고, 구성은 지출 큐브 `group_by=commitment_kind`다.
 - 사후 검토 목록은 위험도·우선순위·신뢰도·점수를 싣지 않는다.
 
-## Net Worth `/net-worth`
+## Net Worth `/net-worth` (재무상태, T061)
 
-The selected investment source panel is distinct from BankSalad snapshot history and investment detail. It shows the selected holdings value, a separately labeled estimated net worth (or its unavailable reason), per-account configured/effective sources and basis dates, and mixed-date/transfer-risk warnings. A source switch never rewrites the historical chart.
+기록된 스냅샷과 거래만 쓴다. 실시간 잔액, 시세, 이자·원금 추정, 월말을 넘는 전망은 두지 않는다. 화면의 어떤 값도 추정이 아니므로 추정 색을 쓰지 않는다.
 
 ```text
-[compare mode control]
-
-[KPI: net worth] [KPI: assets] [KPI: liabilities] [KPI: cash]
-
-[net-worth history]            [asset composition]
-
-[liquidity]
-
-[loans]
-
-[investments]                  [insurance]
-
-[installment forecast]
+[PageHeader: 재무상태 · 스냅샷 비교 모드(최신↔직전 / 마감월↔직전 마감월) · 스냅샷 기준일 배지]
+[자료 현황 띠]
+[KPI: 순자산] [총자산(음수 자산 제외 ⓘ)] [총부채] [현금성 자산 · 월 보호 지급의 n개월분]
+[종류별 스냅샷 날짜: 자산(순자산) · 대출 · 투자 · 보험 · 프로필 — 최근 날짜, 개수, 대조에 쓰는지, 날짜 모두 보기]
+[순자산 대조]
+  대조할 구간 [선택: 이어지는 자산 스냅샷 쌍, 기본 최근]
+  [상태 배지(✓/! + 쉬운 말)] 상태 설명
+  · 이유 (응답의 종류별 날짜·거래 범위·이체 미정 금액에서 만든 문장)
+  [구간의 거래: 시작 스냅샷 다음 날 ~ 끝 스냅샷일 · 경계 규칙 · 거래 n건]
+  순자산 변동 = 잔여 + 대출 잔액 감소 + 투자 평가 변동 + 설명되지 않는 차이
+     순자산 변동          끝 순자산 − 시작 순자산                       +₩…
+   = 잔여 (수입 − 총지급)  수입 ₩… − 총지급 ₩… · 대출 원리금 포함        +₩…  [근거·거래]
+   + 대출 잔액 감소        대출 스냅샷 잔액 시작 → 끝, 원금·이자 나누지 않음  +₩… 또는 [계산 보류] + 보류 이유
+   + 투자 평가 변동        투자 평가액 변화 − 투자 이체로 들어간 돈         +₩… 또는 [계산 보류]
+   + 설명되지 않는 차이    추정으로 채우지 않는 나머지                     +₩… 또는 [계산 보류]
+  (네 값이 모두 있으면) 네 항목을 더하면 순자산 변동과 같습니다.
+  [잔여의 행방 (이체): 투자·저축 이체 / 그 밖의 계좌 간 이동 / 목적 미정 이체 [근거·거래] = 이체 합계]
+  [목적이 정해지지 않은 이체: 이체 금액의 x% (미정 ₩… / 오간 ₩…) · 이체 목적 정하기 →]
+  [스냅샷 종류별 짝 표: 자산(순자산) · 대출 · 투자 (시작 쪽 날짜·값, 끝 쪽 날짜·값, 두 날짜 모두 있음/스냅샷 없음/날짜가 맞지 않음) · 보험·프로필(대조에 쓰지 않음)]
+[스냅샷 구간 목록: 날짜 쌍 · 상태 · 순자산 변동 · 설명되지 않는 차이(또는 계산 보류) · 이체 미정 비중 — 누르면 위 대조가 바뀜]
+[순자산 추이]                   [순자산 구성] [신용점수]
+[비상금 개월 수]                 [유동성 등급별 자산 · 자산 메타 편집 →]
+[대출 (스냅샷 잔액, 월상환 출처, 상환 방식, 만기, 원금 대비 상환)]
+[뱅샐 스냅샷 투자 내역]          [보험]
+약정(대출·할부·정기 지급)의 월 부담과 남은 회차는 약정 현황에서 → /commitments
 ```
 
-Main blocks:
+- 자료: `/metrics/net-worth/intervals`(종류별 날짜, 구간 목록), `/metrics/net-worth/reconciliation?start_date&end_date`(대조), `/metrics/net-worth/emergency-fund`(비상금), 기존 `/assets/*`, `/analytics/net-worth-breakdown`, `/profile`.
+- 고른 구간은 주소 `?start=&end=`(자산 스냅샷 날짜)에 남는다. 없으면 API 기본값(최근 두 자산 스냅샷). 주소의 날짜가 스냅샷이 아니라 `422`이면 "주소에 적힌 날짜가 자산 스냅샷 날짜가 아니거나 순서가 바뀌었습니다"와 "최근 구간 보기"를 보인다.
+- 상태 다섯 가지와 화면 이름: `complete` 대조 완료, `incomplete_classification` 분류가 덜 됨, `transactions_not_covered` 거래가 구간을 덮지 않음, `snapshot_dates_mismatched` 스냅샷 날짜가 맞지 않음, `no_snapshot_pair` 스냅샷 쌍 없음. 응답의 `status_reasons` 문장에는 내부 이름이 섞여 있어 그대로 보이지 않고, 같은 내용을 응답의 구조화된 값(`kinds[]`, `transactions`, `transfers`)에서 쉬운 말로 만든다.
+- API가 `null`로 보류한 항목은 "계산 보류" 배지와 보류 이유로 보이고, 화면에서 다른 값으로 메우거나 다시 계산하지 않는다. 네 항목이 모두 있을 때만 합이 순자산 변동과 같은지 문장으로 확인한다.
+- "이체 목적 정하기"는 `/data/transfers?start={구간 첫 거래일}&end={끝 스냅샷일}&undecided=1(미정이 있을 때)&from={시작 스냅샷}~{끝 스냅샷}`로 간다. 이체 목적 화면의 "대조로 돌아가기"가 `from`의 구간으로 돌아온다.
+- 비상금 개월 수 카드: 값(소수 둘째 자리) 또는 계산 보류, 상태 배지, 현금성 자산(자산 스냅샷 기준일, 이름으로 판단한 금액), 월 보호 지급(기준 마감월과 개수, 중앙값, 채우지 못한 이유, 자료 없는 달), 조정 가능성 미정 비중과 미정 지출 월 중앙값(분류하러 가기), 거래 기준일. "기록된 값으로 계산한 비율이며, 얼마가 적당한지에 대한 조언이 아닙니다"를 카드 설명에 둔다. 예전 `liquidity-health`의 비상금 값·목표 게이지·월 부채상환은 이 화면에서 뺐다.
+- 뺀 것(T061): 대출 카드의 월 이자 추정(단리), 할부 향후 6개월 예정 카드(약정 현황 링크로 대신), 선택 투자 소스 기준 현재 자산 패널(`SelectedInvestmentsPanel`, 현재 평가액·추정 순자산이라 기록된 스냅샷이 아님 — `/data/settings`의 투자 데이터 소스 아래로 옮김).
 
-- latest vs previous snapshot comparison mode
-- net worth, total assets, total liabilities, cash-equivalent assets
-- net-worth history line area
-- asset/liability composition
-- liquidity health and emergency target progress
-- loan cards with monthly payment and interest estimate provenance
-- investment composition
-- insurance summary or empty state
-- installment forecast link
+## Transfer Purpose `/data/transfers` (작업대 · 이체 목적, T061)
+
+```text
+[PageHeader: 작업대 · 이체 목적 · 목적 미정 n건 · 금액 기준 x%]
+[← 재무상태의 {시작} → {끝} 대조로 돌아가기]  (from이 있을 때)
+[이체 목적 정하기]
+  투자 / 저축 / 그 밖의 계좌 간 이동 — 각각의 뜻
+  [시작일] [끝 날] [ ] 목적 미정만 보기 [기간 지우기]
+  (기간)의 이체 n건 중 목적 미정 m건, 미정 금액 ₩… / 오간 금액 ₩… (x%)
+  날짜  거래처 · 카테고리 · 원본 설명                     -₩…
+        지금 목적: [투자] (거래처 규칙)  [이 거래에서 정하지 않음 ▾]  [같은 거래처 n건에 규칙으로]
+        (누르면) 거래처 '…'의 이체를 '…'(으)로 정하는 규칙을 만듭니다 · 바뀌는 건수 · 직접 정한 건 그대로 · 앞으로 가져올 이체에도 [규칙 만들기] [취소]
+  100건씩 더 보기 (금액 큰 2000건까지 불러옴)
+[이체 목적 규칙]
+  적용 순서: 이 거래에서 정한 값 → 거래처 규칙 → 카테고리 규칙 → 목적 미정
+  새 규칙: 범위[거래처|카테고리] · 거래처 이름(목록의 거래처 제안) 또는 대분류·소분류(소분류 전체) · 목적[목적 고르기] · 이름(선택) [규칙 만들기]
+  거래처 '…' / 카테고리 '…' — 지금 이 규칙으로 목적이 정해진 이체 n건 [투자] [고치기] [지우기]
+```
+
+- 자료: `GET /transfer-purposes/transactions?start_date&end_date&purpose=undecided&limit=2000`(금액 절댓값 큰 순, 합계는 목적 필터 전), `PUT|DELETE /transfer-purposes/transactions/{id}`, `GET|POST /transfer-purposes/rules`, `PATCH|DELETE /transfer-purposes/rules/{id}`, 카테고리 목록은 `/transactions/filter-options`.
+- 주소: `?start=&end=&undecided=1&from=`. 필터는 주소 교체(replace)로 바꾼다.
+- 사람이 분류한다: 목적을 추정하거나 미리 고르지 않는다. 거래 단위 선택은 거래에서 직접 정한 값만 보이고(규칙에서 온 값은 선택에 넣지 않고 "지금 목적"과 출처로 보인다), 비우면 거래 단위 값을 지운다(알림에서 되돌리기).
+- "같은 거래처 n건에 규칙으로"는 사람이 그 거래에 정한 목적이 있을 때만 보인다. 확인 뒤 거래처 규칙을 만들고, 같은 거래처 규칙이 이미 있으면 그 규칙의 목적을 바꾼다. 거래 단위 값은 규칙보다 우선하므로 그대로 둔다.
+- 규칙 지우기는 확인 문구 "지우기"를 입력해야 실행된다. `409`(같은 규칙이 이미 있음)는 쉬운 말로 알린다.
+- 쓰기 권한(API 키)이 없으면 "읽기 전용"을 보이고 선택과 버튼을 막는다.
+- 목적을 바꾸면 흐름표·대조·비상금·이체 목록 조회를 다시 읽는다(`invalidateClassificationDependents`; 재무상태 조회 키는 `metrics`로 시작한다).
 
 ## Commitments `/commitments` (약정 현황, T059)
 
@@ -358,7 +395,7 @@ Main blocks:
 
 ## Settings `/data/settings`
 
-Investment source settings provide BankSalad/Toss default selection and account-group overrides. Show the configured choice separately from effective fallback, account mapping conflicts, basis time, freshness and last sync attempt. Preview the impact before explicit save; editing the draft invalidates the preview. Without write access, the section remains readable. The interface explains that selecting Toss does not itself connect or synchronize a real account.
+Investment source settings provide BankSalad/Toss default selection and account-group overrides. 선택 소스 기준 현재 자산 패널(`SelectedInvestmentsPanel`)은 T061부터 재무상태가 아니라 이 화면의 투자 데이터 소스 아래에 있다: 선택 소스 평가액과 따로 표시한 추정 순자산(또는 낼 수 없는 이유), 계좌별 설정·적용 소스와 기준 시각, 시점 혼합·이체 위험 경고. 소스를 바꿔도 과거 스냅샷 차트는 바뀌지 않으며, 순자산 대조에는 쓰지 않는다. Show the configured choice separately from effective fallback, account mapping conflicts, basis time, freshness and last sync attempt. Preview the impact before explicit save; editing the draft invalidates the preview. Without write access, the section remains readable. The interface explains that selecting Toss does not itself connect or synchronize a real account.
 
 ```text
 [financial targets]

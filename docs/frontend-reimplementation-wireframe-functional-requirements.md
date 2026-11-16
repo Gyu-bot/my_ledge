@@ -32,10 +32,11 @@
 | `/` | 월 결산 (첫 화면, T058) |
 | `/analysis` | 지출 분석 (T058) |
 | `/commitments` | 약정 현황 (T059) |
-| `/net-worth` | 자산·부채 |
+| `/net-worth` | 재무상태 (스냅샷 순자산과 구성, 구간별 순자산 대조, 비상금 개월 수, T061) |
 | `/data/inbox` | 작업대 · 분류 (분류 큐, 대출 연결 후보, T059) |
 | `/data/transactions` | 작업대 · 거래 |
 | `/data/nature` | 작업대 · 기본값·정기 지급 (T059) |
+| `/data/transfers` | 작업대 · 이체 목적 (T061) |
 | `/data/status` | 작업대 · 자료 현황 (T059) |
 | `/data/loans` | 대출 관리 |
 | `/data/installments` | 할부 관리 |
@@ -71,8 +72,8 @@
 ## App Shell Requirements
 
 - Shell은 `left nav + route content` 구조다.
-- Main nav는 월 결산, 지출 분석, 약정 현황, 자산·부채를 노출한다 (T058, T059).
-- 작업대 nav(예전 데이터 메뉴)는 분류, 거래, 기본값·정기 지급, 대출, 할부, 자산 메타, 규칙, 자료 현황, 가져오기, 설정, 데이터 사전을 노출한다 (T059).
+- Main nav는 월 결산, 지출 분석, 약정 현황, 재무상태를 노출한다 (T058, T059, T061).
+- 작업대 nav(예전 데이터 메뉴)는 분류, 거래, 기본값·정기 지급, 이체 목적(T061), 대출, 할부, 자산 메타, 규칙, 자료 현황, 가져오기, 설정, 데이터 사전을 노출한다 (T059).
 - 뒤로 가기로 돌아오면 보던 스크롤 위치를 되살린다 (T059).
 - Page title, meta, controls는 `PageHeader`에서 처리한다.
 - Route mapping은 `frontend/src/router.tsx`, nav mapping은 `frontend/src/shell/navigation.ts`가 source of truth다.
@@ -108,14 +109,29 @@
 
 ### Common Data Status (T058)
 
-- 월 결산과 지출 분석 머리에 거래 기준일, 종류별 스냅샷 기준일, 조정 가능성 미정 비중을 둔다(`/metrics/data-status`).
+- 월 결산, 지출 분석, 재무상태 머리에 거래 기준일, 종류별 스냅샷 기준일, 조정 가능성 미정 비중을 둔다(`/metrics/data-status`).
 
-### Net Worth
+### Net Worth (재무상태, T061)
 
 - snapshot 비교 모드를 제공한다.
-- 순자산, 총자산, 총부채, 현금성 자산 KPI를 보여준다.
-- 순자산 추이, 자산 구성, 유동성 health, 대출, 투자, 보험, 할부 forecast를 제공한다.
-- provenance가 필요한 추정값은 출처/가정을 확인할 수 있어야 한다.
+- 순자산, 총자산, 총부채, 현금성 자산 KPI를 보여준다. 스냅샷 날짜는 종류(자산·대출·투자·보험·프로필)마다 따로 보인다.
+- 순자산 대조: 이어지는 자산 스냅샷 쌍 하나(기본 최근 쌍, 주소 `?start=&end=`)에 대해 순자산 변동 = 잔여(수입 − 총지급) + 대출 잔액 감소 + 투자 평가 변동 + 설명되지 않는 차이를 응답 값 그대로 줄로 보인다. 설명되지 않는 차이는 자기 줄이며 추정으로 채우지 않는다.
+- 구간 규칙(시작 스냅샷 다음 날 ~ 끝 스냅샷일)과 구간 상태(대조 완료 / 분류가 덜 됨 / 거래가 구간을 덮지 않음 / 스냅샷 날짜가 맞지 않음 / 스냅샷 쌍 없음)를 이유와 함께 쉬운 말로 보인다. 종류별 짝(두 날짜 모두 있음 / 스냅샷 없음 / 날짜가 맞지 않음)을 표로 보인다.
+- API가 보류한(`null`) 값은 "계산 보류"와 이유로 보이고 화면에서 대신 계산하지 않는다.
+- 잔여와 그 부분(수입, 총지급, 이체 세 줄)은 금액 근거 패널로 구간의 거래를 연다.
+- 이체 목적 미정 비중과, 그 구간을 기간 필터로 넘기는 이체 목적 화면 링크를 둔다.
+- 구간 목록(날짜 쌍, 상태, 순자산 변동, 설명되지 않는 차이, 이체 미정 비중)으로 구간을 옮겨 다닌다.
+- 비상금 개월 수 = 현금성 자산 ÷ 월 보호 지급(`/metrics/net-worth/emergency-fund`)과 기준 기간, 미정 비중을 보이고, 기록된 비율이며 조언이 아님을 밝힌다. 예전 `liquidity-health` 값은 쓰지 않는다.
+- 순자산 추이, 자산 구성, 유동성 등급별 자산(자산 메타 편집 링크), 대출(스냅샷 잔액), 투자, 보험 스냅샷을 보인다. 실시간 잔액, 시세, 이자·원금 추정, 할부 미래 예정은 두지 않는다(약정 현황 링크).
+
+### Transfer Purpose (작업대 · 이체 목적, T061)
+
+- 이체를 금액 큰 순으로 지금 목적과 그 출처(이 거래에서 정함 / 거래처 규칙 / 카테고리 규칙 / 정하지 않음)와 함께 보인다. 필터는 목적 미정만, 기간(주소 `?start=&end=&undecided=1`).
+- 한 이체의 목적을 투자 / 저축 / 그 밖의 계좌 간 이동으로 정하거나 거래 단위 값을 지운다. 아무것도 추정하거나 미리 고르지 않는다.
+- 거래처·카테고리 단위 목적 규칙을 만들고 고치고 지운다(지우기는 확인 문구). 규칙마다 지금 그 규칙으로 정해진 이체 건수를 보인다.
+- 사람이 한 이체에 정한 목적을 확인 뒤 같은 거래처 규칙으로 넓힐 수 있다(같은 거래처 규칙이 있으면 그 규칙을 바꾼다).
+- 목적 미정 건수와 이체 금액 중 미정 비중을 보인다. 재무상태에서 왔으면 그 구간으로 돌아가는 링크를 둔다.
+- 쓰기 권한이 없으면 읽기 전용으로 보인다.
 
 ### Shared Transaction Editor (T059)
 
@@ -162,7 +178,7 @@
 
 ### Asset Metadata
 
-- 최신 자산 row의 liquidity tier와 cash equivalent flag를 편집한다.
+- 최신 자산 row의 liquidity tier와 cash equivalent flag를 편집한다. 재무상태의 비상금 개월 수와 유동성 등급별 자산 카드가 이 화면으로 링크한다.
 - 대출 월상환액, 상환방식, source metadata를 보강한다.
 
 ### Rules
@@ -173,6 +189,7 @@
 ### Settings
 
 - financial targets를 편집한다.
+- 투자 데이터 소스 아래에 선택 소스 기준 현재 자산(참고값, 스냅샷 아님)을 보인다 (T061에 재무상태에서 옮김).
 - analytics settings의 default/saved/effective 구조를 확인한다.
 
 ### Import
@@ -191,7 +208,8 @@
 
 - transactions list (T059 줄 필터 `flow_row`, `payment_form`, `adjustability`), filter options
 - read surface `/read/commitments`, `/read/data-status`; nature axes `/nature/*`; transfer purpose per transaction
-- asset snapshots, net worth history, investments, loans, profile, liquidity
+- asset snapshots, net worth history, investments, loans, profile
+- net worth reconciliation `/metrics/net-worth/intervals`, `/metrics/net-worth/reconciliation`, `/metrics/net-worth/emergency-fund`; transfer purposes `/transfer-purposes/transactions`, `/transfer-purposes/rules` (T061)
 - analytics cashflow, category, recurring, anomaly, purchase gate, discretionary velocity
 - settings defaults/saved/effective
 - upload logs and schema/canonical reference
@@ -201,6 +219,7 @@
 
 - transaction update/delete/restore/bulk update
 - category adjustability defaults, recurring commitment bundles, transaction-level adjustability, transaction transfer purpose (T059)
+- transfer purpose rules create/update/delete (T061)
 - bulk delete/restore preview and execute
 - loan transaction link/unlink
 - installment plan and link management
