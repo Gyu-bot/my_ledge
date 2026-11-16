@@ -33,7 +33,7 @@ from app.services.upload_rollback_service import LOCK_KEY
 HISTORY_RULE = (
     "한도는 새 적용 시작월로만 추가합니다. 이미 마감된 달과 같은 대상의 마지막 적용 "
     "시작월 이전·동일 월은 바꿀 수 없습니다. 각 달은 그 달 이하의 최신 버전을 읽습니다. "
-    "금액 null은 한도 해제이며, 이전 버전을 지우지 않습니다."
+    "금액을 비워 저장하면 한도 해제이며, 이전 버전을 지우지 않습니다."
 )
 MISSING_LABELS = {
     "no_limit_set": "이 달에 적용할 한도가 없습니다.",
