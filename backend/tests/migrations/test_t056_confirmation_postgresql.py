@@ -140,7 +140,7 @@ async def capture(factory):
             )
             paths += [
                 "/api/v1/read/commitments?view=summary",
-                "/api/v1/transactions?limit=200",
+                "/api/v1/transactions?per_page=200&start_date=2026-02-01&end_date=2026-02-28",
             ]
             bodies = {}
             for path in paths:
@@ -194,9 +194,20 @@ async def test_roundtrip_preserves_all_read_analytics_and_axes(migrated_db):
             import json
 
             before_tx, after_tx = json.loads(body), json.loads(after[path])
-            for item in after_tx["items"]:
-                if item["id"] in ids:
-                    assert item["is_edited"] is True
+            expected_ids = {manual.id, no_override.id, target.id}
+            before_marks = {
+                item["id"]: item["is_edited"] for item in before_tx["items"]
+            }
+            after_marks = {item["id"]: item["is_edited"] for item in after_tx["items"]}
+            assert expected_ids <= before_marks.keys()
+            assert expected_ids <= after_marks.keys()
+            assert all(
+                before_marks[transaction_id] is False for transaction_id in expected_ids
+            )
+            assert all(
+                after_marks[transaction_id] is True for transaction_id in expected_ids
+            )
+            assert after_marks[automatic.id] is False
 
             def without_mark(value):
                 if isinstance(value, dict):
