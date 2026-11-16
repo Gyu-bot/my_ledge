@@ -85,10 +85,6 @@ async def test_list_transactions_preserves_raw_signed_amounts_when_refund_exists
         include_deleted=False,
         include_merged=False,
         search=None,
-        cost_kind="all",
-        fixed_cost_necessity="all",
-        spend_necessity="all",
-        recurring_payment_kind="all",
         page=1,
         per_page=40,
     )

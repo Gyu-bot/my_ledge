@@ -43,7 +43,7 @@ from app.models.nature_axes import (
 )
 from app.models.transaction import Transaction
 from app.models.user_profile_snapshot import UserProfileSnapshot
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 
 FIRST_PERIOD = "2025-01"
 LAST_CLOSED_PERIOD = "2026-07"

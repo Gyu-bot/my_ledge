@@ -1,6 +1,4 @@
 import type { FlowRowKey } from './metrics'
-
-export type RecurringPaymentKind = 'installment' | 'monthly_recurring' | 'not_recurring'
 export type SpendNecessity = 'essential' | 'discretionary'
 
 export interface TransactionResponse {
@@ -19,11 +17,6 @@ export interface TransactionResponse {
   amount: number
   currency: string
   payment_method: string | null
-  cost_kind: 'fixed' | 'variable' | null
-  fixed_cost_necessity: SpendNecessity | null
-  spend_necessity: SpendNecessity | null
-  cost_classification_source: 'manual' | 'auto' | null
-  recurring_payment_kind: RecurringPaymentKind | null
   memo: string | null
   is_deleted: boolean
   merged_into_id: number | null
@@ -58,10 +51,6 @@ export interface TransactionListParams {
   end_date?: string
   include_deleted?: boolean
   is_edited?: boolean
-  cost_kind?: 'fixed' | 'variable'
-  fixed_cost_necessity?: SpendNecessity
-  spend_necessity?: SpendNecessity
-  recurring_payment_kind?: RecurringPaymentKind
   search?: string
   start_month?: string
   end_month?: string
@@ -94,10 +83,6 @@ export interface TransactionUpdateRequest {
   merchant?: string | null
   category_major_user?: string | null
   category_minor_user?: string | null
-  cost_kind?: 'fixed' | 'variable' | null
-  fixed_cost_necessity?: SpendNecessity | null
-  spend_necessity?: SpendNecessity | null
-  recurring_payment_kind?: RecurringPaymentKind | null
   memo?: string | null
 }
 
@@ -106,10 +91,6 @@ export interface TransactionBulkUpdateRequest {
   merchant?: string | null
   category_major_user?: string | null
   category_minor_user?: string | null
-  cost_kind?: 'fixed' | 'variable' | null
-  fixed_cost_necessity?: SpendNecessity | null
-  spend_necessity?: SpendNecessity | null
-  recurring_payment_kind?: RecurringPaymentKind | null
   memo?: string | null
 }
 
@@ -337,7 +318,6 @@ export interface InstallmentTransactionMappingItem {
   currency: string
   payment_method: string | null
   memo: string | null
-  recurring_payment_kind: RecurringPaymentKind | null
   link: InstallmentTransactionLinkItem | null
 }
 
@@ -371,7 +351,6 @@ export interface InstallmentSuggestionTransactionItem {
   currency: string
   payment_method: string | null
   memo: string | null
-  recurring_payment_kind: RecurringPaymentKind | null
 }
 
 export interface InstallmentTransactionSuggestionItem {
@@ -448,40 +427,11 @@ export interface MonthlySummaryItem {
 }
 
 export interface AutoClassificationSettings {
-  apply_cost_rules_on_upload: boolean
   apply_loan_rules_on_upload: boolean
-  apply_recurring_rules_on_upload: boolean
 }
 
 export interface AutoClassificationSettingsPatchRequest {
-  apply_cost_rules_on_upload?: boolean
   apply_loan_rules_on_upload?: boolean
-  apply_recurring_rules_on_upload?: boolean
-}
-
-export interface CategoryClassificationRuleRequest {
-  category_major: string
-  category_minor?: string | null
-  cost_kind: 'fixed' | 'variable'
-  fixed_cost_necessity?: SpendNecessity | null
-  spend_necessity?: SpendNecessity | null
-}
-
-export interface CategoryClassificationRuleResponse extends CategoryClassificationRuleRequest {
-  category_valid?: boolean
-  validation_message?: string | null
-  id: number
-  category_major: string
-  category_minor: string | null
-  cost_kind: 'fixed' | 'variable'
-  fixed_cost_necessity: SpendNecessity | null
-  spend_necessity: SpendNecessity | null
-  created_at: string
-  updated_at: string
-}
-
-export interface CategoryClassificationRuleListResponse {
-  items: CategoryClassificationRuleResponse[]
 }
 
 export interface MerchantAliasRuleRequest {
@@ -521,59 +471,6 @@ export interface LoanMerchantRuleResponse extends LoanMerchantRuleRequest {
 
 export interface LoanMerchantRuleListResponse {
   items: LoanMerchantRuleResponse[]
-}
-
-export interface RecurringCategoryRuleRequest {
-  category_major: string
-  category_minor?: string | null
-  recurring_payment_kind: RecurringPaymentKind
-}
-
-export interface RecurringCategoryRuleResponse extends RecurringCategoryRuleRequest {
-  category_valid?: boolean
-  validation_message?: string | null
-  id: number
-  category_major: string
-  category_minor: string | null
-  recurring_payment_kind: RecurringPaymentKind
-  created_at: string
-  updated_at: string
-}
-
-export interface RecurringCategoryRuleListResponse {
-  items: RecurringCategoryRuleResponse[]
-}
-
-export type RecurringDryRunApplyScope = 'all_matching' | 'reviewed_only'
-
-export interface RecurringDryRunMatchedTransaction {
-  id: number
-  date: string
-  amount: number
-}
-
-export interface RecurringDryRunItem {
-  preview_token: string
-  default_apply_scope: RecurringDryRunApplyScope
-  merchant: string
-  proposed_kind: RecurringPaymentKind
-  confidence: number
-  matched_transactions: RecurringDryRunMatchedTransaction[]
-  reason: string
-  category_hint: string
-  apply_scope_options: RecurringDryRunApplyScope[]
-}
-
-export interface RecurringDryRunResponse {
-  items: RecurringDryRunItem[]
-}
-
-export interface RecurringDryRunApplyRequest {
-  merchant: string
-  proposed_kind: RecurringPaymentKind
-  apply_scope?: RecurringDryRunApplyScope
-  preview_token: string
-  transaction_ids?: number[]
 }
 
 export interface AutoClassificationApplyResponse {

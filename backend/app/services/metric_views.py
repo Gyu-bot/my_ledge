@@ -8,7 +8,7 @@ to exactly one monthly-flow row; 이체 lines also carry exactly one transfer
 purpose) -> vw_monthly_flow, vw_monthly_flow_summary, vw_spend_cube.
 
 The PostgreSQL views are created by the newest metric-view Alembic migration
-(20261116_0039, superseding 0038 and 0035) from a frozen copy of the SQL
+(20261117_0041, superseding 0039, 0038 and 0035) from a frozen copy of the SQL
 compiled here;
 ``tests/migrations`` guards that the frozen SQL and these definitions never
 drift. Services read the views by name
@@ -250,10 +250,6 @@ def _metric_transactions_select() -> Select:
             tx.c.merchant.label("merchant"),
             tx.c.description.label("description"),
             tx.c.payment_method.label("payment_method"),
-            tx.c.cost_kind.label("cost_kind"),
-            tx.c.fixed_cost_necessity.label("fixed_cost_necessity"),
-            tx.c.spend_necessity.label("spend_necessity"),
-            tx.c.recurring_payment_kind.label("recurring_payment_kind"),
             _loan_links.c.loan_account_id.label("loan_account_id"),
             _installment_links.c.installment_plan_id.label("installment_plan_id"),
             _installment_links.c.installment_number.label("installment_number"),
@@ -650,10 +646,6 @@ ATTRIBUTED_COLUMNS = (
     "merchant",
     "description",
     "payment_method",
-    "cost_kind",
-    "fixed_cost_necessity",
-    "spend_necessity",
-    "recurring_payment_kind",
     "loan_account_id",
     "installment_plan_id",
 )

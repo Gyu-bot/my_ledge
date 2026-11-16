@@ -22,7 +22,7 @@ from app.schemas.income_projection import (
 )
 from app.services.income_expectations_service import save_income_expectations
 from app.services.monthly_projection_service import get_monthly_projection
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 
 
 async def classify(db: AsyncSession) -> None:

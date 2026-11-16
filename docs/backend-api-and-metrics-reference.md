@@ -1,5 +1,14 @@
 # Backend API And Metrics Reference
 
+## T056 입력·이전 읽기 표면 제거 (2026-11-17, PR A)
+
+이 절이 아래의 이전 분류 호환 설명보다 우선한다. [전체 경로별 결정과 뷰 변경 목록](agents/t056-classification-retirement.md)을 따른다. `cost_kind`, `fixed_cost_necessity`, `spend_necessity`, `recurring_payment_kind`, `cost_classification_source`는 거래 응답·생성·단건/일괄 수정에서 제거되며 옛 입력과 필터는 422다. `/nature/transactions/{id}.legacy`와 할부 응답의 `recurring_payment_kind`도 제거된다. 변동비·재량·반복 아님을 기본 저장하지 않는다.
+
+GET `analytics/fixed-cost-summary`, `analytics/fixed-cost-trend`, `analytics/recurring-payments` 및 category/recurring 자동 분류 규칙 CRUD·apply·dry-run은 404다. 후속은 `/read/monthly-flow`, `/read/spend-cube`, `/read/commitments`와 사람이 입력하는 `/nature/*`다. 같은 이름으로 근사값을 내지 않는다. 자동 분류 설정에는 대출 규칙만 남고, `settings/analytics`의 `recurring_dry_run`은 읽기 보관용이며 수정은 422다. 거래처 정규화와 대출 연결은 유지한다.
+
+`20261117_0041`은 가역적인 뷰 전용 이행이다. 원시 거래의 이전 컬럼은 legacy/frozen 보관이며 아직 삭제하지 않는다. `/schema`는 이를 표시하고 폐기된 뷰 필드는 더 열거하지 않는다. 아래의 옛 필드·산식·입력 설명은 이행 배경 기록이며 현재 계약이 아니다. 가져오기 HTTP 계약과 새 축·흐름표·큐브·`/read/*` 금융 값은 유지한다. 배포하지 않았다.
+
+
 이 문서는 **현재 백엔드 구현 코드 기준**으로 다음을 한 번에 정리한다.
 
 - `/api/v1` 아래 모든 구현된 endpoint

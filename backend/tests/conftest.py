@@ -16,7 +16,7 @@ from app.main import app
 from app.models import Base
 from app.models.transaction import Transaction
 from app.services.metric_views import metric_view_ddl
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 from app.services.net_worth_views import net_worth_view_ddl
 from app.services.upload_service import import_transactions_from_workbook
 
@@ -149,7 +149,8 @@ def sync_legacy_classification(
     db_session: AsyncSession,
 ) -> Callable[[], Awaitable[None]]:
     """Reflect old classification columns of rows inserted directly into the
-    T056 axes, the same write-through a human edit through the API runs.
+    T056 axes using a test-only historical seed adapter. Production no longer
+    accepts or mirrors legacy classification inputs.
 
     Readers decide from ``vw_transaction_nature``; a test that sets
     ``cost_kind``/necessity/``recurring_payment_kind`` on ORM rows calls this

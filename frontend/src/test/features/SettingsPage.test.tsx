@@ -88,7 +88,7 @@ describe('SettingsPage', () => {
 
   it('backend가 반환하는 분석 설정 contract 섹션을 모두 렌더링한다', () => {
     renderPage()
-    for (const name of ['이상 지출', '재량 지출 속도', '구매 검토 후보', '반복 결제 후보 검토', '자산·부채 분석', '일괄 작업 확인']) {
+    for (const name of ['이상 지출', '재량 지출 속도', '구매 검토 후보', '자산·부채 분석', '일괄 작업 확인']) {
       expect(section(name)).toBeInTheDocument()
     }
     expect(within(section('이상 지출')).queryByText('기본 100,000 · 저장 미설정 · 적용 100,000')).not.toBeInTheDocument()
@@ -121,12 +121,6 @@ describe('SettingsPage', () => {
     expect(screen.getAllByLabelText((content) => content.startsWith('제외 카테고리'))).toHaveLength(2)
     expect(screen.getAllByLabelText((content) => content.startsWith('제외 가맹점'))).toHaveLength(2)
 
-    expect(getByLabelPrefix('최소 반복 횟수')).toHaveValue(2)
-    expect(getByLabelPrefix('월간 간격 최소 (일)')).toHaveValue(25)
-    expect(getByLabelPrefix('월간 간격 최대 (일)')).toHaveValue(35)
-    expect(getByLabelPrefix('반복 신뢰도 최소 (%)')).toHaveValue(50)
-    expect(getByLabelPrefix('반복 작업 기본 범위')).toHaveValue('all_matching')
-    expect(getByLabelPrefix('업로드 후 자동 적용')).not.toBeChecked()
 
     expect(getByLabelPrefix('비상금 포함 유동성 등급')).toHaveValue('immediate')
     expect(getByLabelPrefix('단기 현금화 자산 보조 표시')).toBeChecked()
@@ -142,9 +136,6 @@ describe('SettingsPage', () => {
     expect(screen.getByText('대형 단발, 신규 가맹점, 거래처 급증, 재량 지출 급증 중 어떤 신호를 후보로 만들지 정합니다.')).toBeInTheDocument()
     expect(screen.getByText('기본 대형 단발 구매, 신규 가맹점, 가맹점 급증, 재량 지출 급증 · 저장 미설정 · 적용 대형 단발 구매, 신규 가맹점, 가맹점 급증, 재량 지출 급증')).toBeInTheDocument()
 
-    openHelp('설명: 업로드 후 자동 적용')
-    expect(screen.getByText('업로드 직후 반복 결제 후보를 자동 적용할지 정합니다. 안전상 기본은 꺼짐입니다.')).toBeInTheDocument()
-    expect(screen.getByText('기본 끔 · 저장 미설정 · 적용 끔')).toBeInTheDocument()
 
     openHelp('설명: 비상금 포함 유동성 등급')
     expect(screen.getByText('비상금 계산에 포함할 자산 유동성 등급 목록입니다.')).toBeInTheDocument()
@@ -157,16 +148,14 @@ describe('SettingsPage', () => {
 
   it('소수 퍼센트 표시값을 그대로 저장하면 spurious analytics PATCH를 만들지 않는다', async () => {
     settingsMock.analyticsSettingsResponse = withEffectiveRatios({
+      recurring_dry_run: { max_amount_cv: 0.1234, minimum_confidence: 0.8765 },
       purchase_gate: { merchant_spike_ratio: 1.2345, discretionary_spike_ratio: 1.5555 },
       discretionary_velocity: { warning_velocity_ratio: 1.2345, high_velocity_ratio: 1.5555, minimum_classification_coverage: 0.7654 },
-      recurring_dry_run: { max_amount_cv: 0.1234, minimum_confidence: 0.8765 },
     })
     renderPage()
 
     expect(getByLabelPrefix('가맹점 급증 기준 (%)')).toHaveValue(123.45)
     expect(getByLabelPrefix('재량 지출 급증 기준 (%)')).toHaveValue(155.55)
-    expect(getByLabelPrefix('금액 변동계수 최대 (%)')).toHaveValue(12.34)
-    expect(getByLabelPrefix('반복 신뢰도 최소 (%)')).toHaveValue(87.65)
 
     fireEvent.click(screen.getByRole('button', { name: '분석 설정 저장' }))
 
@@ -203,17 +192,6 @@ describe('SettingsPage', () => {
     changeField('분류 커버리지 최소 (%)', '80')
     fireEvent.change(within(section('재량 지출 속도')).getByLabelText((content) => content.startsWith('제외 카테고리')), { target: { value: '식비, 여가' } })
     fireEvent.change(within(section('재량 지출 속도')).getByLabelText((content) => content.startsWith('제외 가맹점')), { target: { value: '쿠팡' } })
-    changeField('최소 반복 횟수', '3')
-    changeField('최소 반복 월수', '4')
-    changeField('최소 반복 일수', '5')
-    changeField('금액 변동계수 최대 (%)', '25')
-    changeField('월간 간격 최소 (일)', '26')
-    changeField('월간 간격 최대 (일)', '36')
-    changeField('주간 간격 최소 (일)', '5')
-    changeField('주간 간격 최대 (일)', '9')
-    changeField('반복 신뢰도 최소 (%)', '90')
-    changeField('반복 작업 기본 범위', 'reviewed_only')
-    fireEvent.click(getByLabelPrefix('업로드 후 자동 적용'))
     changeField('비상금 포함 유동성 등급', 'immediate, near_liquid')
     fireEvent.click(getByLabelPrefix('단기 현금화 자산 보조 표시'))
     changeField('월상환 추정 조회 기간 (개월)', '12')
@@ -242,19 +220,6 @@ describe('SettingsPage', () => {
           minimum_classification_coverage: 0.8,
           excluded_category_names: ['식비', '여가'],
           excluded_merchants: ['쿠팡'],
-        },
-        recurring_dry_run: {
-          min_occurrences: 3,
-          min_distinct_months: 4,
-          min_distinct_days: 5,
-          max_amount_cv: 0.25,
-          monthly_interval_days_min: 26,
-          monthly_interval_days_max: 36,
-          weekly_interval_days_min: 5,
-          weekly_interval_days_max: 9,
-          minimum_confidence: 0.9,
-          default_apply_scope: 'reviewed_only',
-          upload_auto_apply: true,
         },
         asset_liability_health: {
           emergency_fund_included_tiers: ['immediate', 'near_liquid'],

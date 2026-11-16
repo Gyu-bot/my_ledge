@@ -7,7 +7,6 @@ import {
   patchAssetList,
   patchPurchaseList,
   patchPurchaseRatio,
-  patchRecurringRatio,
   patchVelocityList,
   patchVelocityRatio,
   sameList,
@@ -36,19 +35,6 @@ export type AnalyticsDraft = {
     readonly baseline_mode: string
     readonly excluded_category_names: string
     readonly excluded_merchants: string
-  }
-  readonly recurring_dry_run: {
-    readonly min_occurrences: string
-    readonly min_distinct_months: string
-    readonly min_distinct_days: string
-    readonly max_amount_cv: string
-    readonly monthly_interval_days_min: string
-    readonly monthly_interval_days_max: string
-    readonly weekly_interval_days_min: string
-    readonly weekly_interval_days_max: string
-    readonly minimum_confidence: string
-    readonly default_apply_scope: string
-    readonly upload_auto_apply: boolean
   }
   readonly asset_liability_health: {
     readonly emergency_fund_included_tiers: string
@@ -91,19 +77,6 @@ export function toAnalyticsDraft(effective: AnalyticsSettingsSection): Analytics
       excluded_category_names: formatList(effective.discretionary_velocity.excluded_category_names),
       excluded_merchants: formatList(effective.discretionary_velocity.excluded_merchants),
     },
-    recurring_dry_run: {
-      min_occurrences: String(effective.recurring_dry_run.min_occurrences),
-      min_distinct_months: String(effective.recurring_dry_run.min_distinct_months),
-      min_distinct_days: String(effective.recurring_dry_run.min_distinct_days),
-      max_amount_cv: toPercentString(effective.recurring_dry_run.max_amount_cv),
-      monthly_interval_days_min: String(effective.recurring_dry_run.monthly_interval_days_min),
-      monthly_interval_days_max: String(effective.recurring_dry_run.monthly_interval_days_max),
-      weekly_interval_days_min: String(effective.recurring_dry_run.weekly_interval_days_min),
-      weekly_interval_days_max: String(effective.recurring_dry_run.weekly_interval_days_max),
-      minimum_confidence: toPercentString(effective.recurring_dry_run.minimum_confidence),
-      default_apply_scope: effective.recurring_dry_run.default_apply_scope,
-      upload_auto_apply: effective.recurring_dry_run.upload_auto_apply,
-    },
     asset_liability_health: {
       emergency_fund_included_tiers: formatList(effective.asset_liability_health.emergency_fund_included_tiers),
       show_near_liquid_as_secondary: effective.asset_liability_health.show_near_liquid_as_secondary,
@@ -125,15 +98,6 @@ export function buildAnalyticsPatch(draft: AnalyticsDraft, effective: AnalyticsS
   const warningVelocity = parseDraftNumber(draft.discretionary_velocity.warning_velocity_ratio, { label: '재량 속도 경고', min: 0, unit: 'percent' }, errors)
   const highVelocity = parseDraftNumber(draft.discretionary_velocity.high_velocity_ratio, { label: '재량 속도 높음', min: 0, unit: 'percent' }, errors)
   const coverage = parseDraftNumber(draft.discretionary_velocity.minimum_classification_coverage, { label: '분류 커버리지 최소값', min: 0, max: 100, unit: 'percent' }, errors)
-  const recurringOccurrences = parseDraftNumber(draft.recurring_dry_run.min_occurrences, { label: '최소 반복 횟수', min: 2, integer: true }, errors)
-  const recurringMonths = parseDraftNumber(draft.recurring_dry_run.min_distinct_months, { label: '최소 반복 월수', min: 1, integer: true }, errors)
-  const recurringDays = parseDraftNumber(draft.recurring_dry_run.min_distinct_days, { label: '최소 반복 일수', min: 1, integer: true }, errors)
-  const amountCv = parseDraftNumber(draft.recurring_dry_run.max_amount_cv, { label: '금액 변동계수 최대', min: 0, unit: 'percent' }, errors)
-  const monthlyMin = parseDraftNumber(draft.recurring_dry_run.monthly_interval_days_min, { label: '월간 간격 최소', min: 1, integer: true }, errors)
-  const monthlyMax = parseDraftNumber(draft.recurring_dry_run.monthly_interval_days_max, { label: '월간 간격 최대', min: 1, integer: true }, errors)
-  const weeklyMin = parseDraftNumber(draft.recurring_dry_run.weekly_interval_days_min, { label: '주간 간격 최소', min: 1, integer: true }, errors)
-  const weeklyMax = parseDraftNumber(draft.recurring_dry_run.weekly_interval_days_max, { label: '주간 간격 최대', min: 1, integer: true }, errors)
-  const confidence = parseDraftNumber(draft.recurring_dry_run.minimum_confidence, { label: '반복 신뢰도 최소', min: 0, max: 100, unit: 'percent' }, errors)
   const paymentLookback = parseDraftNumber(draft.asset_liability_health.monthly_payment_estimate_lookback_months, { label: '월상환 추정 조회 기간', min: 1, max: 24, integer: true }, errors)
   const paymentObservations = parseDraftNumber(draft.asset_liability_health.monthly_payment_min_observations, { label: '월상환 최소 관측', min: 1, integer: true }, errors)
   if (errors.length > 0) return {}
@@ -160,19 +124,6 @@ export function buildAnalyticsPatch(draft: AnalyticsDraft, effective: AnalyticsS
     ...patchVelocityList('excluded_category_names', draft.discretionary_velocity.excluded_category_names, effective.discretionary_velocity.excluded_category_names),
     ...patchVelocityList('excluded_merchants', draft.discretionary_velocity.excluded_merchants, effective.discretionary_velocity.excluded_merchants),
   }
-  const recurring = {
-    ...(recurringOccurrences !== effective.recurring_dry_run.min_occurrences ? { min_occurrences: recurringOccurrences } : {}),
-    ...(recurringMonths !== effective.recurring_dry_run.min_distinct_months ? { min_distinct_months: recurringMonths } : {}),
-    ...(recurringDays !== effective.recurring_dry_run.min_distinct_days ? { min_distinct_days: recurringDays } : {}),
-    ...patchRecurringRatio('max_amount_cv', amountCv, effective.recurring_dry_run.max_amount_cv),
-    ...(monthlyMin !== effective.recurring_dry_run.monthly_interval_days_min ? { monthly_interval_days_min: monthlyMin } : {}),
-    ...(monthlyMax !== effective.recurring_dry_run.monthly_interval_days_max ? { monthly_interval_days_max: monthlyMax } : {}),
-    ...(weeklyMin !== effective.recurring_dry_run.weekly_interval_days_min ? { weekly_interval_days_min: weeklyMin } : {}),
-    ...(weeklyMax !== effective.recurring_dry_run.weekly_interval_days_max ? { weekly_interval_days_max: weeklyMax } : {}),
-    ...patchRecurringRatio('minimum_confidence', confidence, effective.recurring_dry_run.minimum_confidence),
-    ...(draft.recurring_dry_run.default_apply_scope !== effective.recurring_dry_run.default_apply_scope ? { default_apply_scope: draft.recurring_dry_run.default_apply_scope } : {}),
-    ...(draft.recurring_dry_run.upload_auto_apply !== effective.recurring_dry_run.upload_auto_apply ? { upload_auto_apply: draft.recurring_dry_run.upload_auto_apply } : {}),
-  }
   const asset = {
     ...patchAssetList(draft.asset_liability_health.emergency_fund_included_tiers, effective.asset_liability_health.emergency_fund_included_tiers),
     ...(draft.asset_liability_health.show_near_liquid_as_secondary !== effective.asset_liability_health.show_near_liquid_as_secondary ? { show_near_liquid_as_secondary: draft.asset_liability_health.show_near_liquid_as_secondary } : {}),
@@ -183,7 +134,6 @@ export function buildAnalyticsPatch(draft: AnalyticsDraft, effective: AnalyticsS
   return {
     ...(Object.keys(purchaseGate).length > 0 ? { purchase_gate: purchaseGate } : {}),
     ...(Object.keys(velocity).length > 0 ? { discretionary_velocity: velocity } : {}),
-    ...(Object.keys(recurring).length > 0 ? { recurring_dry_run: recurring } : {}),
     ...(Object.keys(asset).length > 0 ? { asset_liability_health: asset } : {}),
   }
 }

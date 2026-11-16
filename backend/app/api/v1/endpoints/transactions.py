@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
@@ -15,20 +15,16 @@ from app.schemas.transaction import (
     TransactionBulkMutationRequest,
     TransactionBulkMutationResponse,
     TransactionCategoryLevel,
-    TransactionCostKindFilter,
     TransactionCreateRequest,
     TransactionAdjustabilityFilter,
     TransactionEditedFilter,
     TransactionFlowRowFilter,
     TransactionPaymentFormFilter,
-    TransactionFixedCostNecessityFilter,
     TransactionFilterOptionsResponse,
     TransactionGroupBy,
     TransactionListResponse,
     TransactionMergeRequest,
-    TransactionRecurringPaymentKindFilter,
     TransactionResponse,
-    TransactionSpendNecessityFilter,
     TransactionSourceFilter,
     TransactionSummaryResponse,
     TransactionTypeFilter,
@@ -57,18 +53,13 @@ router = APIRouter()
 
 @router.get("/transactions", response_model=TransactionListResponse)
 async def get_transactions(
+    request: Request,
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     type: TransactionTypeFilter = Query(default="all"),
     source: TransactionSourceFilter = Query(default="all"),
     category_major: str | None = Query(default=None),
     payment_method: str | None = Query(default=None),
-    cost_kind: TransactionCostKindFilter = Query(default="all"),
-    fixed_cost_necessity: TransactionFixedCostNecessityFilter = Query(default="all"),
-    spend_necessity: TransactionSpendNecessityFilter = Query(default="all"),
-    recurring_payment_kind: TransactionRecurringPaymentKindFilter = Query(
-        default="all"
-    ),
     is_edited: TransactionEditedFilter = Query(default="all"),
     include_deleted: bool = Query(default=False),
     include_merged: bool = Query(default=False),
@@ -95,6 +86,18 @@ async def get_transactions(
     ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> TransactionListResponse:
+    retired = [
+        "cost_classification_source",
+        "cost_kind",
+        "fixed_cost_necessity",
+        "recurring_payment_kind",
+        "spend_necessity",
+    ]
+    if any(key in request.query_params for key in retired):
+        raise HTTPException(
+            status_code=422,
+            detail="이전 분류 필터는 제거되었습니다. 지급 형태와 조정 가능성을 사용해 주세요.",
+        )
     return await list_transactions(
         db_session,
         start_date=start_date,
@@ -103,10 +106,6 @@ async def get_transactions(
         source=source,
         category_major=category_major,
         payment_method=payment_method,
-        cost_kind=cost_kind,
-        fixed_cost_necessity=fixed_cost_necessity,
-        spend_necessity=spend_necessity,
-        recurring_payment_kind=recurring_payment_kind,
         is_edited=is_edited,
         include_deleted=include_deleted,
         include_merged=include_merged,

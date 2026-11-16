@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SpendingAnomaliesSettings(BaseModel):
@@ -278,6 +278,15 @@ class ComparisonSettingsPatch(BaseModel):
 
 
 class AnalyticsSettingsPatchRequest(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def reject_retired_recurring_settings(cls, value):
+        if isinstance(value, dict) and "recurring_dry_run" in value:
+            raise ValueError(
+                "반복 분류 제안 설정은 제거되었습니다. 정기 지급은 약정 현황에서 직접 등록해 주세요."
+            )
+        return value
+
     spending_anomalies: SpendingAnomaliesSettingsPatch = Field(
         default_factory=SpendingAnomaliesSettingsPatch,
     )

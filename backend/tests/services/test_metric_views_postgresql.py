@@ -163,14 +163,8 @@ async def test_pg_metric_and_analytics_api_equal_the_views(
         for period, row in summary.items()
     }
 
-    trend = (await pg_client.get("/api/v1/analytics/fixed-cost-trend")).json()
-    assert {item["period"]: item["expense_total"] for item in trend["items"]} == {
-        period: row["total_outflow"] for period, row in summary.items()
-    }
-    fixed_summary = (await pg_client.get("/api/v1/analytics/fixed-cost-summary")).json()
-    assert fixed_summary["expense_total"] == sum(
-        row["total_outflow"] for row in summary.values()
-    )
+    for path in ("fixed-cost-trend", "fixed-cost-summary", "recurring-payments"):
+        assert (await pg_client.get(f"/api/v1/analytics/{path}")).status_code == 404
 
     income = (
         await pg_client.get(
@@ -404,9 +398,7 @@ async def test_pg_expense_aliases_and_view_ratios(pg_session, pg_client):
     ).mappings():
         assert row["living_spend"] == row["expense_total"]
     for path in ("fixed-cost-summary", "fixed-cost-trend"):
-        body = (await pg_client.get(f"/api/v1/analytics/{path}")).json()
-        for item in body.get("items", [body]):
-            assert item["total_outflow"] == item["expense_total"]
+        assert (await pg_client.get(f"/api/v1/analytics/{path}")).status_code == 404
 
 
 async def test_pg_remaining_view_migration_roundtrip(pg_session, migrated_url):
@@ -464,10 +456,11 @@ async def test_pg_remaining_view_migration_roundtrip(pg_session, migrated_url):
         _, stderr = await process.communicate()
         assert process.returncode == 0, stderr.decode()
 
+    await migrate("downgrade", "20261117_0040")
     upgraded = await snapshot()
     await migrate("downgrade", "20261116_0039")
     original = await snapshot()
-    await migrate("upgrade", "head")
+    await migrate("upgrade", "20261117_0040")
     again = await snapshot()
     assert sorted(upgraded["transactions"], key=lambda r: r["id"]) == sorted(
         original["transactions"], key=lambda r: r["id"]

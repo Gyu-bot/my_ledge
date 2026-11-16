@@ -336,7 +336,7 @@ def test_migration_maps_every_row_and_round_trips(scratch_url: str) -> None:
     assert before.checks == {"predicted_conservation": True}
 
     # ---- migrate ----
-    _alembic(scratch_url, "upgrade", "head")
+    _alembic(scratch_url, "upgrade", "20261117_0040")
     after = asyncio.run(_report(scratch_url))
     assert after.migrated
     assert after.checks == {
@@ -487,7 +487,7 @@ def test_migration_maps_every_row_and_round_trips(scratch_url: str) -> None:
     assert tables == []
 
     # ---- upgrade again: same result, no duplicate bundles ----
-    _alembic(scratch_url, "upgrade", "head")
+    _alembic(scratch_url, "upgrade", "20261117_0040")
     again = asyncio.run(_report(scratch_url))
     assert again.bundles_by_origin == {"migration": 7}
     assert again.mismatches_by_mapping_row == {}

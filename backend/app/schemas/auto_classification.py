@@ -1,60 +1,20 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
-CostKind = Literal["fixed", "variable"]
-FixedCostNecessity = Literal["essential", "discretionary"]
-SpendNecessity = Literal["essential", "discretionary"]
 LoanRepaymentType = Literal["principal", "interest", "mixed", "unknown"]
 LoanMerchantMatchField = Literal["merchant", "description"]
-RecurringPaymentKind = Literal["installment", "monthly_recurring", "not_recurring"]
 
 
 class AutoClassificationSettingsResponse(BaseModel):
-    apply_cost_rules_on_upload: bool
     apply_loan_rules_on_upload: bool
-    apply_recurring_rules_on_upload: bool
 
 
 class AutoClassificationSettingsPatchRequest(BaseModel):
-    apply_cost_rules_on_upload: bool | None = None
+    model_config = ConfigDict(extra="forbid")
     apply_loan_rules_on_upload: bool | None = None
-    apply_recurring_rules_on_upload: bool | None = None
-
-
-class CategoryClassificationRuleRequest(BaseModel):
-    category_major: str = Field(min_length=1, max_length=50)
-    category_minor: str | None = Field(default=None, max_length=50)
-    cost_kind: CostKind
-    fixed_cost_necessity: FixedCostNecessity | None = None
-    spend_necessity: SpendNecessity | None = None
-
-    @model_validator(mode="after")
-    def validate_necessity(self) -> "CategoryClassificationRuleRequest":
-        if self.cost_kind == "variable" and self.fixed_cost_necessity is not None:
-            raise ValueError(
-                "fixed_cost_necessity is only allowed for fixed cost rules"
-            )
-        return self
-
-
-class CategoryClassificationRuleResponse(BaseModel):
-    category_valid: bool = True
-    validation_message: str | None = None
-    id: int
-    category_major: str
-    category_minor: str | None
-    cost_kind: CostKind
-    fixed_cost_necessity: FixedCostNecessity | None
-    spend_necessity: SpendNecessity | None
-    created_at: datetime
-    updated_at: datetime
-
-
-class CategoryClassificationRuleListResponse(BaseModel):
-    items: list[CategoryClassificationRuleResponse]
 
 
 class LoanMerchantRuleRequest(BaseModel):
@@ -98,57 +58,6 @@ class MerchantAliasRuleResponse(BaseModel):
 
 class MerchantAliasRuleListResponse(BaseModel):
     items: list[MerchantAliasRuleResponse]
-
-
-class RecurringCategoryRuleRequest(BaseModel):
-    category_major: str = Field(min_length=1, max_length=50)
-    category_minor: str | None = Field(default=None, max_length=50)
-    recurring_payment_kind: RecurringPaymentKind
-
-
-class RecurringCategoryRuleResponse(BaseModel):
-    category_valid: bool = True
-    validation_message: str | None = None
-    id: int
-    category_major: str
-    category_minor: str | None
-    recurring_payment_kind: RecurringPaymentKind
-    created_at: datetime
-    updated_at: datetime
-
-
-class RecurringCategoryRuleListResponse(BaseModel):
-    items: list[RecurringCategoryRuleResponse]
-
-
-class RecurringDryRunMatchedTransaction(BaseModel):
-    id: int
-    date: str
-    amount: int
-
-
-class RecurringDryRunItem(BaseModel):
-    merchant: str
-    proposed_kind: RecurringPaymentKind
-    confidence: float
-    matched_transactions: list[RecurringDryRunMatchedTransaction]
-    reason: str
-    category_hint: str
-    apply_scope_options: list[Literal["all_matching", "reviewed_only"]]
-    default_apply_scope: Literal["all_matching", "reviewed_only"]
-    preview_token: str
-
-
-class RecurringDryRunResponse(BaseModel):
-    items: list[RecurringDryRunItem]
-
-
-class RecurringDryRunApplyRequest(BaseModel):
-    merchant: str = Field(min_length=1, max_length=500)
-    proposed_kind: RecurringPaymentKind
-    apply_scope: Literal["all_matching", "reviewed_only"] | None = None
-    preview_token: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
-    transaction_ids: list[int] | None = Field(default=None, min_length=1)
 
 
 class AutoClassificationApplyResponse(BaseModel):

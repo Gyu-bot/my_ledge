@@ -48,7 +48,6 @@ def serialize_installment_suggestion(
             currency=transaction.currency,
             payment_method=transaction.payment_method,
             memo=transaction.memo,
-            recurring_payment_kind=transaction.recurring_payment_kind,
         ),
         installment_plan_id=suggestion.plan.id,
         installment_plan_display_name=suggestion.plan.display_name,

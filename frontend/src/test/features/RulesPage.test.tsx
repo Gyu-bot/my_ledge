@@ -1,49 +1,36 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { RulesPage } from '../../features/data/RulesPage'
 
-const mutations = vi.hoisted(() => ({ remove: vi.fn(), recurring: vi.fn() }))
+const mutations = vi.hoisted(() => ({ alias: vi.fn(), apply: vi.fn(), settings: vi.fn() }))
 vi.mock('../../hooks/useWriteAccess', () => ({ useWriteAccess: () => true }))
-vi.mock('../../hooks/useTransactions', () => {
-  const query = (data: unknown) => ({ data, isLoading: false })
-  const mutation = () => ({ mutateAsync: vi.fn(), isPending: false })
-  return {
-    useAutoClassificationSettings: () => query({}),
-    usePatchAutoClassificationSettings: mutation,
-    useTransactionFilterOptions: () => query({ category_options: ['식비'], category_minor_options_by_major: {} }),
-    useCategoryClassificationRules: () => query({ items: [{ id: 7, category_major: '유효하지 않은 분류', category_minor: null, category_valid: false, validation_message: '현재 지출 카테고리에 없는 규칙입니다.', cost_kind: 'variable', spend_necessity: null }] }),
-    useMerchantAliasRules: () => query({ items: [] }),
-    useRecurringCategoryRules: () => query({ items: [] }),
-    useDeleteCategoryClassificationRule: () => ({ mutateAsync: mutations.remove, isPending: false }),
-    useDeleteRecurringCategoryRule: () => ({ mutateAsync: mutations.recurring, isPending: false }),
-    useUpsertCategoryClassificationRule: mutation,
-    useApplyCategoryClassificationRules: mutation,
-    useUpsertMerchantAliasRule: mutation,
-    useApplyMerchantAliasRules: mutation,
-    useUpsertRecurringCategoryRule: mutation,
-    useApplyRecurringCategoryRules: mutation,
-  }
-})
+vi.mock('../../hooks/useTransactions', () => ({
+  useAutoClassificationSettings: () => ({ data: { apply_loan_rules_on_upload: false }, isLoading: false }),
+  usePatchAutoClassificationSettings: () => ({ mutateAsync: mutations.settings, isPending: false }),
+  useMerchantAliasRules: () => ({ data: { items: [] }, isLoading: false }),
+  useUpsertMerchantAliasRule: () => ({ mutateAsync: mutations.alias, isPending: false }),
+  useApplyMerchantAliasRules: () => ({ mutateAsync: mutations.apply, isPending: false }),
+}))
 
-describe('RulesPage invalid rules', () => {
-  beforeEach(() => { mutations.remove.mockReset().mockResolvedValue(undefined) })
-  afterEach(() => vi.restoreAllMocks())
+beforeEach(() => { vi.clearAllMocks(); mutations.alias.mockResolvedValue({}); mutations.apply.mockResolvedValue({ updated: 1 }) })
 
-  it('유효하지 않은 카테고리 규칙을 표시하고 확인 후 해당 규칙만 삭제한다', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+describe('RulesPage retired classification inputs', () => {
+  it('이전 분류 입력 없이 사람이 관리하는 새 축으로 안내한다', () => {
     render(<MemoryRouter><RulesPage /></MemoryRouter>)
-    expect(screen.getByRole('alert')).toHaveTextContent('일치하지 않는 규칙')
-    expect(screen.getByText('현재 지출 카테고리에 없는 규칙입니다.')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
-    await waitFor(() => expect(mutations.remove).toHaveBeenCalledWith(7))
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('기존 거래의 분류는 유지'))
+    for (const label of ['비용 성격', '필수/재량', '반복결제 규칙', '고정비 규칙']) expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '작업대로 이동' })).toHaveAttribute('href', '/data/nature')
+    expect(screen.getByRole('link', { name: '약정 현황으로 이동' })).toHaveAttribute('href', '/commitments')
+    expect(mutations.alias).not.toHaveBeenCalled()
+    expect(mutations.apply).not.toHaveBeenCalled()
   })
-
-  it('삭제 확인을 취소하면 요청하지 않는다', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('거래처 정규화와 대출 규칙은 기존 조작을 유지한다', async () => {
     render(<MemoryRouter><RulesPage /></MemoryRouter>)
-    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
-    expect(mutations.remove).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('포함 패턴'), { target: { value: 'synthetic-raw' } })
+    fireEvent.change(screen.getByLabelText('정규 거래처'), { target: { value: 'synthetic-normalized' } })
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }))
+    await waitFor(() => expect(mutations.alias).toHaveBeenCalledWith({ alias_pattern: 'synthetic-raw', normalized_merchant: 'synthetic-normalized' }))
+    fireEvent.click(screen.getByLabelText('업로드 후 대출 거래처 규칙 적용'))
+    await waitFor(() => expect(mutations.settings).toHaveBeenCalledWith({ apply_loan_rules_on_upload: true }))
   })
 })

@@ -142,7 +142,6 @@ export type AnalyticsSettingsPatchRequest = {
   readonly spending_anomalies?: SpendingAnomaliesSettingsPatch
   readonly discretionary_velocity?: DiscretionaryVelocitySettingsPatch
   readonly purchase_gate?: PurchaseGateSettingsPatch
-  readonly recurring_dry_run?: RecurringDryRunSettingsPatch
   readonly asset_liability_health?: AssetLiabilityHealthSettingsPatch
   readonly bulk_operations?: BulkOperationsSettingsPatch
   readonly financial_targets?: FinancialTargetsSettingsPatch

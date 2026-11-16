@@ -11,45 +11,6 @@ export interface MonthlyCashflowResponse {
   items: MonthlyCashflowItem[]
 }
 
-export interface FixedCostSummaryResponse {
-  expense_total: number
-  fixed_total: number
-  variable_total: number
-  fixed_ratio: number | null
-  essential_fixed_total: number
-  discretionary_fixed_total: number
-  essential_variable_total: number
-  discretionary_variable_total: number
-  required_spend_total: number
-  discretionary_spend_total: number
-  unclassified_total: number
-  unclassified_count: number
-  necessity_unclassified_total?: number
-  necessity_unclassified_count?: number
-}
-
-export interface FixedCostTrendItem {
-  period: string
-  expense_total: number
-  fixed_total: number
-  variable_total: number
-  essential_fixed_total: number
-  discretionary_fixed_total: number
-  essential_variable_total: number
-  discretionary_variable_total: number
-  required_spend_total: number
-  discretionary_spend_total: number
-  unclassified_total: number
-  unclassified_count: number
-  necessity_unclassified_total?: number
-  necessity_unclassified_count?: number
-  fixed_ratio: number | null
-}
-
-export interface FixedCostTrendResponse {
-  items: FixedCostTrendItem[]
-}
-
 export interface MerchantSpendItem {
   merchant: string
   amount: number
@@ -73,26 +34,6 @@ export interface IncomeStabilityResponse {
   assumptions: string
 }
 
-export interface RecurringPaymentItem {
-  merchant: string
-  category: string
-  avg_amount: number
-  interval_type: string
-  avg_interval_days: number
-  occurrences: number
-  confidence: number
-  last_date: string
-  last_charge_date?: string | null
-  net_amount?: number
-  activity_status?: 'active_candidate' | 'historical' | 'irregular' | 'non_positive' | 'not_recurring'
-  recurring_payment_kind: 'installment' | 'monthly_recurring' | 'not_recurring' | null
-  installment_count: number
-  monthly_recurring_count: number
-  not_recurring_count: number
-  unclassified_count: number
-  transaction_ids: number[]
-}
-
 export interface AnalyticsDateRange {
   start_month?: string
   end_month?: string
@@ -106,27 +47,8 @@ export interface MerchantSpendQuery extends AnalyticsDateRange {
   include_income?: boolean
 }
 
-export interface RecurringPaymentsQuery {
-  page?: number
-  per_page?: number
-  end_date?: string
-  activity?: 'all' | 'active' | 'history'
-  recent_days?: number
-}
-
 export interface MonthlyCashflowQuery extends AnalyticsDateRange {
   months?: number
-}
-
-export interface RecurringPaymentsResponse {
-  reference_date?: string
-  activity?: 'all' | 'active' | 'history'
-  recent_days?: number
-  total: number
-  page: number
-  per_page: number
-  items: RecurringPaymentItem[]
-  assumptions: string
 }
 
 export interface IncomeStabilityQuery {

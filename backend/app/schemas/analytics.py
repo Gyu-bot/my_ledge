@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 from app.schemas.comparison import ComparisonBasis
 from app.schemas.metrics import MetricContract, MonthStatus
@@ -19,60 +19,6 @@ class MonthlyCashflowItem(BaseModel):
 
 class MonthlyCashflowResponse(BaseModel):
     items: list[MonthlyCashflowItem]
-    contract: MetricContract | None = None
-
-
-class FixedCostSummaryResponse(BaseModel):
-    expense_total: int
-    fixed_total: int
-    variable_total: int
-    fixed_ratio: float | None
-    essential_fixed_total: int
-    discretionary_fixed_total: int
-    essential_variable_total: int
-    discretionary_variable_total: int
-    required_spend_total: int
-    discretionary_spend_total: int
-    unclassified_total: int
-    unclassified_count: int
-    necessity_unclassified_total: int = 0
-    necessity_unclassified_count: int = 0
-    contract: MetricContract | None = None
-
-    @computed_field
-    @property
-    def total_outflow(self) -> int:
-        """All effective KRW expense, including loan repayments (legacy alias)."""
-        return self.expense_total
-
-
-class FixedCostTrendItem(BaseModel):
-    period: str
-    expense_total: int
-    fixed_total: int
-    variable_total: int
-    essential_fixed_total: int
-    discretionary_fixed_total: int
-    essential_variable_total: int
-    discretionary_variable_total: int
-    required_spend_total: int
-    discretionary_spend_total: int
-    unclassified_total: int
-    unclassified_count: int
-    necessity_unclassified_total: int = 0
-    necessity_unclassified_count: int = 0
-    fixed_ratio: float | None
-    month_status: MonthStatus | None = None
-
-    @computed_field
-    @property
-    def total_outflow(self) -> int:
-        """All effective KRW expense, including loan repayments (legacy alias)."""
-        return self.expense_total
-
-
-class FixedCostTrendResponse(BaseModel):
-    items: list[FixedCostTrendItem]
     contract: MetricContract | None = None
 
 
@@ -122,38 +68,6 @@ class IncomeStabilityResponse(BaseModel):
 
 
 # P1 ── recurring-payments
-class RecurringPaymentItem(BaseModel):
-    merchant: str
-    category: str
-    avg_amount: int
-    interval_type: str
-    avg_interval_days: float
-    occurrences: int
-    confidence: float
-    last_date: date
-    recurring_payment_kind: str | None
-    installment_count: int
-    monthly_recurring_count: int
-    not_recurring_count: int
-    unclassified_count: int
-    transaction_ids: list[int]
-    last_charge_date: date | None = None
-    net_amount: int = 0
-    activity_status: Literal[
-        "active_candidate", "historical", "irregular", "non_positive", "not_recurring"
-    ] = "historical"
-
-
-class RecurringPaymentsResponse(BaseModel):
-    total: int
-    page: int
-    per_page: int
-    items: list[RecurringPaymentItem]
-    reference_date: date | None = None
-    activity: Literal["all", "active", "history"] = "all"
-    recent_days: int = 90
-    assumptions: str
-    contract: MetricContract | None = None
 
 
 # P1 ── spending-anomalies

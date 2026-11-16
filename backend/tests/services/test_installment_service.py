@@ -44,6 +44,7 @@ def _transaction(
 
 async def test_list_installment_transaction_mappings_search_matches_transaction_memo(
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     db_session.add_all(
         [
@@ -62,6 +63,7 @@ async def test_list_installment_transaction_mappings_search_matches_transaction_
         ]
     )
     await db_session.commit()
+    await sync_legacy_classification()
 
     response = await list_installment_transaction_mappings(
         db_session,

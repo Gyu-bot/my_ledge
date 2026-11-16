@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
-from app.services.transactions_service import build_transactions_effective_select, list_transactions
+from app.services.transactions_service import (
+    build_transactions_effective_select,
+    list_transactions,
+)
 
 
 def _transaction(
@@ -85,14 +88,20 @@ async def test_build_transactions_effective_select_excludes_deleted_and_merged_r
 
     canonical = build_transactions_effective_select().subquery()
     rows = (
-        await db_session.execute(select(canonical).order_by(canonical.c.date.desc(), canonical.c.time.desc()))
-    ).mappings().all()
+        (
+            await db_session.execute(
+                select(canonical).order_by(
+                    canonical.c.date.desc(), canonical.c.time.desc()
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
 
     assert len(rows) == 1
     assert rows[0]["effective_category_major"] == "식비"
     assert rows[0]["effective_category_minor"] == "배달"
-    assert rows[0]["cost_kind"] is None
-    assert rows[0]["fixed_cost_necessity"] is None
     assert rows[0]["is_edited"] is True
     assert rows[0]["is_deleted"] is False
     assert rows[0]["merged_into_id"] is None
@@ -118,8 +127,10 @@ async def test_build_transactions_effective_select_exposes_merchant_and_marks_me
 
     canonical = build_transactions_effective_select().subquery()
     row = (
-        await db_session.execute(select(canonical).order_by(canonical.c.id.desc()))
-    ).mappings().first()
+        (await db_session.execute(select(canonical).order_by(canonical.c.id.desc())))
+        .mappings()
+        .first()
+    )
 
     assert row is not None
     assert row["description"] == "스타벅스 리저브 종로점"
@@ -162,10 +173,6 @@ async def test_list_transactions_omits_sensitive_source_lineage_fields(
         include_deleted=False,
         include_merged=False,
         search=None,
-        cost_kind="all",
-        fixed_cost_necessity="all",
-        spend_necessity="all",
-        recurring_payment_kind="all",
         page=1,
         per_page=40,
     )
@@ -210,8 +217,14 @@ async def test_build_transactions_effective_select_exposes_loan_mapping_fields(
 
     canonical = build_transactions_effective_select().subquery()
     row = (
-        await db_session.execute(select(canonical).where(canonical.c.id == transaction.id))
-    ).mappings().one()
+        (
+            await db_session.execute(
+                select(canonical).where(canonical.c.id == transaction.id)
+            )
+        )
+        .mappings()
+        .one()
+    )
 
     assert row["loan_account_id"] == account.id
     assert row["loan_lender"] == "토스뱅크"
@@ -264,10 +277,6 @@ async def test_list_transactions_search_matches_transaction_memo(
         include_deleted=False,
         include_merged=False,
         search="세탁비",
-        cost_kind="all",
-        fixed_cost_necessity="all",
-        spend_necessity="all",
-        recurring_payment_kind="all",
         page=1,
         per_page=40,
     )

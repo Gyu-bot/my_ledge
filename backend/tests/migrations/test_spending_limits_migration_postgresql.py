@@ -67,7 +67,7 @@ def test_limit_migration_preserves_existing_tables(scratch_url):  # noqa: F811
         return result
 
     before = asyncio.run(capture(seed=True))
-    _alembic(scratch_url, "upgrade", "head")
+    _alembic(scratch_url, "upgrade", "20261117_0040")
     assert asyncio.run(capture()) == before
     _alembic(scratch_url, "downgrade", "20261117_t054_t057")
     assert asyncio.run(capture()) == before
