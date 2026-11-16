@@ -138,6 +138,8 @@ Queue 필터는 count/limit/offset 전에 적용된다. 월별 두 관측 배열
 | `net_after_known_remaining_expense` | 예상수입 - 관측순지출 - 알려진 잔여지출. 미확정 지출이 빠진 부분 계산이며 월말 전망/사용 가능 금액이 아니다. |
 | `income_sources[]` | 출처 key/거래처, 예상·관측·잔여 금액, `expected_day`와 예상일/범위, 상태, confidence, 관측/제외 월, 매칭 거래 ids, 이유. `cycle_anchor`(`calendar_month|month_end|month_start`)와 `cycle_reassigned_transaction_ids`는 월 경계 입금을 가까운 지급 주기로 배정한 결과다(`T064` R7). 근거 월·관측액은 지급 주기 단위다. |
 | `expense_components[]` | `kind=loan|installment|recurring|variable`, nullable `expected_remaining`, `known_expected_remaining`, 기준·missing reasons·confidence·warnings. 반복 지출은 등록된 정기 지급 묶음별 `sources`도 제공한다. 알려진 부분합에도 낮은 신뢰도의 추정이 포함되며 확정 청구액이 아니다. `link_unconfirmed_count`/`link_unconfirmed_amount`(대출·할부: 사람이 등록한 대출 거래처 규칙·할부 계획 규칙으로 이번 달 상환으로 본 미연결 결제), `not_in_expense_commitments[]`(대출: 장부에 지출 줄이 없어 지출 가정에 더하지 않은 대출과 `reason_code`=`no_expense_line_in_recent_month|no_loan_account`), `twelve_month_window`·`annual_items[]`(변동: 12개월 창과 연간성 카테고리)가 붙는다. |
+| `completeness` | 월말 값(`projected_month_end_net`)이 알려진 구성 요소를 모두 반영했는지: `all_known_components`, `known_components_only`(빠진 것이 있음), `not_projected`(월말 값 없음). `left_out[]`에 빠진 것과 이유가 있다: 남은 금액을 0으로 둔 수입 출처(`income_source_uncertain`, 규칙으로 자동 중단된 `income_source_stopped_by_rule`), 지출 가정에 넣지 않은 대출(`no_expense_line_in_recent_month`, `no_loan_account`), 추정하지 못한 지출 구성 요소(`component_not_estimated`). 합계 숫자만 읽고 전체 전망으로 받아들이지 않는다. |
+| `expense_components[kind=loan].sources[]` | 지출 가정에 넣은 대출마다 한 행: 쓴 월상환액(`expected_monthly_amount`, 출처 `recorded_monthly_payment_source`), 이번 달 관측 상환(`observed_payment_amount`, `observed_net_expense`), 남은 금액(`expected_remaining`), 찾은 방법(`match_method`: `loan_link`, `loan_merchant_rule_unconfirmed`, 둘 다, `no_repayment_this_month`), `loan_account_id`. |
 | `expense_components[].sources[]` | 정기 지급 묶음(`commitment_id`, `cycle`, `end_date`)별 월 기준액, 실제 총결제액·환급·순지출, 잔여 예상액, 기준초과 결제액, `expected|observed|review` 상태, confidence, 근거·사용/제외 월·warnings. |
 | `remaining_expense_adjustability` | 알려진 남은 지출 가정을 근거 줄의 조정 가능성 금액 비율로 나눈 값(`T064` R12): 보호·조정 가능·미정 금액, 합계(= `known_expected_remaining_expense`), 미정 비중(%). 미정은 보호나 조정 가능으로 추정하지 않는다. |
 | `coverage`, `included_periods`, `excluded_periods` | 최근 6개 마감월의 관측밀도·누락/제외와 업로드 기준일. |
@@ -519,7 +521,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `status` | `ok`, `classification_incomplete`(미정 지출이나 주기·조정 가능성이 빈 약정 때문에 나눔이 불완전), `no_transactions`(가져온 기간 안인데 거래 0건: 자료 공백과 구분할 수 없음), `not_imported`(가져오지 않은 기간). 조회 실패는 HTTP 503 본문의 `query_failed`, 인증 실패는 HTTP 401이다. 이유는 `status_reasons`에 모두 적힌다. |
 | `period_scope.periods[]` | 요청한 달마다 가져왔는지(`coverage`), 마감월·진행월, 거래 수, 미정 비중. 가져온 기간은 첫 유효 거래의 달부터 거래 기준일의 달까지다(업로드 기록에 파일 범위가 없어서). |
 | `as_of` | 거래 기준일과 종류별 스냅샷 기준일. 스냅샷 날짜는 종류마다 다르며 합치지 않는다. 자료가 오래되었는지는 판단하지 않고 날짜만 준다. `data-status`는 종류별로 거래 기준일과의 차이(일)를 준다. |
-| `classification` | 그 응답 범위의 조정 가능성 미정 금액과 총지급, 금액 기준 미정 비중. `complete=false`이면 보호·조정 가능 합계가 미정만큼 덜 잡혀 있다. |
+| `classification` | 그 응답 범위의 조정 가능성 미정 금액(순액)과 총지급, 순액 미정 비중, 그리고 상쇄되지 않는 미정 거래 수·미정 절댓값 합·지출 절댓값 합·절댓값 비중(0–1). `complete`는 미정 거래가 0건일 때만 true다. 순액 비중(`adjustability_undecided_share`)은 환불이 섞이면 음수가 될 수 있어 완성도 판단에 쓰지 않는다. `complete=false`이면 보호·조정 가능 합계가 미정만큼 덜 잡혀 있다. |
 | `basis` | 정의 이름과 범위, 부호·환불·이체·대출·기간 귀속 규칙, 가정(한국어 문장 목록). 다른 형식의 가정 표기는 없다. |
 | `labels` | 응답에 나오는 영문 키의 한국어 이름(`flow_row.committed_loan` → "약정 지급 · 대출 원리금" 등). |
 | 약정 `observation.state` | `observed`(그 달 약정에 속한 지출이 있음), `expected_not_observed`(마감월이고 기록된 주기상 있어야 하는데 연결된 거래가 없음), `unlinked_transaction_present`(할부 회차 달에 같은 거래처의 '할부 연결 미확인' 표시 거래가 있음), `not_expected`(시작 전·종료 뒤·주기 밖·총 횟수 모두 관측), `not_determinable`(주기나 시작이 기록되지 않음, 진행월, 거래 0건 달, 가져오지 않은 기간). "관측 안 됨"은 기록에 연결된 거래가 없다는 뜻이지 지급하지 않았다는 증거가 아니다. |
@@ -527,3 +529,27 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | 대출의 주기 | 대출에는 주기 기록이 없다. 최신 스냅샷에 월 상환액이 있을 때만 매월로 보고, 없으면 `cycle=null`, 관측 판단은 `not_determinable`이다. |
 | 사후 검토 `listed_because` | 어느 기존 검출기가 어떤 사유 코드로 올렸는지와 검출기의 문장·기준값 그대로. 새 점수나 위험 등급이 아니다. 이미 일어난 거래의 사후 검토용이며 구매 전 판단이 아니다. 구매 단위 후보 검출기는 지급 형태 수시이고 조정 가능성이 `adjustable`인 거래만 본다(`vw_transaction_nature`). 미정 거래는 후보가 아니다. |
 | 월말 순현금흐름 전망 | 읽기 표면은 다시 계산하지 않는다. 기존 대시보드 응답의 `month_projection`에 그대로 있다(`T064` 2차 수정 반영). 최근 마감월 되짚기 오차는 `GET /api/v1/canonical-views/month-projection/accuracy`. |
+
+### 소비자 검토 반영 (읽기 표면 보강)
+
+실제 소비 에이전트가 읽기 표면을 쓰며 찾은 문제를 고친 내용이다. 기존 필드 이름과 뜻은 그대로이고 필드만 더했다. 기본 인자의 응답에서 기존 값은 바뀌지 않는다. 자세한 계약은 [backend-api-ssot.md](../backend-api-ssot.md#read-surface-consumer-review).
+
+| 항목 | 읽는 법 |
+|---|---|
+| 422 | `/read/*`, `/metrics/net-worth/*`의 422 본문은 모두 `detail` 배열(`loc`, `msg`, `type`)이다. `/read/*`는 선언하지 않은 조회 인자(예: `start_date`)를 이름과 함께 거부하고, 지출 큐브 필터는 지출 줄이 가질 수 있는 값만 받는다. 0행 응답은 이제 "값이 틀렸다"가 아니라 "해당 거래가 없다"는 뜻이다. |
+| 분류 완성도 | 위 `classification` 행. 기간별(`period_scope.periods[]`)에도 같은 값이 있다. |
+| 달별 자료 범위 | `data_coverage`: `full`(달력상 범위가 달 전체를 덮음. 모든 계좌 수집의 확인은 아님), `partial`(첫 거래일이 1일이 아닌 첫 달, 또는 거래 기준일이 말일 전인 달), `no_transactions_observed`(범위 안 거래 0건: 거래가 없었다는 확인이 아니라 기록이 없다는 추정), `outside_data`. `month_status`(마감·진행)는 달력 상태로 따로 읽는다. 같은 규칙 문장이 자료 현황·비교(`data_coverage_rule`, `target_data_coverage`)·월말 전망(`coverage.month_coverage_rule`)에 있다. |
+| 비교 기준 | `/read/comparison/*`의 `baseline=previous_month`이면 직전 마감월 한 달과 비교한다(기본은 최근 마감월 중앙값). 쓸 수 없으면 기준값이 null이고 `comparison.baseline_unavailable_reason`이 이유다. `previous_full_month_delta_available`은 이 응답에 월 전체끼리의 증감이 실제로 있을 때만 true다. |
+| 변화 기여 | 항목 변화는 각 항목 자기 기준값에 대한 변화이지 전체 변화의 분해가 아니다. `sum_item_changes`와 `non_additive_gap`(= `change_total − sum_item_changes`)으로 차이를 본다. `baseline=previous_month`이면 항목이 더해져 차이는 0이다. `items_summary`·`twelve_month_items_summary`는 잘린 항목 수와 반환하지 않은 합을 준다. `lists=monthly|twelve_month`로 한 목록만 받을 수 있다. |
+| 약정 | `end_date_status`가 `end_date=null`의 이유를 준다: `open_ended`(정기 지급 묶음은 끝이 정해지지 않음), `not_recorded`(대출 만기 등 기록 없음), `not_applicable`(회차 약정은 횟수로 끝남). 종료일은 추정하지 않는다. `monthly_burden_origin`은 월 부담 값을 사람이 넣었는지(`entered_by_person`) 연결 거래로 추정해 저장했는지(`estimated_from_linked_transactions`) 등을 구분한다. `status=active|ended`, `view=summary`로 응답을 줄일 수 있다. |
+| 거래 | `GET /transactions`와 사후 검토 거래 항목(`axes`)이 지급 형태·조정 가능성·흐름표 줄과 각 출처를 준다(`vw_transaction_nature`, `vw_metric_flow_lines` 값 그대로). 출처 `none`은 아무도 정하지 않았다는 뜻이다. |
+| 순자산 대조 | `status=complete`는 항목을 모두 계산할 수 있었다는 뜻이지 변화가 설명되었다는 뜻이 아니다. `unexplained_share_of_change`(설명되지 않은 차이 ÷ 순자산 변화의 절댓값)로 크기를 본다. 목적 미정 이체가 있으면 `investment_valuation_change_provisional=true`: 그 이체가 투자 입금일 수 있어 투자 평가 변동이 잠정값이다. |
+| 색인 | `/read/index`에 월말 전망(대시보드 `month_projection`)과 오차 경로 항목, 부호가 있어 0–1 밖일 수 있는 비율 목록(`signed_ratio_fields`), 어휘 대응표(`vocabulary_mapping`)가 있다. |
+
+같은 뜻 다른 이름(이름은 바꾸지 않는다):
+
+| `/read/*` | 지표 응답(`/metrics/net-worth/*` 등) | 뜻 |
+|---|---|---|
+| `status=classification_incomplete` | `status=incomplete_classification` | 사람이 아직 정하지 않은 분류(조정 가능성, 이체 목적)가 있어 불완전함 |
+| `basis` | `contract` | 무엇을 어떤 규칙으로 계산했는지. `/read/*`는 지표의 `contract`를 `basis`로 옮겨 싣는다 |
+| `status_reasons[]`(코드·이름) | `status_reasons[]`(문장) | 상태의 이유 |
