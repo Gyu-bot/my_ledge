@@ -23,6 +23,9 @@ from app.models.nature_axes import (  # noqa: E402
     RecurringCommitment,
 )
 from app.models.transaction import Transaction  # noqa: E402
+from app.services.monthly_projection_service import (  # noqa: E402
+    get_monthly_projection,
+)
 from read_surface_ledger import build_read_surface_ledger  # noqa: E402
 
 READ_PATHS = [
@@ -816,3 +819,105 @@ async def test_unexplained_share_is_withheld_when_net_worth_does_not_change(
     assert items["net_worth_change"] == 0
     assert items["unexplained_share_of_change"] is None
     assert items["unexplained_share_withheld_reason"] == "net_worth_change_zero"
+
+
+# --------------------------------------------------------------------------
+# Finding 7: month-end projection completeness and loan rows.
+# --------------------------------------------------------------------------
+
+
+async def test_projection_lists_income_left_out_of_the_total(
+    db_session: AsyncSession,
+):
+    for month, payday in zip(range(1, 7), (3, 25, 5, 27, 4, 26), strict=True):
+        for day in (2, 5, 9, 13, 17, 21, 25, 28):
+            db_session.add(
+                _tx(date(2031, month, day), -100, category="food-a", merchant="grocer")
+            )
+        income = _tx(
+            date(2031, month, payday), 100_000, category="급여", merchant="payer"
+        )
+        income.type = "수입"
+        db_session.add(income)
+    db_session.add(_tx(date(2031, 7, 20), -100, category="food-a", merchant="grocer"))
+    await db_session.commit()
+    projection = await get_monthly_projection(
+        db_session, reference_date=date(2031, 7, 20)
+    )
+    (source,) = projection.income_sources
+    assert source.status == "uncertain" and source.remaining_amount == 0
+    assert projection.projected_month_end_net is not None
+    completeness = projection.completeness
+    assert completeness is not None
+    assert completeness.status == "known_components_only"
+    (left_out,) = completeness.left_out
+    assert left_out.component == "income_source"
+    assert left_out.reason_code == "income_source_uncertain"
+    assert left_out.key == source.source_key
+
+
+async def test_projection_loan_component_has_one_row_per_loan(
+    db_session: AsyncSession,
+):
+    await build_read_surface_ledger(db_session)
+    projection = await get_monthly_projection(
+        db_session, reference_date=date(2026, 8, 14)
+    )
+    loan = next(c for c in projection.expense_components if c.kind == "loan")
+    (row,) = loan.sources
+    assert row.loan_account_id is not None
+    assert row.expected_monthly_amount == 450_000
+    assert row.observed_net_expense == 450_000
+    assert row.expected_remaining == 0
+    assert row.match_method == "loan_link"
+    assert row.recorded_monthly_payment_source == "manual"
+    assert loan.expected_remaining == sum(
+        r.expected_remaining or 0 for r in loan.sources
+    )
+    assert projection.completeness is not None
+    assert projection.completeness.status in {
+        "all_known_components",
+        "known_components_only",
+        "not_projected",
+    }
+    if projection.projected_month_end_net is None:
+        assert projection.completeness.status == "not_projected"
+
+
+# --------------------------------------------------------------------------
+# Finding 11 / 13: the index points at the projection and states exceptions.
+# --------------------------------------------------------------------------
+
+
+async def test_index_lists_projection_and_signed_ratio_fields(
+    async_client: AsyncClient, api_headers: dict[str, str]
+):
+    body = (await async_client.get("/api/v1/read/index", headers=api_headers)).json()
+    entries = {entry["key"]: entry for entry in body["entries"]}
+    projection = entries["month_end_projection"]
+    assert projection["path"] == "/api/v1/canonical-views/dashboard"
+    assert projection["response_field"] == "month_projection"
+    assert projection["definition"] and projection["notes"]
+    accuracy = entries["month_projection_accuracy"]
+    assert accuracy["path"] == "/api/v1/canonical-views/month-projection/accuracy"
+    assert "오차" in accuracy["definition"]
+    assert "adjustability_undecided_share" in body["signed_ratio_fields"]
+    assert "residual_rate" in body["signed_ratio_fields"]
+    pairs = {
+        (item["read_surface"], item["net_worth_metrics"])
+        for item in body["vocabulary_mapping"]
+    }
+    assert (
+        "status=classification_incomplete",
+        "status=incomplete_classification",
+    ) in pairs
+    assert "baseline" in entries["comparison_monthly_flow"]["parameters"]
+    assert {"status", "view"} <= set(entries["commitments"]["parameters"])
+    schema = app.openapi()["paths"]
+    for entry in body["entries"]:
+        assert entry["path"] in schema, entry["path"]
+        declared = {
+            param["name"]
+            for param in schema[entry["path"]]["get"].get("parameters", [])
+        }
+        assert set(entry["parameters"]) <= declared, (entry["key"], declared)

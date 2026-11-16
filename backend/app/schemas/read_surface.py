@@ -833,6 +833,16 @@ class ReadSurfaceEntry(BaseModel):
     provided_by: str
     parameters: list[str] = Field(default_factory=list)
     notes: str | None = None
+    response_field: str | None = Field(
+        default=None,
+        description="값이 응답 안의 한 필드에 있을 때 그 필드 이름(예: month_projection).",
+    )
+
+
+class ReadVocabularyMapping(BaseModel):
+    read_surface: str
+    net_worth_metrics: str
+    meaning: str
 
 
 class ReadSurfaceIndexResponse(BaseModel):
@@ -843,3 +853,11 @@ class ReadSurfaceIndexResponse(BaseModel):
     status_vocabulary: dict[str, str]
     format_rules: list[str]
     migration_document: str
+    signed_ratio_fields: dict[str, str] = Field(
+        default_factory=dict,
+        description="0–1 규칙의 예외: 부호가 있거나 0–1 밖일 수 있는 비율 필드 → 이유.",
+    )
+    vocabulary_mapping: list[ReadVocabularyMapping] = Field(
+        default_factory=list,
+        description="/read/*와 지표 응답(/metrics/net-worth/* 등)의 같은 뜻 다른 이름.",
+    )

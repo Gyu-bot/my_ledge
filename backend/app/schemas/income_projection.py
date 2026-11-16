@@ -110,6 +110,28 @@ class RecurringExpenseProjectionSource(BaseModel):
     commitment_id: int | None = None
     cycle: Literal["monthly", "yearly", "n_times"] | None = None
     end_date: date | None = None
+    # Loan component rows (one per loan added to the expense assumption).
+    loan_account_id: int | None = None
+    match_method: (
+        Literal[
+            "loan_link",
+            "loan_merchant_rule_unconfirmed",
+            "loan_link_and_merchant_rule",
+            "no_repayment_this_month",
+        ]
+        | None
+    ) = Field(
+        default=None,
+        description=(
+            "대출 행만: 이번 달 상환을 어떻게 찾았나. loan_link(대출 계좌 연결), "
+            "loan_merchant_rule_unconfirmed(사람이 등록한 대출 거래처 규칙, 연결 미확인), "
+            "둘 다, 또는 이번 달 상환 없음."
+        ),
+    )
+    recorded_monthly_payment_source: str | None = Field(
+        default=None,
+        description="대출 행만: 쓴 월 상환액의 출처(manual / estimated_from_linked_transactions).",
+    )
 
 
 class ProjectionCommitmentNotInExpense(BaseModel):
@@ -212,6 +234,41 @@ class ProjectionAccuracy(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+ProjectionCompletenessStatus = Literal[
+    "all_known_components", "known_components_only", "not_projected"
+]
+PROJECTION_COMPLETENESS_LABELS: dict[str, str] = {
+    "all_known_components": "알려진 구성 요소를 모두 반영한 전망",
+    "known_components_only": "일부 구성 요소를 빼고 반영한 전망(전체 전망이 아님)",
+    "not_projected": "월말 값을 내지 않음",
+}
+
+
+class ProjectionLeftOutComponent(BaseModel):
+    component: Literal["income_source", "loan", "installment", "recurring", "variable"]
+    key: str | None = Field(
+        default=None, description="수입 출처 source_key, 대출 계좌 id 등."
+    )
+    name: str | None = None
+    reason_code: str
+    reason: str
+
+
+class ProjectionCompleteness(BaseModel):
+    """Whether projected_month_end_net covers every known component."""
+
+    status: ProjectionCompletenessStatus
+    status_label: str
+    left_out: list[ProjectionLeftOutComponent] = Field(default_factory=list)
+    basis: str = (
+        "projected_month_end_net만 읽으면 빠진 구성 요소를 알 수 없다. 남은 금액을 0으로 "
+        "둔 수입 출처(확인 필요 uncertain, 규칙으로 자동 중단 stopped), 지출 가정에 넣지 "
+        "않은 대출, 추정하지 못한 지출 구성 요소를 left_out에 나열한다. left_out이 "
+        "있으면 known_components_only, 월말 값이 없으면 not_projected. 월말을 넘는 "
+        "전망은 하지 않는다."
+    )
+
+
 class MonthlyProjection(BaseModel):
     period: str
     as_of_date: date
@@ -250,3 +307,4 @@ class MonthlyProjection(BaseModel):
     # (GET /canonical-views/month-projection/accuracy): replaying the forecast
     # 15 times is too slow for every dashboard request.
     remaining_expense_adjustability: ProjectionAdjustabilityShare | None = None
+    completeness: ProjectionCompleteness | None = None

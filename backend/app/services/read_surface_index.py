@@ -5,8 +5,12 @@ from app.schemas.read_surface import (
     STATUS_LABELS,
     ReadSurfaceEntry,
     ReadSurfaceIndexResponse,
+    ReadVocabularyMapping,
 )
 from app.services.metric_views import FLOW_DEFINITION, SPEND_CUBE_DEFINITION
+from app.services.projection_accuracy_service import (
+    DEFINITION as PROJECTION_ACCURACY_DEFINITION,
+)
 from app.services.net_worth_service import (
     EMERGENCY_FUND_DEFINITION,
     RECONCILIATION_DEFINITION,
@@ -24,6 +28,37 @@ FORMAT_RULES = [
     "status는 ok, classification_incomplete, no_transactions, not_imported 중 하나다. "
     "조회 실패는 HTTP 503과 status=query_failed 본문, 인증 실패는 HTTP 401이다.",
     "스냅샷 기준일은 종류(자산·대출·투자·보험·프로필)마다 따로 주고 합치지 않는다.",
+    "예외: signed_ratio_fields에 적은 비율 필드는 부호가 있고 0–1 밖일 수 있다. "
+    "분류 완성도는 부호 없는 *_gross_share와 미정 거래 수로 읽는다.",
+]
+SIGNED_RATIO_FIELDS = {
+    "adjustability_undecided_share": (
+        "미정 순액 ÷ 총지급. 미정 쪽 환불이 결제보다 크면 음수(classification, "
+        "period_scope.periods[], 월 흐름표 items[], data-status classification)."
+    ),
+    "adjustability_decided_share": "1 − 순액 미정 비중. 1보다 클 수 있다.",
+    "residual_rate": "잔여 ÷ 수입. 지출이 수입보다 크면 음수(월 흐름표, 비교 residual_rate).",
+    "unexplained_share_of_change": (
+        "설명되지 않은 차이 ÷ |순자산 변화|(/metrics/net-worth/*). 부호 있음, 절댓값이 "
+        "1을 넘을 수 있음."
+    ),
+}
+VOCABULARY_MAPPING = [
+    ReadVocabularyMapping(
+        read_surface="status=classification_incomplete",
+        net_worth_metrics="status=incomplete_classification",
+        meaning="사람이 아직 분류(조정 가능성·이체 목적)를 정하지 않은 금액이 있어 불완전함.",
+    ),
+    ReadVocabularyMapping(
+        read_surface="basis (definition, scope, rules, field_scopes, assumptions)",
+        net_worth_metrics="contract (definition, scope, inclusion, field_scopes, as_of)",
+        meaning="무엇을 어떤 규칙으로 계산했는지. /read/*는 contract를 basis로 옮겨 싣는다.",
+    ),
+    ReadVocabularyMapping(
+        read_surface="status_reasons[] (code, label, periods, detail)",
+        net_worth_metrics="status_reasons[] (한국어 문장)",
+        meaning="상태의 이유. /read/*는 코드와 이름, 지표 응답은 문장 목록.",
+    ),
 ]
 
 
@@ -76,7 +111,7 @@ def build_index() -> ReadSurfaceIndexResponse:
                 path=f"{READ_PREFIX}/comparison/monthly-flow",
                 questions=["Q1", "Q2"],
                 definition="comparison.v1",
-                parameters=["period"],
+                parameters=["period", "baseline"],
             ),
             entry(
                 key="comparison_contributions",
@@ -84,7 +119,15 @@ def build_index() -> ReadSurfaceIndexResponse:
                 path=f"{READ_PREFIX}/comparison/contributions",
                 questions=["Q2", "Q3"],
                 definition="comparison.v1",
-                parameters=["period", "adjustability", "level", "category", "limit"],
+                parameters=[
+                    "period",
+                    "adjustability",
+                    "level",
+                    "category",
+                    "limit",
+                    "baseline",
+                    "lists",
+                ],
             ),
             entry(
                 key="review_items",
@@ -100,7 +143,7 @@ def build_index() -> ReadSurfaceIndexResponse:
                 path=f"{READ_PREFIX}/commitments",
                 questions=["Q4"],
                 definition="commitments.v1",
-                parameters=["period"],
+                parameters=["period", "status", "view"],
             ),
             ReadSurfaceEntry(
                 key="net_worth_intervals",
@@ -150,6 +193,39 @@ def build_index() -> ReadSurfaceIndexResponse:
                     "(응답의 status, status_reasons)."
                 ),
             ),
+            ReadSurfaceEntry(
+                key="month_end_projection",
+                name="진행월 월말 순현금흐름 전망",
+                path="/api/v1/canonical-views/dashboard",
+                response_field="month_projection",
+                questions=[],
+                definition="monthly_projection (T064)",
+                availability="live",
+                availability_label=live,
+                provided_by="T064",
+                parameters=["reference_date"],
+                notes=(
+                    "대시보드 응답의 month_projection 필드. 진행월의 관측값 + 남은 기간 가정 "
+                    "= 월말 순현금흐름(projected_month_end_net). 월말을 넘는 전망은 없다. "
+                    "completeness가 빠진 구성 요소(남은 금액을 0으로 둔 수입 출처, 지출 가정에 "
+                    "넣지 않은 대출, 추정 못 한 지출)를 밝힌다. 공통 봉투 없이 그대로 준다."
+                ),
+            ),
+            ReadSurfaceEntry(
+                key="month_projection_accuracy",
+                name="월말 전망의 지난 오차",
+                path="/api/v1/canonical-views/month-projection/accuracy",
+                questions=[],
+                definition=PROJECTION_ACCURACY_DEFINITION,
+                availability="live",
+                availability_label=live,
+                provided_by="T064",
+                parameters=["reference_date"],
+                notes=(
+                    "최근 마감월에 같은 전망 코드를 다시 돌려 흐름표 잔여와 비교한 오차"
+                    "(기준일 구간별 중앙값). 읽기 전용, 저장하지 않는다."
+                ),
+            ),
             entry(
                 key="data_status",
                 name="자료 현황",
@@ -162,4 +238,6 @@ def build_index() -> ReadSurfaceIndexResponse:
         status_vocabulary=dict(STATUS_LABELS),
         format_rules=FORMAT_RULES,
         migration_document="docs/agents/read-surface-migration.md",
+        signed_ratio_fields=dict(SIGNED_RATIO_FIELDS),
+        vocabulary_mapping=list(VOCABULARY_MAPPING),
     )

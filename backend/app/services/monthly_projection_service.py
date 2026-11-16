@@ -42,10 +42,13 @@ from app.schemas.income_projection import (
     ExpenseProjectionComponent,
     IncomeExpectation,
     IncomeProjectionSource,
+    PROJECTION_COMPLETENESS_LABELS,
     MonthlyProjection,
     ProjectionAdjustabilityShare,
     ProjectionCommitmentNotInExpense,
+    ProjectionCompleteness,
     ProjectionCoverage,
+    ProjectionLeftOutComponent,
     ProjectionTwelveMonthWindow,
     RecurringExpenseProjectionSource,
     income_source_key,
@@ -742,6 +745,60 @@ LOAN_WITHOUT_ACCOUNT_REASON = (
 )
 
 
+def _loan_source(
+    loan: Loan,
+    account: LoanAccount | None,
+    *,
+    name: str,
+    monthly: int | None,
+    current_rows: list[dict[str, Any]],
+    warnings: list[str],
+) -> RecurringExpenseProjectionSource:
+    """One loan row of the loan component: what was used and how it matched."""
+    payments = sum(-row["amount"] for row in current_rows if row["amount"] < 0)
+    refunds = sum(row["amount"] for row in current_rows if row["amount"] > 0)
+    paid = payments - refunds
+    linked = any(not row["_rule"] for row in current_rows)
+    by_rule = any(row["_rule"] for row in current_rows)
+    match_method = (
+        "loan_link_and_merchant_rule"
+        if linked and by_rule
+        else "loan_link"
+        if linked
+        else "loan_merchant_rule_unconfirmed"
+        if by_rule
+        else "no_repayment_this_month"
+    )
+    remaining = max(monthly - paid, 0) if monthly is not None else None
+    return RecurringExpenseProjectionSource(
+        source_key=f"loan:{account.id}" if account is not None else f"loan:{name}",
+        merchant=name,
+        expected_monthly_amount=monthly,
+        observed_payment_amount=payments,
+        observed_refund_amount=refunds,
+        observed_net_expense=paid,
+        expected_remaining=remaining,
+        additional_observed_amount=max(paid - monthly, 0) if monthly is not None else 0,
+        confidence="unavailable"
+        if monthly is None
+        else "low"
+        if warnings
+        else "medium",
+        status="review" if warnings else "expected" if remaining else "observed",
+        basis=(
+            f"대출 스냅샷 {loan.snapshot_date.isoformat()}의 월상환액"
+            + (f" {monthly}원" if monthly is not None else "(기록 없음)")
+            + f" − 이번 달 관측 상환 {paid}원(연결 또는 대출 거래처 규칙) = 남은 상환"
+            + (f" {remaining}원" if remaining is not None else " 추정 안 함")
+            + "; 상환일 정보는 없음"
+        ),
+        warnings=warnings,
+        loan_account_id=account.id if account is not None else None,
+        match_method=match_method,  # type: ignore[arg-type]
+        recorded_monthly_payment_source=loan.monthly_payment_source,
+    )
+
+
 def _loan_name(loan: Loan, account: LoanAccount | None) -> str:
     if account is not None and account.display_name_user:
         return account.display_name_user
@@ -1099,6 +1156,7 @@ def _expense_components(
     not_in_expense: list[ProjectionCommitmentNotInExpense] = []
     loan_unconfirmed: list[dict[str, Any]] = []
     included_loans = 0
+    loan_sources: list[RecurringExpenseProjectionSource] = []
     for loan, account in loans:
         if loan.balance is not None and loan.balance <= 0:
             continue
@@ -1138,16 +1196,32 @@ def _expense_components(
         current_rows = [row for row in rows if _period(row["date"]) == period]
         paid = sum(-row["amount"] for row in current_rows)
         unconfirmed = [row for row in current_rows if row["_rule"]]
+        source_warnings: list[str] = []
         if unconfirmed:
             loan_unconfirmed.extend(unconfirmed)
             loan_warnings.append(
                 f"{name}: 대출 거래처 규칙에 맞지만 연결되지 않은 이번 달 상환을 관측 상환으로 봄; "
                 "연결 확인 필요"
             )
+            source_warnings.append(
+                "대출 거래처 규칙에 맞지만 연결되지 않은 이번 달 상환을 관측 상환으로 봄; "
+                "연결 확인 필요"
+            )
         if monthly is None:
             reasons["loan"].append("월상환액을 확인할 수 없는 대출이 있음")
+            source_warnings.append("월상환액이 기록되지 않아 남은 상환을 추정하지 않음")
         else:
             loan_remaining += max(monthly - paid, 0)
+        loan_sources.append(
+            _loan_source(
+                loan,
+                account,
+                name=name,
+                monthly=monthly,
+                current_rows=current_rows,
+                warnings=source_warnings,
+            )
+        )
     if included_loans:
         # An unlinked loan-looking payment could be one of the loans added
         # above; it cannot be told apart without a link or a rule.
@@ -1387,7 +1461,11 @@ def _expense_components(
             if component_warnings.get(kind)
             else "medium",
             warnings=component_warnings.get(kind, []),
-            sources=recurring_sources if kind == "recurring" else [],
+            sources=recurring_sources
+            if kind == "recurring"
+            else loan_sources
+            if kind == "loan"
+            else [],
             link_unconfirmed_count=len(unconfirmed.get(kind, [])),
             link_unconfirmed_amount=sum(
                 -row["amount"] for row in unconfirmed.get(kind, [])
@@ -1649,6 +1727,10 @@ async def get_monthly_projection(
     projected_expense = (
         observed_expense + remaining_expense if remaining_expense is not None else None
     )
+    projected_net = (
+        projected_income - projected_expense if projected_expense is not None else None
+    )
+    completeness = _projection_completeness(sources, components, projected_net)
     return MonthlyProjection(
         period=_period(reference_date),
         as_of_date=reference_date,
@@ -1667,9 +1749,7 @@ async def get_monthly_projection(
         - known_remaining_expense,
         projected_month_expense=projected_expense,
         observed_net_cashflow=observed_income - observed_expense,
-        projected_month_end_net=projected_income - projected_expense
-        if projected_expense is not None
-        else None,
+        projected_month_end_net=projected_net,
         confidence="unavailable"
         if projected_expense is None
         else "low"
@@ -1690,4 +1770,66 @@ async def get_monthly_projection(
         coverage=coverage,
         as_of_basis=as_of_basis,  # type: ignore[arg-type]
         remaining_expense_adjustability=remaining_adjustability,
+        completeness=completeness,
+    )
+
+
+def _projection_completeness(
+    sources: list[IncomeProjectionSource],
+    components: list[ExpenseProjectionComponent],
+    projected_net: int | None,
+) -> ProjectionCompleteness:
+    """Which known components the month-end total leaves out, and why."""
+    left_out: list[ProjectionLeftOutComponent] = []
+    for source in sources:
+        if source.status == "uncertain":
+            code = "income_source_uncertain"
+        elif source.status == "stopped" and source.confidence == "low":
+            # Stopped by the history rule, not by a person.
+            code = "income_source_stopped_by_rule"
+        else:
+            continue
+        left_out.append(
+            ProjectionLeftOutComponent(
+                component="income_source",
+                key=source.source_key,
+                name=source.merchant,
+                reason_code=code,
+                reason=source.reason,
+            )
+        )
+    for component in components:
+        for item in component.not_in_expense_commitments:
+            left_out.append(
+                ProjectionLeftOutComponent(
+                    component="loan",
+                    key=str(item.loan_account_id)
+                    if item.loan_account_id is not None
+                    else None,
+                    name=item.name,
+                    reason_code=item.reason_code,
+                    reason=item.reason,
+                )
+            )
+        if component.expected_remaining is None:
+            left_out.append(
+                ProjectionLeftOutComponent(
+                    component=component.kind,
+                    key=component.kind,
+                    reason_code="component_not_estimated",
+                    reason="; ".join(component.missing_reasons)
+                    or "남은 금액을 추정하지 못함",
+                )
+            )
+    status = (
+        "not_projected"
+        if projected_net is None
+        else "known_components_only"
+        if left_out
+        else "all_known_components"
+    )
+    return ProjectionCompleteness(
+        status=status,  # type: ignore[arg-type]
+        status_label=PROJECTION_COMPLETENESS_LABELS[status],
+        left_out=left_out,
     )

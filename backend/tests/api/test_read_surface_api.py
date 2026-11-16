@@ -285,7 +285,11 @@ async def test_index_lists_surface_with_questions_and_versions(
         f"/api/v1/metrics/net-worth/{name}"
         for name in ("intervals", "reconciliation", "emergency-fund")
     }
-    assert paths == set(ENVELOPE_PATHS) | net_worth
+    projection = {
+        "/api/v1/canonical-views/dashboard",
+        "/api/v1/canonical-views/month-projection/accuracy",
+    }
+    assert paths == set(ENVELOPE_PATHS) | net_worth | projection
     covered = {question for entry in body["entries"] for question in entry["questions"]}
     assert covered == {"Q1", "Q2", "Q3", "Q4", "Q5", "Q6"}
     assert all(entry["definition"] for entry in body["entries"])
