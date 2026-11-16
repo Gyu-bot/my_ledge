@@ -11,6 +11,7 @@ import { useDataStatus, useMonthlyFlow } from '../../hooks/useMetrics'
 import { PageHeader } from '../../shell/PageHeader'
 import type { MonthlyFlowMonth } from '../../types/metrics'
 import { AmountDrilldown, type DrillTarget } from '../analysis/AmountDrilldown'
+import { SpendingReferenceCard } from '../analysis/SpendingReferenceCard'
 import { DataStatusStrip } from '../analysis/DataStatusStrip'
 import type { FlowMeasureKey } from '../analysis/flowMeasures'
 import { formatDateKo, formatPeriodKo } from '../analysis/periods'
@@ -176,6 +177,7 @@ export function MonthClosePage() {
           </div>
 
           <div className="xl:col-start-1 xl:row-start-2">
+            {selectedPeriod ? <SpendingReferenceCard period={selectedPeriod} /> : null}
             {items.length > 0 ? (
               <TrendCard
                 items={items}

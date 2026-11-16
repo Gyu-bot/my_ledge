@@ -129,6 +129,18 @@ def build_index() -> ReadSurfaceIndexResponse:
                     "lists",
                 ],
             ),
+            ReadSurfaceEntry(
+                key="spending_reference",
+                name="연간성 지출 참고와 한도 대비",
+                path=f"{READ_PREFIX}/spending-reference",
+                questions=["Q1", "Q3"],
+                definition="spending_reference.v1",
+                parameters=["period"],
+                availability="live",
+                availability_label=live,
+                provided_by="T062",
+                notes="12개월 월 환산은 참고값. 한도 대비는 완전한 마감월에만. 한도 이력은 인증된 /spending-limits API로 사람이 입력한다.",
+            ),
             entry(
                 key="review_items",
                 name="사후 검토할 거래",

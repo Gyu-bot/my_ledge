@@ -395,7 +395,7 @@ async def get_spend_cube(
     end_period: str | None,
     group_by: list[str],
     filters: dict[str, str],
-    limit: int,
+    limit: int | None,
 ) -> SpendCubeResponse:
     cube = SPEND_CUBE_VIEW
     unknown = [name for name in group_by if name not in SPEND_CUBE_DIMENSIONS]

@@ -9,6 +9,7 @@ import { useAnalyticsSettings, usePatchAnalyticsSettings } from '../../hooks/use
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import { PageHeader } from '../../shell/PageHeader'
 import type { DebtStrategyPreference } from '../../types/settings'
+import { SpendingLimitsEditor } from '../settings/SpendingLimitsEditor'
 import { IncomeExpectationsEditor } from '../settings/IncomeExpectationsEditor'
 import { AnalyticsSettingsEditor } from './AnalyticsSettingsEditor'
 import { SourcePolicyEditor } from './SourcePolicyEditor'
@@ -68,6 +69,7 @@ export function SettingsPage() {
     <>
       <PageHeader title="작업대 · 설정" meta={<span>분석 파라미터 · 재무 목표</span>} />
 
+      <SpendingLimitsEditor />
       <SourcePolicyEditor />
       <SelectedInvestmentsPanel />
 

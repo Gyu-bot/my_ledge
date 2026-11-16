@@ -462,3 +462,13 @@ Main blocks:
 - Legacy `frontend/src/components/**`, `frontend/src/pages/**`, and `frontend/src/navigation.ts` should not exist after merge.
 - Legacy routes are compatibility redirects only.
 - New UI work should not reintroduce legacy page/component directories.
+
+## T062 — 기존 화면의 월 환산 참고와 한도
+
+새 route 없이 기존 화면에 추가한다.
+
+- `/`: 선택 마감월의 흐름표·추이 영역에 `SpendingReferenceCard`. 총지급 흐름표 밖에서 12개월 합계 → 월 환산(참고)을 표시하고 지출 합계에 포함하지 않는 참고값이라고 명시한다. `대분류 › 소분류`(없으면 소분류 없음), 관측 패턴/사람이 등록한 연간 약정 출처와 약정 이름, 양수 순지출 관측월 목록·개월 수, 12개월 순액과 월 환산을 표시한다. 패턴은 완전한 12개월에서 양수 순지출 월이 1~2개인 쌍이며, 등록 약정 구매·환불 줄을 패턴 금액에서 빼고 빈 쌍은 생략한다. 목록이 없으면 해당 지출이 없다는 문장을 보인다. 같은 카드 아래에 대상 월의 카테고리/조정 가능성 한도·실적·차이와 적용 시작월을 보인다.
+- `/analysis`: 선택 달에 같은 카드와 같은 read endpoint를 사용한다. 진행월은 관측 실적만 보이며 환산·한도 대비는 사유 문장으로 대체한다. 기존 분석 필터·route는 유지한다.
+- `/data/settings#spending-limits`: `SpendingLimitsEditor`. 단위·대상·원 단위 금액·적용 시작월을 모두 사람이 정한다. 조정 가능성은 미선택, 금액과 시작월도 빈 상태로 시작한다. 미분류 대분류는 별도 체크로 직접 지정한다. 추천이나 기본 금액은 없다. 같은 대상의 변경 버튼은 대상만 가져오고 새 시작월·금액은 채우지 않는다. 해제도 체크로 직접 정하고 새 이력으로 저장한다. 변경 이력은 적용 시작월별로 모두 표시한다. 쓰기 권한이 없으면 폼이 비활성화되고 실패하면 초안을 보존한다.
+
+차이의 의미는 색 대신 `초과`/`한도 미만`/`한도와 같음` 문장으로 구분한다. 미설정·부분월·자료 없음은 0원 비교로 바꾸지 않는다. 기존 Ledger Card/Field/Select/TextInput/Button/States를 재사용한다.

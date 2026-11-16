@@ -52,6 +52,9 @@ from app.services.read_surface_service import (
     read_spend_cube,
 )
 
+from app.schemas.spending_limits import ReadSpendingReferenceResponse
+from app.services.spending_limits_service import read_spending_reference
+
 logger = logging.getLogger(__name__)
 
 # Authentication first, then unknown query parameters (HTTP 422 naming each).
@@ -306,3 +309,19 @@ async def get_read_data_status(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadDataStatusResponse | JSONResponse:
     return await _guard("data_status", db_session, lambda: read_data_status(db_session))
+
+
+@router.get(
+    "/spending-reference",
+    response_model=ReadSpendingReferenceResponse,
+    responses=_ERROR_RESPONSES,
+)
+async def get_read_spending_reference(
+    period: str | None = Query(default=None, pattern=PERIOD_PATTERN),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> ReadSpendingReferenceResponse | JSONResponse:
+    return await _guard(
+        "spending_reference",
+        db_session,
+        lambda: read_spending_reference(db_session, period=period),
+    )

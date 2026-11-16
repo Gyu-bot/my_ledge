@@ -31,6 +31,7 @@ READ_PATHS = [
     "/api/v1/read/review-items",
     "/api/v1/read/commitments",
     "/api/v1/read/data-status",
+    "/api/v1/read/spending-reference",
 ]
 ENVELOPE_PATHS = READ_PATHS[1:]
 ENVELOPE_KEYS = {
@@ -49,6 +50,16 @@ ENVELOPE_KEYS = {
     "data",
 }
 DATA_KEYS = {
+    "/api/v1/read/spending-reference": {
+        "period",
+        "total_outflow",
+        "window_start_period",
+        "window_end_period",
+        "annual_items",
+        "annual_missing_reason",
+        "annual_missing_reason_label",
+        "comparisons",
+    },
     "/api/v1/read/monthly-flow": {"items"},
     "/api/v1/read/spend-cube": {
         "group_by",
