@@ -193,6 +193,13 @@ def build_index() -> ReadSurfaceIndexResponse:
                     "(응답의 status, status_reasons)."
                 ),
             ),
+            entry(
+                key="data_status",
+                name="자료 현황",
+                path=f"{READ_PREFIX}/data-status",
+                questions=["Q6"],
+                definition="data_status.v1",
+            ),
             ReadSurfaceEntry(
                 key="month_end_projection",
                 name="진행월 월말 순현금흐름 전망",
@@ -225,13 +232,6 @@ def build_index() -> ReadSurfaceIndexResponse:
                     "최근 마감월에 같은 전망 코드를 다시 돌려 흐름표 잔여와 비교한 오차"
                     "(기준일 구간별 중앙값). 읽기 전용, 저장하지 않는다."
                 ),
-            ),
-            entry(
-                key="data_status",
-                name="자료 현황",
-                path=f"{READ_PREFIX}/data-status",
-                questions=["Q6"],
-                definition="data_status.v1",
             ),
         ],
         questions=dict(QUESTION_LABELS),
