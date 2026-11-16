@@ -1,3 +1,4 @@
+vi.mock('../../features/analysis/SpendingReferenceCard', () => ({ SpendingReferenceCard: ({ period }: { period: string }) => <div data-testid="spending-reference">{period}</div> }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -107,6 +108,7 @@ describe('SpendingAnalysisPage — 지출 분석', () => {
     expect(screen.getByRole('heading', { level: 1, name: '지출 분석' })).toBeInTheDocument()
     const select = screen.getByRole('combobox', { name: '분석할 달' })
     expect(select).toHaveValue('2026-07')
+    expect(screen.getByTestId('spending-reference')).toHaveTextContent('2026-07')
     expect(within(select).getByRole('option', { name: '2026년 8월 (진행월 · 부분 기록)' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '자료 현황' })).toBeInTheDocument()
     expect(cubeCalls).toContainEqual(expect.objectContaining({ start_period: '2026-07', end_period: '2026-07', group_by: ['effective_category_major'] }))

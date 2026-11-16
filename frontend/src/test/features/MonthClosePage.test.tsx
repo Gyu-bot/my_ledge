@@ -1,3 +1,4 @@
+vi.mock('../../features/analysis/SpendingReferenceCard', () => ({ SpendingReferenceCard: ({ period }: { period: string }) => <div data-testid="spending-reference">{period}</div> }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'

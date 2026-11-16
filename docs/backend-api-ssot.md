@@ -713,3 +713,21 @@ Vocabulary mapping (names are kept; the meaning is the same):
 | `status=classification_incomplete` | `status=incomplete_classification` | A human has not yet set an axis (adjustability, transfer purpose) for some amount. |
 | `basis` (`definition`, `scope`, `rules`, `field_scopes`, `assumptions`) | `contract` (`definition`, `scope`, `inclusion`, `field_scopes`, `as_of`) | What was computed under which rules; `/read/*` carries the metric `contract` as `basis`. |
 | `status_reasons[]` (`code`, `label`, `periods`, `detail`) | `status_reasons[]` (Korean sentences) | Why the status applies. |
+
+## T062 — 연간성 지출 참고와 월 한도
+
+모든 새 경로는 `X-API-Key`가 필요하다. 기존 필드·endpoint·총지급 산식은 바꾸지 않는다.
+
+| 경로 | 계약 |
+|---|---|
+| `GET /api/v1/read/spending-reference?period=YYYY-MM` | `ReadEnvelope`, `basis.definition=spending_reference.v1`. 생략 시 최근 마감월, 없으면 진행월. `data`에 대상 월, 기존 `total_outflow`, 12개월 창 시작·끝, `annual_items`, `comparisons`를 준다. `/read/index`에 등록됨. |
+| `GET /api/v1/spending-limits` | `revisions` 전체 변경 이력, `last_closed_period`, `history_rule`. 대상별 적용 시작월 순. |
+| `POST /api/v1/spending-limits` | 201. 사람이 `target_kind=category|adjustability`, `target_value`, `effective_from_period`, `amount`를 입력한다. 대분류는 정확한 문자열(빈 문자열은 미분류), 조정 가능성은 `protected|adjustable|undecided`. `amount`는 0 이상 원 단위 정수(최대 9,000,000,000,000,000), `null`은 한도 해제. 새 버전만 추가한다. |
+
+- 연간성 판정은 T057 `twelve_month_items`를 그대로 쓴다. 대상 마감월로 끝나는 자료가 완전한 12개월 중 **월 지출 순액이 양수인 달이 1~2개인 대분류**다. 합계를 12로 나누고 원 단위 사사오입한 `monthly_equivalent`는 참고값이다. 총지급·월 실적·한도에 더하거나 대체하지 않는다. 거래 분류나 약정 주기는 바꾸지 않는다.
+- `annual_missing_reason`: 진행월이면 `month_in_progress`, 12개월 미충족·공백·월중 시작 첫 달 포함이면 `incomplete_twelve_month_window`. 이때 목록은 비운다. 해당 항목이 없는 완전한 창은 이유 없이 빈 목록이다.
+- `comparisons[]`: 대상 단위·값·한국어 이름, `actual_amount`, `limit_amount`, `limit_revision_id`, `effective_from_period`, `difference_amount`(실적 − 한도), `missing_reason`과 이름. 마감 여부와 별도로 **자료가 완전한 마감월만** 비교한다. `no_limit_set`(한도 해제 포함), `month_in_progress`, `not_imported`, `no_transactions`, `partial_month`이면 차이는 null이다. 한 달에 자료가 있지만 특정 대상 지출이 없으면 실적은 0원이다. 진행월의 실적은 관측 누적일 뿐이고 남은 예산을 내지 않는다.
+- 한도는 같은 대상에서 `effective_from_period <= 대상 월`인 최신 버전이 적용된다. 이미 마감된 달의 신규 설정·변경은 422, 같은 대상의 마지막 시작월 이하로 추가하면 409다. PUT/PATCH/DELETE는 제공하지 않는다. 열린 달에 설정한 한도는 뒤에 그 달 자료가 마감되면 비교에 사용된다. 추천값·분류 기본값·한도 기본값은 없다.
+- 카테고리 보기와 조정 가능성 보기는 같은 지출의 다른 절단이다. 한도와 실적을 두 보기 사이에서 합산하지 않는다. 실제 값은 기존 SQL 지출 큐브와 월 흐름표에서 읽는다.
+- 새 경로의 모르는 조회 인자와 틀린 period·열거값·추가 body 필드는 422다. 읽기 조회 실패는 기존 `/read/*`와 같은 503 `query_failed` 봉투다.
+- migration `20261117_0040`은 `20261116_0039` 위에 빈 `spending_limit_revisions` 표만 추가한다. 기존 행·뷰·가져오기 HTTP 계약은 바꾸지 않는다. 등록된 금융 표이므로 가져오기 검토 fingerprint·되돌리기 snapshot에 포함된다. 스키마 변경 전 준비한 검토/되돌리기 지점은 기존 스키마 검사에 의해 거절될 수 있으므로 운영 이행 시 구분한다. 이 작업은 배포하지 않는다.

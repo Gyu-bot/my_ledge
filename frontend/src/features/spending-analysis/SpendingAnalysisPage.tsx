@@ -5,6 +5,7 @@ import { ListSkeleton } from '../../ds/Skeleton'
 import { EmptyState, ErrorState } from '../../ds/States'
 import { useDataStatus, useMonthlyFlow } from '../../hooks/useMetrics'
 import { PageHeader } from '../../shell/PageHeader'
+import { SpendingReferenceCard } from '../analysis/SpendingReferenceCard'
 import { DataStatusStrip } from '../analysis/DataStatusStrip'
 import { formatPeriodKo } from '../analysis/periods'
 import { loadErrorMessage } from '../analysis/text'
@@ -84,6 +85,7 @@ export function SpendingAnalysisPage() {
               <NewPurchaseCard key={`new-${period}`} month={month} />
             )}
             <ReviewItemsCard period={period} />
+            <SpendingReferenceCard period={period} />
           </div>
         </div>
       )}

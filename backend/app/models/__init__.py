@@ -28,6 +28,7 @@ from app.models.nature_axes import (
     TransactionNatureOverride,
 )
 from app.models.purchase_gate_review import PurchaseGateReview
+from app.models.spending_limit import SpendingLimitRevision
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
 from app.models.transfer_purpose import TransferPurposeOverride, TransferPurposeRule
@@ -60,6 +61,7 @@ __all__ = [
     "PurchaseGateReview",
     "RecurringCategoryRule",
     "RecurringCommitment",
+    "SpendingLimitRevision",
     "TimestampMixin",
     "SettlementMatch",
     "SettlementMatchStatus",

@@ -2293,3 +2293,21 @@ The workbook's broker label is a fallback group identity, not evidence of a uniq
 빈 items는 KRW/USD 합이 0일 때 완전한 0건 수집이다. 항목 누락/중복/지원 외 통화/overview 불일치/환율 오류는 부분 또는 실패로 기록하고 선택 후보에서 제외한다. 공급자에 holdings 평가 timestamp가 없어 `valuation_at=observed_at`은 명시적 observation_proxy이다. 환율 유효구간은 별도로 저장되며 같은 시각의 확정 평가를 뜻하지 않는다. 조회 최신성과 시세 최신성은 다르다.
 
 계좌 그룹을 Toss로 교체하려면 동일한 단일계좌 및 국내·미국 주식 범위를 확인한다. 비주식/미분류 항목이 있으면 `unsupported_holdings_scope`로 뱅샐 유지. 예수금은 API가 제공하지 않으므로 매수가능액 등을 현금으로 대용하지 않는다. BankSalad 자산 component mapping과 cash_scope가 확인되기 전 estimated_net_worth=null은 정상적인 미확정 상태다.
+
+## T062: spending_reference.v1 and spending_limit_revisions
+
+`GET /api/v1/read/spending-reference`는 `period`(YYYY-MM) 하나를 받는다. 생략하면 가장 최근 마감월, 없으면 진행월이다. `/read/*` 공통 인증·422·503·기준일·기간별 상태·미정 비중 봉투를 따른다. 새 쓰기는 `/api/v1/spending-limits` POST이고, GET으로 이력 전체를 읽는다. 두 경로 모두 인증하고 알 수 없는 조회 인자를 거절한다.
+
+계산 경로:
+
+1. `read_monthly_flow`에서 선택 월 봉투와 총지급을 읽는다.
+2. `get_change_contributions(adjustability=all, level=category, limit=None)`의 **동일한 T057 `twelve_month_items`**를 읽는다. 자료가 모두 있는 12개월이고 월중 시작 첫 달이 없으며, 월 순지출이 양수인 달 수가 1~2개인 대분류다. 약정/수시 모두 포함한다. 환불은 게시월 차감, 유효 KRW·대출 포함 등 기존 흐름표 규칙 그대로다. 관측 달 수는 거래 건수가 아니다.
+3. `monthly_equivalent = ROUND_HALF_UP(12개월 순액 / 12)` (원). 진행월에는 환산하지 않는다. 이 값은 기존 실적 계산에 들어가지 않는다. 창이 불완전하면 `annual_missing_reason=incomplete_twelve_month_window`; 진행월은 `month_in_progress`다.
+4. 월 실적은 `get_spend_cube`의 대분류·조정 가능성 묶음에서 읽는다(한도 없이 SQL 집계 결과 전체). Python에서는 거래·큐브 금액을 다시 합산하지 않는다. 카테고리는 대분류의 정확한 값이며 빈 문자열은 미분류다.
+5. 선택 월 이하의 최신 `spending_limit_revisions`를 대상별로 선택한다. `difference_amount = actual_amount − limit_amount`. 금액은 원 단위 정수이며, 양수=초과, 음수=한도 미만, 0=같음이다. 비율·건강/위험 판정·한도 추천·잔여 예산 전망은 없다.
+
+한도 표: `id`, `target_kind(category|adjustability)`, `target_value`(대분류 최대 50자 또는 protected/adjustable/undecided), `effective_from_period`(YYYY-MM), `amount`(BigInteger nullable), 생성·수정 타임스탬프. `(target_kind, target_value, effective_from_period)` 유일, 금액 음수 금지, 조정 가능성 값 제약. 초기 표는 비어 있으며 데이터 이행이나 기존 행 수정은 없다. `amount=null`인 버전은 해당 월부터 해제, 0은 0원 한도다.
+
+POST는 이미 마감된 달을 거절한다(422). 같은 대상의 마지막 버전보다 뒤인 월만 추가한다(409). 업데이트·삭제 API는 없다. 이전 버전의 값과 효력이 과거 비교에 남는다. 적용 시작월·금액을 고르는 자동 기본값은 없으며, 사용자가 열린 달에 정해 두면 해당 달이 마감된 뒤 비교한다. PostgreSQL에서는 가져오기/되돌리기와 같은 advisory transaction lock으로 쓰기와 기준일 검사를 직렬화한다. 새 표는 기존 `Base.metadata` 기반 검토 fingerprint·되돌리기 snapshot에 포함되므로 스키마 변경 전 준비 자료는 재준비가 필요할 수 있다. HTTP 가져오기 계약은 그대로다.
+
+비교 불가 이유는 행별로 반환한다: `no_limit_set`, `month_in_progress`, `not_imported`, `no_transactions`, `partial_month`. 이유가 있으면 차이는 null이다. 달에 자료가 있지만 대상 거래가 없는 0원과 달 자체에 거래가 없는 상태는 다르다. 분류 미정은 기존 봉투에서 드러내며 조정 가능성 `undecided`도 사람이 한도를 정할 수 있다. 대분류와 조정 가능성 결과는 서로 겹치므로 합산할 수 없다.

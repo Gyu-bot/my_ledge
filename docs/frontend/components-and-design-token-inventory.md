@@ -193,3 +193,8 @@ Current frontend server state is TanStack Query based.
 - Legacy URLs should be implemented as redirects in `frontend/src/router.tsx`.
 - UI token changes should update `docs/frontend-design-tokens.md`.
 - New shared primitives should update this inventory.
+
+### T062 additions
+
+- `features/analysis/SpendingReferenceCard`: 월 결산·지출 분석 공용. `/read/spending-reference`의 총지급·12개월 월 환산 참고·한도 대비를 그대로 표시한다. 한도와 환산을 실적에 합산하지 않는다. 창/적용월/조회 불가 이유와 계산 근거를 함께 표시한다.
+- `features/settings/SpendingLimitsEditor`: `/data/settings#spending-limits`, 직접 입력/새 버전/해제/변경 이력. 추천값이나 미리 고른 분류·한도 없음. 기존 Ledger DS 컴포넌트와 토큰만 사용한다.

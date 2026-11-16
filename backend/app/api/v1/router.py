@@ -20,6 +20,7 @@ from app.api.v1.endpoints.read_surface import router as read_surface_router
 from app.api.v1.endpoints.schema import router as schema_router
 from app.api.v1.endpoints.settlement_matches import router as settlement_matches_router
 from app.api.v1.endpoints.settings import router as settings_router
+from app.api.v1.endpoints.spending_limits import router as spending_limits_router
 from app.api.v1.endpoints.transactions import router as transactions_router
 from app.api.v1.endpoints.transfer_purpose import router as transfer_purpose_router
 from app.api.v1.endpoints.upload import router as upload_router
@@ -46,6 +47,7 @@ api_router.include_router(loan_mapping_router)
 api_router.include_router(data_management_router)
 api_router.include_router(settlement_matches_router)
 api_router.include_router(transactions_router)
+api_router.include_router(spending_limits_router)
 api_router.include_router(read_surface_router)
 
 api_router.include_router(toss_router)

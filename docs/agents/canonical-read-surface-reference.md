@@ -553,3 +553,14 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `status=classification_incomplete` | `status=incomplete_classification` | 사람이 아직 정하지 않은 분류(조정 가능성, 이체 목적)가 있어 불완전함 |
 | `basis` | `contract` | 무엇을 어떤 규칙으로 계산했는지. `/read/*`는 지표의 `contract`를 `basis`로 옮겨 싣는다 |
 | `status_reasons[]`(코드·이름) | `status_reasons[]`(문장) | 상태의 이유 |
+
+## T062 — 연간성 지출 참고와 사람이 정한 한도
+
+`GET /api/v1/read/spending-reference?period=YYYY-MM` (`X-API-Key`, `/read/index`의 `spending_reference`)를 쓴다. 기본은 최근 마감월이며 없으면 진행월이다. 기간·기준일·미정 비중·조회 상태는 공통 봉투, 정의는 `basis.definition=spending_reference.v1`이다.
+
+- `data.total_outflow`: 기존 월 흐름표의 총지급. `annual_items[].monthly_equivalent`를 더하지 않는다.
+- `annual_items`: T057 12개월 기여 목록 그대로다. 완전한 12개월 중 순지출이 양수인 달이 1~2개인 대분류에 대해 `window_amount / 12`를 원 단위 사사오입한다. 지급 형태·조정 가능성을 지정하거나 예측하는 분류가 아니다. 창은 `window_start_period`, `window_end_period`다. 진행월·불완전한 창은 `annual_missing_reason`과 한국어 이유를 읽는다.
+- `comparisons`: 대상 월 실적과 그 달에 적용된 사람이 정한 월 한도를 비교한다. 차이(`difference_amount`)는 실적 − 한도. `limit_revision_id`, `effective_from_period`가 실제 적용 이력을 가리킨다. 카테고리·조정 가능성 두 보기를 서로 더하면 이중 계산이다.
+- 차이가 null이면 `missing_reason`을 먼저 읽는다. `no_limit_set`은 미설정/해제, `month_in_progress`는 진행월, `partial_month`는 월중 시작, `no_transactions`는 거래 없는 달, `not_imported`는 아직 가져오지 않은 기간이다. **미설정을 0원 한도로 간주하지 않는다.** 진행월 실적이 있어도 한도 대비나 남은 예산을 계산하지 않는다.
+- 사람이 설정하는 API는 별도 `GET/POST /api/v1/spending-limits`다. 모든 쓰기는 인증 API로만 하며 직접 DB 쓰기는 금지다. `target_kind=category|adjustability`, 정확한 `target_value`(미분류는 빈 문자열), `effective_from_period`, `amount`를 사람이 입력한다. `null`은 한도 해제, 0은 실제 0원 한도다. 시스템은 한도·분류를 미리 고르거나 추천하지 않는다.
+- 한도 이력은 추가만 가능하다. 이미 마감된 월에는 설정/변경할 수 없고, 같은 대상의 마지막 적용 시작월보다 뒤인 월이어야 한다. 각 마감월은 자기 월 이하의 최신 버전을 읽는다. 한도 미만·초과는 기록 비교이며 최종 조언이나 건강/위험 판정이 아니다.

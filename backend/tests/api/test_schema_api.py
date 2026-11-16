@@ -17,6 +17,7 @@ def test_expected_tables_exist() -> None:
         # T061 human-set transfer purpose (new tables; no existing table altered).
         "transfer_purpose_overrides",
         "transfer_purpose_rules",
+        "spending_limit_revisions",
         "merchant_alias_rules",
         "recurring_category_rules",
         "transactions",

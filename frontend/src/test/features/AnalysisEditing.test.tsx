@@ -1,3 +1,4 @@
+vi.mock('../../features/analysis/SpendingReferenceCard', () => ({ SpendingReferenceCard: () => null }))
 // T059: 분석 화면에서 거래를 고치고 돌아오면 필터와 위치가 그대로이고, 키보드만으로 열고·저장하고·닫는다.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
