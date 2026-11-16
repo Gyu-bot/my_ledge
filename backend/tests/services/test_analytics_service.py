@@ -1866,6 +1866,7 @@ def _purchase_gate_settings() -> PurchaseGateSettings:
 
 async def test_get_purchase_gate_candidates_deduplicates_reasons_and_filters_queue(
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     loan_account = LoanAccount(lender="테스트은행", product_name="신용대출")
     baseline_jan = _transaction(
@@ -2023,6 +2024,7 @@ async def test_get_purchase_gate_candidates_deduplicates_reasons_and_filters_que
         )
     )
     await db_session.commit()
+    await sync_legacy_classification()
 
     db_session.add(
         PurchaseGateReview(

@@ -90,6 +90,7 @@ async def test_all_net_worth_surfaces_share_exclusion_basis_and_preserve_raw(
 
 async def test_liquidity_uses_snapshot_bounded_observations_without_debt_overlap(
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     requested_date = date(2026, 8, 22)
     account = LoanAccount(lender="Bank", product_name="Loan")
@@ -144,12 +145,16 @@ async def test_liquidity_uses_snapshot_bounded_observations_without_debt_overlap
     merged.merged_into_id = july_essential_debt.id
     db_session.add(merged)
     await db_session.commit()
+    await sync_legacy_classification()
     result = await assets_service.get_asset_liability_health(
         db_session, snapshot_date=requested_date
     )
     assert result.monthly_required_spend == 1150  # 700+300+200-50, each once
-    assert result.required_spend_essential_total == 1000
-    assert result.required_spend_additional_debt_total == 150
+    # T056: loan-linked lines are always `protected` (vw_transaction_nature), so
+    # every debt line is in the protected (essential) part and none is left over
+    # as additional debt; the total is the same either way.
+    assert result.required_spend_essential_total == 1150
+    assert result.required_spend_additional_debt_total == 0
     assert result.monthly_debt_payment == 400
     assert result.monthly_income == 1500
     assert result.required_spend_period == "2026-07"

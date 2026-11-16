@@ -1054,7 +1054,7 @@ Single and bulk PATCH share field-presence semantics: omitted fields preserve st
   - when `is_cash_equivalent` is null, `liquidity_tier='immediate'` counts as cash-equivalent; `near_liquid` and `illiquid` do not count in the base emergency-fund months
   - when the flag is missing, the service falls back to conservative category/type name heuristics and records the assumption; `자유입출금`, `전자금융`, and `통장` count only when locked markers such as `청약`, `저금통`, `보험`, `연금`, or `부동산` are absent
   - omitted income/required-spend defaults are bounded by the selected snapshot (`input_as_of_date`), not today's date; explicit query params override defaults and appear in `manual_input_overrides`
-  - required spend uses that snapshot's latest closed calendar month (the same month if the snapshot is month-end): `max(0, required_spend_essential_total + required_spend_additional_debt_total)`. Essential expenses use signed `-amount`; linked debt expense is added only if it is not already essential. Monthly estimated debt payment is not added again.
+  - required spend uses that snapshot's latest closed calendar month (the same month if the snapshot is month-end): `max(0, required_spend_essential_total + required_spend_additional_debt_total)`. "Essential" is the resolved T056 adjustability `protected` on `vw_metric_flow_lines` (not the old `spend_necessity` column); expenses use signed `-amount`. Linked debt expense is added only if it is not already protected; because loan-linked lines are always `protected` in `vw_transaction_nature`, every linked repayment is in `required_spend_essential_total` and `required_spend_additional_debt_total` is 0 since T056 (the sum is unchanged). `undecided` spend is not assumed to be required. Monthly estimated debt payment is not added again.
   - `required_spend_period` names the observation month. Income uses the median of observed income-month totals through that closed month; missing income months are not synthesized as zero.
   - negative asset rows are excluded from cash-equivalent totals and add `negative_asset_rows_excluded` to assumptions
   - `emergency_fund_target_months` comes from effective `settings/analytics.financial_targets`; `target_progress_ratio = emergency_fund_months / emergency_fund_target_months` when required spend is available
@@ -1431,7 +1431,7 @@ Estimate metadata on repayment metadata, loan summary and recalculation items:
 - Query params:
   - `as_of_date` optional; omitted uses server date
 - Response includes `period`, `as_of_date`, `month_progress_ratio`, `discretionary_spend`, `baseline_monthly_spend`, `baseline_spend_at_same_progress`, `velocity_ratio`, `risk_level`, `confidence`, `classification_coverage_ratio`, `unclassified_spend`, `reasons[]`, and `assumptions[]`.
-- Calculation excludes loan-linked repayments and uses `spend_necessity='discretionary'`; classification coverage below the configured minimum lowers confidence instead of producing a strong warning.
+- Calculation excludes loan-linked repayments. Discretionary spend is the resolved T056 adjustability `adjustable` (`vw_transaction_nature`: transaction value > commitment value > category default; installment-linked rows are fixed `protected`), and "classified" for coverage means `protected` or `adjustable`; `undecided` rows count as unclassified spend. The old `spend_necessity` column is not read. Classification coverage below the configured minimum lowers confidence instead of producing a strong warning.
 - Current/baseline/unclassified spend use signed net expense. Coverage uses positive charge amounts only, so refunds do not make coverage ratios misleading. A nonpositive prorated baseline yields a null velocity ratio.
 
 #### `GET /api/v1/analytics/purchase-gate-candidates`
@@ -1446,11 +1446,12 @@ Legacy naming for the same post-transaction review queue. Prefer `GET /api/v1/an
   - `review_status`
   - `page`, `per_page`
 - Candidate types: `large_oneoff`, `new_merchant`, `merchant_spike`, `discretionary_spike`.
-- Candidate scope:
+- Candidate scope (T056 axes from `vw_transaction_nature`; the old `cost_kind`/`spend_necessity` columns are not read):
   - `loan_account_id is null`
-  - `cost_kind != 'fixed'`
-  - `spend_necessity == 'discretionary'`
+  - `payment_form = 'ad_hoc'` (`commitment_kind is null`: no loan/installment link and not a member of a recurring commitment; the old "not fixed cost")
+  - resolved `adjustability = 'adjustable'` (the old `spend_necessity = 'discretionary'`); `protected` and `undecided` rows are not candidates
   - amount meets the effective minimum candidate amount
+- The same detector feeds `/api/v1/read/review-items` (`subject=transaction`).
 - Response items include `candidate_key`, `candidate_type`, `candidate_types[]`, `transaction_id`, `merchant`, `amount`, `category`, `signals`, `risk_level`, `review_priority`, `confidence`, `suggested_review_window`, `reasons[]`, `assumptions[]`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing='post_transaction'`, `candidate_purpose='future_friction_rule_candidate'`, and `future_friction_suggestion`.
 - `candidate_key` is canonicalized to `transaction:{transaction_id}`. Multiple matched reasons are collapsed into one row per transaction; reason-specific signals are namespaced in `signals`.
 - Confirmed settlement refunds are netted before scoring. Fully refunded purchases are excluded; partial refunds are scored by net spend and expose `refund_netting_refund_total`.
@@ -2021,7 +2022,21 @@ The old columns stay, keep every existing endpoint field and filter, and still f
 - ad hoc with a payment-form signal (`cost_kind` or `recurring_payment_kind` set): excluded from a matching bundle; a necessity-only edit keeps the current membership;
 - flags `installment_link_unconfirmed` and `necessity_conflict` follow the mapping.
 
-Writes through the new API never touch the old columns; the two can diverge and the new tables win. The old columns are therefore not read-only yet (plan criterion "읽기 전용으로 남고" is only partly met until T059 replaces the frontend workflow).
+Writes through the new API never touch the old columns; the two can diverge and the new tables win.
+
+### Readers of the old columns (consistency follow-up)
+
+Readers whose decision has an exact counterpart in the mapping read the resolved axes, not the old columns, so a classification made only through the new API reaches them. Correspondence used: discretionary ↔ `adjustable`, essential ↔ `protected`, empty ↔ `undecided`, fixed cost ↔ committed (recurring bundle). On data where the old columns and the new axes agree (for example right after the backfill) the response bodies are byte-identical to the old ones; only the `/read/review-items` assumption sentence about the detector changed.
+
+| Reader | Endpoint(s) | Old decision | Now |
+|---|---|---|---|
+| `get_discretionary_velocity` | `/analytics/discretionary-velocity` | 재량 = `spend_necessity='discretionary'`, 분류됨 = essential/discretionary | `vw_transaction_nature.adjustability` = `adjustable` / `protected`+`adjustable` |
+| `_is_purchase_gate_base_row` | `/analytics/purchase-gate-candidates`, `/analytics/spending-review-candidates`, `/read/review-items` | no loan link, `cost_kind<>'fixed'`, `spend_necessity='discretionary'` | no loan link, `commitment_kind is null` (ad hoc), adjustability `adjustable` |
+| `_derive_liquidity_health_defaults` | `/analytics/liquidity-health` (derived required spend) | essential = `spend_necessity='essential'`; loan lines not essential added as debt | `vw_metric_flow_lines.adjustability='protected'`; loan lines not protected (none since loan lines are fixed `protected`) |
+
+Where the two disagree the new axes decide, for example: a loan- or installment-linked row is `protected` whatever its old necessity; `cost_kind='variable'` + `monthly_recurring` (or `monthly_recurring` without `cost_kind`) is a committed recurring payment and is not a review candidate; `cost_kind='fixed'` + `not_recurring` is ad hoc and can be one.
+
+Left on the old columns (no exact counterpart, or a database view that would need a migration): `/analytics/fixed-cost-summary` and `/analytics/fixed-cost-trend` (fixed/variable/unclassified `cost_kind` split and `fixed_cost_necessity` vs `spend_necessity` buckets; the new payment form has no "unclassified" state); `/analytics/recurring-payments` (per-merchant counts of `recurring_payment_kind` values, including `not_recurring`/unclassified, and the `activity_status` rule that reads them); the PostgreSQL legacy views `vw_monthly_cashflow` (fixed/variable/essential columns), `vw_true_spendable_monthly`, `vw_fixed_cost_monthly_summary`, `vw_recurring_merchant_monthly` and the `needs_cost_kind`/`needs_fixed_cost_necessity` flags of `vw_unclassified_work_queue` (read through `/canonical-views/dashboard`); the installment-link candidate list (`/installment-transaction-links`, `recurring_payment_kind='installment'`); the `GET /transactions` old-column filters and the `is_edited` flag (stored-value filters; the flow-row filters `flow_row`/`payment_form`/`adjustability` already read the new axes). The old columns are therefore not read-only yet (plan criterion "읽기 전용으로 남고" is only partly met until T059 replaces the frontend workflow).
 
 ### Work queue (`vw_unclassified_work_queue`, 0038)
 

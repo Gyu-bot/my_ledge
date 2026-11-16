@@ -24,7 +24,9 @@ def _expense(day: date, amount: int, merchant: str) -> Transaction:
 
 
 async def test_all_signal_read_surfaces_accept_explicit_historical_cutoff(
-    async_client: AsyncClient, db_session: AsyncSession
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     current = _expense(date(2026, 3, 5), -150_000, "현재")
     future = _expense(date(2026, 4, 5), -300_000, "미래")
@@ -37,6 +39,7 @@ async def test_all_signal_read_surfaces_accept_explicit_historical_cutoff(
         ]
     )
     await db_session.flush()
+    await sync_legacy_classification()
     for endpoint, params, expected in [
         (
             "category-mom",
@@ -96,12 +99,15 @@ async def test_recurring_filters_validate_before_querying(
 
 
 async def test_cancellation_evidence_is_serialized_without_confident_warning(
-    async_client: AsyncClient, db_session: AsyncSession
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     charge = _expense(date(2026, 3, 5), -150_000, "주유")
     refund = _expense(date(2026, 3, 5), 150_000, "주유")
     db_session.add_all([charge, refund])
     await db_session.flush()
+    await sync_legacy_classification()
     response = await async_client.get(
         "/api/v1/analytics/spending-review-candidates",
         params={"start_date": "2026-03-01", "end_date": "2026-03-31"},

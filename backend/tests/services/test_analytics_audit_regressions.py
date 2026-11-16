@@ -149,7 +149,9 @@ async def test_necessity_buckets_are_exhaustive_separate_from_missing_cost_kind(
 
 @pytest.mark.parametrize("confirmed", [False, True])
 async def test_velocity_nets_refunds_in_target_and_baseline_once(
-    db_session: AsyncSession, confirmed: bool
+    db_session: AsyncSession,
+    confirmed: bool,
+    sync_legacy_classification,
 ) -> None:
     pairs = []
     for month in [1, 2, 3]:
@@ -169,6 +171,7 @@ async def test_velocity_nets_refunds_in_target_and_baseline_once(
                 )
             )
         await db_session.flush()
+    await sync_legacy_classification()
     response = await get_discretionary_velocity(
         db_session, as_of_date=date(2026, 3, 31), settings=_velocity_settings()
     )
@@ -180,6 +183,7 @@ async def test_velocity_nets_refunds_in_target_and_baseline_once(
 
 async def test_velocity_preserves_net_refund_and_uses_charge_coverage(
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     db_session.add_all(
         [
@@ -191,6 +195,7 @@ async def test_velocity_preserves_net_refund_and_uses_charge_coverage(
         ]
     )
     await db_session.flush()
+    await sync_legacy_classification()
     response = await get_discretionary_velocity(
         db_session, as_of_date=date(2026, 3, 31), settings=_velocity_settings()
     )
@@ -277,6 +282,7 @@ async def test_recurring_active_filter_excludes_history_and_zero_only_groups_bef
 
 async def test_cancellation_marker_is_readonly_conservative_and_preserves_review(
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     day = date(2026, 3, 5)
     charge = _expense(day, -150_000, merchant="주유소")
@@ -294,6 +300,7 @@ async def test_cancellation_marker_is_readonly_conservative_and_preserves_review
         )
     )
     await db_session.flush()
+    await sync_legacy_classification()
     response = await get_purchase_gate_candidates(
         db_session,
         start_date=date(2026, 3, 1),
@@ -322,7 +329,9 @@ async def test_cancellation_marker_is_readonly_conservative_and_preserves_review
 
 @pytest.mark.parametrize("mismatch", ["date", "payment", "amount", "ambiguous"])
 async def test_cancellation_marker_requires_unique_exact_evidence(
-    db_session: AsyncSession, mismatch: str
+    db_session: AsyncSession,
+    mismatch: str,
+    sync_legacy_classification,
 ) -> None:
     day = date(2026, 3, 5)
     charge = _expense(day, -150_000)
@@ -335,6 +344,7 @@ async def test_cancellation_marker_requires_unique_exact_evidence(
     if mismatch == "ambiguous":
         db_session.add(_expense(day, -150_000))
     await db_session.flush()
+    await sync_legacy_classification()
     response = await get_purchase_gate_candidates(
         db_session,
         start_date=date(2026, 3, 1),

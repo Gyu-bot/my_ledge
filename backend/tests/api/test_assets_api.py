@@ -451,6 +451,7 @@ async def test_liquidity_health_echoes_financial_target_settings(
 async def test_liquidity_health_derives_closed_month_defaults_and_source_metadata(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     db_session.add_all(
         [
@@ -541,6 +542,7 @@ async def test_liquidity_health_derives_closed_month_defaults_and_source_metadat
     )
     await db_session.commit()
 
+    await sync_legacy_classification()
     health = await async_client.get("/api/v1/analytics/liquidity-health")
 
     assert health.status_code == 200
