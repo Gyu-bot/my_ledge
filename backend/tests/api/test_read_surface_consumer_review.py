@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services"))
 
 from app.main import app  # noqa: E402
-from app.models.nature_axes import CategoryAdjustabilityDefault  # noqa: E402
+from app.models.loan import Loan  # noqa: E402
+from app.models.nature_axes import (  # noqa: E402
+    CategoryAdjustabilityDefault,
+    RecurringCommitment,
+)
 from app.models.transaction import Transaction  # noqa: E402
 from read_surface_ledger import build_read_surface_ledger  # noqa: E402
 
@@ -204,9 +208,6 @@ def test_openapi_declares_validation_error_for_read_and_net_worth_paths():
         assert ref.endswith("/HTTPValidationError"), (path, ref)
     error = schema["components"]["schemas"]["ValidationError"]
     assert {"loc", "msg", "type"} <= set(error["required"])
-
-
-__all__ = ["CategoryAdjustabilityDefault", "Decimal"]
 
 
 # --------------------------------------------------------------------------
@@ -553,3 +554,149 @@ async def test_previous_month_baseline_is_withheld_when_unusable(
     bad = await async_client.get(path, headers=api_headers, params={"baseline": "x"})
     assert bad.status_code == 422
     assert bad.json()["detail"][0]["loc"] == ["query", "baseline"]
+
+
+# --------------------------------------------------------------------------
+# Finding 9: end-date status and the origin of a loan's monthly payment.
+# --------------------------------------------------------------------------
+
+
+async def test_commitment_end_date_status_and_burden_origin(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await build_read_surface_ledger(db_session)
+    db_session.add(
+        RecurringCommitment(
+            label="n-times-a",
+            match_scope="merchant",
+            merchant="service-n",
+            category_major="category-10",
+            cycle="n_times",
+            total_count=3,
+            origin="user",
+        )
+    )
+    await db_session.commit()
+    items = {
+        item["commitment_key"]: item
+        for item in (
+            await async_client.get("/api/v1/read/commitments", headers=api_headers)
+        ).json()["data"]["items"]
+    }
+    loan = items["loan:1"]
+    assert loan["end_date_status"] == "recorded"
+    assert loan["monthly_burden_basis"] == "recorded_monthly_payment"
+    assert loan["monthly_burden_origin"] == "entered_by_person"
+    assert loan["monthly_burden_origin_label"]
+    assert items["installment:1"]["end_date_status"] == "recorded"
+    assert items["installment:1"]["monthly_burden_origin"] == "installment_plan_record"
+    monthly = items["recurring:1"]
+    assert monthly["end_date"] is None
+    assert monthly["end_date_status"] == "open_ended"
+    assert monthly["monthly_burden_origin"] == "observed_closed_month"
+    n_times = items["recurring:4"]
+    assert n_times["end_date"] is None
+    assert n_times["end_date_status"] == "not_applicable"
+    for item in items.values():
+        assert item["end_date_status_label"] and item["end_date_reason"]
+
+    # A later snapshot whose monthly payment was estimated, without maturity.
+    db_session.add(
+        Loan(
+            snapshot_date=date(2026, 7, 31),
+            lender="lender-a",
+            product_name="loan-product-a",
+            balance=Decimal("1"),
+            monthly_payment=Decimal(450_000),
+            monthly_payment_source="estimated_from_linked_transactions",
+        )
+    )
+    await db_session.commit()
+    loan = [
+        item
+        for item in (
+            await async_client.get("/api/v1/read/commitments", headers=api_headers)
+        ).json()["data"]["items"]
+        if item["kind"] == "loan"
+    ][0]
+    assert loan["monthly_burden_basis"] == "recorded_monthly_payment"
+    assert loan["monthly_burden_source"] == "estimated_from_linked_transactions"
+    assert loan["monthly_burden_origin"] == "estimated_from_linked_transactions"
+
+
+# --------------------------------------------------------------------------
+# Finding 12: response size switches; defaults unchanged.
+# --------------------------------------------------------------------------
+
+
+async def test_commitments_status_filter_and_summary_view(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await build_read_surface_ledger(db_session)
+    db_session.add(
+        RecurringCommitment(
+            label="ended-a",
+            match_scope="merchant",
+            merchant="service-ended",
+            category_major="category-11",
+            cycle="monthly",
+            end_date=date(2025, 6, 30),
+            origin="user",
+        )
+    )
+    await db_session.commit()
+    path = "/api/v1/read/commitments"
+    default = (await async_client.get(path, headers=api_headers)).json()["data"]
+    explicit = (
+        await async_client.get(
+            path, headers=api_headers, params={"status": "all", "view": "detail"}
+        )
+    ).json()["data"]
+    assert explicit == default
+    assert default["item_summaries"] is None
+    assert (
+        default["returned_item_count"]
+        == default["total_item_count"]
+        == len(default["items"])
+    )
+    ended = (
+        await async_client.get(path, headers=api_headers, params={"status": "ended"})
+    ).json()["data"]
+    assert [item["name"] for item in ended["items"]] == ["ended-a"]
+    assert ended["counts_by_state"] == default["counts_by_state"]
+    assert ended["totals"] == default["totals"]
+    active = (
+        await async_client.get(path, headers=api_headers, params={"status": "active"})
+    ).json()["data"]
+    assert all(item["lifecycle"] == "active" for item in active["items"])
+    summary = await async_client.get(
+        path, headers=api_headers, params={"view": "summary"}
+    )
+    body = summary.json()["data"]
+    assert body["items"] == []
+    assert len(body["item_summaries"]) == default["total_item_count"]
+    assert len(summary.content) < len(
+        (await async_client.get(path, headers=api_headers)).content
+    )
+    bad = await async_client.get(path, headers=api_headers, params={"status": "x"})
+    assert bad.status_code == 422
+
+
+async def test_spend_cube_reports_group_counts(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await build_read_surface_ledger(db_session)
+    path = "/api/v1/read/spend-cube"
+    full = (
+        await async_client.get(
+            path, headers=api_headers, params={"group_by": "merchant", "limit": 2000}
+        )
+    ).json()["data"]
+    cut = (
+        await async_client.get(
+            path, headers=api_headers, params={"group_by": "merchant", "limit": 3}
+        )
+    ).json()["data"]
+    assert cut["total_group_count"] == full["total_group_count"] == len(full["rows"])
+    assert cut["returned_count"] == cut["row_count"] == 3
+    assert cut["truncated"] is True

@@ -472,6 +472,33 @@ async def get_spend_cube(
     )
 
 
+async def count_spend_cube_groups(
+    db_session: AsyncSession,
+    *,
+    start_period: str | None,
+    end_period: str | None,
+    group_by: list[str],
+    filters: dict[str, str],
+) -> int:
+    """Number of spend-cube groups before any limit (same scope as the cube)."""
+    cube = SPEND_CUBE_VIEW
+    dimensions = [cube.c[name] for name in dict.fromkeys(group_by)]
+    conditions: list[ColumnElement[bool]] = []
+    if start_period is not None:
+        conditions.append(cube.c.period >= start_period)
+    if end_period is not None:
+        conditions.append(cube.c.period <= end_period)
+    for name, value in filters.items():
+        conditions.append(cube.c[name] == value)
+    groups = (
+        select(*dimensions)
+        .where(and_(true(), *conditions))
+        .group_by(*dimensions)
+        .subquery("cube_groups")
+    )
+    return int(await db_session.scalar(select(func.count()).select_from(groups)) or 0)
+
+
 async def get_metric_data_status(db_session: AsyncSession) -> MetricDataStatusResponse:
     as_of = await load_as_of(db_session)
     summary = MONTHLY_FLOW_SUMMARY_VIEW

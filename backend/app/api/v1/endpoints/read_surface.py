@@ -24,6 +24,8 @@ from app.schemas.comparison import (
 )
 from app.schemas.metrics import SpendCubeDimension
 from app.schemas.read_surface import (
+    CommitmentStatusFilter,
+    CommitmentView,
     ContributionLists,
     ReadCommitmentsResponse,
     ReadComparisonResponse,
@@ -275,12 +277,23 @@ async def get_read_commitments(
         pattern=PERIOD_PATTERN,
         description="관측 여부를 볼 달. 생략하면 가장 최근 마감월(없으면 진행월).",
     ),
+    commitment_status: CommitmentStatusFilter = Query(
+        default="all",
+        alias="status",
+        description="active(진행 중) / ended(종료) / all(기본, 확인 불가 포함).",
+    ),
+    view: CommitmentView = Query(
+        default="detail",
+        description="detail(기본): items 전체. summary: item_summaries만(간단한 행).",
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadCommitmentsResponse | JSONResponse:
     return await _guard(
         "commitments",
         db_session,
-        lambda: read_commitments(db_session, period=period),
+        lambda: read_commitments(
+            db_session, period=period, status_filter=commitment_status, view=view
+        ),
     )
 
 

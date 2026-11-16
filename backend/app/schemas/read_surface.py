@@ -327,6 +327,12 @@ class ReadSpendCubeData(BaseModel):
         description="limit 때문에 잘렸으면 true. total_amount는 잘리기 전 전체 합계."
     )
     rows: list[SpendCubeRow]
+    total_group_count: int = Field(
+        default=0, description="limit 전 group_by 조합(칸) 수."
+    )
+    returned_count: int = Field(
+        default=0, description="반환한 칸 수(row_count와 같다)."
+    )
 
 
 class ReadSpendCubeResponse(ReadEnvelope):
@@ -559,6 +565,31 @@ MONTHLY_BURDEN_BASIS_LABELS: dict[str, str] = {
     "last_observed_closed_month": "최근 마감월에 관측된 묶음 합계",
     "not_available": "기록된 월 금액 없음",
 }
+MonthlyBurdenOrigin = Literal[
+    "entered_by_person",
+    "estimated_from_linked_transactions",
+    "source_not_recorded",
+    "installment_plan_record",
+    "observed_closed_month",
+    "not_available",
+]
+MONTHLY_BURDEN_ORIGIN_LABELS: dict[str, str] = {
+    "entered_by_person": "사람이 입력한 월 상환액",
+    "estimated_from_linked_transactions": "연결된 상환 거래로 추정해 저장된 월 상환액",
+    "source_not_recorded": "월 상환액은 있으나 누가 넣었는지 기록되지 않음",
+    "installment_plan_record": "할부 계획에 기록된 월 금액",
+    "observed_closed_month": "최근 마감월에 관측된 묶음 합계",
+    "not_available": "월 부담 없음",
+}
+EndDateStatus = Literal["recorded", "open_ended", "not_recorded", "not_applicable"]
+END_DATE_STATUS_LABELS: dict[str, str] = {
+    "recorded": "종료 시점이 기록됨",
+    "open_ended": "끝이 정해지지 않은 약정(사람이 종료일을 넣기 전까지)",
+    "not_recorded": "종료 시점이 기록되지 않음",
+    "not_applicable": "날짜가 아니라 횟수로 끝나는 약정",
+}
+CommitmentStatusFilter = Literal["active", "ended", "all"]
+CommitmentView = Literal["detail", "summary"]
 CommitmentLifecycle = Literal["active", "ended", "unknown"]
 LIFECYCLE_LABELS: dict[str, str] = {
     "active": "진행 중",
@@ -607,10 +638,31 @@ class CommitmentItem(BaseModel):
     monthly_burden_source: str | None = Field(
         default=None, description="대출 월 상환액의 출처 표시(기존 값 그대로)."
     )
+    monthly_burden_origin: MonthlyBurdenOrigin = Field(
+        default="not_available",
+        description=(
+            "월 부담 값이 어디서 왔나. 대출은 저장된 월 상환액을 사람이 넣었는지"
+            "(entered_by_person) 연결 거래로 추정해 저장했는지"
+            "(estimated_from_linked_transactions) 구분한다. monthly_burden_basis="
+            "recorded_monthly_payment는 '스냅샷에 저장된 값'이라는 뜻일 뿐이다."
+        ),
+    )
+    monthly_burden_origin_label: str = MONTHLY_BURDEN_ORIGIN_LABELS["not_available"]
     start_date: date | None
     end_date: date | None = Field(
         description="기록된 종료 시점: 대출 만기, 할부 마지막 회차 예정일, 묶음 종료일."
     )
+    end_date_status: EndDateStatus = Field(
+        default="not_recorded",
+        description=(
+            "end_date가 null인 이유를 구분한다: recorded(값 있음), open_ended(정기 지급 "
+            "묶음처럼 끝이 정해지지 않음), not_recorded(대출 만기 등 있어야 할 값이 "
+            "기록되지 않음), not_applicable(회차 약정처럼 횟수로 끝남). 서버는 종료일을 "
+            "추정하지 않는다."
+        ),
+    )
+    end_date_status_label: str = END_DATE_STATUS_LABELS["not_recorded"]
+    end_date_reason: str = ""
     total_count: int | None = Field(
         default=None, description="할부 총 회차 또는 회차 약정의 총 횟수."
     )
@@ -632,17 +684,45 @@ class CommitmentItem(BaseModel):
     observation: CommitmentObservation
 
 
+class CommitmentSummaryItem(BaseModel):
+    """Compact row for ``view=summary``."""
+
+    commitment_key: str
+    kind: Literal["loan", "installment", "recurring"]
+    name: str
+    lifecycle: CommitmentLifecycle
+    monthly_burden: int | None
+    monthly_burden_origin: MonthlyBurdenOrigin
+    end_date: date | None
+    end_date_status: EndDateStatus
+    observation_state: ObservationState
+    observed_amount: int
+
+
 class ReadCommitmentsData(BaseModel):
     period: str | None
     period_month_status: MonthStatus | None
     totals: dict[str, int] = Field(
         description=(
             "기간 합계(원): monthly_burden_recorded(기록된 월 부담 합, 진행 중 약정만), "
-            "observed_amount(관측 합계)."
+            "observed_amount(관측 합계). status·view 필터와 무관하게 모든 약정 기준."
         )
     )
-    counts_by_state: dict[str, int]
-    items: list[CommitmentItem]
+    counts_by_state: dict[str, int] = Field(
+        description="관측 상태별 약정 수. status·view 필터와 무관하게 모든 약정 기준."
+    )
+    items: list[CommitmentItem] = Field(
+        description="view=detail(기본)일 때 status 필터를 통과한 약정. summary면 빈 배열."
+    )
+    status_filter: CommitmentStatusFilter = "all"
+    view: CommitmentView = "detail"
+    total_item_count: int = Field(default=0, description="필터 전 약정 수.")
+    returned_item_count: int = Field(
+        default=0, description="status 필터를 통과해 반환한 약정 수."
+    )
+    item_summaries: list[CommitmentSummaryItem] | None = Field(
+        default=None, description="view=summary일 때만 채우는 간단한 행."
+    )
 
 
 class ReadCommitmentsResponse(ReadEnvelope):

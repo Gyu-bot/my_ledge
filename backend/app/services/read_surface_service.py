@@ -67,6 +67,7 @@ from app.services.metric_views import (
     MONTHLY_FLOW_SUMMARY_VIEW,
 )
 from app.services.metrics_service import (
+    count_spend_cube_groups,
     get_metric_data_status,
     get_monthly_flow,
     get_spend_cube,
@@ -609,6 +610,14 @@ async def read_spend_cube(
             row_count=len(rows),
             truncated=len(cube.rows) > limit,
             rows=rows,
+            total_group_count=await count_spend_cube_groups(
+                db_session,
+                start_period=start_period,
+                end_period=end_period,
+                group_by=group_by,
+                filters=filters,
+            ),
+            returned_count=len(rows),
         ),
     )
 
