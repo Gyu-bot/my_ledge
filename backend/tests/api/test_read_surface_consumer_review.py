@@ -207,3 +207,83 @@ def test_openapi_declares_validation_error_for_read_and_net_worth_paths():
 
 
 __all__ = ["CategoryAdjustabilityDefault", "Decimal"]
+
+
+# --------------------------------------------------------------------------
+# Finding 1: completeness measures that payments and refunds cannot cancel.
+# --------------------------------------------------------------------------
+
+
+async def _seed_offsetting_undecided(db_session: AsyncSession) -> None:
+    db_session.add_all(
+        [
+            CategoryAdjustabilityDefault(
+                category_major="cat-protected", adjustability="protected"
+            ),
+            _tx(date(2026, 1, 31), -10_000, category="cat-protected"),
+            # 2026-02: undecided refunds exceed undecided payments.
+            _tx(date(2026, 2, 3), -1_000, category="cat-undecided", merchant="m-u"),
+            _tx(date(2026, 2, 4), 5_000, category="cat-undecided", merchant="m-u"),
+            _tx(date(2026, 2, 5), -20_000, category="cat-protected"),
+            # 2026-03: an undecided payment and refund offset each other.
+            _tx(date(2026, 3, 3), -7_000, category="cat-undecided2", merchant="m-v"),
+            _tx(date(2026, 3, 4), 7_000, category="cat-undecided2", merchant="m-v"),
+            _tx(date(2026, 3, 5), -20_000, category="cat-protected"),
+            _tx(date(2026, 3, 31), -1_000, category="cat-protected"),
+        ]
+    )
+    await db_session.commit()
+
+
+async def test_offsetting_undecided_rows_never_read_as_complete(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    await _seed_offsetting_undecided(db_session)
+
+    async def flow(period: str) -> dict:
+        response = await async_client.get(
+            "/api/v1/read/monthly-flow",
+            headers=api_headers,
+            params={"start_period": period, "end_period": period},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    march = await flow("2026-03")
+    classification = march["classification"]
+    assert classification["adjustability_undecided_total"] == 0  # net, unchanged
+    assert classification["adjustability_undecided_transaction_count"] == 2
+    assert classification["adjustability_undecided_gross_total"] == 14_000
+    assert classification["expense_gross_total"] == 35_000
+    assert classification["adjustability_undecided_gross_share"] == 0.4
+    assert classification["complete"] is False
+    assert march["status"] == "classification_incomplete"
+    state = march["period_scope"]["periods"][0]
+    assert state["status"] == "classification_incomplete"
+    assert state["adjustability_undecided_transaction_count"] == 2
+
+    february = await flow("2026-02")
+    # The net share stays signed (documented); the gross share is 0–1.
+    assert february["classification"]["adjustability_undecided_share"] < 0
+    assert 0 < february["classification"]["adjustability_undecided_gross_share"] <= 1
+    assert "classification_completeness" in february["basis"]["rules"]
+
+    status = (
+        await async_client.get("/api/v1/read/data-status", headers=api_headers)
+    ).json()
+    completeness = status["data"]["classification"]
+    assert completeness["adjustability_undecided_transaction_count"] == 4
+    assert completeness["adjustability_undecided_gross_total"] == 20_000
+    assert 0 <= completeness["adjustability_undecided_gross_share"] <= 1
+    assert 0 <= completeness["adjustability_decided_gross_share"] <= 1
+    assert status["classification"]["complete"] is False
+
+    cube = (
+        await async_client.get(
+            "/api/v1/read/spend-cube",
+            headers=api_headers,
+            params={"start_period": "2026-03", "end_period": "2026-03"},
+        )
+    ).json()
+    assert cube["classification"]["complete"] is False
+    assert cube["classification"]["adjustability_undecided_transaction_count"] == 2

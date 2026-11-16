@@ -182,8 +182,30 @@ class ReadPeriodState(BaseModel):
     status_label: str
     transaction_count: int = 0
     total_outflow: int = 0
-    adjustability_undecided_total: int = 0
-    adjustability_undecided_share: float | None = None
+    adjustability_undecided_total: int = Field(
+        default=0, description="조정 가능성 미정 지출 순액(원, 환불 차감)."
+    )
+    adjustability_undecided_share: float | None = Field(
+        default=None,
+        description=(
+            "부호 있는 순액 비중 = 미정 순액 ÷ 총지급. 미정 쪽 환불이 결제보다 크면 "
+            "음수가 되고 0–1 밖일 수 있다. 완성도는 *_gross_share와 건수로 읽는다."
+        ),
+    )
+    adjustability_undecided_transaction_count: int = Field(
+        default=0, description="조정 가능성 미정 지출 거래 수(환불 포함)."
+    )
+    adjustability_undecided_gross_total: int = Field(
+        default=0,
+        description="미정 지출 줄 금액의 절댓값 합(원). 결제와 환불이 상쇄되지 않는다.",
+    )
+    expense_gross_total: int = Field(
+        default=0, description="같은 범위 지출 줄 금액의 절댓값 합(원)."
+    )
+    adjustability_undecided_gross_share: float | None = Field(
+        default=None,
+        description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1). 지출 줄이 없으면 null.",
+    )
 
 
 class ReadPeriodScope(BaseModel):
@@ -196,13 +218,35 @@ class ReadClassificationState(BaseModel):
     """How complete the human classification is for the response's scope."""
 
     adjustability_undecided_total: int = Field(
-        description="조정 가능성 미정 지출 순액(원)."
+        description="조정 가능성 미정 지출 순액(원, 환불 차감)."
     )
     total_outflow: int = Field(description="같은 범위의 총지급(원).")
     adjustability_undecided_share: float | None = Field(
-        description="금액 기준 미정 비중 = 미정 ÷ 총지급. 총지급이 0 이하면 null."
+        description=(
+            "부호 있는 순액 비중 = 미정 순액 ÷ 총지급. 총지급이 0 이하면 null. 미정 쪽 "
+            "환불이 결제보다 크면 음수, 0–1 밖일 수 있다. 완성도 판단에는 쓰지 않는다."
+        )
     )
-    complete: bool = Field(description="미정 금액이 0이면 true.")
+    complete: bool = Field(
+        description=(
+            "조정 가능성 미정 지출 거래가 0건이면 true. 결제와 환불이 상쇄되어 순액이 "
+            "0이어도 미정 거래가 있으면 false."
+        )
+    )
+    adjustability_undecided_transaction_count: int = Field(
+        default=0, description="조정 가능성 미정 지출 거래 수(환불 포함)."
+    )
+    adjustability_undecided_gross_total: int = Field(
+        default=0,
+        description="미정 지출 줄 금액의 절댓값 합(원). 결제와 환불이 상쇄되지 않는다.",
+    )
+    expense_gross_total: int = Field(
+        default=0, description="같은 범위 지출 줄 금액의 절댓값 합(원)."
+    )
+    adjustability_undecided_gross_share: float | None = Field(
+        default=None,
+        description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1). 지출 줄이 없으면 null.",
+    )
 
 
 class ReadBasis(BaseModel):
@@ -565,7 +609,22 @@ class ClassificationCompleteness(BaseModel):
     total_outflow: int
     adjustability_undecided_share: float | None
     adjustability_decided_share: float | None = Field(
-        description="1 − 미정 비중(금액 기준). 총지급이 0 이하면 null."
+        description=(
+            "1 − 순액 미정 비중. 순액 비중이 음수면 1보다 클 수 있다. 총지급이 0 이하면 "
+            "null. 완성도는 adjustability_decided_gross_share로 읽는다."
+        )
+    )
+    adjustability_undecided_gross_total: int = Field(
+        default=0, description="미정 지출 줄 금액의 절댓값 합(원)."
+    )
+    expense_gross_total: int = Field(
+        default=0, description="지출 줄 금액의 절댓값 합(원)."
+    )
+    adjustability_undecided_gross_share: float | None = Field(
+        default=None, description="미정 절댓값 합 ÷ 지출 절댓값 합(0–1)."
+    )
+    adjustability_decided_gross_share: float | None = Field(
+        default=None, description="1 − adjustability_undecided_gross_share(0–1)."
     )
     uncategorized_expense_total: int = Field(
         description="대분류가 비었거나 '미분류'인 지출 순액(원)."

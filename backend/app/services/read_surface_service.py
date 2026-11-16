@@ -11,6 +11,7 @@ from datetime import date
 
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.validation import query_error
 from app.models.nature_axes import RecurringCommitment
@@ -122,10 +123,59 @@ def period_range(start_period: str, end_period: str) -> list[str]:
     return periods
 
 
+COMPLETENESS_KEYS = (
+    "adjustability_undecided_transaction_count",
+    "adjustability_undecided_gross_total",
+    "expense_gross_total",
+)
+
+
+def _completeness_columns() -> list[ColumnElement]:
+    """Classification completeness measures that cannot cancel out.
+
+    Over expense lines of ``vw_metric_flow_lines``: the number of
+    transactions with an undecided line and absolute-value sums, so an
+    undecided payment and an undecided refund never net to "complete".
+    """
+    lines = FLOW_LINES_VIEW
+    undecided = lines.c.adjustability == "undecided"
+    return [
+        func.count(func.distinct(case((undecided, lines.c.transaction_id)))).label(
+            "adjustability_undecided_transaction_count"
+        ),
+        func.coalesce(
+            func.sum(case((undecided, func.abs(lines.c.amount)), else_=0)), 0
+        ).label("adjustability_undecided_gross_total"),
+        func.coalesce(func.sum(func.abs(lines.c.amount)), 0).label(
+            "expense_gross_total"
+        ),
+    ]
+
+
+async def load_completeness(
+    db_session: AsyncSession, conditions: list[ColumnElement[bool]] | None = None
+) -> dict[str, int]:
+    """Completeness measures over expense lines matching ``conditions``."""
+    lines = FLOW_LINES_VIEW
+    row = (
+        (
+            await db_session.execute(
+                select(*_completeness_columns()).where(
+                    lines.c.type == EXPENSE, *(conditions or [])
+                )
+            )
+        )
+        .mappings()
+        .one()
+    )
+    return {key: int(row[key] or 0) for key in COMPLETENESS_KEYS}
+
+
 async def load_period_summaries(
     db_session: AsyncSession,
 ) -> dict[str, dict[str, int]]:
-    """Per-period totals from ``vw_monthly_flow_summary`` (one row per month)."""
+    """Per-period totals from ``vw_monthly_flow_summary`` (one row per month)
+    plus the completeness measures of the same month's expense lines."""
     summary = MONTHLY_FLOW_SUMMARY_VIEW
     rows = await db_session.execute(
         select(
@@ -135,16 +185,30 @@ async def load_period_summaries(
             summary.c.adjustability_undecided_total,
         )
     )
-    return {
+    result = {
         row.period: {
             "transaction_count": int(row.transaction_count or 0),
             "total_outflow": int(row.total_outflow or 0),
             "adjustability_undecided_total": int(
                 row.adjustability_undecided_total or 0
             ),
+            **dict.fromkeys(COMPLETENESS_KEYS, 0),
         }
         for row in rows
     }
+    lines = FLOW_LINES_VIEW
+    for row in (
+        await db_session.execute(
+            select(lines.c.period, *_completeness_columns())
+            .where(lines.c.type == EXPENSE)
+            .group_by(lines.c.period)
+        )
+    ).mappings():
+        if row["period"] in result:
+            result[row["period"]].update(
+                {key: int(row[key] or 0) for key in COMPLETENESS_KEYS}
+            )
+    return result
 
 
 def imported_bounds(as_of: MetricAsOf) -> tuple[str, str] | None:
@@ -172,6 +236,9 @@ def period_state(
     count = values.get("transaction_count", 0)
     outflow = values.get("total_outflow", 0)
     undecided = values.get("adjustability_undecided_total", 0)
+    undecided_count = values.get("adjustability_undecided_transaction_count", 0)
+    undecided_gross = values.get("adjustability_undecided_gross_total", 0)
+    expense_gross = values.get("expense_gross_total", 0)
     month_status = (
         "closed"
         if as_of.last_closed_period is not None and period <= as_of.last_closed_period
@@ -179,7 +246,7 @@ def period_state(
     )
     if count == 0:
         state = "no_transactions"
-    elif undecided != 0:
+    elif undecided_count > 0:
         state = "classification_incomplete"
     else:
         state = "ok"
@@ -194,6 +261,10 @@ def period_state(
         total_outflow=outflow,
         adjustability_undecided_total=undecided,
         adjustability_undecided_share=ratio(undecided, outflow),
+        adjustability_undecided_transaction_count=undecided_count,
+        adjustability_undecided_gross_total=undecided_gross,
+        expense_gross_total=expense_gross,
+        adjustability_undecided_gross_share=ratio(undecided_gross, expense_gross),
     )
 
 
@@ -222,12 +293,35 @@ def build_period_scope(
     return ReadPeriodScope(start_period=start, end_period=end, periods=periods)
 
 
-def classification_state(undecided_total: int, outflow: int) -> ReadClassificationState:
+def classification_state(
+    undecided_total: int,
+    outflow: int,
+    *,
+    undecided_count: int = 0,
+    undecided_gross: int = 0,
+    expense_gross: int = 0,
+) -> ReadClassificationState:
     return ReadClassificationState(
         adjustability_undecided_total=undecided_total,
         total_outflow=outflow,
         adjustability_undecided_share=ratio(undecided_total, outflow),
-        complete=undecided_total == 0,
+        complete=undecided_count == 0,
+        adjustability_undecided_transaction_count=undecided_count,
+        adjustability_undecided_gross_total=undecided_gross,
+        expense_gross_total=expense_gross,
+        adjustability_undecided_gross_share=ratio(undecided_gross, expense_gross),
+    )
+
+
+def classification_from_completeness(
+    undecided_total: int, outflow: int, measures: dict[str, int]
+) -> ReadClassificationState:
+    return classification_state(
+        undecided_total,
+        outflow,
+        undecided_count=measures["adjustability_undecided_transaction_count"],
+        undecided_gross=measures["adjustability_undecided_gross_total"],
+        expense_gross=measures["expense_gross_total"],
     )
 
 
@@ -236,6 +330,13 @@ def scope_classification(scope: ReadPeriodScope) -> ReadClassificationState:
     return classification_state(
         sum(item.adjustability_undecided_total for item in imported),
         sum(item.total_outflow for item in imported),
+        undecided_count=sum(
+            item.adjustability_undecided_transaction_count for item in imported
+        ),
+        undecided_gross=sum(
+            item.adjustability_undecided_gross_total for item in imported
+        ),
+        expense_gross=sum(item.expense_gross_total for item in imported),
     )
 
 
@@ -282,7 +383,7 @@ def resolve_status(
             return "not_imported", reasons
         if all(p.transaction_count == 0 for p in imported):
             return "no_transactions", reasons
-    if classification is not None and classification.adjustability_undecided_total:
+    if classification is not None and not classification.complete:
         resolved = "classification_incomplete"
         reasons.append(
             _reason(
@@ -290,7 +391,7 @@ def resolve_status(
                 [
                     p.period
                     for p in (scope.periods if scope else [])
-                    if p.adjustability_undecided_total
+                    if p.adjustability_undecided_transaction_count
                 ],
             )
         )
@@ -302,6 +403,14 @@ def resolve_status(
             _reason("non_krw_excluded", detail=f"{non_krw_count}건 제외(전체 기간)")
         )
     return resolved, reasons
+
+
+CLASSIFICATION_COMPLETENESS_RULE = (
+    "classification.complete는 조정 가능성 미정 지출 거래가 0건일 때만 true다. "
+    "adjustability_undecided_share는 환불을 뺀 순액 비중이라 부호가 있고 0–1 밖일 수 "
+    "있다. 상쇄되지 않는 완성도는 adjustability_undecided_transaction_count와 "
+    "adjustability_undecided_gross_share(미정 줄 |금액| 합 ÷ 지출 줄 |금액| 합, 0–1)다."
+)
 
 
 def basis_from_contract(
@@ -320,6 +429,7 @@ def basis_from_contract(
             "transfers": inclusion.transfers,
             "loans": inclusion.loans,
             "period_attribution": inclusion.period_attribution,
+            "classification_completeness": CLASSIFICATION_COMPLETENESS_RULE,
         },
         field_scopes=dict(contract.field_scopes),
         assumptions=assumptions or [],
@@ -430,8 +540,15 @@ async def read_spend_cube(
         start_period=start_period,
         end_period=end_period,
     )
-    classification = classification_state(
-        int(cube.contract.adjustability_undecided_total or 0), cube.total_amount
+    classification = classification_from_completeness(
+        int(cube.contract.adjustability_undecided_total or 0),
+        cube.total_amount,
+        await load_completeness(
+            db_session,
+            spend_cube_line_conditions(
+                start_period=start_period, end_period=end_period, filters=filters
+            ),
+        ),
     )
     state, reasons = resolve_status(
         as_of=as_of,
@@ -467,6 +584,25 @@ async def read_spend_cube(
             rows=rows,
         ),
     )
+
+
+def spend_cube_line_conditions(
+    *, start_period: str | None, end_period: str | None, filters: dict[str, str]
+) -> list[ColumnElement[bool]]:
+    """The spend cube's scope as conditions on ``vw_metric_flow_lines``.
+
+    Every cube dimension is a column of the flow lines, so the same filters
+    select the same expense lines the cube aggregated.
+    """
+    lines = FLOW_LINES_VIEW
+    conditions: list[ColumnElement[bool]] = []
+    if start_period is not None:
+        conditions.append(lines.c.period >= start_period)
+    if end_period is not None:
+        conditions.append(lines.c.period <= end_period)
+    for name, value in filters.items():
+        conditions.append(lines.c[name] == value)
+    return conditions
 
 
 def _single_period_scope(
@@ -673,8 +809,9 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
         as_of=as_of, summaries=summaries, start_period=None, end_period=None
     )
     counts = await _classification_counts(db_session)
-    classification = classification_state(
-        base.adjustability_undecided_total, base.total_outflow
+    measures = await load_completeness(db_session)
+    classification = classification_from_completeness(
+        base.adjustability_undecided_total, base.total_outflow, measures
     )
     missing_attributes = (
         counts["commitments_without_cycle"]
@@ -703,6 +840,7 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
     snapshot_values = as_of.snapshot_as_of.model_dump()
     bounds = imported_bounds(as_of)
     share = classification.adjustability_undecided_share
+    gross_share = classification.adjustability_undecided_gross_share
     return ReadDataStatusResponse(
         surface="data_status",
         surface_label="자료 현황",
@@ -727,6 +865,7 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
                 ),
                 "snapshot_as_of": "스냅샷 기준일은 종류마다 따로 두고 합치지 않는다.",
                 "undecided_share": "미정 비중 = 조정 가능성 미정 지출 ÷ 총지급(금액 기준).",
+                "classification_completeness": CLASSIFICATION_COMPLETENESS_RULE,
             },
             assumptions=[
                 "업로드 기록에는 파일이 덮는 기간이 없어서, 가져온 기간은 유효 거래의 첫 날과 "
@@ -771,6 +910,14 @@ async def read_data_status(db_session: AsyncSession) -> ReadDataStatusResponse:
                 adjustability_undecided_share=share,
                 adjustability_decided_share=(
                     None if share is None else round(1 - share, 4)
+                ),
+                adjustability_undecided_gross_total=(
+                    classification.adjustability_undecided_gross_total
+                ),
+                expense_gross_total=classification.expense_gross_total,
+                adjustability_undecided_gross_share=gross_share,
+                adjustability_decided_gross_share=(
+                    None if gross_share is None else round(1 - gross_share, 4)
                 ),
                 uncategorized_expense_total=counts["uncategorized_total"],
                 uncategorized_expense_transaction_count=counts["uncategorized_count"],
