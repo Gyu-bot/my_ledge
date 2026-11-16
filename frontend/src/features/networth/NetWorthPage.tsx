@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { Badge } from '../../ds/Badge'
 import { Card } from '../../ds/Card'
-import { CoverageGauge } from '../../ds/CoverageGauge'
 import { Provenance } from '../../ds/Provenance'
 import { SegmentedControl } from '../../ds/SegmentedControl'
 import { Sparkline } from '../../ds/Sparkline'
@@ -12,24 +10,27 @@ import { ChartSkeleton, ListSkeleton, StatSkeleton } from '../../ds/Skeleton'
 import { EmptyState, ErrorState } from '../../ds/States'
 import { HBarList } from '../../ds/charts/HBarList'
 import { LineArea } from '../../ds/charts/LineArea'
-import { EM_DASH, formatDay, formatNetWon, formatPct, formatSignedWon, formatWon, formatWonCompact } from '../../ds/format'
+import { EM_DASH, formatDay, formatNetWon, formatPct, formatSignedWon, formatWonCompact } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import {
   useAssetSnapshotCompare,
   useAssetSnapshots,
   useInsuranceSummary,
   useInvestmentSummary,
-  useLiquidityHealth,
   useLoanSummary,
   useNetWorthBreakdown,
   useNetWorthHistory,
 } from '../../hooks/useAssets'
+import { useEmergencyFund, useNetWorthIntervals } from '../../hooks/useNetWorth'
 import { useProfile } from '../../hooks/useProfile'
 import { useAnalyticsSettings } from '../../hooks/useSettings'
-import { useInstallmentForecast } from '../../hooks/useTransactions'
-import { SelectedInvestmentsPanel } from './SelectedInvestmentsPanel'
+import { DataStatusStrip } from '../analysis/DataStatusStrip'
+import { EmergencyFundCard } from './EmergencyFundCard'
+import { ReconciliationSection } from './ReconciliationSection'
+import type { SnapshotPair } from './pairs'
+import { SnapshotDatesCard } from './SnapshotDatesCard'
 import { monthlyPaymentEvidence, monthlyPaymentMissingLabel, monthlyPaymentSourceLabel } from './loanPresentation'
-import type { LiquidityTier, LoanItem, LoanKind, LoanRepaymentMethod, SnapshotComparisonMode } from '../../types/asset'
+import type { LiquidityTier, LoanKind, LoanRepaymentMethod, SnapshotComparisonMode } from '../../types/asset'
 
 const LIQUIDITY_LABEL: Record<LiquidityTier, string> = {
   immediate: '즉시 사용',
@@ -64,40 +65,41 @@ function decimal(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function runwayLabel(months: number | null): string {
-  if (months == null) return EM_DASH
-  if (months === 0 || months >= 1) return `${months.toFixed(1)}개월`
-  const days = months * 30
-  if (days >= 7) return `약 ${(days / 7).toFixed(1)}주`
-  if (days >= 0.1) return `약 ${days.toFixed(1)}일`
-  return '1일 미만'
-}
-
-const CONFIDENCE_LABEL: Record<string, string> = { high: '높음', medium: '보통', low: '낮음' }
-
-/** 월 이자 단리 추정 — vw_loan_account_canonical과 같은 식 (balance × rate / 100 / 12) */
-function estimatedMonthlyInterest(loan: LoanItem): number | null {
-  const balance = decimal(loan.balance)
-  const rate = decimal(loan.interest_rate)
-  if (balance == null || rate == null) return null
-  return Math.round((balance * rate) / 100 / 12)
-}
-
+/** 재무상태 (Implentation-plan.md 3.1, Q5) — 스냅샷 순자산과 구성, 구간별 대조, 비상금 개월 수.
+ *  기록된 스냅샷과 거래만 쓴다. 실시간 잔액·시세·이자 추정·전망은 두지 않는다. */
 export function NetWorthPage() {
   const [compareMode, setCompareMode] = useState<SnapshotComparisonMode>(
     'latest_available_vs_previous_available',
   )
+  const [searchParams, setSearchParams] = useSearchParams()
+  const startParam = searchParams.get('start')
+  const endParam = searchParams.get('end')
+  const pair: SnapshotPair | null = startParam && endParam ? { start_date: startParam, end_date: endParam } : null
+  const intervals = useNetWorthIntervals()
+  const emergency = useEmergencyFund()
+
+  function selectPair(next: SnapshotPair | null) {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current)
+      if (next) {
+        params.set('start', next.start_date)
+        params.set('end', next.end_date)
+      } else {
+        params.delete('start')
+        params.delete('end')
+      }
+      return params
+    }, { replace: true })
+  }
   const snapshots = useAssetSnapshots()
   const history = useNetWorthHistory()
   const compare = useAssetSnapshotCompare(compareMode)
   const breakdown = useNetWorthBreakdown()
-  const liquidity = useLiquidityHealth()
   const loans = useLoanSummary()
   const investments = useInvestmentSummary()
   const insurance = useInsuranceSummary()
   const profile = useProfile()
   const settings = useAnalyticsSettings()
-  const forecast = useInstallmentForecast({ months: 6 })
 
   const latest = [...(snapshots.data?.items ?? [])]
     .reverse()
@@ -107,10 +109,8 @@ export function NetWorthPage() {
   const assetTotal = currentSnapshot ? decimal(currentSnapshot.asset_total) : null
   const liabilityTotal = currentSnapshot ? decimal(currentSnapshot.liability_total) : null
   const negativeExcluded = decimal(currentSnapshot?.negative_asset_excluded_total) ?? (currentSnapshot?.snapshot_date === breakdown.data?.snapshot_date ? decimal(breakdown.data?.negative_asset_excluded_total) : null) ?? 0
-  const cashEquivalent = decimal(liquidity.data?.cash_equivalent_total)
-  const emergencyMonths = liquidity.data?.emergency_fund_months ?? null
-  const emergencyTarget = liquidity.data?.emergency_fund_target_months ?? null
-  const targetProgress = liquidity.data?.target_progress_ratio ?? null
+  const cashLike = emergency.data?.cash_like_total ?? null
+  const emergencyMonths = emergency.data?.emergency_fund_months ?? null
 
   const compareData = compare.data
   const compareMeta = compareData?.baseline
@@ -141,21 +141,16 @@ export function NetWorthPage() {
     return { totals, unassigned }
   }, [snapshots.data?.asset_items, latest?.snapshot_date])
 
-  const remainingForecast = (forecast.data?.monthly_summary ?? []).reduce(
-    (sum, item) => sum + item.projected_total, 0,
-  )
-  const missedForecast = (forecast.data?.monthly_summary ?? []).reduce((sum, item) => sum + (item.past_unconfirmed_total ?? item.missed_total), 0)
-
   const creditHistory = (profile.data?.credit_score_history ?? [])
     .map((item) => item.credit_score_kcb)
     .filter((score): score is number => score != null)
 
-  const kpiLoading = snapshots.isLoading || liquidity.isLoading
+  const kpiLoading = snapshots.isLoading || emergency.isLoading
 
   return (
     <>
       <PageHeader
-        title="자산·부채"
+        title="재무상태"
         controls={
           <SegmentedControl
             ariaLabel="스냅샷 비교 모드"
@@ -186,6 +181,8 @@ export function NetWorthPage() {
           ) : undefined
         }
       />
+
+      <DataStatusStrip />
 
       <div className="flex flex-col gap-4">
         {/* KPI */}
@@ -233,15 +230,23 @@ export function NetWorthPage() {
               />
               <Stat
                 label="현금성 자산"
-                value={cashEquivalent != null ? formatWonCompact(cashEquivalent) : EM_DASH}
-                sub={emergencyMonths != null ? `비상금 ${runwayLabel(emergencyMonths)}` : '월 필수지출 근거 부족'}
-                subTone={targetProgress != null && targetProgress >= 1 ? 'good' : 'neutral'}
+                value={cashLike != null ? formatWonCompact(cashLike) : EM_DASH}
+                sub={emergencyMonths != null ? `월 보호 지급의 ${emergencyMonths.toFixed(2)}개월분` : '비상금 개월 수 계산 보류'}
               />
             </>
           )}
         </div>
 
-        <SelectedInvestmentsPanel />
+        <SnapshotDatesCard data={intervals.data} isLoading={intervals.isLoading} error={intervals.error} onRetry={() => void intervals.refetch()} />
+
+        <ReconciliationSection
+          intervals={intervals.data}
+          intervalsLoading={intervals.isLoading}
+          intervalsError={intervals.error}
+          onRetryIntervals={() => void intervals.refetch()}
+          pair={pair}
+          onSelect={selectPair}
+        />
 
         {/* 순자산 추이 + 구성/신용점수 */}
         <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
@@ -300,62 +305,38 @@ export function NetWorthPage() {
           </div>
         </div>
 
-        {/* 유동성 */}
-        <Card
-          title="유동성"
-          meta={liquidityTierTotals.unassigned > 0 ? `미지정 자산 ${liquidityTierTotals.unassigned}건 ⚠` : undefined}
-          action={
-            <Link to="/data/assets" className="flex items-center gap-1 text-caption font-medium text-transfer hover:underline">
-              자산 메타 편집
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          }
-        >
-          {liquidity.isLoading || snapshots.isLoading ? <ListSkeleton rows={4} /> :
-           liquidity.data ? (
-             <div className="flex flex-col gap-4">
-               <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-                 {(['immediate', 'near_liquid', 'illiquid'] as LiquidityTier[]).map((tier) => (
-                   <div key={tier} className="rounded-md border border-border bg-bg-inset p-3">
-                     <div className="text-micro text-text-faint">{LIQUIDITY_LABEL[tier]}</div>
-                     <div className="tnum mt-1 text-label font-bold text-text-primary">
-                       {formatWonCompact(liquidityTierTotals.totals.get(tier) ?? 0)}
-                     </div>
-                   </div>
-                 ))}
-                 <div className="rounded-md border border-border bg-bg-inset p-3">
-                   <div className="text-micro text-text-faint">월 부채상환</div>
-                   <div className="tnum mt-1 text-label font-bold text-expense">
-                     {formatWonCompact(decimal(liquidity.data.monthly_debt_payment) ?? 0)}
-                   </div>
-                 </div>
-               </div>
-               {emergencyTarget != null && (
-                 <div className="flex items-center gap-2">
-                   <CoverageGauge
-                     className="flex-1"
-                     label={`비상금 확보 ${runwayLabel(emergencyMonths)} · 목표 ${emergencyTarget}개월`}
-                     ratio={targetProgress}
-                   />
-                   <Provenance
-                     title="비상금 목표"
-                     rows={[
-                       { label: '목표', value: `${emergencyTarget}개월 (설정에서 변경)` },
-                       { label: '월 필수지출', value: formatWon(decimal(liquidity.data.monthly_required_spend) ?? 0) },
-                       { label: '지출 기준 월', value: liquidity.data.required_spend_period ?? EM_DASH },
-                       { label: '필수로 분류한 순지출', value: formatWon(decimal(liquidity.data.required_spend_essential_total) ?? 0) },
-                       { label: '중복 제외 후 추가 상환', value: formatWon(decimal(liquidity.data.required_spend_additional_debt_total) ?? 0) },
-                       { label: '입력 기준일', value: liquidity.data.input_as_of_date ?? liquidity.data.snapshot_date ?? EM_DASH },
-                       { label: '대출 스냅샷', value: liquidity.data.debt_payment_snapshot_date ?? EM_DASH },
-                       { label: '신뢰도', value: CONFIDENCE_LABEL[liquidity.data.confidence] ?? '판단 근거 부족' },
-                     ]}
-                     note={liquidity.data.manual_input_overrides?.includes('monthly_required_spend') ? '월 필수지출을 수동 입력한 기준입니다. 현금성 미지정 자산은 종류와 이름으로 추정합니다.' : '해당 마감월의 필수 순지출에, 이미 포함되지 않은 연결 상환 거래만 더합니다. 추정 월상환액을 다시 더하지 않습니다. 현금성 미지정 자산은 종류와 이름으로 추정하며, 일·주 환산은 30일 기준입니다.'}
-                   />
-                 </div>
-               )}
-             </div>
-           ) : <EmptyState message="유동성 데이터가 없습니다" />}
-        </Card>
+        {/* 비상금 개월 수 + 유동성 등급 */}
+        <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
+          <EmergencyFundCard />
+          <Card
+            title="유동성 등급별 자산"
+            meta={
+              <>
+                {latest ? `자산 스냅샷 ${latest.snapshot_date} · 사람이 정한 등급 기준` : '사람이 정한 등급 기준'}
+                {liquidityTierTotals.unassigned > 0 ? ` · 등급을 정하지 않은 자산 ${liquidityTierTotals.unassigned}건` : ''}
+              </>
+            }
+            action={
+              <Link to="/data/assets" className="flex items-center gap-1 text-caption font-medium text-transfer hover:underline">
+                자산 메타 편집
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            }
+          >
+            {snapshots.isLoading ? <ListSkeleton rows={3} /> : (
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                {(['immediate', 'near_liquid', 'illiquid'] as LiquidityTier[]).map((tier) => (
+                  <div key={tier} className="rounded-md border border-border bg-bg-inset p-3">
+                    <div className="text-micro text-text-faint">{LIQUIDITY_LABEL[tier]}</div>
+                    <div className="tnum mt-1 text-label font-bold text-text-primary">
+                      {formatWonCompact(liquidityTierTotals.totals.get(tier) ?? 0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
 
         {/* 대출 */}
         <Card
@@ -382,7 +363,6 @@ export function NetWorthPage() {
                  const principal = decimal(loan.principal)
                  const balance = decimal(loan.balance)
                  const progress = principal && balance != null && principal > 0 ? 1 - balance / principal : null
-                 const monthlyInterest = estimatedMonthlyInterest(loan)
                  return (
                    <div key={loan.id ?? index} className="rounded-md border border-border bg-bg-inset p-3.5">
                      <div className="flex items-start justify-between gap-3">
@@ -405,13 +385,6 @@ export function NetWorthPage() {
                        <span className="flex items-center gap-1">
                          월상환 {loan.monthly_payment != null ? formatWonCompact(decimal(loan.monthly_payment) ?? 0) : EM_DASH}
                          <Provenance title="월상환액 출처" rows={[{ label: '출처', value: monthlyPaymentSourceLabel(loan) }]} note={[monthlyPaymentMissingLabel(loan), ...monthlyPaymentEvidence(loan)].filter(Boolean).join(' · ')} />
-                       </span>
-                       <span className="flex items-center gap-1">
-                         월 이자 추정 {monthlyInterest != null ? formatWonCompact(monthlyInterest) : EM_DASH}
-                         <Provenance
-                           title="월 이자 추정"
-                           note="잔액 × 금리 / 12 단리 추정입니다. 상환 스케줄 기반이 아닙니다."
-                         />
                        </span>
                        <span>상환 방식 {loan.repayment_method ? REPAYMENT_LABEL[loan.repayment_method] : '미정'}</span>
                        <span>만기 {loan.maturity_date ?? EM_DASH}</span>
@@ -499,24 +472,11 @@ export function NetWorthPage() {
           )}
         </div>
 
-        {/* 할부 잔여 */}
-        <Card title="할부 잔여" meta="향후 6개월">
-          {forecast.isLoading ? <ListSkeleton rows={1} /> :
-           forecast.data && forecast.data.monthly_summary.length > 0 ? (
-             <div className="flex flex-wrap items-center justify-between gap-3">
-               <div className="tnum flex items-center gap-4 text-label text-text-secondary">
-                 <span>미래 예정 <strong className="text-text-primary">{formatWonCompact(remainingForecast)}</strong></span>
-                 {missedForecast > 0 && (
-                   <Badge variant="warn">과거 연결 미확인 {formatWonCompact(missedForecast)}</Badge>
-                 )}
-               </div>
-               <Link to="/data/installments" className="flex items-center gap-1 text-caption font-medium text-transfer hover:underline">
-                 할부 관리
-                 <ArrowRight className="h-3 w-3" />
-               </Link>
-             </div>
-           ) : <EmptyState message="등록된 할부 계획이 없습니다" actionLabel="할부 관리" actionTo="/data/installments" />}
-        </Card>
+        <p className="text-caption text-text-muted">
+          대출·할부·정기 지급의 월 부담과 남은 회차는{' '}
+          <Link to="/commitments" className="font-medium text-transfer hover:underline">약정 현황</Link>
+          에서 봅니다. 이 화면은 기록된 스냅샷과 거래만 씁니다.
+        </p>
       </div>
     </>
   )

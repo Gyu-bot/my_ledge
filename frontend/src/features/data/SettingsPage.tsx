@@ -12,6 +12,7 @@ import type { DebtStrategyPreference } from '../../types/settings'
 import { IncomeExpectationsEditor } from '../settings/IncomeExpectationsEditor'
 import { AnalyticsSettingsEditor } from './AnalyticsSettingsEditor'
 import { SourcePolicyEditor } from './SourcePolicyEditor'
+import { SelectedInvestmentsPanel } from '../networth/SelectedInvestmentsPanel'
 
 type TargetsDraft = {
   readonly emergency_fund_target_months: string
@@ -68,6 +69,7 @@ export function SettingsPage() {
       <PageHeader title="작업대 · 설정" meta={<span>분석 파라미터 · 재무 목표</span>} />
 
       <SourcePolicyEditor />
+      <SelectedInvestmentsPanel />
 
       {settings.isLoading ? <ListSkeleton rows={5} /> :
        settings.error ? <ErrorState onRetry={() => void settings.refetch()} /> :
@@ -75,7 +77,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4">
           <Card
             title="재무 목표"
-            meta="홈·자산·부채·신호 화면이 이 값을 읽습니다"
+            meta="재무상태 화면은 부채 상환 전략(대출 정렬)만 읽습니다. 비상금·저축률 목표는 저장만 되며 지금 화면에서는 쓰지 않습니다."
             action={<Button variant="primary" disabled={!hasWrite || patch.isPending} onClick={() => void saveTargets()}>목표 저장</Button>}
           >
             <div className="grid gap-4 sm:grid-cols-3">
@@ -100,7 +102,7 @@ export function SettingsPage() {
                   onChange={(event) => setDraft((current) => current && { ...current, savings_rate_target: event.target.value })}
                 />
               </Field>
-              <Field label="부채 상환 전략" hint="자산·부채 대출 정렬에 반영">
+              <Field label="부채 상환 전략" hint="재무상태의 대출 정렬에 반영">
                 <Select
                   disabled={!hasWrite}
                   value={draft.debt_strategy_preference}

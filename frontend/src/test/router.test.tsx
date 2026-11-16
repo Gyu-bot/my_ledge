@@ -19,7 +19,7 @@ describe('router — 새 IA + 레거시 redirect', () => {
   it.each([
     ['/', '월 결산'],
     ['/analysis', '지출 분석'],
-    ['/net-worth', '자산·부채'],
+    ['/net-worth', '재무상태'],
     ['/commitments', '약정 현황'],
     ['/data/inbox', '작업대 · 분류'],
     ['/data/nature', '작업대 · 기본값·정기 지급'],

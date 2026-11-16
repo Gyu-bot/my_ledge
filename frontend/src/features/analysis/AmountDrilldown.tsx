@@ -12,6 +12,7 @@ import { cn } from '../../lib/utils'
 import type { FlowRowKey, MonthStatus, MonthlyFlowMonth, SpendCubeFilters, SpendCubeRow, TransferPurpose } from '../../types/metrics'
 import type { TransactionListParams } from '../../types/transaction'
 import { TransactionRows, type TxRow } from '../transactions/TransactionRows'
+import { INTERVAL_MEASURES, OUTFLOW_FLOW_ROWS, type IntervalMeasureKey, type IntervalRange, type IntervalValues } from '../networth/intervalMeasures'
 import {
   FLOW_MEASURES,
   FLOW_ROW_LABELS,
@@ -23,7 +24,7 @@ import {
   measureAmount,
   measureTransactionCount,
 } from './flowMeasures'
-import { formatPeriodKo, periodDateRange } from './periods'
+import { formatDateKo, formatPeriodKo, periodDateRange } from './periods'
 import { loadErrorMessage } from './text'
 
 /** 드릴다운 대상: 흐름표의 한 금액이거나, 지출 큐브의 한 칸(카테고리·거래처 등). */
@@ -40,6 +41,8 @@ export type DrillTarget =
       includes: string[]
       excludes: string[]
     }
+  /** 순자산 대조의 스냅샷 구간 금액 (T061) — 달이 아니라 날짜 범위로 거래를 연다 */
+  | { kind: 'interval'; measure: IntervalMeasureKey; range: IntervalRange; values: IntervalValues }
 
 interface AmountDrilldownProps {
   target: DrillTarget
@@ -52,8 +55,13 @@ interface AmountDrilldownProps {
 const TRANSFER_PURPOSE_LABELS: Record<TransferPurpose, string> = {
   investment: '투자',
   savings: '저축',
-  internal_move: '계좌 간 이동',
+  internal_move: '그 밖의 계좌 간 이동',
   undecided: '목적 미정',
+}
+
+interface DateRange {
+  start_date: string
+  end_date: string
 }
 
 const TX_LIMIT = 200
@@ -247,8 +255,7 @@ function FlowRowsBreakdown({
   )
 }
 
-function IncomeTransactions({ period, expectedCount }: { period: string; expectedCount: number | null }) {
-  const range = periodDateRange(period)
+function IncomeTransactions({ range, expectedCount }: { range: DateRange; expectedCount: number | null }) {
   const list = useTransactionList({ type: '수입', flow_row: 'income_undetermined', start_date: range.start_date, end_date: range.end_date, per_page: TX_LIMIT })
   if (list.isLoading) return <ListSkeleton rows={3} />
   if (list.error) return <ErrorState message={loadErrorMessage(list.error)} onRetry={() => void list.refetch()} />
@@ -271,8 +278,7 @@ function IncomeTransactions({ period, expectedCount }: { period: string; expecte
   )
 }
 
-function TransferTransactions({ period, purposes }: { period: string; purposes: TransferPurpose[] | null }) {
-  const range = periodDateRange(period)
+function TransferTransactions({ range, purposes }: { range: DateRange; purposes: TransferPurpose[] | null }) {
   const list = useTransferTransactions({ start_date: range.start_date, end_date: range.end_date })
   if (list.isLoading) return <ListSkeleton rows={3} />
   if (list.error || !list.data) return <ErrorState message={loadErrorMessage(list.error)} onRetry={() => void list.refetch()} />
@@ -288,7 +294,73 @@ function TransferTransactions({ period, purposes }: { period: string; purposes: 
   return (
     <div className="space-y-1.5">
       <TransactionRows rows={rows} caption="이체 거래" />
-      <p className="text-text-muted">이체의 목적은 사람이 정합니다. 거래 옆 "고치기"에서 그 거래의 목적을 정할 수 있습니다.</p>
+      <p className="text-text-muted">
+        이체의 목적은 사람이 정합니다. 거래 옆 "고치기"에서 그 거래의 목적을 정하거나,{' '}
+        <Link
+          to={`/data/transfers?${new URLSearchParams({ start: range.start_date, end: range.end_date }).toString()}`}
+          className="text-transfer hover:underline"
+        >
+          이체 목적 정하기 화면
+        </Link>
+        에서 같은 거래처를 규칙으로 한꺼번에 정할 수 있습니다.
+      </p>
+    </div>
+  )
+}
+
+/** 날짜 범위 안에서 흐름표 줄 하나에 든 거래 (스냅샷 구간용) */
+function RangeRowTransactions({ range, flowRow }: { range: DateRange; flowRow: FlowRowKey }) {
+  const params: TransactionListParams = { flow_row: flowRow, start_date: range.start_date, end_date: range.end_date, per_page: TX_LIMIT }
+  const list = useTransactionList(params)
+  if (list.isLoading) return <ListSkeleton rows={3} />
+  if (list.error || !list.data) return <ErrorState message={loadErrorMessage(list.error)} onRetry={() => void list.refetch()} />
+  const rows: TxRow[] = list.data.items
+    .filter((tx) => tx.currency === 'KRW')
+    .map((tx) => ({
+      id: tx.id,
+      date: tx.date,
+      title: tx.merchant,
+      sub: [tx.effective_category_major, tx.effective_category_minor, tx.memo].filter(Boolean).join(' · '),
+      amount: tx.amount,
+    }))
+  const query = new URLSearchParams({ flow_row: flowRow, start_date: range.start_date, end_date: range.end_date })
+  return (
+    <div className="space-y-1.5">
+      <p className="text-text-muted">{list.data.total}건</p>
+      <TransactionRows rows={rows} caption={`${FLOW_ROW_LABELS[flowRow]} 거래`} />
+      {list.data.total > TX_LIMIT ? (
+        <p className="text-text-muted">
+          거래가 많아 {TX_LIMIT}건까지만 보여 줍니다.{' '}
+          <Link to={`/data/transactions?${query.toString()}`} className="text-transfer hover:underline">거래 화면에서 전체 보기</Link>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/** 총지급을 이루는 흐름표 줄을 골라 그 줄의 거래를 연다 (구간별 줄 금액은 응답에 없어 거래만 보인다) */
+function OutflowRowsPicker({ range }: { range: DateRange }) {
+  const [row, setRow] = useState<FlowRowKey | null>(null)
+  return (
+    <div className="space-y-2">
+      <p className="text-text-muted">총지급은 아래 줄로 이루어집니다. 줄을 누르면 이 구간의 거래가 열립니다.</p>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="총지급의 흐름표 줄">
+        {OUTFLOW_FLOW_ROWS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={row === key}
+            onClick={() => setRow(row === key ? null : key)}
+            className={cn(
+              'rounded-md border px-2.5 py-1 text-caption font-medium',
+              row === key ? 'border-accent-border bg-bg-selected text-text-primary' : 'border-border text-text-secondary hover:border-border-strong',
+            )}
+          >
+            {FLOW_ROW_LABELS[key]}
+          </button>
+        ))}
+      </div>
+      {row ? <RangeRowTransactions range={range} flowRow={row} /> : null}
     </div>
   )
 }
@@ -319,7 +391,79 @@ function ComparisonLine({ period, comparisonKey }: { period: string; comparisonK
   )
 }
 
+function IntervalDrilldown({ target, onClose, onNavigate, nonKrwCount }: AmountDrilldownProps & { target: Extract<DrillTarget, { kind: 'interval' }>; nonKrwCount: number }) {
+  const def = INTERVAL_MEASURES[target.measure]
+  const amount = def.amount(target.values)
+  const withValues = def.withValues(target.values)
+  const range: DateRange = { start_date: target.range.start_date, end_date: target.range.end_date }
+  const source = def.source
+  let body: ReactNode
+  if (source.kind === 'parts') {
+    body = (
+      <div className="flex flex-wrap gap-2">
+        {source.parts.map((part) => (
+          <button
+            key={part}
+            type="button"
+            onClick={() => onNavigate?.({ ...target, measure: part })}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-caption font-medium text-text-secondary hover:border-border-strong"
+          >
+            {INTERVAL_MEASURES[part].label} 내역 열기
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        ))}
+      </div>
+    )
+  } else if (source.kind === 'income') {
+    body = <IncomeTransactions range={range} expectedCount={null} />
+  } else if (source.kind === 'outflow_rows') {
+    body = <OutflowRowsPicker range={range} />
+  } else {
+    body = <TransferTransactions range={range} purposes={source.purposes} />
+  }
+  return (
+    <div role="region" aria-label={`${def.label} 근거`} className="rounded-md border border-accent-border bg-bg-raised p-3 shadow-raised">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-label font-semibold text-text-primary">
+            {def.label} <span className="tnum">{def.signed ? formatSignedWon(amount) : formatNetWon(amount)}</span>
+          </h3>
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-micro text-text-muted">
+            <span className="tnum">{formatDateKo(range.start_date)} ~ {formatDateKo(range.end_date)}</span>
+            <Badge variant="neutral">스냅샷 구간</Badge>
+          </p>
+        </div>
+        <button type="button" aria-label="근거 닫기" onClick={onClose} className="shrink-0 text-text-muted hover:text-text-primary">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-3 space-y-3">
+        <Section title="산식">
+          <p>{def.formula}</p>
+          {withValues ? <p className="tnum mt-1 text-text-primary">{withValues}</p> : null}
+        </Section>
+        <Section title="포함하는 것">
+          <ul className="list-inside list-disc space-y-0.5">
+            {def.includes.map((item) => <li key={item}>{item}</li>)}
+            {nonKrwCount > 0 ? <li>원화가 아닌 거래 {nonKrwCount}건은 따로 세고 더하지 않았습니다.</li> : null}
+          </ul>
+        </Section>
+        <Section title="빼는 것">
+          <ul className="list-inside list-disc space-y-0.5">
+            {def.excludes.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </Section>
+        <Section title={source.kind === 'parts' ? '이루는 금액' : '거래'}>{body}</Section>
+        <p className="text-micro text-text-muted">거래 옆 "고치기"를 누르면 이 화면 위에서 그 거래의 분류를 고칠 수 있습니다. 닫으면 보던 자리로 돌아옵니다.</p>
+      </div>
+    </div>
+  )
+}
+
 export function AmountDrilldown({ target, onClose, onNavigate, nonKrwCount = 0 }: AmountDrilldownProps) {
+  if (target.kind === 'interval') {
+    return <IntervalDrilldown target={target} onClose={onClose} onNavigate={onNavigate} nonKrwCount={nonKrwCount} />
+  }
   const isFlow = target.kind === 'flow'
   const def = isFlow ? FLOW_MEASURES[target.measure] : null
   const period = isFlow ? target.month.period : target.period
@@ -339,8 +483,8 @@ export function AmountDrilldown({ target, onClose, onNavigate, nonKrwCount = 0 }
     const source = def.source
     if (source.kind === 'cube') body = <CubeBreakdown period={period} filters={source.filters} />
     else if (source.kind === 'cube_rows') body = <FlowRowsBreakdown month={target.month} excludedRows={source.excludedRows} onNavigate={onNavigate} />
-    else if (source.kind === 'income') body = <IncomeTransactions period={period} expectedCount={txCount} />
-    else if (source.kind === 'transfer') body = <TransferTransactions period={period} purposes={source.purposes} />
+    else if (source.kind === 'income') body = <IncomeTransactions range={periodDateRange(period)} expectedCount={txCount} />
+    else if (source.kind === 'transfer') body = <TransferTransactions range={periodDateRange(period)} purposes={source.purposes} />
     else {
       body = (
         <div className="flex flex-wrap gap-2">
