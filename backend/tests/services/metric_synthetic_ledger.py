@@ -21,7 +21,7 @@ from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 from app.services.metric_views import (
     FLOW_LINES_VIEW,
     MONTHLY_FLOW_SUMMARY_VIEW,

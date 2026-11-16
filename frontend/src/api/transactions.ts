@@ -39,20 +39,12 @@ import type {
   MerchantTreemapNode,
   AutoClassificationSettings,
   AutoClassificationSettingsPatchRequest,
-  CategoryClassificationRuleRequest,
-  CategoryClassificationRuleListResponse,
-  CategoryClassificationRuleResponse,
   MerchantAliasRuleRequest,
   MerchantAliasRuleListResponse,
   MerchantAliasRuleResponse,
   LoanMerchantRuleRequest,
   LoanMerchantRuleListResponse,
   LoanMerchantRuleResponse,
-  RecurringCategoryRuleRequest,
-  RecurringCategoryRuleListResponse,
-  RecurringCategoryRuleResponse,
-  RecurringDryRunApplyRequest,
-  RecurringDryRunResponse,
   AutoClassificationApplyResponse,
 } from '../types/transaction'
 
@@ -244,24 +236,6 @@ export const transactionApi = {
       body: JSON.stringify(data),
     }),
 
-  categoryClassificationRules: () =>
-    apiFetch<CategoryClassificationRuleListResponse>('/auto-classification/category-rules'),
-
-  deleteCategoryClassificationRule: (id: number) =>
-    apiFetch<void>(`/auto-classification/category-rules/${id}`, { method: 'DELETE' }),
-
-  upsertCategoryClassificationRule: (data: CategoryClassificationRuleRequest) =>
-    apiFetch<CategoryClassificationRuleResponse>('/auto-classification/category-rules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }),
-
-  applyCategoryClassificationRules: () =>
-    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/category-rules', {
-      method: 'POST',
-    }),
-
   merchantAliasRules: () =>
     apiFetch<MerchantAliasRuleListResponse>('/auto-classification/merchant-alias-rules'),
 
@@ -290,34 +264,6 @@ export const transactionApi = {
   applyLoanMerchantRules: () =>
     apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/loan-merchant-rules', {
       method: 'POST',
-    }),
-
-  recurringCategoryRules: () =>
-    apiFetch<RecurringCategoryRuleListResponse>('/auto-classification/recurring-category-rules'),
-
-  deleteRecurringCategoryRule: (id: number) =>
-    apiFetch<void>(`/auto-classification/recurring-category-rules/${id}`, { method: 'DELETE' }),
-
-  upsertRecurringCategoryRule: (data: RecurringCategoryRuleRequest) =>
-    apiFetch<RecurringCategoryRuleResponse>('/auto-classification/recurring-category-rules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }),
-
-  applyRecurringCategoryRules: () =>
-    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/recurring-category-rules', {
-      method: 'POST',
-    }),
-
-  recurringCategoryRulesDryRun: () =>
-    apiFetch<RecurringDryRunResponse>('/auto-classification/recurring-category-rules/dry-run'),
-
-  applyRecurringDryRun: (data: RecurringDryRunApplyRequest) =>
-    apiFetch<AutoClassificationApplyResponse>('/auto-classification/apply/recurring-dry-run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
     }),
 
   incomeCategoryTimeline: (params: CategoryBreakdownParams = {}) =>

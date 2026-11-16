@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class SchemaColumnResponse(BaseModel):
+    description: str | None = None
     name: str
     type: str
     nullable: bool

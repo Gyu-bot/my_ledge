@@ -176,13 +176,6 @@ class NatureCommitmentRef(BaseModel):
     end_date: date | None
 
 
-class LegacyClassification(BaseModel):
-    cost_kind: str | None
-    fixed_cost_necessity: str | None
-    spend_necessity: str | None
-    recurring_payment_kind: str | None
-
-
 class TransactionNatureResponse(BaseModel):
     transaction_id: int
     effective: bool = Field(
@@ -208,7 +201,6 @@ class TransactionNatureResponse(BaseModel):
     installment_link_unconfirmed: bool
     necessity_conflict: bool
     override_source: NatureOrigin | None
-    legacy: LegacyClassification
     precedence: str = Field(
         default=(
             "지출 only: loan/installment link (fixed protected) > transaction > "

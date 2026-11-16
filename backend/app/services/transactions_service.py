@@ -6,15 +6,12 @@ from sqlalchemy import Select, exists, func, literal, or_, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.nature_axes import TransactionNatureOverride
 from app.models.transaction import Transaction
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.services.canonical_views import build_transactions_effective_select
 from app.services.metric_views import FLOW_LINES_VIEW
 from app.services.transaction_axes_service import load_transaction_axes
-from app.services.nature_axes_service import (
-    LEGACY_CLASSIFICATION_FIELDS,
-    write_through_legacy_classification,
-)
 from app.schemas.transaction import (
     CategorySummaryItem,
     CategorySummaryResponse,
@@ -54,10 +51,6 @@ async def list_transactions(
     include_deleted: bool,
     include_merged: bool,
     search: str | None,
-    cost_kind: str,
-    fixed_cost_necessity: str,
-    spend_necessity: str,
-    recurring_payment_kind: str,
     page: int,
     per_page: int,
     flow_row: str | None = None,
@@ -71,10 +64,6 @@ async def list_transactions(
         source=source,
         category_major=category_major,
         payment_method=payment_method,
-        cost_kind=cost_kind,
-        fixed_cost_necessity=fixed_cost_necessity,
-        spend_necessity=spend_necessity,
-        recurring_payment_kind=recurring_payment_kind,
         is_edited=is_edited,
         include_deleted=include_deleted,
         include_merged=include_merged,
@@ -113,9 +102,27 @@ async def _with_axes(
     db_session: AsyncSession, items: list[TransactionResponse]
 ) -> list[TransactionResponse]:
     """Fill the resolved axes from vw_transaction_nature / vw_metric_flow_lines."""
-    axes = await load_transaction_axes(db_session, [item.id for item in items])
+    if not items:
+        return []
+    ids = [item.id for item in items]
+    axes = await load_transaction_axes(db_session, ids)
+    edited_ids = set(
+        (
+            await db_session.scalars(
+                select(TransactionNatureOverride.transaction_id).where(
+                    TransactionNatureOverride.transaction_id.in_(ids),
+                    TransactionNatureOverride.source.in_(("user", "legacy_edit")),
+                )
+            )
+        ).all()
+    )
     return [
-        item.model_copy(update=axes[item.id].model_dump()) if item.id in axes else item
+        item.model_copy(
+            update={
+                **(axes[item.id].model_dump() if item.id in axes else {}),
+                "is_edited": item.is_edited or item.id in edited_ids,
+            }
+        )
         for item in items
     ]
 
@@ -346,31 +353,11 @@ async def create_transaction(
         merchant=payload_data.get("merchant"),
         description=payload_data["description"],
     )
-    payload_data["cost_kind"] = _normalized_cost_kind(payload_data.get("cost_kind"))
-    payload_data["fixed_cost_necessity"], payload_data["spend_necessity"] = (
-        _normalized_necessity_pair(
-            cost_kind=payload_data["cost_kind"],
-            fixed_cost_necessity=payload_data.get("fixed_cost_necessity"),
-            spend_necessity=payload_data.get("spend_necessity"),
-        )
-    )
-    payload_data["cost_classification_source"] = (
-        "manual"
-        if {"cost_kind", "fixed_cost_necessity", "spend_necessity"}
-        & payload.model_fields_set
-        else None
-    )
-    payload_data["recurring_payment_kind"] = _normalized_recurring_payment_kind(
-        payload_data.get("recurring_payment_kind")
-    )
     transaction = Transaction(
         **payload_data,
         source="manual",
     )
     db_session.add(transaction)
-    if LEGACY_CLASSIFICATION_FIELDS & payload.model_fields_set:
-        await db_session.flush()
-        await write_through_legacy_classification(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
     return await _one_with_axes(db_session, _serialize_transaction_model(transaction))
@@ -384,8 +371,6 @@ async def update_transaction(
     transaction = await _get_transaction_or_404(db_session, transaction_id)
     update_fields = payload.model_dump(exclude_unset=True)
     _apply_transaction_updates(transaction, update_fields)
-    if LEGACY_CLASSIFICATION_FIELDS & update_fields.keys():
-        await write_through_legacy_classification(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
     return await _one_with_axes(db_session, _serialize_transaction_model(transaction))
@@ -404,50 +389,11 @@ async def get_transaction(
 
 
 def _apply_transaction_updates(transaction: Transaction, fields: dict) -> None:
-    # Null cost_kind has historically been a no-op. Necessity null is an
-    # explicit clear; omitted fields must never reclassify imported evidence.
-    before = (
-        transaction.cost_kind,
-        transaction.fixed_cost_necessity,
-        transaction.spend_necessity,
-    )
-    cost_kind = fields.get("cost_kind") or transaction.cost_kind
-    necessity = transaction.spend_necessity
-    if "spend_necessity" in fields:
-        necessity = fields["spend_necessity"]
-    elif "fixed_cost_necessity" in fields:
-        necessity = fields["fixed_cost_necessity"]
-    elif cost_kind != transaction.cost_kind:
-        necessity = necessity or transaction.fixed_cost_necessity
-
-    if {"cost_kind", "fixed_cost_necessity", "spend_necessity"} & fields.keys():
-        if (
-            "spend_necessity" in fields
-            or "fixed_cost_necessity" in fields
-            or cost_kind != transaction.cost_kind
-        ):
-            transaction.fixed_cost_necessity = (
-                necessity if cost_kind == "fixed" else None
-            )
-            transaction.spend_necessity = necessity
-        transaction.cost_kind = cost_kind
-        after = (
-            transaction.cost_kind,
-            transaction.fixed_cost_necessity,
-            transaction.spend_necessity,
-        )
-        if before != after:
-            transaction.cost_classification_source = "manual"
-
     for field, value in fields.items():
-        if field in {"cost_kind", "fixed_cost_necessity", "spend_necessity"}:
-            continue
         if field == "merchant":
             value = _normalized_merchant(
                 merchant=value, description=transaction.description
             )
-        elif field == "recurring_payment_kind":
-            value = _normalized_recurring_payment_kind(value)
         setattr(transaction, field, value)
 
 
@@ -532,10 +478,6 @@ async def bulk_update_transactions(
     update_fields = payload.model_dump(exclude={"ids"}, exclude_unset=True)
     for transaction in transactions:
         _apply_transaction_updates(transaction, update_fields)
-    if LEGACY_CLASSIFICATION_FIELDS & update_fields.keys():
-        await write_through_legacy_classification(
-            db_session, [transaction.id for transaction in transactions]
-        )
     await db_session.commit()
     return TransactionBulkUpdateResponse(updated=len(transactions))
 
@@ -627,20 +569,12 @@ async def _load_filtered_transactions(
     include_deleted: bool,
     include_merged: bool,
     search: str | None,
-    cost_kind: str = "all",
-    fixed_cost_necessity: str = "all",
-    spend_necessity: str = "all",
-    recurring_payment_kind: str = "all",
 ) -> list[RowMapping]:
     query, canonical = _build_transaction_query(
         start_date=start_date,
         end_date=end_date,
         category_major=category_major,
         payment_method=payment_method,
-        cost_kind=cost_kind,
-        fixed_cost_necessity=fixed_cost_necessity,
-        spend_necessity=spend_necessity,
-        recurring_payment_kind=recurring_payment_kind,
         tx_type=tx_type,
         source=source,
         is_edited=is_edited,
@@ -662,10 +596,6 @@ def _build_transaction_query(
     end_date: date | None,
     category_major: str | None,
     payment_method: str | None,
-    cost_kind: str,
-    fixed_cost_necessity: str,
-    spend_necessity: str,
-    recurring_payment_kind: str,
     tx_type: TransactionTypeFilter,
     source: TransactionSourceFilter,
     is_edited: str,
@@ -686,16 +616,6 @@ def _build_transaction_query(
         query = query.where(canonical.c.payment_method == payment_method)
     if category_major is not None:
         query = query.where(canonical.c.effective_category_major == category_major)
-    if cost_kind != "all":
-        query = query.where(canonical.c.cost_kind == cost_kind)
-    if fixed_cost_necessity != "all":
-        query = query.where(canonical.c.fixed_cost_necessity == fixed_cost_necessity)
-    if spend_necessity != "all":
-        query = query.where(canonical.c.spend_necessity == spend_necessity)
-    if recurring_payment_kind != "all":
-        query = query.where(
-            canonical.c.recurring_payment_kind == recurring_payment_kind
-        )
     if tx_type != "all":
         query = query.where(canonical.c.type.in_(_included_transaction_types(tx_type)))
     if source != "all":
@@ -781,11 +701,6 @@ def _serialize_transaction_model(transaction: Transaction) -> TransactionRespons
         amount=transaction.amount,
         currency=transaction.currency,
         payment_method=transaction.payment_method,
-        cost_kind=transaction.cost_kind,
-        fixed_cost_necessity=transaction.fixed_cost_necessity,
-        spend_necessity=transaction.spend_necessity,
-        cost_classification_source=transaction.cost_classification_source,
-        recurring_payment_kind=transaction.recurring_payment_kind,
         memo=transaction.memo,
         is_deleted=transaction.is_deleted,
         merged_into_id=transaction.merged_into_id,
@@ -813,11 +728,6 @@ def _serialize_transaction_row(transaction: RowMapping) -> TransactionResponse:
         amount=transaction["amount"],
         currency=transaction["currency"],
         payment_method=transaction["payment_method"],
-        cost_kind=transaction["cost_kind"],
-        fixed_cost_necessity=transaction["fixed_cost_necessity"],
-        spend_necessity=transaction["spend_necessity"],
-        cost_classification_source=transaction["cost_classification_source"],
-        recurring_payment_kind=transaction["recurring_payment_kind"],
         memo=transaction["memo"],
         is_deleted=transaction["is_deleted"],
         merged_into_id=transaction["merged_into_id"],
@@ -843,9 +753,6 @@ def _is_edited(transaction: Transaction) -> bool:
             transaction.category_minor_user is not None,
             transaction.memo is not None,
             transaction.merchant != transaction.description,
-            transaction.cost_classification_source == "manual",
-            transaction.spend_necessity is not None,
-            transaction.recurring_payment_kind is not None,
         )
     )
 
@@ -856,38 +763,6 @@ def _normalized_merchant(*, merchant: str | None, description: str) -> str:
 
     normalized = merchant.strip()
     return normalized or description
-
-
-def _normalized_cost_kind(cost_kind: str | None) -> str:
-    return "fixed" if cost_kind == "fixed" else "variable"
-
-
-def _normalized_necessity_pair(
-    *,
-    cost_kind: str,
-    fixed_cost_necessity: str | None,
-    spend_necessity: str | None,
-) -> tuple[str | None, str | None]:
-    explicit_spend_necessity = (
-        spend_necessity if spend_necessity in {"essential", "discretionary"} else None
-    )
-    explicit_fixed_necessity = (
-        fixed_cost_necessity
-        if fixed_cost_necessity in {"essential", "discretionary"}
-        else None
-    )
-    if cost_kind == "fixed":
-        normalized = explicit_spend_necessity or explicit_fixed_necessity
-        return normalized, normalized
-    return None, explicit_spend_necessity or "discretionary"
-
-
-def _normalized_recurring_payment_kind(
-    recurring_payment_kind: str | None,
-) -> str | None:
-    if recurring_payment_kind in {"installment", "monthly_recurring", "not_recurring"}:
-        return recurring_payment_kind
-    return None
 
 
 def _period_key(tx_date: date, group_by: TransactionGroupBy) -> str:

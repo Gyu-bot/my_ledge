@@ -169,8 +169,6 @@ async def test_list_transactions_supports_is_edited_and_search(
     assert payload["total"] == 1
     assert payload["items"][0]["effective_category_major"] == "식비"
     assert payload["items"][0]["effective_category_minor"] == "배달"
-    assert payload["items"][0]["cost_kind"] is None
-    assert payload["items"][0]["fixed_cost_necessity"] is None
 
 
 async def test_list_transactions_preserves_raw_signed_amounts_after_settlement_analysis(
@@ -285,69 +283,6 @@ async def test_list_transactions_supports_type_source_and_date_filters(
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["description"] == "수동 식비"
-
-
-async def test_list_transactions_supports_cost_and_recurring_filters(
-    async_client: AsyncClient,
-    db_session: AsyncSession,
-) -> None:
-    db_session.add_all(
-        [
-            _transaction(
-                tx_date=date(2026, 3, 10),
-                tx_time=time(9, 0),
-                tx_type="지출",
-                category_major="통신",
-                category_minor="휴대폰",
-                description="통신비",
-                amount=-90000,
-                payment_method="카드 A",
-                cost_kind="fixed",
-                fixed_cost_necessity="essential",
-                recurring_payment_kind="monthly_recurring",
-            ),
-            _transaction(
-                tx_date=date(2026, 3, 11),
-                tx_time=time(9, 0),
-                tx_type="지출",
-                category_major="쇼핑",
-                category_minor="전자제품",
-                description="노트북 할부",
-                amount=-120000,
-                payment_method="카드 A",
-                cost_kind="fixed",
-                fixed_cost_necessity="discretionary",
-                recurring_payment_kind="installment",
-            ),
-            _transaction(
-                tx_date=date(2026, 3, 12),
-                tx_time=time(9, 0),
-                tx_type="지출",
-                category_major="식비",
-                category_minor="외식",
-                description="점심",
-                amount=-15000,
-                payment_method="카드 B",
-                cost_kind="variable",
-            ),
-        ]
-    )
-    await db_session.commit()
-
-    response = await async_client.get(
-        "/api/v1/transactions",
-        params={
-            "cost_kind": "fixed",
-            "fixed_cost_necessity": "essential",
-            "recurring_payment_kind": "monthly_recurring",
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["total"] == 1
-    assert payload["items"][0]["description"] == "통신비"
-    assert payload["items"][0]["recurring_payment_kind"] == "monthly_recurring"
 
 
 async def test_list_transaction_filter_options_returns_distinct_visible_values(
@@ -641,8 +576,6 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert create_response.json()["source"] == "manual"
     assert create_response.json()["description"] == "점심"
     assert create_response.json()["merchant"] == "점심"
-    assert create_response.json()["cost_kind"] == "variable"
-    assert create_response.json()["spend_necessity"] == "discretionary"
 
     patch_response = await async_client.patch(
         f"/api/v1/transactions/{created_id}",
@@ -651,7 +584,6 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
             "category_major_user": "생활/잡화",
             "category_minor_user": "생필품",
             "merchant": "회사식당",
-            "cost_kind": "variable",
             "memo": "수정 메모",
         },
     )
@@ -659,8 +591,6 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert patch_response.json()["effective_category_major"] == "생활/잡화"
     assert patch_response.json()["description"] == "점심"
     assert patch_response.json()["merchant"] == "회사식당"
-    assert patch_response.json()["cost_kind"] == "variable"
-    assert patch_response.json()["spend_necessity"] == "discretionary"
     assert patch_response.json()["is_edited"] is True
 
     second = _transaction(
@@ -684,9 +614,6 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
             "merchant": "공통 거래처",
             "category_major_user": "식비",
             "category_minor_user": "배달",
-            "cost_kind": "fixed",
-            "fixed_cost_necessity": "essential",
-            "recurring_payment_kind": "installment",
             "memo": "일괄 메모",
         },
     )
@@ -714,10 +641,6 @@ async def test_write_endpoints_update_transactions_and_require_api_key(
     assert stored.category_minor_user == "배달"
     assert stored.description == "점심"
     assert stored.merchant == "공통 거래처"
-    assert stored.cost_kind == "fixed"
-    assert stored.fixed_cost_necessity == "essential"
-    assert stored.spend_necessity == "essential"
-    assert stored.recurring_payment_kind == "installment"
     assert stored.memo == "일괄 메모"
     assert stored.is_deleted is False
 

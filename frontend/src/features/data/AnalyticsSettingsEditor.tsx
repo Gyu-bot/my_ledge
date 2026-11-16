@@ -136,30 +136,6 @@ export function AnalyticsSettingsEditor({ analytics, hasWrite, isPending, onSave
           </div>
         </section>
 
-        <section aria-labelledby="analytics-recurring-dry-run" className="rounded-md border border-border-subtle bg-bg-inset p-3">
-          <h3 id="analytics-recurring-dry-run" className="text-label text-text-secondary">반복 결제 후보 검토</h3>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Field label="최소 반복 횟수" help={settingHelp('recurringMinOccurrences', triple({ defaults: analytics.defaults.recurring_dry_run.min_occurrences, saved: analytics.saved.recurring_dry_run.min_occurrences, effective: analytics.effective.recurring_dry_run.min_occurrences, format: formatNumber }))}><TextInput type="number" min={2} disabled={!hasWrite} value={draft.recurring_dry_run.min_occurrences} onChange={(event) => updateRecurring(setDirtyDraft, { min_occurrences: event.target.value })} /></Field>
-            <Field label="최소 반복 월수" help={settingHelp('recurringMinMonths', triple({ defaults: analytics.defaults.recurring_dry_run.min_distinct_months, saved: analytics.saved.recurring_dry_run.min_distinct_months, effective: analytics.effective.recurring_dry_run.min_distinct_months, format: formatNumber }))}><TextInput type="number" min={1} disabled={!hasWrite} value={draft.recurring_dry_run.min_distinct_months} onChange={(event) => updateRecurring(setDirtyDraft, { min_distinct_months: event.target.value })} /></Field>
-            <Field label="최소 반복 일수" help={settingHelp('recurringMinDays', triple({ defaults: analytics.defaults.recurring_dry_run.min_distinct_days, saved: analytics.saved.recurring_dry_run.min_distinct_days, effective: analytics.effective.recurring_dry_run.min_distinct_days, format: formatNumber }))}><TextInput type="number" min={1} disabled={!hasWrite} value={draft.recurring_dry_run.min_distinct_days} onChange={(event) => updateRecurring(setDirtyDraft, { min_distinct_days: event.target.value })} /></Field>
-            <Field label="금액 변동계수 최대 (%)" help={settingHelp('recurringAmountCv', triple({ defaults: analytics.defaults.recurring_dry_run.max_amount_cv, saved: analytics.saved.recurring_dry_run.max_amount_cv, effective: analytics.effective.recurring_dry_run.max_amount_cv, format: formatRatio }))}><TextInput type="number" min={0} disabled={!hasWrite} value={draft.recurring_dry_run.max_amount_cv} onChange={(event) => updateRecurring(setDirtyDraft, { max_amount_cv: event.target.value })} /></Field>
-            <Field label="월간 간격 최소 (일)" help={settingHelp('recurringMonthlyMin', triple({ defaults: analytics.defaults.recurring_dry_run.monthly_interval_days_min, saved: analytics.saved.recurring_dry_run.monthly_interval_days_min, effective: analytics.effective.recurring_dry_run.monthly_interval_days_min, format: formatNumber }))}><TextInput type="number" min={1} disabled={!hasWrite} value={draft.recurring_dry_run.monthly_interval_days_min} onChange={(event) => updateRecurring(setDirtyDraft, { monthly_interval_days_min: event.target.value })} /></Field>
-            <Field label="월간 간격 최대 (일)" help={settingHelp('recurringMonthlyMax', triple({ defaults: analytics.defaults.recurring_dry_run.monthly_interval_days_max, saved: analytics.saved.recurring_dry_run.monthly_interval_days_max, effective: analytics.effective.recurring_dry_run.monthly_interval_days_max, format: formatNumber }))}><TextInput type="number" min={1} disabled={!hasWrite} value={draft.recurring_dry_run.monthly_interval_days_max} onChange={(event) => updateRecurring(setDirtyDraft, { monthly_interval_days_max: event.target.value })} /></Field>
-            <Field label="주간 간격 최소 (일)" help={settingHelp('recurringWeeklyMin', triple({ defaults: analytics.defaults.recurring_dry_run.weekly_interval_days_min, saved: analytics.saved.recurring_dry_run.weekly_interval_days_min, effective: analytics.effective.recurring_dry_run.weekly_interval_days_min, format: formatNumber }))}><TextInput type="number" min={1} disabled={!hasWrite} value={draft.recurring_dry_run.weekly_interval_days_min} onChange={(event) => updateRecurring(setDirtyDraft, { weekly_interval_days_min: event.target.value })} /></Field>
-            <Field label="주간 간격 최대 (일)" help={settingHelp('recurringWeeklyMax', triple({ defaults: analytics.defaults.recurring_dry_run.weekly_interval_days_max, saved: analytics.saved.recurring_dry_run.weekly_interval_days_max, effective: analytics.effective.recurring_dry_run.weekly_interval_days_max, format: formatNumber }))}><TextInput type="number" min={1} disabled={!hasWrite} value={draft.recurring_dry_run.weekly_interval_days_max} onChange={(event) => updateRecurring(setDirtyDraft, { weekly_interval_days_max: event.target.value })} /></Field>
-            <Field label="반복 신뢰도 최소 (%)" help={settingHelp('recurringConfidence', triple({ defaults: analytics.defaults.recurring_dry_run.minimum_confidence, saved: analytics.saved.recurring_dry_run.minimum_confidence, effective: analytics.effective.recurring_dry_run.minimum_confidence, format: formatRatio }))}><TextInput type="number" min={0} max={100} disabled={!hasWrite} value={draft.recurring_dry_run.minimum_confidence} onChange={(event) => updateRecurring(setDirtyDraft, { minimum_confidence: event.target.value })} /></Field>
-            <Field label="반복 작업 기본 범위" help={settingHelp('recurringApplyScope', triple({ defaults: analytics.defaults.recurring_dry_run.default_apply_scope, saved: analytics.saved.recurring_dry_run.default_apply_scope, effective: analytics.effective.recurring_dry_run.default_apply_scope, format: formatText }))}>
-              <Select disabled={!hasWrite} value={draft.recurring_dry_run.default_apply_scope} onChange={(event) => updateRecurring(setDirtyDraft, { default_apply_scope: event.target.value })}>
-                <option value="all_matching">미리보기 전체</option>
-                <option value="reviewed_only">직접 검토한 거래만</option>
-              </Select>
-            </Field>
-            <div className="flex flex-col gap-1">
-              <Toggle disabled={!hasWrite} checked={draft.recurring_dry_run.upload_auto_apply} label={<ToggleLabel label="업로드 후 자동 적용" help={settingHelp('recurringUploadAutoApply', triple({ defaults: analytics.defaults.recurring_dry_run.upload_auto_apply, saved: analytics.saved.recurring_dry_run.upload_auto_apply, effective: analytics.effective.recurring_dry_run.upload_auto_apply, format: formatBoolean }))} />} onChange={(checked) => updateRecurring(setDirtyDraft, { upload_auto_apply: checked })} />
-            </div>
-          </div>
-        </section>
-
         <section aria-labelledby="analytics-asset-liability-health" className="rounded-md border border-border-subtle bg-bg-inset p-3">
           <h3 id="analytics-asset-liability-health" className="text-label text-text-secondary">자산·부채 분석</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -241,9 +217,6 @@ function updateVelocity(setter: Dispatch<SetStateAction<AnalyticsDraft>>, patch:
   setter((current) => ({ ...current, discretionary_velocity: { ...current.discretionary_velocity, ...patch } }))
 }
 
-function updateRecurring(setter: Dispatch<SetStateAction<AnalyticsDraft>>, patch: Partial<AnalyticsDraft['recurring_dry_run']>) {
-  setter((current) => ({ ...current, recurring_dry_run: { ...current.recurring_dry_run, ...patch } }))
-}
 
 function updateAsset(setter: Dispatch<SetStateAction<AnalyticsDraft>>, patch: Partial<AnalyticsDraft['asset_liability_health']>) {
   setter((current) => ({ ...current, asset_liability_health: { ...current.asset_liability_health, ...patch } }))

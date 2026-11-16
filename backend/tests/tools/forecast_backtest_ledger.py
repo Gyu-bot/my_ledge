@@ -20,7 +20,7 @@ from app.models import (
     Transaction,
     UploadLog,
 )
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 
 SALARY = 123_457
 SUBSCRIPTION = 4_321

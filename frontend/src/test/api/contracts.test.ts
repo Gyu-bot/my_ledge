@@ -42,36 +42,11 @@ describe('frontend query contract adapters', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await analyticsApi.monthlyCashflow({ months: 6 })
-    await analyticsApi.fixedCostSummary({ start_month: '2026-01', end_month: '2026-03' })
-    await analyticsApi.fixedCostTrend({ start_month: '2026-01', end_month: '2026-03' })
     await analyticsApi.merchantSpend({ start_month: '2026-01', end_month: '2026-03', limit: 5 })
-    await analyticsApi.merchantSpend({ months: 3, limit: 5 })
-    await transactionApi.recurringCategoryRulesDryRun()
-    await transactionApi.applyRecurringDryRun({
-      merchant: '왓챠',
-      proposed_kind: 'monthly_recurring',
-      apply_scope: 'all_matching',
-      preview_token: 'test-preview',
-      transaction_ids: [1],
-    })
-
     expect(fetchMock.mock.calls[0][0]).toContain('/analytics/monthly-cashflow?')
-    expect(fetchMock.mock.calls[0][0]).toContain('start_date=')
-    expect(fetchMock.mock.calls[0][0]).toContain('end_date=')
     expect(fetchMock.mock.calls[1][0]).toContain('start_date=2026-01-01')
     expect(fetchMock.mock.calls[1][0]).toContain('end_date=2026-03-31')
-    expect(fetchMock.mock.calls[2][0]).toContain('/analytics/fixed-cost-trend?')
-    expect(fetchMock.mock.calls[2][0]).toContain('start_date=2026-01-01')
-    expect(fetchMock.mock.calls[2][0]).toContain('end_date=2026-03-31')
-    expect(fetchMock.mock.calls[3][0]).toContain('start_date=2026-01-01')
-    expect(fetchMock.mock.calls[3][0]).toContain('end_date=2026-03-31')
-    expect(fetchMock.mock.calls[3][0]).toContain('limit=5')
-    expect(fetchMock.mock.calls[3][0]).not.toContain('months=')
-    expect(fetchMock.mock.calls[4][0]).toContain('limit=5')
-    expect(fetchMock.mock.calls[4][0]).not.toContain('months=')
-    expect(fetchMock.mock.calls[5][0]).toContain('/auto-classification/recurring-category-rules/dry-run')
-    expect(fetchMock.mock.calls[6][0]).toContain('/auto-classification/apply/recurring-dry-run')
-    expect(fetchMock.mock.calls[6][1]).toMatchObject({ method: 'POST' })
+    expect(fetchMock.mock.calls[1][0]).toContain('limit=5')
   })
 
   it('replaces missing daily-spend endpoint with transactions list query', async () => {
@@ -202,7 +177,6 @@ describe('frontend query contract adapters', () => {
                   currency: 'KRW',
                   payment_method: '카드',
                   memo: null,
-                  recurring_payment_kind: 'installment',
                 },
                 installment_plan_id: 3,
                 installment_plan_display_name: '맥북 할부',
@@ -271,7 +245,6 @@ describe('frontend query contract adapters', () => {
             currency: 'KRW',
             payment_method: '카드',
             memo: null,
-            recurring_payment_kind: 'installment',
           },
           installment_plan_id: 3,
           installment_plan_display_name: '맥북 할부',
@@ -415,8 +388,8 @@ describe('frontend query contract adapters', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined)
     const update = vi.spyOn(transactionApi, 'update').mockResolvedValue(undefined)
     const { result } = renderHook(() => useUpdateTransaction(), { wrapper: createWrapper(queryClient) })
-    await result.current.mutateAsync({ id: 17, data: { spend_necessity: 'discretionary' } })
-    expect(update).toHaveBeenCalledWith(17, { spend_necessity: 'discretionary' })
+    await result.current.mutateAsync({ id: 17, data: { memo: 'synthetic-note' } })
+    expect(update).toHaveBeenCalledWith(17, { memo: 'synthetic-note' })
     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual(expect.arrayContaining([
       ['transactions'], ['analytics'], ['assets'], ['canonical-views'],
     ]))

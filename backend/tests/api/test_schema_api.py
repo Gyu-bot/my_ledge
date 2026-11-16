@@ -192,7 +192,6 @@ async def test_schema_endpoint_returns_tables(
         "vw_loan_repayment_monthly",
         "vw_merchant_monthly_baseline",
         "vw_monthly_cashflow",
-        "vw_recurring_merchant_monthly",
         "vw_transactions_effective",
         "vw_true_spendable_monthly",
         "vw_unclassified_work_queue",
@@ -238,7 +237,7 @@ async def test_schema_endpoint_returns_tables(
     assert any(
         column["name"] == "loan_maturity_date" for column in effective_view["columns"]
     )
-    assert any(
+    assert not any(
         column["name"] == "cost_classification_source"
         for column in effective_view["columns"]
     )
@@ -254,8 +253,6 @@ async def test_schema_endpoint_returns_tables(
         "expense_total",
         "non_loan_expense_total",
         "loan_repayment_total",
-        "fixed_total",
-        "variable_total",
         "net_cashflow",
         "savings_rate",
     }.issubset({column["name"] for column in monthly_cashflow_view["columns"]})
@@ -320,10 +317,6 @@ async def test_schema_endpoint_returns_tables(
     )
     assert {
         "transaction_id",
-        "needs_cost_kind",
-        "needs_fixed_cost_necessity",
-        "needs_recurring_payment_kind",
+        "needs_adjustability",
         "needs_loan_link_review",
-        "priority_score",
-        "priority_reason",
     }.issubset({column["name"] for column in unclassified_queue_view["columns"]})

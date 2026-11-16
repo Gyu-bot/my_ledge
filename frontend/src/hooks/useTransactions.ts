@@ -21,11 +21,8 @@ import type {
   SubcategoryBreakdownParams,
   MerchantTreemapNode,
   AutoClassificationSettingsPatchRequest,
-  CategoryClassificationRuleRequest,
   MerchantAliasRuleRequest,
   LoanMerchantRuleRequest,
-  RecurringCategoryRuleRequest,
-  RecurringDryRunApplyRequest,
 } from '../types/transaction'
 
 export const txKeys = {
@@ -40,11 +37,8 @@ export const txKeys = {
   installmentTransactionSuggestions: (params: InstallmentTransactionSuggestionParams) =>
     ['transactions', 'installmentTransactionSuggestions', params] as const,
   autoClassificationSettings: () => ['transactions', 'autoClassificationSettings'] as const,
-  categoryClassificationRules: () => ['transactions', 'categoryClassificationRules'] as const,
   merchantAliasRules: () => ['transactions', 'merchantAliasRules'] as const,
   loanMerchantRules: () => ['transactions', 'loanMerchantRules'] as const,
-  recurringCategoryRules: () => ['transactions', 'recurringCategoryRules'] as const,
-  recurringCategoryRulesDryRun: () => ['transactions', 'recurringCategoryRulesDryRun'] as const,
   categoryTimeline: (params: { start_month?: string; end_month?: string; start_date?: string; end_date?: string; include_income?: boolean }) => ['transactions', 'categoryTimeline', params] as const,
   categoryBreakdown: (params: CategoryBreakdownParams) => ['transactions', 'categoryBreakdown', params] as const,
   subcategoryBreakdown: (params: SubcategoryBreakdownParams | null) => ['transactions', 'subcategoryBreakdown', params] as const,
@@ -124,13 +118,6 @@ export function useAutoClassificationSettings() {
   })
 }
 
-export function useCategoryClassificationRules() {
-  return useQuery({
-    queryKey: txKeys.categoryClassificationRules(),
-    queryFn: transactionApi.categoryClassificationRules,
-  })
-}
-
 export function useLoanMerchantRules() {
   return useQuery({
     queryKey: txKeys.loanMerchantRules(),
@@ -142,20 +129,6 @@ export function useMerchantAliasRules() {
   return useQuery({
     queryKey: txKeys.merchantAliasRules(),
     queryFn: transactionApi.merchantAliasRules,
-  })
-}
-
-export function useRecurringCategoryRules() {
-  return useQuery({
-    queryKey: txKeys.recurringCategoryRules(),
-    queryFn: transactionApi.recurringCategoryRules,
-  })
-}
-
-export function useRecurringCategoryRulesDryRun() {
-  return useQuery({
-    queryKey: txKeys.recurringCategoryRulesDryRun(),
-    queryFn: transactionApi.recurringCategoryRulesDryRun,
   })
 }
 
@@ -361,23 +334,6 @@ export function usePatchAutoClassificationSettings() {
   })
 }
 
-export function useUpsertCategoryClassificationRule() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (data: CategoryClassificationRuleRequest) =>
-      transactionApi.upsertCategoryClassificationRule(data),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
-export function useApplyCategoryClassificationRules() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => transactionApi.applyCategoryClassificationRules(),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
 export function useUpsertMerchantAliasRule() {
   const qc = useQueryClient()
   return useMutation({
@@ -408,47 +364,6 @@ export function useApplyLoanMerchantRules() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => transactionApi.applyLoanMerchantRules(),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
-export function useUpsertRecurringCategoryRule() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (data: RecurringCategoryRuleRequest) =>
-      transactionApi.upsertRecurringCategoryRule(data),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
-export function useApplyRecurringCategoryRules() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => transactionApi.applyRecurringCategoryRules(),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
-export function useApplyRecurringDryRun() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (data: RecurringDryRunApplyRequest) => transactionApi.applyRecurringDryRun(data),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
-export function useDeleteCategoryClassificationRule() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => transactionApi.deleteCategoryClassificationRule(id),
-    onSuccess: () => invalidateTransactionDependents(qc),
-  })
-}
-
-export function useDeleteRecurringCategoryRule() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => transactionApi.deleteRecurringCategoryRule(id),
     onSuccess: () => invalidateTransactionDependents(qc),
   })
 }

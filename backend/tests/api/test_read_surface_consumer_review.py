@@ -979,7 +979,7 @@ async def test_transactions_return_resolved_axes_and_sources(
     assert loan["adjustability_source"] == "loan_link"
     assert loan["flow_row"] == "committed_loan"
     assert loan["flow_row_source"] == "own_line"
-    assert loan["cost_kind"] is None or isinstance(loan["cost_kind"], str)  # kept
+    assert "cost_kind" not in loan
 
     subscription = (await listing(flow_row="committed_recurring", per_page="1"))[0]
     assert subscription["payment_form_source"] == "commitment"

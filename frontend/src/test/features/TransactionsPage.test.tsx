@@ -19,8 +19,7 @@ function tx(overrides: Partial<TransactionResponse> = {}): TransactionResponse {
   return {
     id: 1, date: '2026-06-09', time: '12:00:00', type: '지출', category_major: '식비', category_minor: '배달', category_major_user: null, category_minor_user: null,
     effective_category_major: '식비', effective_category_minor: '배달', description: '샘플배달-원본', merchant: '샘플배달', amount: -23000, currency: 'KRW',
-    payment_method: '카드 A', cost_kind: 'variable', fixed_cost_necessity: null, spend_necessity: 'discretionary', cost_classification_source: 'auto',
-    recurring_payment_kind: null, memo: null, is_deleted: false, merged_into_id: null, is_edited: false, source: 'import', created_at: '', updated_at: '',
+    payment_method: '카드 A', memo: null, is_deleted: false, merged_into_id: null, is_edited: false, source: 'import', created_at: '', updated_at: '',
     ...overrides,
   }
 }

@@ -6,10 +6,9 @@ Synthetic data only; no real categories or merchants.
 from datetime import date, time
 
 from httpx import AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auto_classification import CategoryClassificationRule
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.loan_account import LoanAccount
@@ -22,9 +21,6 @@ from app.models.nature_axes import (
 from app.models.transaction import Transaction
 from app.parsers.transactions import TransactionRow
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
-from app.services.auto_classification_service import (
-    apply_category_classification_rules,
-)
 from app.services.metric_views import (
     FLOW_LINES_VIEW,
     MONTHLY_FLOW_SUMMARY_VIEW,
@@ -277,115 +273,6 @@ async def test_adjustability_precedence_and_levels(db_session: AsyncSession) -> 
     # ended + excluded + none; the January row is inside the ended bundle.
     assert february["adjustability_undecided_total"] == 30_000
     assert february["committed_recurring_total"] == 40_000
-
-
-async def test_patch_writes_old_columns_through_to_the_axes(
-    async_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    first = tx("m-sub", tx_date=date(2026, 1, 5))
-    second = tx("m-sub", tx_date=date(2026, 2, 5))
-    one_off = tx("m-sub", tx_date=date(2026, 2, 20))
-    newcomer = tx("m-sub", tx_date=date(2026, 3, 5))
-    unlinked = tx("m-inst")
-    db_session.add_all([first, second, one_off, newcomer, unlinked])
-    await db_session.commit()
-
-    async def patch(transaction_id: int, body: dict) -> None:
-        response = await async_client.patch(
-            f"/api/v1/transactions/{transaction_id}", json=body, headers=HEADERS
-        )
-        assert response.status_code == 200, response.text
-
-    await patch(first.id, {"cost_kind": "fixed", "spend_necessity": "essential"})
-    commitments = (await db_session.scalars(select(RecurringCommitment))).all()
-    assert len(commitments) == 1
-    bundle = commitments[0]
-    assert (bundle.origin, bundle.merchant, bundle.category_major) == (
-        "legacy_edit",
-        "m-sub",
-        "cat-a",
-    )
-    assert (bundle.start_date, bundle.amount_kind, bundle.adjustability) == (
-        date(2026, 1, 5),
-        "fixed",
-        None,
-    )
-
-    # A later row of the same key matches the bundle by rule: no second bundle.
-    await patch(second.id, {"cost_kind": "fixed", "spend_necessity": "essential"})
-    # The same merchant marked variable stays ad hoc (excluded from the bundle).
-    await patch(one_off.id, {"cost_kind": "variable", "spend_necessity": "essential"})
-    # Only a necessity: membership is not an old-column fact and is kept.
-    await patch(newcomer.id, {"spend_necessity": "discretionary"})
-    await patch(unlinked.id, {"recurring_payment_kind": "installment"})
-    assert (
-        await db_session.scalar(select(func.count()).select_from(RecurringCommitment))
-        == 1
-    )
-
-    nature = await nature_rows(db_session)
-    assert nature[first.id]["recurring_commitment_id"] == bundle.id
-    assert nature[first.id]["adjustability_source"] == "transaction"
-    assert nature[second.id]["commitment_match"] == "rule"
-    assert nature[one_off.id]["payment_form"] == "ad_hoc"
-    assert nature[one_off.id]["excluded_from_commitments"]
-    assert nature[one_off.id]["adjustability"] == "protected"
-    assert nature[newcomer.id]["recurring_commitment_id"] == bundle.id
-    assert nature[newcomer.id]["adjustability"] == "adjustable"
-    assert nature[unlinked.id]["payment_form"] == "ad_hoc"
-    assert nature[unlinked.id]["installment_link_unconfirmed"]
-    note = await db_session.scalar(
-        select(FLOW_LINES_VIEW.c.mapping_note).where(
-            FLOW_LINES_VIEW.c.transaction_id == unlinked.id
-        )
-    )
-    assert note == "installment_link_unconfirmed"
-
-    # The old response shape is unchanged.
-    detail = (
-        await async_client.get(f"/api/v1/transactions/{first.id}", headers=HEADERS)
-    ).json()
-    assert detail["cost_kind"] == "fixed" and detail["spend_necessity"] == "essential"
-
-
-async def test_bulk_update_and_category_rule_apply_write_through(
-    async_client: AsyncClient, db_session: AsyncSession
-) -> None:
-    a = tx("m-bulk-a")
-    b = tx("m-bulk-b")
-    ruled = tx("m-rule", major="cat-r")
-    db_session.add_all(
-        [
-            a,
-            b,
-            ruled,
-            CategoryClassificationRule(
-                category_major="cat-r",
-                category_minor=None,
-                cost_kind="variable",
-                spend_necessity="discretionary",
-            ),
-        ]
-    )
-    await db_session.commit()
-
-    response = await async_client.patch(
-        "/api/v1/transactions/bulk-update",
-        json={"ids": [a.id, b.id], "spend_necessity": "essential"},
-        headers=HEADERS,
-    )
-    assert response.status_code == 200
-    applied = await apply_category_classification_rules(db_session)
-    assert applied.updated == 1
-
-    nature = await nature_rows(db_session)
-    assert nature[a.id]["adjustability"] == "protected"
-    assert nature[b.id]["adjustability_source"] == "transaction"
-    assert nature[ruled.id]["adjustability"] == "adjustable"
-    assert (
-        await db_session.scalar(select(func.count()).select_from(RecurringCommitment))
-        == 0
-    )
 
 
 async def test_reimport_replacement_keeps_new_classification(

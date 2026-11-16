@@ -346,11 +346,6 @@ def _copy_user_managed_fields(
     for field_name in (
         "category_major_user",
         "category_minor_user",
-        "cost_kind",
-        "fixed_cost_necessity",
-        "spend_necessity",
-        "cost_classification_source",
-        "recurring_payment_kind",
         "memo",
         "is_deleted",
         "merged_into_id",

@@ -85,7 +85,8 @@ async def test_confirmed_raw_description_exposes_unclassified_next_payments_with
         item.is_usable and item.confidence == "medium" for item in response.items
     )
     assert all(
-        item.transaction.recurring_payment_kind is None for item in response.items
+        not hasattr(item.transaction, "recurring_payment_kind")
+        for item in response.items
     )
     mappings = await list_installment_transaction_mappings(
         db_session,

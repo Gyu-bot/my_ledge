@@ -19,13 +19,11 @@ describe('analysis cutoff adapters', () => {
     const fetchMock = captureRequests()
     await analyticsApi.merchantSpend({ start_month: '2026-09', end_month: '2026-09', end_date: '2026-09-12', include_income: true })
     await analyticsApi.monthlyCashflow({ start_date: '2026-09-01', end_date: '2026-09-12' })
-    await analyticsApi.recurringPayments({ page: 2, activity: 'history', end_date: '2026-09-12', recent_days: 90 })
     for (const [url] of fetchMock.mock.calls) {
       expect(new URL(url, 'http://localhost').searchParams.get('end_date')).toBe('2026-09-12')
     }
     for (const [url] of fetchMock.mock.calls.slice(0, 1)) {
       expect(new URL(url, 'http://localhost').searchParams.get('type')).toBe('income_expense')
     }
-    expect(new URL(fetchMock.mock.calls[2][0], 'http://localhost').searchParams.get('activity')).toBe('history')
   })
 })

@@ -46,11 +46,6 @@ async def test_all_signal_read_surfaces_accept_explicit_historical_cutoff(
             {"end_date": "2026-03-15"},
             {"reference_date": "2026-03-15", "is_partial_period": True},
         ),
-        (
-            "recurring-payments",
-            {"end_date": "2026-03-15", "activity": "active", "recent_days": 30},
-            {"reference_date": "2026-03-15", "activity": "active", "recent_days": 30},
-        ),
     ]:
         response = await async_client.get(
             f"/api/v1/analytics/{endpoint}", params=params
@@ -59,20 +54,6 @@ async def test_all_signal_read_surfaces_accept_explicit_historical_cutoff(
         payload = response.json()
         assert {key: payload[key] for key in expected} == expected
         assert all(item.get("merchant") != "미래" for item in payload.get("items", []))
-
-
-async def test_recurring_filters_validate_before_querying(
-    async_client: AsyncClient,
-) -> None:
-    for params in [
-        {"activity": "subscribed"},
-        {"recent_days": 0},
-        {"recent_days": 731},
-    ]:
-        response = await async_client.get(
-            "/api/v1/analytics/recurring-payments", params=params
-        )
-        assert response.status_code == 422
 
 
 async def test_income_expense_filter_excludes_account_movements(

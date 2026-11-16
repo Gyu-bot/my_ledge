@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.schemas.common import PaginatedResponse
 
@@ -77,11 +77,6 @@ class TransactionRecord(BaseModel):
     amount: int
     currency: str
     payment_method: str | None
-    cost_kind: str | None
-    fixed_cost_necessity: str | None
-    spend_necessity: str | None
-    cost_classification_source: str | None
-    recurring_payment_kind: str | None
     memo: str | None
     is_deleted: bool
     merged_into_id: int | None
@@ -156,6 +151,8 @@ class PaymentMethodSummaryResponse(BaseModel):
 
 
 class TransactionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     date: date
     time: time
     type: str
@@ -165,54 +162,25 @@ class TransactionCreateRequest(BaseModel):
     merchant: str | None = None
     amount: int
     payment_method: str | None = None
-    cost_kind: Literal["fixed", "variable"] | None = None
-    fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
-    spend_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: (
-        Literal[
-            "installment",
-            "monthly_recurring",
-            "not_recurring",
-        ]
-        | None
-    ) = None
     memo: str | None = None
 
 
 class TransactionUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     category_major_user: str | None = None
     category_minor_user: str | None = None
     merchant: str | None = None
-    cost_kind: Literal["fixed", "variable"] | None = None
-    fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
-    spend_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: (
-        Literal[
-            "installment",
-            "monthly_recurring",
-            "not_recurring",
-        ]
-        | None
-    ) = None
     memo: str | None = None
 
 
 class TransactionBulkUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ids: list[int] = Field(min_length=1)
     merchant: str | None = None
     category_major_user: str | None = None
     category_minor_user: str | None = None
-    cost_kind: Literal["fixed", "variable"] | None = None
-    fixed_cost_necessity: Literal["essential", "discretionary"] | None = None
-    spend_necessity: Literal["essential", "discretionary"] | None = None
-    recurring_payment_kind: (
-        Literal[
-            "installment",
-            "monthly_recurring",
-            "not_recurring",
-        ]
-        | None
-    ) = None
     memo: str | None = None
 
 
@@ -273,15 +241,6 @@ TransactionTypeFilter = Literal["지출", "수입", "이체", "income_expense", 
 TransactionSourceFilter = Literal["import", "manual", "all"]
 TransactionCategoryLevel = Literal["major", "minor"]
 TransactionEditedFilter = Literal["true", "false", "all"]
-TransactionCostKindFilter = Literal["fixed", "variable", "all"]
-TransactionFixedCostNecessityFilter = Literal["essential", "discretionary", "all"]
-TransactionSpendNecessityFilter = Literal["essential", "discretionary", "all"]
-TransactionRecurringPaymentKindFilter = Literal[
-    "installment",
-    "monthly_recurring",
-    "not_recurring",
-    "all",
-]
 # Monthly-flow line filters (T059): values exactly as vw_metric_flow_lines
 # stores them. A transaction matches when one of its flow lines matches every
 # given value; nothing is re-derived in Python.

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
+from app.models.nature_axes import TransactionNatureOverride
 from app.models.transaction import Transaction
 from app.schemas.installment import (
     InstallmentLinkStateFilter,
@@ -330,7 +331,11 @@ def _build_mapping_query(
         .where(canonical.c.type == "지출")
         .where(
             or_(
-                canonical.c.recurring_payment_kind == "installment",
+                canonical.c.id.in_(
+                    select(TransactionNatureOverride.transaction_id).where(
+                        TransactionNatureOverride.installment_link_unconfirmed.is_(True)
+                    )
+                ),
                 InstallmentTransactionLink.id.is_not(None),
                 canonical.c.id.in_(candidate_ids),
             )
@@ -638,7 +643,6 @@ def _serialize_mapping_row(row: RowMapping) -> InstallmentTransactionMappingItem
         currency=row["currency"],
         payment_method=row["payment_method"],
         memo=row["memo"],
-        recurring_payment_kind=row["recurring_payment_kind"],
         link=link,
     )
 

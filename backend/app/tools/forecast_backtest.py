@@ -284,7 +284,7 @@ async def _unlinked_commitment_like(
         or_(
             lines.c.effective_category_major.like("%대출%"),
             lines.c.effective_category_minor.like("%대출%"),
-            lines.c.recurring_payment_kind == "installment",
+            lines.c.mapping_note == "installment_link_unconfirmed",
         ),
         lines.c.date >= start,
         lines.c.date <= end,
@@ -411,7 +411,7 @@ async def collect_limitations(
     return [
         {
             "code": "classification_current_state",
-            "detail": "카테고리 재지정, cost_kind, recurring_payment_kind, 조정 가능성 근거 컬럼은 이력이 없어 현재 값으로 재생했다. 과거 시점에는 아직 분류되지 않았을 수 있다.",
+            "detail": "카테고리 재지정, 지급 형태와 조정 가능성 근거은 이력이 없어 현재 값으로 재생했다. 과거 시점에는 아직 분류되지 않았을 수 있다.",
         },
         {
             "code": "transaction_availability",

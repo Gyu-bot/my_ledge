@@ -22,7 +22,9 @@ from app.services.metric_views import METRIC_VIEWS, compile_view_sql
 VERSIONS = Path(__file__).resolve().parents[2] / "alembic" / "versions"
 T054_MIGRATION = VERSIONS / "20261115_0035_metric_contract_views.py"
 T056_MIGRATION = VERSIONS / "20261115_0038_nature_axes_metric_views.py"
-LATEST_METRIC_MIGRATION = VERSIONS / "20261116_0039_transfer_purpose_net_worth_views.py"
+LATEST_METRIC_MIGRATION = (
+    VERSIONS / "20261117_0041_retire_legacy_classification_views.py"
+)
 # sha256 of 0035's frozen METRIC_VIEW_SQL + LEGACY_VIEW_SQL, recorded when 0038
 # was written. 0038's downgrade recreates exactly this SQL.
 T054_FROZEN_SHA256 = "dafcddca15255c1aaaa4e8435f5e3bdb0dcf18c795d578b52b4c35d84b99d668"

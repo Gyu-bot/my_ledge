@@ -13,7 +13,6 @@ from types import ModuleType
 from sqlalchemy.dialects.postgresql.asyncpg import dialect as asyncpg_dialect
 
 from app.services.metric_views import (
-    FLOW_LINES_DEFINITION,
     MONTHLY_FLOW_SUMMARY_DEFINITION,
     compile_view_sql,
 )
@@ -81,7 +80,7 @@ def test_existing_view_columns_keep_their_position() -> None:
         assert _normalize(t056[name]) == _normalize(t061[name]), name
 
     old_columns = _top_level_columns(t056["vw_metric_flow_lines"])
-    new_columns = [column.name for column in FLOW_LINES_DEFINITION.selected_columns]
+    new_columns = _top_level_columns(t061["vw_metric_flow_lines"])
     assert new_columns[: len(old_columns)] == old_columns
     assert new_columns[len(old_columns) :] == [
         "transfer_purpose",

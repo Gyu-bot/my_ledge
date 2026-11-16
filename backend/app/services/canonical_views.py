@@ -21,6 +21,7 @@ from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
+from app.models.nature_axes import TransactionNatureOverride
 from app.services.metric_views import METRIC_VIEWS
 
 
@@ -44,10 +45,13 @@ def transaction_is_edited_clause() -> ColumnElement[bool]:
         Transaction.category_major_user.is_not(None),
         Transaction.category_minor_user.is_not(None),
         Transaction.merchant != Transaction.description,
-        Transaction.cost_classification_source == "manual",
-        Transaction.spend_necessity.is_not(None),
-        Transaction.recurring_payment_kind.is_not(None),
         Transaction.memo.is_not(None),
+        select(TransactionNatureOverride.transaction_id)
+        .where(
+            TransactionNatureOverride.transaction_id == Transaction.id,
+            TransactionNatureOverride.source.in_(("user", "legacy_edit")),
+        )
+        .exists(),
     )
 
 
@@ -101,11 +105,6 @@ def build_transactions_effective_select(
             Transaction.amount.label("amount"),
             Transaction.currency.label("currency"),
             Transaction.payment_method.label("payment_method"),
-            Transaction.cost_kind.label("cost_kind"),
-            Transaction.fixed_cost_necessity.label("fixed_cost_necessity"),
-            Transaction.spend_necessity.label("spend_necessity"),
-            Transaction.cost_classification_source.label("cost_classification_source"),
-            Transaction.recurring_payment_kind.label("recurring_payment_kind"),
             Transaction.memo.label("memo"),
             LoanTransactionLink.loan_account_id.label("loan_account_id"),
             LoanAccount.lender.label("loan_lender"),
@@ -271,33 +270,13 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
     SchemaViewDefinition(
         name="vw_fixed_cost_monthly_summary",
         description=(
-            "Canonical monthly fixed/variable cost aggregate. Uses transaction cost "
-            "classification fields, excludes deleted or merged expense transactions, "
-            "and keeps loan-linked repayments out of ordinary fixed-cost totals."
+            "Retained monthly non-loan expense totals only. Legacy fixed/variable and necessity projections retired; use vw_monthly_flow_summary and vw_spend_cube."
         ),
         recommended_for_ai=True,
         columns=(
             SchemaColumnDefinition("period", String(length=7), nullable=False),
             SchemaColumnDefinition("expense_total", Integer(), nullable=False),
             SchemaColumnDefinition("living_spend", Integer(), nullable=False),
-            SchemaColumnDefinition("fixed_total", Integer(), nullable=False),
-            SchemaColumnDefinition("variable_total", Integer(), nullable=False),
-            SchemaColumnDefinition("essential_fixed_total", Integer(), nullable=False),
-            SchemaColumnDefinition(
-                "discretionary_fixed_total", Integer(), nullable=False
-            ),
-            SchemaColumnDefinition(
-                "essential_variable_total", Integer(), nullable=False
-            ),
-            SchemaColumnDefinition(
-                "discretionary_variable_total", Integer(), nullable=False
-            ),
-            SchemaColumnDefinition("required_spend_total", Integer(), nullable=False),
-            SchemaColumnDefinition(
-                "discretionary_spend_total", Integer(), nullable=False
-            ),
-            SchemaColumnDefinition("unclassified_total", Integer(), nullable=False),
-            SchemaColumnDefinition("unclassified_count", Integer(), nullable=False),
         ),
     ),
     SchemaViewDefinition(
@@ -364,8 +343,7 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
         name="vw_monthly_cashflow",
         description=(
             "Canonical monthly cashflow aggregate. Separates ordinary expense from "
-            "loan repayment, keeps transfer activity separate, and exposes fixed, "
-            "variable, unclassified, net cashflow, and savings-rate fields."
+            "loan repayment, keeps transfer activity separate, and exposes net cashflow and savings rate. Legacy classification totals retired."
         ),
         recommended_for_ai=True,
         columns=(
@@ -379,37 +357,6 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
                 "transfer_activity_total", Integer(), nullable=False
             ),
             SchemaColumnDefinition("loan_repayment_total", Integer(), nullable=False),
-            SchemaColumnDefinition("fixed_total", Integer(), nullable=False),
-            SchemaColumnDefinition("variable_total", Integer(), nullable=False),
-            SchemaColumnDefinition("essential_fixed_total", Integer(), nullable=False),
-            SchemaColumnDefinition(
-                "discretionary_fixed_total",
-                Integer(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "essential_variable_total",
-                Integer(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "discretionary_variable_total",
-                Integer(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "required_spend_total",
-                Integer(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "discretionary_spend_total",
-                Integer(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "unclassified_expense_total", Integer(), nullable=False
-            ),
             SchemaColumnDefinition("net_cashflow", Integer(), nullable=False),
             SchemaColumnDefinition("savings_rate", Numeric(12, 4), nullable=True),
         ),
@@ -451,17 +398,6 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("amount", Integer(), nullable=False),
             SchemaColumnDefinition("currency", String(length=5), nullable=False),
             SchemaColumnDefinition("payment_method", String(length=100), nullable=True),
-            SchemaColumnDefinition("cost_kind", String(length=20), nullable=True),
-            SchemaColumnDefinition(
-                "fixed_cost_necessity", String(length=20), nullable=True
-            ),
-            SchemaColumnDefinition("spend_necessity", String(length=20), nullable=True),
-            SchemaColumnDefinition(
-                "cost_classification_source", String(length=20), nullable=True
-            ),
-            SchemaColumnDefinition(
-                "recurring_payment_kind", String(length=30), nullable=True
-            ),
             SchemaColumnDefinition("memo", Text(), nullable=True),
             SchemaColumnDefinition("loan_account_id", Integer(), nullable=True),
             SchemaColumnDefinition("loan_lender", String(length=50), nullable=True),
@@ -480,7 +416,6 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             SchemaColumnDefinition("loan_link_memo", Text(), nullable=True),
             SchemaColumnDefinition("is_deleted", Boolean(), nullable=False),
             SchemaColumnDefinition("merged_into_id", Integer(), nullable=True),
-            SchemaColumnDefinition("is_edited", Boolean(), nullable=False),
             SchemaColumnDefinition("source", String(length=10), nullable=False),
             SchemaColumnDefinition(
                 "created_at", DateTime(timezone=True), nullable=False
@@ -493,33 +428,13 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
     SchemaViewDefinition(
         name="vw_true_spendable_monthly",
         description=(
-            "Canonical monthly spendable-income view. Shows income after loan "
-            "repayments and fixed commitments before variable spend, plus the "
-            "remaining amount after observed variable spend."
+            "Legacy classification formulas retired. Only period, income and loan repayment remain; use vw_monthly_flow_summary."
         ),
         recommended_for_ai=True,
         columns=(
             SchemaColumnDefinition("period", String(length=7), nullable=False),
             SchemaColumnDefinition("income_total", Integer(), nullable=False),
             SchemaColumnDefinition("loan_repayment_total", Integer(), nullable=False),
-            SchemaColumnDefinition("fixed_commitment_total", Integer(), nullable=False),
-            SchemaColumnDefinition("variable_total", Integer(), nullable=False),
-            SchemaColumnDefinition(
-                "required_variable_total", Integer(), nullable=False
-            ),
-            SchemaColumnDefinition(
-                "discretionary_variable_total", Integer(), nullable=False
-            ),
-            SchemaColumnDefinition(
-                "spendable_before_variable_spend",
-                Integer(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "remaining_after_variable_spend",
-                Integer(),
-                nullable=False,
-            ),
         ),
     ),
     SchemaViewDefinition(
@@ -544,47 +459,13 @@ CANONICAL_VIEWS: tuple[SchemaViewDefinition, ...] = (
             ),
             SchemaColumnDefinition("amount", Integer(), nullable=False),
             SchemaColumnDefinition("amount_abs", Integer(), nullable=False),
-            SchemaColumnDefinition("needs_cost_kind", Boolean(), nullable=False),
             SchemaColumnDefinition(
-                "needs_fixed_cost_necessity",
-                Boolean(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "needs_spend_necessity",
-                Boolean(),
-                nullable=False,
-            ),
-            SchemaColumnDefinition(
-                "needs_recurring_payment_kind",
+                "needs_adjustability",
                 Boolean(),
                 nullable=False,
             ),
             SchemaColumnDefinition("needs_loan_link_review", Boolean(), nullable=False),
             SchemaColumnDefinition("merchant_expense_count", Integer(), nullable=False),
-            SchemaColumnDefinition("priority_score", Integer(), nullable=False),
-            SchemaColumnDefinition(
-                "priority_reason", String(length=40), nullable=False
-            ),
-        ),
-    ),
-    SchemaViewDefinition(
-        name="vw_recurring_merchant_monthly",
-        description=(
-            "Canonical monthly recurring merchant aggregate. Uses normalized "
-            "merchant values and stored recurring payment classifications."
-        ),
-        recommended_for_ai=True,
-        columns=(
-            SchemaColumnDefinition("period", String(length=7), nullable=False),
-            SchemaColumnDefinition("merchant", String(length=500), nullable=False),
-            SchemaColumnDefinition(
-                "recurring_payment_kind", String(length=30), nullable=False
-            ),
-            SchemaColumnDefinition("monthly_spend", Integer(), nullable=False),
-            SchemaColumnDefinition("transaction_count", Integer(), nullable=False),
-            SchemaColumnDefinition("first_date", Date(), nullable=False),
-            SchemaColumnDefinition("last_date", Date(), nullable=False),
         ),
     ),
 )
@@ -620,8 +501,7 @@ METRIC_VIEW_DESCRIPTIONS = {
         "monthly-flow row (flow_section/flow_row) with payment form and "
         "adjustability read from vw_transaction_nature (T056 two axes). Refunds "
         "stay in their posting month; confirmed allocations take the original "
-        "purchase's classification. Legacy cost_kind/necessity/recurring columns "
-        "are carried only for the legacy aggregate views. Prefer this over "
+        "purchase's classification. Prefer this over "
         "re-aggregating vw_transactions_effective. T061: 이체 lines carry "
         "transfer_purpose (investment/savings/internal_move/undecided) and "
         "transfer_purpose_source from vw_transfer_purpose; null otherwise."

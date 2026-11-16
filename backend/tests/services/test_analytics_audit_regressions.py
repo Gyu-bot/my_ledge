@@ -11,12 +11,9 @@ from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction
 from app.schemas.settings import PurchaseGateSettings
 from app.services.analytics_service import (
-    get_fixed_cost_summary,
-    get_fixed_cost_trend,
     get_income_stability,
     get_merchant_spend,
     get_purchase_gate_candidates,
-    get_recurring_payments,
     get_spending_anomalies,
 )
 
@@ -99,84 +96,6 @@ async def test_sparse_anomaly_has_signed_direction_and_suppressed_percentage(
     if target > 0:
         assert "순환급" in item.reason
         assert "급증" not in item.reason
-
-
-async def test_necessity_buckets_are_exhaustive_separate_from_missing_cost_kind(
-    db_session: AsyncSession,
-) -> None:
-    day = date(2026, 3, 10)
-    db_session.add_all(
-        [
-            _expense(day, -100, cost_kind="fixed", fixed_necessity="essential"),
-            _expense(day, -200),
-            _expense(day, -300, cost_kind="fixed", fixed_necessity=None),
-            _expense(day, 50, cost_kind="fixed", fixed_necessity=None),
-            _expense(day, -400, necessity=None),
-            _expense(day, -500, cost_kind=None),
-        ]
-    )
-    await db_session.flush()
-    summary = await get_fixed_cost_summary(db_session, start_date=None, end_date=None)
-    trend = await get_fixed_cost_trend(db_session, start_date=None, end_date=None)
-    for result in [summary, trend.items[0]]:
-        assert result.expense_total == 1450
-        assert result.unclassified_total == 500
-        assert result.unclassified_count == 1
-        assert result.necessity_unclassified_total == 1150
-        assert result.necessity_unclassified_count == 4
-        assert (
-            result.required_spend_total
-            + result.discretionary_spend_total
-            + result.necessity_unclassified_total
-            == result.expense_total
-        )
-
-
-async def test_recurring_active_filter_excludes_history_and_zero_only_groups_before_paging(
-    db_session: AsyncSession,
-) -> None:
-    db_session.add_all(
-        [
-            _expense(date(2026, 2, 5), -10_000, merchant="현재 반복"),
-            _expense(date(2026, 3, 5), -10_000, merchant="현재 반복"),
-            _expense(date(2026, 3, 10), 1_000, merchant="현재 반복"),
-            _expense(date(2025, 11, 5), -10_000, merchant="종료 이력"),
-            _expense(date(2025, 12, 5), -10_000, merchant="종료 이력"),
-            _expense(date(2026, 3, 5), -150_000, merchant="취소 가승인"),
-            _expense(date(2026, 3, 5), 150_000, merchant="취소 가승인"),
-            _expense(date(2026, 3, 5), -10_000, merchant="불규칙"),
-            _expense(date(2026, 3, 6), -10_000, merchant="불규칙"),
-        ]
-    )
-    await db_session.flush()
-    response = await get_recurring_payments(
-        db_session,
-        start_date=None,
-        end_date=date(2026, 3, 15),
-        min_occurrences=2,
-        activity="active",
-        per_page=1,
-    )
-    assert response.total == 1
-    assert response.reference_date == date(2026, 3, 15)
-    item = response.items[0]
-    assert item.merchant == "현재 반복"
-    assert item.last_date == date(2026, 3, 10)
-    assert item.last_charge_date == date(2026, 3, 5)
-    assert item.net_amount == 19_000
-    assert item.avg_amount == 9_500
-    history = await get_recurring_payments(
-        db_session,
-        start_date=None,
-        end_date=date(2026, 3, 15),
-        min_occurrences=2,
-        activity="history",
-    )
-    assert {item.merchant: item.activity_status for item in history.items} == {
-        "종료 이력": "historical",
-        "취소 가승인": "non_positive",
-        "불규칙": "irregular",
-    }
 
 
 async def test_cancellation_marker_is_readonly_conservative_and_preserves_review(

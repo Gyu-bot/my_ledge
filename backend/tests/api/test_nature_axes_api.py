@@ -211,7 +211,6 @@ async def test_transaction_adjustability_set_and_clear(
         "transaction",
     )
     assert body["override_source"] == "user"
-    assert body["legacy"]["spend_necessity"] is None  # old columns untouched
 
     cleared = await async_client.delete(
         f"{BASE}/transactions/{spend.id}/adjustability", headers=api_headers

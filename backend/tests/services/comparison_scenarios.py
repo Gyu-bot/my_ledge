@@ -11,7 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 
 HEADERS = {"X-API-Key": "test-api-key"}
 
@@ -231,9 +231,7 @@ async def scenario_in_progress_month(
     assert rates["2026-06"] is None
     assert rates["2026-05"] is not None
 
-    trend = (await client.get("/api/v1/analytics/fixed-cost-trend")).json()
-    ratios = {row["period"]: row["fixed_ratio"] for row in trend["items"]}
-    assert ratios["2026-06"] is None
+    assert (await client.get("/api/v1/analytics/fixed-cost-trend")).status_code == 404
 
 
 # --------------------------------------------------------------------------

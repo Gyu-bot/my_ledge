@@ -112,7 +112,6 @@ export function txFixture(id: number, overrides: Partial<TransactionResponse> = 
     id, date: '2026-07-15', time: '12:00:00', type: '지출', category_major: '샘플 생활', category_minor: null,
     category_major_user: null, category_minor_user: null, effective_category_major: '샘플 생활', effective_category_minor: null,
     description: `샘플 거래 ${id}`, merchant: `샘플 거래처 ${id}`, amount: -10_000, currency: 'KRW', payment_method: null,
-    cost_kind: null, fixed_cost_necessity: null, spend_necessity: null, cost_classification_source: null, recurring_payment_kind: null,
     memo: null, is_deleted: false, merged_into_id: null, is_edited: false, source: 'import', created_at: '', updated_at: '',
     ...overrides,
   }

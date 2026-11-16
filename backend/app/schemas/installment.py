@@ -108,7 +108,7 @@ class InstallmentTransactionMappingItem(BaseModel):
     currency: str
     payment_method: str | None
     memo: str | None
-    recurring_payment_kind: str | None
+
     link: InstallmentTransactionLinkItem | None
 
 
@@ -129,7 +129,6 @@ class InstallmentSuggestionTransactionItem(BaseModel):
     currency: str
     payment_method: str | None
     memo: str | None
-    recurring_payment_kind: str | None
 
 
 class InstallmentTransactionSuggestionItem(BaseModel):

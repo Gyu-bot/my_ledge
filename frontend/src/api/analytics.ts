@@ -1,9 +1,9 @@
 import { apiFetch } from '../lib/apiClient'
 import { monthSpanToDateRange, recentMonthsToDateRange } from '../lib/dateRange'
 import type {
-  AnalyticsDateRange, MerchantSpendQuery, MonthlyCashflowQuery, RecurringPaymentsQuery,
-  MonthlyCashflowResponse, FixedCostSummaryResponse, FixedCostTrendResponse,
-  MerchantSpendResponse, IncomeStabilityResponse, RecurringPaymentsResponse, IncomeStabilityQuery,
+  MerchantSpendQuery, MonthlyCashflowQuery,
+  MonthlyCashflowResponse,
+  MerchantSpendResponse, IncomeStabilityResponse, IncomeStabilityQuery,
   PurchaseGateReviewPatchRequest, PurchaseGateReviewResponse,
 } from '../types/analytics'
 
@@ -21,22 +21,6 @@ export const analyticsApi = {
     apiFetch<MonthlyCashflowResponse>(`/analytics/monthly-cashflow${buildQuery(
       {
         ...(params.months ? recentMonthsToDateRange(params.months) : monthSpanToDateRange(params.start_month, params.end_month)),
-        ...(params.start_date ? { start_date: params.start_date } : {}),
-        ...(params.end_date ? { end_date: params.end_date } : {}),
-      },
-    )}`),
-
-  fixedCostSummary: (params: AnalyticsDateRange = {}) =>
-    apiFetch<FixedCostSummaryResponse>(`/analytics/fixed-cost-summary${buildQuery(
-      { ...monthSpanToDateRange(params.start_month, params.end_month),
-        ...(params.start_date ? { start_date: params.start_date } : {}),
-        ...(params.end_date ? { end_date: params.end_date } : {}),
-      },
-    )}`),
-
-  fixedCostTrend: (params: AnalyticsDateRange = {}) =>
-    apiFetch<FixedCostTrendResponse>(`/analytics/fixed-cost-trend${buildQuery(
-      { ...monthSpanToDateRange(params.start_month, params.end_month),
         ...(params.start_date ? { start_date: params.start_date } : {}),
         ...(params.end_date ? { end_date: params.end_date } : {}),
       },
@@ -61,9 +45,6 @@ export const analyticsApi = {
 
   incomeStability: (params: IncomeStabilityQuery = {}) =>
     apiFetch<IncomeStabilityResponse>(`/analytics/income-stability${buildQuery(params)}`),
-
-  recurringPayments: (params: RecurringPaymentsQuery = {}) =>
-    apiFetch<RecurringPaymentsResponse>(`/analytics/recurring-payments${buildQuery(params)}`),
 
   reviewPurchaseGateCandidate: (candidateKey: string, data: PurchaseGateReviewPatchRequest) =>
     apiFetch<PurchaseGateReviewResponse>(

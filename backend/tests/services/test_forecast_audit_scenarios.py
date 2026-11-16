@@ -40,7 +40,7 @@ from app.models.nature_axes import (
     TransactionNatureOverride,
 )
 from app.services.monthly_projection_service import get_monthly_projection
-from app.services.nature_axes_service import write_through_legacy_classification
+from legacy_nature_seed import write_through_legacy_classification
 from app.services.settings_service import patch_analytics_settings
 
 SALARY = 100_000

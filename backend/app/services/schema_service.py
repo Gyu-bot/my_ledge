@@ -21,8 +21,8 @@ RAW_TABLE_DESCRIPTIONS = {
         "rules after workbook uploads."
     ),
     "category_classification_rules": (
-        "User-configurable category-to-cost-kind rules. Automatic application writes "
-        "to transactions only when the cost classification source is not manual."
+        "Legacy/frozen category-to-cost-kind rules. No application writes "
+        "or applies these rules; use /nature/category-defaults."
     ),
     "loan_merchant_rules": (
         "User-configurable exact merchant/description-to-loan-account rules for "
@@ -91,6 +91,18 @@ def build_schema_document(metadata: MetaData) -> SchemaDocumentResponse:
                         name=column.name,
                         type=str(column.type),
                         nullable=column.nullable,
+                        description=(
+                            "legacy/frozen: 이전 분류 보관용. 입력·계산에 사용하지 않으며 삭제 예정."
+                            if column.name
+                            in {
+                                "cost_kind",
+                                "fixed_cost_necessity",
+                                "spend_necessity",
+                                "cost_classification_source",
+                                "recurring_payment_kind",
+                            }
+                            else None
+                        ),
                     )
                     for column in table.columns
                 ],
