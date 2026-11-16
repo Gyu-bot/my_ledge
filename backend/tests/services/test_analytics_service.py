@@ -28,6 +28,7 @@ from app.services.analytics_service import (
 
 
 _CONTRACT_FIELDS = {
+    "total_outflow",
     "contract",
     "month_status",
     # T057 comparison contract (additive fields)

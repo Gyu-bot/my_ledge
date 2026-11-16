@@ -2,6 +2,8 @@ export interface CanonicalMonthlyCashflowItem {
   period: string
   income_total: number
   expense_total: number
+  total_outflow?: number
+  living_spend?: number
   non_loan_expense_total: number
   transfer_activity_total: number
   loan_repayment_total: number

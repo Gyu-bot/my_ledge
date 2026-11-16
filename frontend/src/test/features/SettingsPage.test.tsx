@@ -55,6 +55,29 @@ describe('SettingsPage', () => {
     settingsMock.analyticsSettingsResponse = analyticsSettingsResponse
   })
 
+  it('서버의 한국어 비교 이름·설명을 표시하고 기준 구간 시작일만 저장한다', async () => {
+    settingsMock.analyticsSettingsResponse = {
+      ...analyticsSettingsResponse,
+      effective: { ...analyticsSettingsResponse.effective, comparison: { baseline_start_date: null } },
+      comparison_guide: {
+        title: '비교 기준', summary: '마감월과 같은 경과일로 비교합니다.', options: [
+          { key: 'baseline_start_date', label: '기준 구간 시작일', description: '비우면 제한 없음', editable: true, value_label: '제한 없음' },
+          { key: 'baseline_method', label: '기준 기간', description: '자료 있는 달만 비교', editable: false, value_label: '최근 6개 마감월의 중앙값' },
+          { key: 'partial_month_handling', label: '진행 중인 달', description: '비율을 내지 않습니다', editable: false, value_label: '같은 경과일까지의 누적끼리 비교' },
+        ],
+      },
+    }
+    renderPage()
+    expect(screen.getByText('최근 6개 마감월의 중앙값')).toBeInTheDocument()
+    expect(screen.getByText('같은 경과일까지의 누적끼리 비교')).toBeInTheDocument()
+    expect(screen.getByText('자료 있는 달만 비교')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue(analyticsSettingsResponse.effective.discretionary_velocity.outlier_policy)).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue(analyticsSettingsResponse.effective.discretionary_velocity.baseline_mode)).not.toBeInTheDocument()
+    changeField('기준 구간 시작일', '2026-03-01')
+    fireEvent.click(screen.getByRole('button', { name: '분석 설정 저장' }))
+    await waitFor(() => expect(patchMutate).toHaveBeenCalledWith({ comparison: { baseline_start_date: '2026-03-01' } }))
+  })
+
   it('effective 값으로 폼을 초기화한다 (4개월 / 50% / avalanche)', () => {
     renderPage()
     expect(getByLabelPrefix('비상금 목표 (개월)')).toHaveValue(4)
@@ -177,8 +200,6 @@ describe('SettingsPage', () => {
     changeField('재량 속도 경고 (%)', '130')
     changeField('재량 속도 높음 (%)', '180')
     changeField('분류 커버리지 최소 (%)', '80')
-    changeField('이상값 처리 방식', 'none')
-    changeField('비교 기준 방식', 'closed_month')
     fireEvent.change(within(section('재량 지출 속도')).getByLabelText((content) => content.startsWith('제외 카테고리')), { target: { value: '식비, 여가' } })
     fireEvent.change(within(section('재량 지출 속도')).getByLabelText((content) => content.startsWith('제외 가맹점')), { target: { value: '쿠팡' } })
     changeField('최소 반복 횟수', '3')
@@ -215,11 +236,9 @@ describe('SettingsPage', () => {
         },
         discretionary_velocity: {
           baseline_months: 4,
-          outlier_policy: 'none',
           warning_velocity_ratio: 1.3,
           high_velocity_ratio: 1.8,
           minimum_classification_coverage: 0.8,
-          baseline_mode: 'closed_month',
           excluded_category_names: ['식비', '여가'],
           excluded_merchants: ['쿠팡'],
         },

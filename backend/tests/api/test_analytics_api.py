@@ -10,6 +10,7 @@ from app.services import analytics_service as analytics_service_module
 
 
 _CONTRACT_FIELDS = {
+    "total_outflow",
     "contract",
     "month_status",
     # T057 comparison contract (additive fields)

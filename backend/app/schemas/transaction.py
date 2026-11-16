@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from app.schemas.common import PaginatedResponse
 
@@ -230,6 +230,21 @@ class TransactionBulkMutationPreview(BaseModel):
     period_end: date | None
     expense_total: int
     representative_merchants: list[str]
+
+    @computed_field
+    @property
+    def selected_raw_expense_net(self) -> int:
+        """Selected raw expense rows, source currencies, net of positive refunds."""
+        return self.expense_total
+
+    @computed_field
+    @property
+    def field_scopes(self) -> dict[str, str]:
+        return {
+            "expense_total": "selected_raw_expense_net: 선택한 원본 지출의 -amount 합. "
+            "환불 차감, 대출 포함. 선택 작업의 삭제·복원 대상도 포함하며 "
+            "통화별 환산·제외 없음. 월 흐름표 총지급이 아님."
+        }
 
 
 class TransactionBulkMutationResponse(BaseModel):
