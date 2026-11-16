@@ -10,6 +10,7 @@ from app.models.transaction import Transaction
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.services.canonical_views import build_transactions_effective_select
 from app.services.metric_views import FLOW_LINES_VIEW
+from app.services.transaction_axes_service import load_transaction_axes
 from app.services.nature_axes_service import (
     LEGACY_CLASSIFICATION_FIELDS,
     write_through_legacy_classification,
@@ -101,8 +102,28 @@ async def list_transactions(
         total=total,
         page=page,
         per_page=per_page,
-        items=[_serialize_transaction_row(row) for row in result.mappings().all()],
+        items=await _with_axes(
+            db_session,
+            [_serialize_transaction_row(row) for row in result.mappings().all()],
+        ),
     )
+
+
+async def _with_axes(
+    db_session: AsyncSession, items: list[TransactionResponse]
+) -> list[TransactionResponse]:
+    """Fill the resolved axes from vw_transaction_nature / vw_metric_flow_lines."""
+    axes = await load_transaction_axes(db_session, [item.id for item in items])
+    return [
+        item.model_copy(update=axes[item.id].model_dump()) if item.id in axes else item
+        for item in items
+    ]
+
+
+async def _one_with_axes(
+    db_session: AsyncSession, item: TransactionResponse
+) -> TransactionResponse:
+    return (await _with_axes(db_session, [item]))[0]
 
 
 async def list_transaction_filter_options(
@@ -352,7 +373,7 @@ async def create_transaction(
         await write_through_legacy_classification(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
-    return _serialize_transaction_model(transaction)
+    return await _one_with_axes(db_session, _serialize_transaction_model(transaction))
 
 
 async def update_transaction(
@@ -367,15 +388,18 @@ async def update_transaction(
         await write_through_legacy_classification(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
-    return _serialize_transaction_model(transaction)
+    return await _one_with_axes(db_session, _serialize_transaction_model(transaction))
 
 
 async def get_transaction(
     db_session: AsyncSession,
     transaction_id: int,
 ) -> TransactionResponse:
-    return _serialize_transaction_model(
-        await _get_transaction_or_404(db_session, transaction_id)
+    return await _one_with_axes(
+        db_session,
+        _serialize_transaction_model(
+            await _get_transaction_or_404(db_session, transaction_id)
+        ),
     )
 
 
@@ -446,7 +470,7 @@ async def restore_transaction(
     await _refresh_linked_loan_estimates(db_session, [transaction.id])
     await db_session.commit()
     await db_session.refresh(transaction)
-    return _serialize_transaction_model(transaction)
+    return await _one_with_axes(db_session, _serialize_transaction_model(transaction))
 
 
 async def preview_bulk_transaction_mutation(

@@ -921,3 +921,87 @@ async def test_index_lists_projection_and_signed_ratio_fields(
             for param in schema[entry["path"]]["get"].get("parameters", [])
         }
         assert set(entry["parameters"]) <= declared, (entry["key"], declared)
+
+
+# --------------------------------------------------------------------------
+# Finding 8: transactions carry the resolved axes and where they came from.
+# --------------------------------------------------------------------------
+
+
+async def test_transactions_return_resolved_axes_and_sources(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    ledger = await build_read_surface_ledger(db_session)
+
+    async def listing(**params: str) -> list[dict]:
+        response = await async_client.get(
+            "/api/v1/transactions", headers=api_headers, params=params
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["items"]
+
+    loan = (await listing(flow_row="committed_loan", per_page="1"))[0]
+    assert loan["payment_form"] == "committed"
+    assert loan["payment_form_source"] == "loan_link"
+    assert loan["adjustability"] == "protected"
+    assert loan["adjustability_source"] == "loan_link"
+    assert loan["flow_row"] == "committed_loan"
+    assert loan["flow_row_source"] == "own_line"
+    assert loan["cost_kind"] is None or isinstance(loan["cost_kind"], str)  # kept
+
+    subscription = (await listing(flow_row="committed_recurring", per_page="1"))[0]
+    assert subscription["payment_form_source"] == "commitment"
+    assert subscription["adjustability"] == "adjustable"
+    assert subscription["adjustability_source"] == "commitment"
+
+    ad_hoc = await listing(flow_row="ad_hoc_adjustable", per_page="200")
+    sources = {item["adjustability_source"] for item in ad_hoc}
+    # category-05 default (category_default) and rows a person marked
+    # discretionary (transaction).
+    assert {"category_default", "transaction"} <= sources
+    assert {item["payment_form_source"] for item in ad_hoc} == {"none"}
+
+    undecided = (await listing(flow_row="undecided", per_page="1"))[0]
+    assert undecided["adjustability"] == "undecided"
+    assert undecided["adjustability_source"] == "none"
+
+    income = (await listing(type="수입", per_page="1"))[0]
+    assert income["payment_form"] == "not_applicable"
+    assert income["adjustability_source"] == "not_applicable"
+    assert income["flow_row"] == "income_undetermined"
+
+    deleted = [
+        item
+        for item in await listing(include_deleted="true", per_page="200")
+        if item["is_deleted"]
+    ][0]
+    assert deleted["payment_form"] is None
+    assert deleted["payment_form_source"] == "not_effective"
+    assert deleted["flow_row_source"] == "no_flow_line"
+
+    detail = (
+        await async_client.get(
+            f"/api/v1/transactions/{loan['id']}", headers=api_headers
+        )
+    ).json()
+    assert detail["flow_row"] == "committed_loan"
+    flagged = (
+        await async_client.get(
+            f"/api/v1/transactions/{ledger.flagged_installment_tx_id}",
+            headers=api_headers,
+        )
+    ).json()
+    assert flagged["payment_form"] == "ad_hoc"
+
+    review = (
+        await async_client.get(
+            "/api/v1/read/review-items",
+            headers=api_headers,
+            params={"period": "2026-07"},
+        )
+    ).json()["data"]["items"]
+    big = next(item for item in review if item["merchant"] == "merchant-big")
+    assert big["axes"]["adjustability"] == "adjustable"
+    assert big["axes"]["flow_row"] == "ad_hoc_adjustable"
+    category_items = [item for item in review if item["subject"] == "category_month"]
+    assert all(item["axes"] is None for item in category_items)

@@ -29,6 +29,7 @@ from app.schemas.comparison import (
     ContributionItem,
     TwelveMonthWindowBasis,
 )
+from app.schemas.transaction import TransactionAxes
 from app.schemas.metrics import (
     MONTH_DATA_COVERAGE_LABELS,
     ExcludedCurrencyItem,
@@ -470,6 +471,13 @@ class ReviewItem(BaseModel):
         description="subject=transaction일 때 사람이 남긴 검토 상태(pending 등).",
     )
     listed_because: list[ReviewListedBecause]
+    axes: TransactionAxes | None = Field(
+        default=None,
+        description=(
+            "subject=transaction일 때 거래의 지급 형태·조정 가능성·흐름표 줄과 각 출처"
+            "(GET /transactions와 같은 값, vw_transaction_nature·vw_metric_flow_lines)."
+        ),
+    )
 
 
 class ReadReviewItemsData(BaseModel):

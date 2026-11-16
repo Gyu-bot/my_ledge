@@ -6,7 +6,62 @@ from pydantic import BaseModel, Field
 from app.schemas.common import PaginatedResponse
 
 
-class TransactionResponse(BaseModel):
+AxisSource = Literal[
+    "transaction",
+    "commitment",
+    "category_default",
+    "loan_link",
+    "installment_link",
+    "none",
+    "not_applicable",
+    "not_effective",
+]
+FlowRowSource = Literal["own_line", "refund_allocated_to_purchase", "no_flow_line"]
+
+
+class TransactionAxes(BaseModel):
+    """Resolved two-axis nature and monthly-flow row (T056), from the views.
+
+    Read from vw_transaction_nature and vw_metric_flow_lines; never re-derived.
+    Sources: transaction (set on the transaction, including putting it in a
+    bundle), commitment (a recurring bundle's rule or attribute),
+    category_default, loan_link / installment_link, none (nothing set:
+    ad_hoc or undecided), not_applicable (수입·이체 등), not_effective
+    (deleted / merged / superseded rows are outside the metric views).
+    """
+
+    payment_form: str | None = Field(
+        default=None, description="committed / ad_hoc / not_applicable."
+    )
+    payment_form_source: AxisSource | None = None
+    commitment_kind: str | None = Field(
+        default=None, description="loan / installment / recurring (약정일 때)."
+    )
+    adjustability: str | None = Field(
+        default=None,
+        description="protected / adjustable / undecided / not_applicable.",
+    )
+    adjustability_source: AxisSource | None = None
+    flow_row: str | None = Field(
+        default=None,
+        description=(
+            "월 흐름표 줄. 자기 줄이 있으면 그 줄, 전부 구매에 배분된 환불이면 구매의 줄."
+        ),
+    )
+    flow_rows: list[str] = Field(
+        default_factory=list,
+        description="이 거래의 모든 흐름 줄(환불 일부가 다른 구매에 배분되면 둘 이상).",
+    )
+    flow_row_source: FlowRowSource | None = Field(
+        default=None,
+        description=(
+            "own_line: 거래 자신의 분류. refund_allocated_to_purchase: 확정 정산으로 "
+            "구매에 배분된 환불이라 구매의 분류. no_flow_line: 유효 KRW 거래가 아님."
+        ),
+    )
+
+
+class TransactionRecord(BaseModel):
     id: int
     date: date
     time: time
@@ -34,6 +89,10 @@ class TransactionResponse(BaseModel):
     source: str
     created_at: datetime
     updated_at: datetime
+
+
+class TransactionResponse(TransactionAxes, TransactionRecord):
+    """Stored transaction fields first, then the resolved axes (T056)."""
 
 
 class TransactionListResponse(PaginatedResponse):
