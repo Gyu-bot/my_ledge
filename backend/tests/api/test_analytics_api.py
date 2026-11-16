@@ -93,6 +93,7 @@ async def _settlement_match_count(db_session: AsyncSession) -> int:
 async def test_discretionary_velocity_endpoint_reports_month_progress_against_baseline(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     baseline_rows = [
         (date(2026, 1, 5), -100_000),
@@ -155,6 +156,7 @@ async def test_discretionary_velocity_endpoint_reports_month_progress_against_ba
     )
     await db_session.commit()
 
+    await sync_legacy_classification()
     response = await async_client.get(
         "/api/v1/analytics/discretionary-velocity",
         params={"as_of_date": "2026-04-15"},
@@ -189,6 +191,7 @@ async def test_discretionary_velocity_endpoint_reports_month_progress_against_ba
 async def test_purchase_gate_candidates_endpoint_returns_large_and_new_merchant_signals(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     db_session.add_all(
         [
@@ -222,6 +225,7 @@ async def test_purchase_gate_candidates_endpoint_returns_large_and_new_merchant_
     )
     await db_session.commit()
 
+    await sync_legacy_classification()
     response = await async_client.get(
         "/api/v1/analytics/purchase-gate-candidates",
         params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
@@ -247,6 +251,7 @@ async def test_purchase_gate_candidates_include_spike_types_and_saved_review_sta
     async_client: AsyncClient,
     db_session: AsyncSession,
     api_headers: dict[str, str],
+    sync_legacy_classification,
 ) -> None:
     db_session.add_all(
         [
@@ -306,6 +311,7 @@ async def test_purchase_gate_candidates_include_spike_types_and_saved_review_sta
     )
     await db_session.commit()
 
+    await sync_legacy_classification()
     response = await async_client.get(
         "/api/v1/analytics/purchase-gate-candidates",
         params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
@@ -354,6 +360,7 @@ async def test_purchase_gate_candidates_include_spike_types_and_saved_review_sta
 async def test_spending_review_candidates_alias_matches_legacy_purchase_gate_contract(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     db_session.add(
         _transaction(
@@ -373,6 +380,7 @@ async def test_spending_review_candidates_alias_matches_legacy_purchase_gate_con
     await db_session.commit()
 
     params = {"start_date": "2026-04-01", "end_date": "2026-04-30"}
+    await sync_legacy_classification()
     legacy = await async_client.get(
         "/api/v1/analytics/purchase-gate-candidates",
         params=params,
@@ -446,6 +454,7 @@ async def test_purchase_gate_candidates_net_full_refunds_out_of_review_queue(
 async def test_purchase_gate_candidates_use_net_amount_for_partial_refunds(
     async_client: AsyncClient,
     db_session: AsyncSession,
+    sync_legacy_classification,
 ) -> None:
     purchase = _transaction(
         tx_date=date(2026, 4, 10),
@@ -486,6 +495,7 @@ async def test_purchase_gate_candidates_use_net_amount_for_partial_refunds(
     )
     await db_session.commit()
 
+    await sync_legacy_classification()
     response = await async_client.get(
         "/api/v1/analytics/purchase-gate-candidates",
         params={"start_date": "2026-04-01", "end_date": "2026-04-30"},

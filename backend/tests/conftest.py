@@ -1,10 +1,11 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date
 import sys
 from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -13,7 +14,9 @@ from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.main import app
 from app.models import Base
+from app.models.transaction import Transaction
 from app.services.metric_views import metric_view_ddl
+from app.services.nature_axes_service import write_through_legacy_classification
 from app.services.net_worth_views import net_worth_view_ddl
 from app.services.upload_service import import_transactions_from_workbook
 
@@ -139,6 +142,26 @@ async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
         yield session
 
     await engine.dispose()
+
+
+@pytest.fixture
+def sync_legacy_classification(
+    db_session: AsyncSession,
+) -> Callable[[], Awaitable[None]]:
+    """Reflect old classification columns of rows inserted directly into the
+    T056 axes, the same write-through a human edit through the API runs.
+
+    Readers decide from ``vw_transaction_nature``; a test that sets
+    ``cost_kind``/necessity/``recurring_payment_kind`` on ORM rows calls this
+    after the rows (and their loan/installment links) are committed.
+    """
+
+    async def sync() -> None:
+        ids = (await db_session.scalars(select(Transaction.id))).all()
+        await write_through_legacy_classification(db_session, ids)
+        await db_session.commit()
+
+    return sync
 
 
 @pytest.fixture

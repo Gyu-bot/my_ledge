@@ -43,6 +43,7 @@ from app.models.nature_axes import (
 )
 from app.models.transaction import Transaction
 from app.models.user_profile_snapshot import UserProfileSnapshot
+from app.services.nature_axes_service import write_through_legacy_classification
 
 FIRST_PERIOD = "2025-01"
 LAST_CLOSED_PERIOD = "2026-07"
@@ -383,6 +384,13 @@ async def build_read_surface_ledger(
             )
         else:
             session.add(UserProfileSnapshot(snapshot_date=snapshot_date))
+    await session.commit()
+    # Rows a person marked with the old necessity column reach the T056 axes
+    # through the same write-through a human edit runs (readers decide from
+    # vw_transaction_nature, not from the old column).
+    await write_through_legacy_classification(
+        session, [row.id for row in rows if row.spend_necessity is not None]
+    )
     await session.commit()
     ledger.transaction_count = len(rows)
     return ledger

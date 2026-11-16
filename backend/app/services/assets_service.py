@@ -774,10 +774,14 @@ async def _derive_liquidity_health_defaults(
         if income_by_period
         else Decimal("0")
     )
-    is_essential = lines.c.spend_necessity == "essential"
+    # T056: 필수(essential) = 조정 가능성 `protected`, read from the flow lines
+    # (vw_transaction_nature of the transaction the line carries). Loan-linked
+    # lines are always protected there, so the additional-debt part only
+    # catches a loan line whose adjustability is not protected.
+    is_essential = lines.c.adjustability == "protected"
     is_additional_debt = and_(
         lines.c.loan_account_id.is_not(None),
-        func.coalesce(lines.c.spend_necessity, "") != "essential",
+        lines.c.adjustability != "protected",
     )
     spending = (
         await db_session.execute(

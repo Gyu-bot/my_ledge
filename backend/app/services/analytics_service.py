@@ -43,6 +43,7 @@ from app.services.metric_views import (
     INCOME,
     METRIC_CURRENCY,
     METRIC_TRANSACTIONS_VIEW,
+    TRANSACTION_NATURE_VIEW,
     TRANSFER,
     day_of_month,
     flow_summary_columns,
@@ -83,6 +84,10 @@ class AnalyticsRow(TypedDict):
     spend_necessity: str | None
     loan_account_id: int | None
     recurring_payment_kind: str | None
+    # T056 two axes resolved in vw_transaction_nature (the human classification
+    # detectors decide from; the old columns above are only echoed).
+    commitment_kind: str | None
+    adjustability: str
     settlement_refund_total: NotRequired[int]
 
 
@@ -1098,8 +1103,10 @@ async def get_discretionary_velocity(
             continue
 
         row_period = _month_key(row["date"])
-        is_discretionary = row["spend_necessity"] == "discretionary"
-        is_classified = row["spend_necessity"] in {"essential", "discretionary"}
+        # T056: 재량 = 조정 가능성 `adjustable`, 분류됨 = `protected`/`adjustable`
+        # (vw_transaction_nature). `undecided` stays unclassified.
+        is_discretionary = row["adjustability"] == "adjustable"
+        is_classified = row["adjustability"] in {"protected", "adjustable"}
 
         if row_period == period:
             # Coverage describes classified charge volume; refunds must not make
@@ -1489,8 +1496,16 @@ async def _load_purchase_net_rows(
     remainder stays on the refund row. Rows whose net is zero are omitted.
     """
     tx = METRIC_TRANSACTIONS_VIEW
+    nature = TRANSACTION_NATURE_VIEW
     query = (
-        select(tx)
+        select(
+            tx,
+            nature.c.commitment_kind.label("nature_commitment_kind"),
+            nature.c.adjustability.label("nature_adjustability"),
+        )
+        .select_from(
+            tx.outerjoin(nature, nature.c.transaction_id == tx.c.id),
+        )
         .where(func.upper(tx.c.currency) == METRIC_CURRENCY)
         .where(tx.c.purchase_net_amount != 0)
     )
@@ -1527,6 +1542,8 @@ def _parse_purchase_net_row(row: RowMapping) -> AnalyticsRow:
         "spend_necessity": row["spend_necessity"],
         "loan_account_id": row["loan_account_id"],
         "recurring_payment_kind": row["recurring_payment_kind"],
+        "commitment_kind": row["nature_commitment_kind"],
+        "adjustability": row["nature_adjustability"] or "undecided",
         "settlement_refund_total": (
             int(row["settlement_refund_total"] or 0) if is_purchase else 0
         ),
@@ -1752,10 +1769,17 @@ def _possible_cancellation_evidence(rows: list[AnalyticsRow]) -> dict[int, list[
 
 
 def _is_purchase_gate_base_row(row: AnalyticsRow) -> bool:
+    """Ad hoc adjustable purchase (T056 axes from vw_transaction_nature).
+
+    Old rule: no loan link, ``cost_kind`` not fixed, ``spend_necessity``
+    discretionary. Fixed cost is a committed (recurring bundle) payment and
+    discretionary is ``adjustable``; loan- and installment-linked rows are
+    committed too, so only ad hoc rows remain.
+    """
     return (
         row["loan_account_id"] is None
-        and row["cost_kind"] != "fixed"
-        and row["spend_necessity"] == "discretionary"
+        and row["commitment_kind"] is None
+        and row["adjustability"] == "adjustable"
         and row["amount"] != 0
     )
 
