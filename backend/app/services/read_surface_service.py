@@ -9,10 +9,10 @@ It never re-sums transaction amounts in Python.
 
 from datetime import date
 
-from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.validation import query_error
 from app.models.nature_axes import RecurringCommitment
 from app.schemas.metrics import MetricAsOf, MetricContract
 from app.schemas.read_surface import (
@@ -100,9 +100,8 @@ def period_of(value: date) -> str:
 
 def period_range(start_period: str, end_period: str) -> list[str]:
     if end_period < start_period:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="end_period must not be before start_period",
+        raise query_error(
+            "end_period", "end_period must not be before start_period", value=end_period
         )
     year, month = (int(part) for part in start_period.split("-"))
     periods: list[str] = []
@@ -112,9 +111,10 @@ def period_range(start_period: str, end_period: str) -> list[str]:
         if current >= end_period:
             break
         if len(periods) > MAX_PERIOD_SPAN:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"period span must be at most {MAX_PERIOD_SPAN} months",
+            raise query_error(
+                "start_period",
+                f"period span must be at most {MAX_PERIOD_SPAN} months",
+                value=start_period,
             )
         month += 1
         if month == 13:

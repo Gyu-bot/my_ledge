@@ -27,10 +27,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from fastapi import HTTPException, status
 from sqlalchemy import and_, func, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.validation import query_error
 from app.models.insurance_contract import InsuranceContract
 from app.models.user_profile_snapshot import UserProfileSnapshot
 from app.schemas.metrics import MetricAsOf, MetricContract
@@ -439,25 +439,27 @@ async def get_net_worth_reconciliation(
     context = await _load_context(db_session)
     asset_dates = context.asset_dates
     if (start_date is None) != (end_date is None):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "start_date와 end_date는 함께 주거나 함께 생략한다.",
+        missing_param = "end_date" if end_date is None else "start_date"
+        raise query_error(
+            missing_param, "start_date와 end_date는 함께 주거나 함께 생략한다."
         )
     if start_date is not None and end_date is not None:
         missing = [
             value for value in (start_date, end_date) if value not in context.net_worth
         ]
         if missing:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            raise query_error(
+                "start_date" if start_date in missing else "end_date",
                 "자산 스냅샷이 없는 날짜다: "
                 + ", ".join(value.isoformat() for value in missing)
                 + ". /metrics/net-worth/intervals에서 날짜를 고른다.",
+                value=missing[0].isoformat(),
             )
         if start_date >= end_date:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            raise query_error(
+                "start_date",
                 "start_date는 end_date보다 앞서야 한다.",
+                value=start_date.isoformat(),
             )
     elif len(asset_dates) >= 2:
         start_date, end_date = asset_dates[-2], asset_dates[-1]

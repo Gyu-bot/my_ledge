@@ -5,6 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.validation import UniformValidationRoute
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.net_worth import (
@@ -18,7 +19,11 @@ from app.services.net_worth_service import (
     list_snapshot_intervals,
 )
 
-router = APIRouter(prefix="/metrics/net-worth", dependencies=[Depends(require_api_key)])
+router = APIRouter(
+    prefix="/metrics/net-worth",
+    dependencies=[Depends(require_api_key)],
+    route_class=UniformValidationRoute,
+)
 
 
 @router.get("/intervals", response_model=SnapshotIntervalsResponse)

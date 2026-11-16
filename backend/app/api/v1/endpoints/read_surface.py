@@ -4,12 +4,17 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import get_args
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.validation import (
+    UniformValidationRoute,
+    query_error,
+    reject_unknown_query_params,
+)
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.comparison import ComparisonAdjustabilityView, ComparisonLevel
@@ -24,6 +29,10 @@ from app.schemas.read_surface import (
     ReadReviewItemsResponse,
     ReadSpendCubeResponse,
     ReadSurfaceIndexResponse,
+    SpendCubeAdjustability,
+    SpendCubeCommitmentKind,
+    SpendCubeFlowRow,
+    SpendCubePaymentForm,
 )
 from app.services.read_commitments_service import read_commitments
 from app.services.read_review_items_service import read_review_items
@@ -38,7 +47,12 @@ from app.services.read_surface_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/read", dependencies=[Depends(require_api_key)])
+# Authentication first, then unknown query parameters (HTTP 422 naming each).
+router = APIRouter(
+    prefix="/read",
+    dependencies=[Depends(require_api_key), Depends(reject_unknown_query_params)],
+    route_class=UniformValidationRoute,
+)
 
 PERIOD_PATTERN = r"^[1-9]\d{3}-(0[1-9]|1[0-2])$"
 _DIMENSIONS: tuple[str, ...] = get_args(SpendCubeDimension)
@@ -111,10 +125,10 @@ async def get_read_spend_cube(
     effective_category_major: str | None = Query(default=None, max_length=50),
     effective_category_minor: str | None = Query(default=None, max_length=50),
     merchant: str | None = Query(default=None, max_length=500),
-    payment_form: str | None = Query(default=None, max_length=20),
-    commitment_kind: str | None = Query(default=None, max_length=20),
-    adjustability: str | None = Query(default=None, max_length=20),
-    flow_row: str | None = Query(default=None, max_length=40),
+    payment_form: SpendCubePaymentForm | None = Query(default=None),
+    commitment_kind: SpendCubeCommitmentKind | None = Query(default=None),
+    adjustability: SpendCubeAdjustability | None = Query(default=None),
+    flow_row: SpendCubeFlowRow | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=2000),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ReadSpendCubeResponse | JSONResponse:
@@ -123,9 +137,11 @@ async def get_read_spend_cube(
     )
     unknown = [item for item in dimensions if item not in _DIMENSIONS]
     if not dimensions or unknown:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="group_by must list one or more of: " + ", ".join(_DIMENSIONS),
+        raise query_error(
+            "group_by",
+            "group_by must list one or more of: " + ", ".join(_DIMENSIONS),
+            value=group_by,
+            allowed=_DIMENSIONS,
         )
     filters = {
         name: value

@@ -122,6 +122,19 @@ FLOW_SECTION_LABELS: dict[str, str] = {
     "transfer": "잔여의 행방(이체)",
     "other": "기타 유형",
 }
+# Values the spend cube (expense lines only) can hold per filter dimension.
+# Anything else is rejected with HTTP 422 instead of returning zero rows.
+SpendCubePaymentForm = Literal["committed", "ad_hoc"]
+SpendCubeCommitmentKind = Literal["loan", "installment", "recurring"]
+SpendCubeAdjustability = Literal["protected", "adjustable", "undecided"]
+SpendCubeFlowRow = Literal[
+    "committed_loan",
+    "committed_installment",
+    "committed_recurring",
+    "ad_hoc_protected",
+    "ad_hoc_adjustable",
+    "undecided",
+]
 FLOW_ROW_LABELS: dict[str, str] = {
     "income_undetermined": "수입 (정기·비정기 구분 전)",
     "committed_loan": "약정 지급 · 대출 원리금",
