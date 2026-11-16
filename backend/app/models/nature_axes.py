@@ -1,9 +1,10 @@
 """Two-axis transaction nature (T056): payment form and adjustability.
 
 These tables replace the per-transaction ``cost_kind``/necessity/
-``recurring_payment_kind`` inputs as the source of the metric views. They are
-new tables on purpose: no column is added to ``transactions`` or to any other
-table that the import contract or rollback fingerprints already enumerate.
+``recurring_payment_kind`` inputs as the source of the metric views.
+
+가져오기 검토 digest와 되돌리기 스냅샷은 확인 기록도 포함한다. 구조가 바뀌면
+이전에 준비한 검토와 되돌리기 지점은 다시 사용할 수 없다.
 
 - ``recurring_commitments``: human-registered recurring-payment bundles
   (정기 지급 묶음). A transaction belongs to a bundle when its merchant (for
@@ -14,11 +15,12 @@ table that the import contract or rollback fingerprints already enumerate.
   precedence), explicit bundle membership or exclusion, and migration flags.
 """
 
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 
 from sqlalchemy import (
     Boolean,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -62,6 +64,9 @@ class RecurringCommitment(TimestampMixin, Base):
     end_date: Mapped[date_type | None] = mapped_column(Date)
     origin: Mapped[str] = mapped_column(String(20), nullable=False)
     memo: Mapped[str | None] = mapped_column(Text)
+    attributes_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
 
 class CategoryAdjustabilityDefault(TimestampMixin, Base):

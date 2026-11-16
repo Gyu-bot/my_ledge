@@ -170,3 +170,22 @@ describe('NatureSettingsPage — 정기 지급 묶음', () => {
     expect(screen.getByText('데이터베이스 조회가 실패했습니다. 잠시 뒤 다시 시도해 주세요.')).toBeInTheDocument()
   })
 })
+
+it('확인 대기는 끝난 묶음도 보여 주고 빈 속성을 그대로 확인할 수 있다', async () => {
+  commitments = [recurringFixture({ id: 8, label: '샘플 확인 대기', origin: 'migration', cycle: null, amount_kind: null, needs_attribute_confirmation: true, end_date: '2026-01-01' })]
+  renderPage('/data/nature?tab=recurring&confirmation=pending')
+  const list = screen.getByRole('list', { name: '정기 지급 묶음' })
+  expect(within(list).getByText('확인 필요')).toBeInTheDocument()
+  fireEvent.click(within(list).getByRole('button', { name: '지금 주기·금액 그대로 확인' }))
+  await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ id: 8, data: { confirm_attributes: true } }))
+})
+
+it('빈 주기를 저장해도 다른 주기를 미리 고르지 않는다', async () => {
+  commitments = [recurringFixture({ id: 8, origin: 'migration', cycle: null, amount_kind: null, needs_attribute_confirmation: true })]
+  renderPage('/data/nature?tab=recurring&edit=8')
+  const form = screen.getByRole('form', { name: '고친 내용 저장' })
+  expect(within(form).getByLabelText('주기')).toHaveValue('')
+  expect(within(form).getByLabelText('금액')).toHaveValue('')
+  fireEvent.click(within(form).getByRole('button', { name: '고친 내용 저장' }))
+  await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ id: 8, data: expect.objectContaining({ cycle: null, amount_kind: null }) }))
+})

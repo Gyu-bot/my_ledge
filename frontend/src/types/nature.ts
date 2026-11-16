@@ -47,6 +47,8 @@ export interface RecurringCommitment {
   end_date: string | null
   origin: NatureOrigin
   memo: string | null
+  attributes_confirmed_at: string | null
+  needs_attribute_confirmation: boolean
   member_transaction_count: number
   first_member_date: string | null
   last_member_date: string | null
@@ -72,7 +74,7 @@ export interface RecurringCommitmentCreateRequest extends RecurringCommitmentAtt
   category_minor: string | null
 }
 
-export type RecurringCommitmentUpdateRequest = Partial<RecurringCommitmentCreateRequest>
+export type RecurringCommitmentUpdateRequest = Partial<RecurringCommitmentCreateRequest> & { confirm_attributes?: boolean }
 
 export interface NatureLevels {
   fixed: AdjustabilityValue | null

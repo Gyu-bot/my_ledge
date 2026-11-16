@@ -2251,3 +2251,7 @@ Liquidity health is retained and now deprecated through OpenAPI and successor he
 Discovery-only changed keys: `/read/index.entries[key=month_end_projection]` changes `path`, `response_field`, `notes`; `/read/data-status.data.month_end_forecast` changes `path`, `field`, `note`. Remaining financial response values and keys are unchanged. Synthetic snapshot tooling asserts removed paths 404, exact retained response bytes except these precise metadata replacements, and former projection object equality.
 
 전용 전망 응답은 예전 객체의 단위를 보존한다. `data.remaining_expense_adjustability.undecided_share_pct`는 백분율(0–100)이고, 봉투의 분류·기간 비중은 0–1이다. 새 응답의 `basis.rules.projection_ratio_units`와 `labels`가 단위 예외와 열거값 한국어 이름을 밝힌다.
+
+### T056 이행 약정 확인
+
+T056 확인 보완: 이행 약정은 `attributes_confirmed_at`으로 사용자의 주기·금액 확인을 기록한다. `/nature/recurring-commitments`와 `/read/commitments`의 대기 여부·대기 수는 추가 메타데이터이며 기존 관측·집계식은 바꾸지 않는다. HTTP `is_edited`는 별도 `legacy_classification_edited` 이력도 포함한다. 지정 출처·축 우선순위는 유지한다. 이행 전 검토는 다시 준비하며 이전 구조의 되돌리기는 `schema_changed`로 거절한다. 상세는 `agents/t056-classification-retirement.md`를 따른다.

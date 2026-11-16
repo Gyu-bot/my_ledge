@@ -188,10 +188,23 @@ def changed_tables(expected: dict | None, current: dict) -> list[str]:
     )
 
 
+def snapshot_schema_changed_tables(snapshot: dict | None) -> list[str]:
+    """복원 전에 전체 행의 컬럼 집합을 확인한다. 새 컬럼을 null로 채우지 않는다."""
+    snapshot = snapshot or {}
+    return [
+        table.name
+        for table in scope_tables()
+        if table.name not in snapshot
+        or any(set(row) != set(table.columns.keys()) for row in snapshot[table.name])
+    ]
+
+
 async def list_points(db: AsyncSession, limit: int = 20) -> list[dict]:
     if not _enabled(db):
         return []
     candidate = await _candidate(db)
+    if candidate is not None and snapshot_schema_changed_tables(candidate.snapshot):
+        candidate = None
     changed = (
         changed_tables(candidate.post_fingerprint, await fingerprint(db))
         if candidate is not None
@@ -252,7 +265,7 @@ async def rollback_upload(
                 "not_latest",
                 "Only the newest import without a later upload can be undone",
             )
-        missing = [t.name for t in tables if t.name not in (point.snapshot or {})]
+        missing = snapshot_schema_changed_tables(point.snapshot)
         if missing:
             raise RollbackError(
                 "schema_changed",

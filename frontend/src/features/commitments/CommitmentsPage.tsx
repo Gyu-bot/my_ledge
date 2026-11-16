@@ -90,7 +90,7 @@ function adjustabilityText(item: CommitmentItem): string {
 function editLink(item: CommitmentItem): { to: string; label: string } {
   if (item.kind === 'loan') return { to: '/data/loans', label: '대출 화면에서 열기' }
   if (item.kind === 'installment') return { to: '/data/installments', label: '할부 화면에서 열기' }
-  return { to: `/data/nature?tab=recurring${item.source_id != null ? `&edit=${item.source_id}` : ''}`, label: '정기 지급 고치기' }
+  return { to: `/data/nature?tab=recurring${item.source_id != null ? `&edit=${item.source_id}` : ''}`, label: item.needs_attribute_confirmation ? '주기·금액 확인하기' : '정기 지급 고치기' }
 }
 
 function ObservationBlock({ item }: { item: CommitmentItem }) {
@@ -155,6 +155,7 @@ function CommitmentCard({ item }: { item: CommitmentItem }) {
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="neutral">{KIND_TEXT[item.kind]}</Badge>
             {item.lifecycle !== 'active' ? <Badge variant="neutral">{item.lifecycle === 'ended' ? '끝남' : '상태 확인 불가'}</Badge> : null}
+            {item.needs_attribute_confirmation ? <Badge variant="warn">확인 필요</Badge> : null}
             <h3 className="break-words text-label font-semibold text-text-primary">{item.name}</h3>
           </div>
         </div>
@@ -214,6 +215,7 @@ export function CommitmentsPage() {
   const kind: KindFilter = isKindFilter(kindParam) ? kindParam : 'all'
   const stateFilter: StateFilter = isStateFilter(stateParam) ? stateParam : 'all'
   const showEnded = searchParams.get('ended') === '1'
+  const pendingOnly = searchParams.get('confirmation') === 'pending'
 
   function setParam(key: string, value: string | null) {
     setSearchParams((current) => {
@@ -230,7 +232,8 @@ export function CommitmentsPage() {
   const endedCount = items.filter((item) => item.lifecycle !== 'active').length
   const visible = sortItems(items).filter(
     (item) =>
-      (showEnded || item.lifecycle === 'active') &&
+      (pendingOnly || showEnded || item.lifecycle === 'active') &&
+      (!pendingOnly || item.needs_attribute_confirmation) &&
       (kind === 'all' || item.kind === kind) &&
       (stateFilter === 'all' || item.observation.state === stateFilter),
   )
@@ -307,6 +310,12 @@ export function CommitmentsPage() {
             </div>
           ) : null}
 
+          {data.pending_confirmation_count > 0 ? (
+            <p className="text-caption text-text-secondary">
+              예전 분류에서 옮긴 정기 지급 {data.pending_confirmation_count}개의 주기·금액 확인이 필요합니다. 끝난 약정도 포함합니다.
+              {' '}<Link to="/data/nature?tab=recurring&confirmation=pending" className="text-transfer hover:underline">확인할 정기 지급 열기</Link>
+            </p>
+          ) : null}
           <Card
             title="약정 목록"
             meta={`${visible.length}개 표시 · 대출 ${items.filter((item) => item.kind === 'loan').length} · 할부 ${items.filter((item) => item.kind === 'installment').length} · 정기 지급 ${items.filter((item) => item.kind === 'recurring').length}`}
@@ -350,6 +359,7 @@ export function CommitmentsPage() {
                   )
                 })}
               </div>
+              <Toggle label={`확인 필요한 약정만 보기 (${data.pending_confirmation_count})`} checked={pendingOnly} onChange={(value) => setParam('confirmation', value ? 'pending' : null)} />
               {endedCount > 0 ? (
                 <Toggle label={`끝난 약정도 보기 (${endedCount})`} checked={showEnded} onChange={(value) => setParam('ended', value ? '1' : null)} />
               ) : null}

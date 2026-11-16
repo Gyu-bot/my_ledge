@@ -669,6 +669,11 @@ async def _recurring_items(
         )
         items.append(
             CommitmentItem(
+                attributes_confirmed_at=commitment.attributes_confirmed_at,
+                needs_attribute_confirmation=(
+                    commitment.origin == "migration"
+                    and commitment.attributes_confirmed_at is None
+                ),
                 commitment_key=f"recurring:{commitment.id}",
                 kind="recurring",
                 kind_label=COMMITMENT_KIND_LABELS["recurring"],
@@ -712,6 +717,7 @@ async def _recurring_items(
 
 def _summary_item(item: CommitmentItem) -> CommitmentSummaryItem:
     return CommitmentSummaryItem(
+        needs_attribute_confirmation=item.needs_attribute_confirmation,
         commitment_key=item.commitment_key,
         kind=item.kind,
         name=item.name,
@@ -902,6 +908,9 @@ async def read_commitments(
             "totals.observed_committed_total": "이 기간 관측된 약정 지급 합계(월 흐름표)",
         },
         data=ReadCommitmentsData(
+            pending_confirmation_count=sum(
+                item.needs_attribute_confirmation for item in items
+            ),
             period=target,
             period_month_status=period_state.month_status if period_state else None,
             totals={

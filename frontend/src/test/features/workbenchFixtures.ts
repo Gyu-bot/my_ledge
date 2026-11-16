@@ -22,6 +22,7 @@ const ENVELOPE_AS_OF = {
 export function commitmentItem(overrides: Partial<CommitmentItem> & { state?: ObservationState; ids?: number[] } = {}): CommitmentItem {
   const { state = 'observed', ids = [], ...rest } = overrides
   return {
+    attributes_confirmed_at: null, needs_attribute_confirmation: false,
     commitment_key: 'loan:1',
     kind: 'loan',
     kind_label: '대출',
@@ -101,6 +102,7 @@ export function commitmentsFixture(items?: CommitmentItem[]): ReadCommitmentsRes
       period: '2026-07',
       period_month_status: 'closed',
       totals: { monthly_burden_recorded: 650_000, observed_committed_total: 450_000 },
+      pending_confirmation_count: list.filter((item) => item.needs_attribute_confirmation).length,
       counts_by_state: {},
       items: list,
     },
@@ -121,6 +123,7 @@ export function recurringFixture(overrides: Partial<RecurringCommitment> = {}): 
   return {
     id: 7, label: null, match_scope: 'merchant', merchant: '샘플 구독', category_major: '샘플 구독료', category_minor: null,
     cycle: 'monthly', total_count: null, amount_kind: 'fixed', adjustability: 'adjustable', start_date: '2026-01-01', end_date: null,
+    attributes_confirmed_at: null, needs_attribute_confirmation: false,
     origin: 'user', memo: null, member_transaction_count: 7, first_member_date: '2026-01-05', last_member_date: '2026-07-05',
     created_at: '', updated_at: '', ...overrides,
   }

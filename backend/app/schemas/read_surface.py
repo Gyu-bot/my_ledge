@@ -17,7 +17,7 @@ Format rules (docs/agents/read-surface-migration.md, docs/backend-api-ssot.md):
 """
 
 import datetime as dt
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -627,6 +627,8 @@ class CommitmentObservation(BaseModel):
 
 
 class CommitmentItem(BaseModel):
+    attributes_confirmed_at: datetime | None = None
+    needs_attribute_confirmation: bool = False
     commitment_key: str = Field(description="kind:id 형식의 안정 키.")
     kind: Literal["loan", "installment", "recurring"]
     kind_label: str
@@ -696,6 +698,7 @@ class CommitmentItem(BaseModel):
 class CommitmentSummaryItem(BaseModel):
     """Compact row for ``view=summary``."""
 
+    needs_attribute_confirmation: bool = False
     commitment_key: str
     kind: Literal["loan", "installment", "recurring"]
     name: str
@@ -715,6 +718,10 @@ class CommitmentSummaryItem(BaseModel):
 
 
 class ReadCommitmentsData(BaseModel):
+    pending_confirmation_count: int = Field(
+        default=0,
+        description="필터와 무관한 이행 약정의 속성 확인 대기 수. 끝난 약정 포함.",
+    )
     period: str | None
     period_month_status: MonthStatus | None
     totals: dict[str, int] = Field(
