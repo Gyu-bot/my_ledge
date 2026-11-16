@@ -680,6 +680,20 @@ async def test_commitments_status_filter_and_summary_view(
     body = summary.json()["data"]
     assert body["items"] == []
     assert len(body["item_summaries"]) == default["total_item_count"]
+    # Each summary row carries what is needed to count "monthly" items and to
+    # tell protected from adjustable without asking for the detail view.
+    detail_by_key = {item["commitment_key"]: item for item in default["items"]}
+    for row in body["item_summaries"]:
+        detail = detail_by_key[row["commitment_key"]]
+        for field in (
+            "cycle",
+            "monthly_burden_basis",
+            "adjustability",
+            "end_date_reason",
+        ):
+            assert row[field] == detail[field], (row["commitment_key"], field)
+        assert row["end_date_reason"]
+    assert {row["cycle"] for row in body["item_summaries"]} >= {"monthly"}
     assert len(summary.content) < len(
         (await async_client.get(path, headers=api_headers)).content
     )
@@ -850,6 +864,9 @@ async def test_projection_lists_income_left_out_of_the_total(
     completeness = projection.completeness
     assert completeness is not None
     assert completeness.status == "known_components_only"
+    # A value is present, but it is a partial sum: one flag says so.
+    assert completeness.full_projection_available is False
+    assert completeness.amount_scope == "known_components"
     (left_out,) = completeness.left_out
     assert left_out.component == "income_source"
     assert left_out.reason_code == "income_source_uncertain"
@@ -882,6 +899,20 @@ async def test_projection_loan_component_has_one_row_per_loan(
     }
     if projection.projected_month_end_net is None:
         assert projection.completeness.status == "not_projected"
+    completeness = projection.completeness
+    assert completeness.full_projection_available == (
+        completeness.status == "all_known_components"
+    )
+    assert (
+        completeness.amount_scope
+        == {
+            "all_known_components": "all_known_components",
+            "known_components_only": "known_components",
+            "not_projected": "none",
+        }[completeness.status]
+    )
+    if completeness.left_out:
+        assert completeness.full_projection_available is False
 
 
 # --------------------------------------------------------------------------
@@ -913,6 +944,7 @@ async def test_index_lists_projection_and_signed_ratio_fields(
     ) in pairs
     assert "baseline" in entries["comparison_monthly_flow"]["parameters"]
     assert {"status", "view"} <= set(entries["commitments"]["parameters"])
+    assert entries["net_worth_intervals"]["parameters"] == ["limit"]
     schema = app.openapi()["paths"]
     for entry in body["entries"]:
         assert entry["path"] in schema, entry["path"]

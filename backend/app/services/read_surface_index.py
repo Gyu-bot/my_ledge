@@ -154,7 +154,7 @@ def build_index() -> ReadSurfaceIndexResponse:
                 availability="live",
                 availability_label=live,
                 provided_by="T061",
-                parameters=[],
+                parameters=["limit"],
                 notes=(
                     "종류별 스냅샷 날짜와 연속된 자산 스냅샷 구간. "
                     "공통 봉투 없이 지표 응답을 그대로 준다. 상태 어휘가 따로 있다 "

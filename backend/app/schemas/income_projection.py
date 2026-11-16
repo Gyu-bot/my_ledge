@@ -259,6 +259,20 @@ class ProjectionCompleteness(BaseModel):
 
     status: ProjectionCompletenessStatus
     status_label: str
+    full_projection_available: bool = Field(
+        default=False,
+        description=(
+            "projected_month_end_net이 알려진 구성 요소를 모두 반영했을 때만 true. "
+            "false인데 값이 있으면 그 값은 일부 구성 요소만의 합이다."
+        ),
+    )
+    amount_scope: Literal["all_known_components", "known_components", "none"] = Field(
+        default="none",
+        description=(
+            "projected_month_end_net과 net_after_known_remaining_expense가 덮는 범위. "
+            "known_components면 left_out의 항목이 빠진 부분 합계, none이면 값이 없다."
+        ),
+    )
     left_out: list[ProjectionLeftOutComponent] = Field(default_factory=list)
     basis: str = (
         "projected_month_end_net만 읽으면 빠진 구성 요소를 알 수 없다. 남은 금액을 0으로 "

@@ -699,10 +699,16 @@ class CommitmentSummaryItem(BaseModel):
     kind: Literal["loan", "installment", "recurring"]
     name: str
     lifecycle: CommitmentLifecycle
+    cycle: CommitmentCycleKey | None = Field(
+        default=None, description="기록된 주기. null이면 주기가 기록되지 않았다."
+    )
     monthly_burden: int | None
+    monthly_burden_basis: MonthlyBurdenBasis
     monthly_burden_origin: MonthlyBurdenOrigin
+    adjustability: Literal["protected", "adjustable", "undecided"]
     end_date: date | None
     end_date_status: EndDateStatus
+    end_date_reason: str = ""
     observation_state: ObservationState
     observed_amount: int
 
