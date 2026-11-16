@@ -1,5 +1,14 @@
 # Backend/API SSOT
 
+## T056 승인된 컬럼 삭제 (2026-11-17, PR B)
+
+이 절이 PR A의 원시 컬럼 보관 설명보다 우선한다. `20261117_0042`는 `20261117_0041` 뒤에서 `transactions.cost_kind`, `fixed_cost_necessity`, `spend_necessity`, `recurring_payment_kind`, `cost_classification_source`를 삭제한다. `/schema` 원시 거래 표에서도 이 다섯 필드는 사라진다. 뷰 제거·투영 제거는 PR A에서 끝났으며 B는 뷰를 바꾸지 않는다. 과거 규칙 표와 설정 기록은 동결 보관한다.
+
+[영향 분석](agents/t056-drop-impact.md)과 [건수 전용 SQL](agents/t056-drop-preflight.sql)을 따른다. 삭제는 새 축에 보존되지 않은 이전 사람 분류의 건수가 하나라도 있으면 거절된다. pending/processing 가져오기도 거절한다. 준비 검토는 stale, 기존 ready 되돌리기 지점은 expired가 되어 재사용할 수 없다(강제 복원도 불가). 스냅샷·지문·업로드 로그·원본 증거는 보관하며 새로 준비한 검토와 이행 뒤 만든 되돌리기 지점은 새 구조를 쓴다. HTTP 입력·응답 구조와 상태코드는 기존 계약을 유지한다.
+
+downgrade는 nullable 컬럼만 재생성하고 삭제한 값이나 이전 승인·되돌리기 유효성은 복원하지 않는다. 새 축과 `/read/*`·흐름표·큐브의 값은 유지한다. 외부 에이전트 되돌리기 도우미와 SQL 소비자는 이름 변경 목록을 검토자가 점검해야 한다. 이 문서의 구현은 검토·병합 전이며 배포하지 않았다.
+
+
 ## T056 입력·이전 읽기 표면 제거 (2026-11-17, PR A)
 
 이 절이 아래의 이전 분류 호환 설명보다 우선한다. [전체 경로별 결정과 뷰 변경 목록](agents/t056-classification-retirement.md)을 따른다. `cost_kind`, `fixed_cost_necessity`, `spend_necessity`, `recurring_payment_kind`, `cost_classification_source`는 거래 응답·생성·단건/일괄 수정에서 제거되며 옛 입력과 필터는 422다. `/nature/transactions/{id}.legacy`와 할부 응답의 `recurring_payment_kind`도 제거된다. 변동비·재량·반복 아님을 기본 저장하지 않는다.

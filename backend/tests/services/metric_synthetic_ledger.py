@@ -8,6 +8,8 @@ purchases), zero-amount rows, and rows the metric basis must exclude (deleted,
 merged, superseded, non-KRW).
 """
 
+from legacy_nature_seed import legacy_transaction
+
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time
@@ -55,7 +57,7 @@ def _tx(
     recurring_payment_kind: str | None = None,
     currency: str = "KRW",
 ) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=time(12, 0),
         type=tx_type,

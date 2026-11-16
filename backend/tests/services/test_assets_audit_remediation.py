@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, time
 from decimal import Decimal
 
@@ -10,7 +11,6 @@ from app.models.insurance_contract import InsuranceContract
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_transaction_link import LoanTransactionLink
-from app.models.transaction import Transaction
 from app.parsers.snapshots import SnapshotParseResult
 from app.services import assets_service
 from app.services.upload_service import replace_snapshots
@@ -28,7 +28,7 @@ def asset(day: date, name: str, amount: int = 100, **metadata) -> AssetSnapshot:
 
 
 def transaction(day: date, amount: int, *, necessity: str | None = None, **kwargs):
-    return Transaction(
+    return legacy_transaction(
         date=day,
         time=time(9),
         type="수입" if amount > 0 else "지출",

@@ -1,5 +1,7 @@
 """Synthetic-only reviewed import contract and real HTTP integration tests."""
 
+from legacy_nature_seed import legacy_transaction
+
 from datetime import date, time
 from io import BytesIO
 import json
@@ -65,7 +67,7 @@ def row(name="synthetic", amount=-100, seconds=0, **kw):
 
 
 def tx(**kw):
-    return Transaction(**row(**kw))
+    return legacy_transaction(**row(**kw))
 
 
 def workbook(rows=None, asset=100, full_snapshots=False):

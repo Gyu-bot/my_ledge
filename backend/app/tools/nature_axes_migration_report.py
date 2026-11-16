@@ -20,7 +20,7 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 
-from sqlalchemy import exists, func, inspect, select, text
+from sqlalchemy import literal_column, exists, func, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from app.models.installment_transaction_link import InstallmentTransactionLink
@@ -71,6 +71,13 @@ def _is_effective():  # type: ignore[no-untyped-def]
 
 
 async def build_report(connection: AsyncConnection) -> NatureMigrationReport:
+    columns = await connection.run_sync(
+        lambda conn: {c["name"] for c in inspect(conn).get_columns("transactions")}
+    )
+    if "cost_kind" not in columns:
+        raise ValueError(
+            "Legacy classification columns were retired by 20261117_0042; use /read/data-status for current classification"
+        )
     loan_linked = exists().where(LoanTransactionLink.transaction_id == Transaction.id)
     installment_linked = exists().where(
         InstallmentTransactionLink.transaction_id == Transaction.id
@@ -91,10 +98,16 @@ async def build_report(connection: AsyncConnection) -> NatureMigrationReport:
                     func.coalesce(
                         Transaction.category_minor_user, Transaction.category_minor
                     ).label("category_minor"),
-                    Transaction.cost_kind,
-                    Transaction.fixed_cost_necessity,
-                    Transaction.spend_necessity,
-                    Transaction.recurring_payment_kind,
+                    literal_column("transactions.cost_kind").label("cost_kind"),
+                    literal_column("transactions.fixed_cost_necessity").label(
+                        "fixed_cost_necessity"
+                    ),
+                    literal_column("transactions.spend_necessity").label(
+                        "spend_necessity"
+                    ),
+                    literal_column("transactions.recurring_payment_kind").label(
+                        "recurring_payment_kind"
+                    ),
                     loan_linked.label("loan_linked"),
                     installment_linked.label("installment_linked"),
                 )
@@ -309,7 +322,11 @@ def main(argv: list[str] | None = None) -> int:
     if not url:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 2
-    report = asyncio.run(_run(url))
+    try:
+        report = asyncio.run(_run(url))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if args.json:
         payload = asdict(report)
         if not args.show_amounts:

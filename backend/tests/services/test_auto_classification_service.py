@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, time
 
 from sqlalchemy import select
@@ -26,7 +27,7 @@ def _transaction(
     cost_classification_source: str | None = None,
     recurring_payment_kind: str | None = None,
 ) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=time(9, 0),
         type="지출",

@@ -29,7 +29,7 @@ def normalize(value):
 
 
 async def capture(url):
-    engine = create_async_engine(url)
+    engine = create_async_engine(url, connect_args={"server_settings": {"jit": "off"}})
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def override():
@@ -79,6 +79,12 @@ async def capture(url):
                     await db.execute(text("SELECT * FROM transactions ORDER BY id"))
                 ).mappings()
             ]
+        rows = {
+            name: sorted(
+                items, key=lambda row: json.dumps(row, sort_keys=True, default=str)
+            )
+            for name, items in rows.items()
+        }
         return bodies, definitions, rows, transactions
     finally:
         app.dependency_overrides.pop(get_db_session, None)

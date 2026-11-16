@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, time
 from decimal import Decimal
 
@@ -56,7 +57,7 @@ REFERENCE = date(2031, 7, 20)
 
 
 def tx(on, amount, merchant="Example Payer", category="급여", **values):
-    return Transaction(
+    return legacy_transaction(
         date=on,
         time=time(12),
         type=values.pop("type", "수입" if amount > 0 else "지출"),

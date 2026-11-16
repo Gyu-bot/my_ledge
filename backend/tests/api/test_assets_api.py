@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, time
 
 from httpx import AsyncClient
@@ -491,7 +492,7 @@ async def test_liquidity_health_derives_closed_month_defaults_and_source_metadat
                 currency="KRW",
                 source="import",
             ),
-            Transaction(
+            legacy_transaction(
                 date=date(2026, 4, 5),
                 time=time(9, 0),
                 type="지출",

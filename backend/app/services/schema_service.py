@@ -92,7 +92,7 @@ def build_schema_document(metadata: MetaData) -> SchemaDocumentResponse:
                         type=str(column.type),
                         nullable=column.nullable,
                         description=(
-                            "legacy/frozen: 이전 분류 보관용. 입력·계산에 사용하지 않으며 삭제 예정."
+                            "legacy/frozen: 과거 규칙 보관용. 입력·계산에 사용하지 않음."
                             if column.name
                             in {
                                 "cost_kind",

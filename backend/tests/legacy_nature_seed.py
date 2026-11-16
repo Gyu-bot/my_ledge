@@ -18,6 +18,34 @@ from app.services.nature_axes_service import (
     _effective_category,
 )
 
+
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
+LEGACY_FIELDS = (
+    "cost_kind",
+    "fixed_cost_necessity",
+    "spend_necessity",
+    "cost_classification_source",
+    "recurring_payment_kind",
+)
+
+
+def legacy_transaction(**values) -> Transaction:
+    legacy = {name: values.pop(name, None) for name in LEGACY_FIELDS}
+    row = Transaction(**values)
+    for name, value in legacy.items():
+        setattr(row, name, value)
+    row._synthetic_legacy = True
+    return row
+
+
+@event.listens_for(Session, "after_attach")
+def _hold_synthetic_legacy_rows(session, row):
+    if isinstance(row, Transaction) and getattr(row, "_synthetic_legacy", False):
+        session.info.setdefault("synthetic_legacy_rows", []).append(row)
+
+
 _CHUNK = 400
 
 
@@ -85,10 +113,12 @@ async def write_through_legacy_classification(
             nature = map_legacy_classification(
                 loan_linked=transaction.id in loan_linked,
                 installment_linked=transaction.id in installment_linked,
-                cost_kind=transaction.cost_kind,
-                fixed_cost_necessity=transaction.fixed_cost_necessity,
-                spend_necessity=transaction.spend_necessity,
-                recurring_payment_kind=transaction.recurring_payment_kind,
+                cost_kind=getattr(transaction, "cost_kind", None),
+                fixed_cost_necessity=getattr(transaction, "fixed_cost_necessity", None),
+                spend_necessity=getattr(transaction, "spend_necessity", None),
+                recurring_payment_kind=getattr(
+                    transaction, "recurring_payment_kind", None
+                ),
             )
             override = overrides.get(transaction.id) or TransactionNatureOverride(
                 transaction_id=transaction.id,
@@ -143,10 +173,11 @@ async def _apply_legacy_nature(
                 category_major=major,
                 category_minor=minor,
                 cycle="monthly"
-                if transaction.recurring_payment_kind == "monthly_recurring"
+                if getattr(transaction, "recurring_payment_kind", None)
+                == "monthly_recurring"
                 else None,
-                amount_kind=transaction.cost_kind
-                if transaction.cost_kind in ("fixed", "variable")
+                amount_kind=getattr(transaction, "cost_kind", None)
+                if getattr(transaction, "cost_kind", None) in ("fixed", "variable")
                 else None,
                 adjustability=None,
                 start_date=transaction.date,
@@ -170,7 +201,7 @@ async def _apply_legacy_nature(
 
 
 def _has_payment_form_signal(transaction: Transaction) -> bool:
-    return transaction.cost_kind in ("fixed", "variable") or (
-        transaction.recurring_payment_kind
+    return getattr(transaction, "cost_kind", None) in ("fixed", "variable") or (
+        getattr(transaction, "recurring_payment_kind", None)
         in ("monthly_recurring", "installment", "not_recurring")
     )

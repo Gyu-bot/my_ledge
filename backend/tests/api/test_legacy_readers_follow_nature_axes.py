@@ -3,7 +3,7 @@
 Every classification here is set only through the nature API (category
 default, recurring commitment, transaction adjustability); the old columns
 ``cost_kind``/``fixed_cost_necessity``/``spend_necessity``/
-``recurring_payment_kind`` stay empty. Synthetic data only.
+``recurring_payment_kind`` are absent. Synthetic data only.
 """
 
 from datetime import date, time
@@ -40,10 +40,10 @@ def _row(
 
 def _assert_old_columns_empty(transactions: list[Transaction]) -> None:
     for transaction in transactions:
-        assert transaction.cost_kind is None
-        assert transaction.fixed_cost_necessity is None
-        assert transaction.spend_necessity is None
-        assert transaction.recurring_payment_kind is None
+        assert not hasattr(transaction, "cost_kind")
+        assert not hasattr(transaction, "fixed_cost_necessity")
+        assert not hasattr(transaction, "spend_necessity")
+        assert not hasattr(transaction, "recurring_payment_kind")
 
 
 async def _set_adjustability(

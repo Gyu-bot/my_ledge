@@ -3,6 +3,8 @@
 Synthetic data only; no real categories or merchants.
 """
 
+from legacy_nature_seed import legacy_transaction
+
 from datetime import date, time
 
 from httpx import AsyncClient
@@ -44,7 +46,7 @@ def tx(
     minor: str | None = None,
     **fields: object,
 ) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=time(12, 0),
         type=tx_type,

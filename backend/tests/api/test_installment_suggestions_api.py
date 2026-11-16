@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, datetime, time
 
 from httpx import AsyncClient
@@ -15,7 +16,7 @@ def _expense(
     amount: int,
 ) -> Transaction:
     now = datetime(2026, 5, 30, 0, 0, 0)
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=time(9, 0),
         type="지출",
@@ -176,10 +177,7 @@ async def test_installment_suggestions_expose_conflicts_without_linked_duplicate
     assert payload["items"][0]["transaction"]["transaction_id"] == candidate.id
     assert payload["items"][0]["suggested_installment_number"] == 2
     assert payload["items"][0]["is_usable"] is False
-    assert (
-        payload["items"][0]["conflict_reason"]
-        == "installment_number_already_linked"
-    )
+    assert payload["items"][0]["conflict_reason"] == "installment_number_already_linked"
 
 
 async def test_installment_suggestions_reject_malformed_inputs(

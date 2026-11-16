@@ -5,6 +5,8 @@ each closed month exactly at every as-of day. Distinctive amounts make it easy
 to prove that the default report never prints a won amount.
 """
 
+from legacy_nature_seed import legacy_transaction
+
 from datetime import date, time
 from decimal import Decimal
 
@@ -48,7 +50,7 @@ PRIVATE_STRINGS = (
 
 
 def _tx(on: date, amount: int, merchant: str, category: str, **values) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=on,
         time=time(12),
         type=values.pop("type", "수입" if amount > 0 else "지출"),

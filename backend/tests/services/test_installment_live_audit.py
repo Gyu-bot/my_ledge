@@ -109,7 +109,7 @@ async def test_confirmed_raw_description_exposes_unclassified_next_payments_with
         )
         == 1
     )
-    assert all(tx.recurring_payment_kind is None for tx in next_payments)
+    assert all(not hasattr(tx, "recurring_payment_kind") for tx in next_payments)
 
 
 async def test_alias_rules_are_review_evidence_and_conflicting_alias_targets_are_rejected(

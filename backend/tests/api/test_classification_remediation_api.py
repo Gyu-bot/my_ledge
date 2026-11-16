@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, time
 from decimal import Decimal
 
@@ -33,7 +34,7 @@ def transaction(**overrides) -> Transaction:
         "amount": -10000,
         "source": "import",
     }
-    return Transaction(**(values | overrides))
+    return legacy_transaction(**(values | overrides))
 
 
 async def seed_recurring(db_session: AsyncSession) -> list[Transaction]:

@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, datetime, time
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +22,7 @@ def _transaction(
     merged_into_id: int | None = None,
 ) -> Transaction:
     now = datetime(2026, 5, 31, 0, 0, 0)
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=time(9, 0),
         type="지출",

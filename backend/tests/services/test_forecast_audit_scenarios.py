@@ -9,6 +9,8 @@ normal tests; the two F-C2 xfails stay (see their reasons). Synthetic
 identities and amounts only.
 """
 
+from legacy_nature_seed import legacy_transaction
+
 import calendar
 from datetime import date, time
 from decimal import Decimal
@@ -76,7 +78,7 @@ GROCERY_DAYS = (2, 5, 9, 13, 17, 21, 25, 28)
 
 
 def tx(on: date, amount: int, merchant: str, category: str, **values) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=on,
         time=time(12),
         type=values.pop("type", "수입" if amount > 0 else "지출"),

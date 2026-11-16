@@ -54,3 +54,5 @@
 월 흐름표·큐브·비교·`/read/*`는 새 축을 그대로 읽는다. 합성 장부에서 모든 해당 GET과 유지되는 뷰 투영의 이행 전후 동일성, downgrade/upgrade, 원본 표 무변경을 검증한다. 이전 분류의 금액 구획은 후속 축의 값과 같다고 주장하지 않는다.
 
 PR A 검증: 백엔드 829 passed / 55 skipped / 2 xfailed, ruff 통과. 프론트엔드 326 passed 및 typecheck/lint/build 통과. 실제 컴포넌트·빌드 CSS를 격리한 브라우저에서 390/1280px로 확인했고 가로 넘침이 없었다. 18개 read/metric GET의 변경 전 응답 대조와 합성 PostgreSQL 뷰 왕복 검증을 수행했다. 원시 QA 로그나 개인 자료는 커밋하지 않는다.
+
+PR B의 별도 승인 삭제 단계는 [영향 분석](t056-drop-impact.md)과 [0건 사전 검사](t056-drop-preflight.sql)를 따른다. 위의 컬럼 보관 설명은 PR A 단계의 계약이다.

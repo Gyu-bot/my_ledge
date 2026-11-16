@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, datetime, time
 
 from httpx import AsyncClient
@@ -30,7 +31,7 @@ def _transaction(
     source: str = "import",
 ) -> Transaction:
     now = datetime(2026, 3, 24, 0, 0, 0)
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=tx_time,
         type=tx_type,

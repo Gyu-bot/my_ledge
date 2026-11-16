@@ -1,3 +1,4 @@
+from legacy_nature_seed import legacy_transaction
 from datetime import date, time
 
 from httpx import AsyncClient
@@ -7,7 +8,7 @@ from app.models.transaction import Transaction
 
 
 def _expense(day: date, amount: int, merchant: str) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=day,
         time=time(10),
         type="지출",

@@ -78,7 +78,7 @@ async def test_retired_surfaces_are_404(async_client, api_headers, method, path)
         assert r.status_code == 404
 
 
-async def test_new_axis_and_ordinary_writes_leave_old_columns_frozen(
+async def test_new_axis_and_ordinary_writes_work_without_legacy_columns(
     async_client, api_headers, db_session
 ):
     tx = Transaction(
@@ -89,7 +89,6 @@ async def test_new_axis_and_ordinary_writes_leave_old_columns_frozen(
         description="synthetic-merchant",
         merchant="synthetic-merchant",
         amount=-100,
-        **dict(zip(OLD, VALUES, strict=True)),
     )
     db_session.add_all(
         [
@@ -109,7 +108,7 @@ async def test_new_axis_and_ordinary_writes_leave_old_columns_frozen(
         ]
     )
     await db_session.commit()
-    before = tuple(getattr(tx, field) for field in OLD)
+    assert set(OLD).isdisjoint(Transaction.__table__.columns.keys())
     r = await async_client.put(
         f"/api/v1/nature/transactions/{tx.id}/adjustability",
         json={"adjustability": "adjustable"},
@@ -127,7 +126,7 @@ async def test_new_axis_and_ordinary_writes_leave_old_columns_frozen(
         assert r.status_code == 200
     await apply_enabled_auto_classification_after_upload(db_session)
     await db_session.refresh(tx)
-    assert tuple(getattr(tx, field) for field in OLD) == before
+    assert all(not hasattr(tx, field) for field in OLD)
     override = await db_session.get(TransactionNatureOverride, tx.id)
     assert override.adjustability == "adjustable"
     r = await async_client.post(
@@ -144,7 +143,7 @@ async def test_new_axis_and_ordinary_writes_leave_old_columns_frozen(
     )
     assert r.status_code == 201
     new = await db_session.get(Transaction, r.json()["id"])
-    assert all(getattr(new, field) is None for field in OLD)
+    assert all(not hasattr(new, field) for field in OLD)
     assert (
         await db_session.scalar(
             select(TransactionNatureOverride).where(
@@ -177,3 +176,14 @@ def test_no_runtime_legacy_assignment_or_copy_path():
         .split("async def _move_transaction_relationships", 1)[0]
     )
     assert not any(f'"{field}"' in copier for field in OLD)
+
+
+async def test_schema_exposes_new_transaction_shape_and_keeps_archival_rules(
+    async_client, api_headers
+):
+    response = await async_client.get("/api/v1/schema", headers=api_headers)
+    assert response.status_code == 200
+    tables = {item["name"]: item for item in response.json()["tables"]}
+    assert not set(OLD) & {c["name"] for c in tables["transactions"]["columns"]}
+    assert "category_classification_rules" in tables
+    assert "recurring_category_rules" in tables

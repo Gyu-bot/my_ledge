@@ -4,6 +4,8 @@ Set METRIC_TEST_DATABASE_URL (or REVIEW_TEST_DATABASE_URL) to a disposable
 loopback server. Each test creates and drops its own scratch database.
 """
 
+from legacy_nature_seed import legacy_transaction
+
 import asyncio
 import importlib.util
 import json
@@ -92,7 +94,7 @@ def _tx(merchant: str, amount: int, day: date, **fields: object) -> Transaction:
         "payment_method": "card-a",
     }
     values.update(fields)
-    return Transaction(**values)
+    return legacy_transaction(**values)
 
 
 JAN, FEB = date(2026, 1, 5), date(2026, 2, 5)
@@ -199,6 +201,25 @@ async def _seed(session: AsyncSession) -> dict[str, int]:
     rows = _ledger()
     session.add_all(rows.values())
     await session.flush()
+    for row in rows.values():
+        await session.execute(
+            text(
+                "UPDATE transactions SET cost_kind=:cost_kind, fixed_cost_necessity=:fixed_cost_necessity, spend_necessity=:spend_necessity, cost_classification_source=:cost_classification_source, recurring_payment_kind=:recurring_payment_kind WHERE id=:id"
+            ),
+            {
+                "id": row.id,
+                **{
+                    name: getattr(row, name, None)
+                    for name in (
+                        "cost_kind",
+                        "fixed_cost_necessity",
+                        "spend_necessity",
+                        "cost_classification_source",
+                        "recurring_payment_kind",
+                    )
+                },
+            },
+        )
     ids = {key: row.id for key, row in rows.items()}
     rows[
         "superseded_old"

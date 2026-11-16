@@ -5,6 +5,8 @@ assertions run on SQLite (``test_comparison_contract.py``) and on PostgreSQL
 views created by ``alembic upgrade head`` (``test_comparison_postgresql.py``).
 """
 
+from legacy_nature_seed import legacy_transaction
+
 from datetime import date, time
 
 from httpx import AsyncClient
@@ -25,7 +27,7 @@ def tx(
     tx_type: str = "지출",
     spend_necessity: str | None = None,
 ) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=tx_date,
         time=time(12, 0),
         type=tx_type,

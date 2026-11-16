@@ -637,8 +637,8 @@ async def test_possible_replacement_requires_review_and_explicit_apply_supersede
     assert replacement.category_minor_user == "사용자소분류"
     assert replacement.memo == "사용자 메모"
     assert replacement.merchant == "사용자 거래처"
-    assert replacement.spend_necessity is None
-    assert replacement.recurring_payment_kind is None
+    assert not hasattr(replacement, "spend_necessity")
+    assert not hasattr(replacement, "recurring_payment_kind")
     assert replacement.first_seen_import_id == result.upload_id
     assert replacement.last_seen_import_id == result.upload_id
     assert replacement.source_row_hash is not None

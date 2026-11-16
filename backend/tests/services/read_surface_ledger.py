@@ -21,6 +21,8 @@ configurable number of ordinary purchases per month, plus:
 - snapshots of every kind on different dates.
 """
 
+from legacy_nature_seed import legacy_transaction
+
 import random
 from dataclasses import dataclass, field
 from datetime import date, time
@@ -105,7 +107,7 @@ def _tx(
     spend_necessity: str | None = None,
     is_deleted: bool = False,
 ) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=on,
         time=time(12, 0),
         type=tx_type,

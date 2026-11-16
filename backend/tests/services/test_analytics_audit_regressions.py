@@ -1,5 +1,7 @@
 """Synthetic regressions for analytics audit; all writes use temporary SQLite."""
 
+from legacy_nature_seed import legacy_transaction
+
 from datetime import date, time
 
 import pytest
@@ -31,7 +33,7 @@ def _expense(
     kind: str | None = None,
     tx_type: str = "지출",
 ) -> Transaction:
-    return Transaction(
+    return legacy_transaction(
         date=day,
         time=time(10),
         type=tx_type,
