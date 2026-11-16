@@ -119,9 +119,41 @@ export interface TransactionNature {
 // T061 이체 목적 (거래 한 건)
 export type TransferPurposeValue = 'investment' | 'savings' | 'internal_move'
 
+export type TransferPurposeSource = 'transaction' | 'rule_merchant' | 'rule_category' | 'none'
+
 export interface TransferPurposeDetail {
   transaction_id: number
   effective: boolean
   purpose: TransferPurposeValue | 'undecided' | null
-  purpose_source: 'transaction' | 'rule_merchant' | 'rule_category' | 'none' | null
+  purpose_source: TransferPurposeSource | null
 }
+
+// T061 이체 목적 규칙 — 사람이 거래처나 카테고리 단위로 정한다 (backend/app/schemas/transfer_purpose.py)
+export type TransferRuleScope = 'merchant' | 'category'
+
+export interface TransferPurposeRule {
+  id: number
+  match_scope: TransferRuleScope
+  merchant: string | null
+  category_major: string | null
+  category_minor: string | null
+  purpose: TransferPurposeValue
+  label: string | null
+  memo: string | null
+  /** 지금 이 규칙으로 목적이 정해진 유효 이체 건수 */
+  matched_transfer_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TransferPurposeRuleCreateRequest {
+  match_scope: TransferRuleScope
+  merchant?: string | null
+  category_major?: string | null
+  category_minor?: string | null
+  purpose: TransferPurposeValue
+  label?: string | null
+  memo?: string | null
+}
+
+export type TransferPurposeRuleUpdateRequest = Partial<TransferPurposeRuleCreateRequest>

@@ -82,3 +82,11 @@ export function useTransferTransactions(
     enabled: params !== null,
   })
 }
+
+/** 이체 목적 정하기 화면 — 기간은 비워 둘 수 있다. 금액(절댓값) 큰 순. */
+export function useTransferPurposeList(params: { start_date?: string; end_date?: string; purpose?: TransferPurpose; limit?: number }) {
+  return useQuery({
+    queryKey: ['transfer-purposes', 'transactions', 'list', params],
+    queryFn: () => metricsApi.transferTransactions(params),
+  })
+}

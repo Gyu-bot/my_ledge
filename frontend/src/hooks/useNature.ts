@@ -6,6 +6,8 @@ import type {
   CategoryAdjustabilityDefaultRequest,
   RecurringCommitmentCreateRequest,
   RecurringCommitmentUpdateRequest,
+  TransferPurposeRuleCreateRequest,
+  TransferPurposeRuleUpdateRequest,
   TransferPurposeValue,
 } from '../types/nature'
 
@@ -104,6 +106,34 @@ export function useSetTransferPurpose() {
   return useMutation({
     mutationFn: ({ id, value }: { id: number; value: TransferPurposeValue | null }) =>
       value === null ? natureApi.clearTransferPurpose(id) : natureApi.setTransferPurpose(id, value),
+    onSuccess: () => invalidateClassificationDependents(qc),
+  })
+}
+
+export function useTransferPurposeRules() {
+  return useQuery({ queryKey: ['transfer-purposes', 'rules'], queryFn: () => natureApi.transferRules() })
+}
+
+export function useCreateTransferPurposeRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: TransferPurposeRuleCreateRequest) => natureApi.createTransferRule(data),
+    onSuccess: () => invalidateClassificationDependents(qc),
+  })
+}
+
+export function useUpdateTransferPurposeRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: TransferPurposeRuleUpdateRequest }) => natureApi.updateTransferRule(id, data),
+    onSuccess: () => invalidateClassificationDependents(qc),
+  })
+}
+
+export function useDeleteTransferPurposeRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => natureApi.deleteTransferRule(id),
     onSuccess: () => invalidateClassificationDependents(qc),
   })
 }

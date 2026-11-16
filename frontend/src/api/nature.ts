@@ -8,6 +8,9 @@ import type {
   RecurringCommitmentUpdateRequest,
   TransactionNature,
   TransferPurposeDetail,
+  TransferPurposeRule,
+  TransferPurposeRuleCreateRequest,
+  TransferPurposeRuleUpdateRequest,
   TransferPurposeValue,
 } from '../types/nature'
 
@@ -74,4 +77,22 @@ export const natureApi = {
 
   clearTransferPurpose: (id: number) =>
     apiFetch<TransferPurposeDetail>(`/transfer-purposes/transactions/${id}`, { method: 'DELETE' }),
+
+  transferRules: () => apiFetch<{ items: TransferPurposeRule[] }>('/transfer-purposes/rules'),
+
+  createTransferRule: (data: TransferPurposeRuleCreateRequest) =>
+    apiFetch<TransferPurposeRule>('/transfer-purposes/rules', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(data),
+    }),
+
+  updateTransferRule: (id: number, data: TransferPurposeRuleUpdateRequest) =>
+    apiFetch<TransferPurposeRule>(`/transfer-purposes/rules/${id}`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(data),
+    }),
+
+  deleteTransferRule: (id: number) => apiFetch<void>(`/transfer-purposes/rules/${id}`, { method: 'DELETE' }),
 }

@@ -361,6 +361,11 @@ export interface TransferPurposeItem {
   effective_category_major: string
   effective_category_minor: string | null
   purpose: TransferPurpose | null
+  /** 목적이 어디서 왔나: 이 거래 / 거래처 규칙 / 카테고리 규칙 / 없음 */
+  purpose_source: 'transaction' | 'rule_merchant' | 'rule_category' | 'none' | null
+  transaction_purpose: Exclude<TransferPurpose, 'undecided'> | null
+  rule_id: number | null
+  rule_purpose: Exclude<TransferPurpose, 'undecided'> | null
 }
 
 export interface TransferPurposeListResponse {
