@@ -761,7 +761,12 @@ async def test_bulk_delete_and_restore_preview_and_execute_soft_delete_rows(
         json={"ids": ids},
     )
     assert preview.status_code == 200
-    assert preview.json() == {
+    preview_body = preview.json()
+    assert preview_body.pop("selected_raw_expense_net") == preview_body["expense_total"]
+    assert (
+        "selected_raw_expense_net" in preview_body.pop("field_scopes")["expense_total"]
+    )
+    assert preview_body == {
         "count": 2,
         "period_start": "2026-03-10",
         "period_end": "2026-03-11",

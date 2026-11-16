@@ -354,3 +354,146 @@ async def test_pg_transaction_flow_filters_match_the_flow_lines(
     """T059: the transactions listing's line filters read the PostgreSQL view."""
     await build_synthetic_ledger(pg_session)
     await flow_filters.assert_listing_matches_flow_lines(pg_client, pg_session)
+
+
+async def test_pg_remaining_actuals_equal_views(pg_session):
+    from test_remaining_metric_criteria import scenario_remaining_actuals_equal_views
+
+    await scenario_remaining_actuals_equal_views(pg_session)
+
+
+async def test_pg_review_comparison(pg_session):
+    from test_remaining_metric_criteria import scenario_review_comparison
+
+    await scenario_review_comparison(pg_session)
+
+
+async def test_pg_expense_aliases_and_view_ratios(pg_session, pg_client):
+    await build_synthetic_ledger(pg_session)
+    # Add income in the month in progress so the old view would produce a rate.
+    from datetime import time
+    from app.models.transaction import Transaction
+
+    pg_session.add(
+        Transaction(
+            date=AS_OF,
+            time=time(12),
+            type="수입",
+            amount=100_000,
+            description="synthetic-income",
+            merchant="synthetic-income",
+            category_major="synthetic-category",
+            currency="KRW",
+        )
+    )
+    await pg_session.commit()
+    for row in (
+        await pg_session.execute(text("SELECT * FROM vw_monthly_cashflow"))
+    ).mappings():
+        assert row["total_outflow"] == row["expense_total"]
+        assert row["living_spend"] == row["non_loan_expense_total"]
+        if row["period"] == "2026-03":
+            assert row["savings_rate"] is None
+        elif row["income_total"]:
+            assert float(row["savings_rate"]) == round(
+                row["net_cashflow"] / row["income_total"], 4
+            )
+    for row in (
+        await pg_session.execute(text("SELECT * FROM vw_fixed_cost_monthly_summary"))
+    ).mappings():
+        assert row["living_spend"] == row["expense_total"]
+    for path in ("fixed-cost-summary", "fixed-cost-trend"):
+        body = (await pg_client.get(f"/api/v1/analytics/{path}")).json()
+        for item in body.get("items", [body]):
+            assert item["total_outflow"] == item["expense_total"]
+    dashboard = (
+        await pg_client.get("/api/v1/canonical-views/dashboard", headers=HEADERS)
+    ).json()
+    for item in dashboard["monthly_cashflow"]:
+        assert item["total_outflow"] == item["expense_total"]
+        assert item["living_spend"] == item["non_loan_expense_total"]
+
+
+async def test_pg_remaining_view_migration_roundtrip(pg_session, migrated_url):
+    """Only savings_rate may change; aliases are additive; downgrade is exact."""
+    await build_synthetic_ledger(pg_session)
+    from datetime import time
+    from app.models.transaction import Transaction
+
+    pg_session.add(
+        Transaction(
+            date=AS_OF,
+            time=time(12),
+            type="수입",
+            amount=100_000,
+            description="synthetic-income",
+            merchant="synthetic-income",
+            category_major="synthetic-category",
+            currency="KRW",
+        )
+    )
+    await pg_session.commit()
+
+    async def snapshot():
+        result = {}
+        # A new connection avoids stale asyncpg SELECT * plans after changing
+        # the view columns in a separate Alembic process.
+        engine = create_async_engine(migrated_url)
+        async with engine.connect() as connection:
+            for view in (
+                "vw_monthly_cashflow",
+                "vw_fixed_cost_monthly_summary",
+                "transactions",
+            ):
+                result[view] = [
+                    dict(row)
+                    for row in (
+                        await connection.execute(text(f"SELECT * FROM {view}"))
+                    ).mappings()
+                ]
+        await engine.dispose()
+        return result
+
+    async def migrate(direction, target):
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "alembic",
+            direction,
+            target,
+            cwd=BACKEND_DIR,
+            env={**os.environ, "DATABASE_URL": migrated_url, "API_KEY": "test-api-key"},
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        assert process.returncode == 0, stderr.decode()
+
+    upgraded = await snapshot()
+    await migrate("downgrade", "20261116_0039")
+    original = await snapshot()
+    await migrate("upgrade", "head")
+    again = await snapshot()
+    assert sorted(upgraded["transactions"], key=lambda r: r["id"]) == sorted(
+        original["transactions"], key=lambda r: r["id"]
+    )
+    assert sorted(again["transactions"], key=lambda r: r["id"]) == sorted(
+        original["transactions"], key=lambda r: r["id"]
+    )
+    for name in ("vw_monthly_cashflow", "vw_fixed_cost_monthly_summary"):
+        by_period = {row["period"]: row for row in original[name]}
+        again_by_period = {row["period"]: row for row in again[name]}
+        for row in upgraded[name]:
+            assert row == again_by_period[row["period"]]
+            old = by_period[row["period"]]
+            changed = {key for key, value in old.items() if row[key] != value}
+            assert changed == (
+                {"savings_rate"}
+                if name == "vw_monthly_cashflow" and row["period"] == "2026-03"
+                else set()
+            )
+            assert set(row) - set(old) == (
+                {"total_outflow", "living_spend"}
+                if name == "vw_monthly_cashflow"
+                else {"living_spend"}
+            )

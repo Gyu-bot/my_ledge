@@ -527,7 +527,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | 약정 `observation.state` | `observed`(그 달 약정에 속한 지출이 있음), `expected_not_observed`(마감월이고 기록된 주기상 있어야 하는데 연결된 거래가 없음), `unlinked_transaction_present`(할부 회차 달에 같은 거래처의 '할부 연결 미확인' 표시 거래가 있음), `not_expected`(시작 전·종료 뒤·주기 밖·총 횟수 모두 관측), `not_determinable`(주기나 시작이 기록되지 않음, 진행월, 거래 0건 달, 가져오지 않은 기간). "관측 안 됨"은 기록에 연결된 거래가 없다는 뜻이지 지급하지 않았다는 증거가 아니다. |
 | 약정 `monthly_burden` | 기록된 월 부담이다: 대출 스냅샷의 월 상환액, 할부 계획의 월 금액, 매월 묶음은 최근 마감월에 관측된 합계. 매년·회차 묶음은 월 부담을 내지 않는다(월 환산은 `T062`). 근거는 `monthly_burden_basis`. 전망이 아니다. |
 | 대출의 주기 | 대출에는 주기 기록이 없다. 최신 스냅샷에 월 상환액이 있을 때만 매월로 보고, 없으면 `cycle=null`, 관측 판단은 `not_determinable`이다. |
-| 사후 검토 `listed_because` | 어느 기존 검출기가 어떤 사유 코드로 올렸는지와 검출기의 문장·기준값 그대로. 새 점수나 위험 등급이 아니다. 이미 일어난 거래의 사후 검토용이며 구매 전 판단이 아니다. 구매 단위 후보 검출기는 지급 형태 수시이고 조정 가능성이 `adjustable`인 거래만 본다(`vw_transaction_nature`). 미정 거래는 후보가 아니다. |
+| 사후 검토 `listed_because` | 어느 검출기가 어떤 사유 코드로 올렸는지와 비교 계약에 맞춘 기준값·금액 차이 설명. 새 점수나 위험 등급이 아니다. 이미 일어난 거래의 사후 검토용이며 구매 전 판단이 아니다. 구매 단위 후보 검출기는 지급 형태 수시이고 조정 가능성이 `adjustable`인 거래만 본다(`vw_transaction_nature`). 미정 거래는 후보가 아니다. |
 | 월말 순현금흐름 전망 | 읽기 표면은 다시 계산하지 않는다. 기존 대시보드 응답의 `month_projection`에 그대로 있다(`T064` 2차 수정 반영). 최근 마감월 되짚기 오차는 `GET /api/v1/canonical-views/month-projection/accuracy`. |
 
 ### 소비자 검토 반영 (읽기 표면 보강)
@@ -553,6 +553,14 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `status=classification_incomplete` | `status=incomplete_classification` | 사람이 아직 정하지 않은 분류(조정 가능성, 이체 목적)가 있어 불완전함 |
 | `basis` | `contract` | 무엇을 어떤 규칙으로 계산했는지. `/read/*`는 지표의 `contract`를 `basis`로 옮겨 싣는다 |
 | `status_reasons[]`(코드·이름) | `status_reasons[]`(문장) | 상태의 이유 |
+
+## T054/T057 보완 (2026-11-17)
+
+`/read/review-items.data.comparison`은 거래 후보와 카테고리 변화 양쪽의 대상월·실제 기준월 목록·기준 구간 시작일·부분월 처리 방식을 설명한다. 기본은 최근 6개 마감월 중앙값이며, 진행월은 같은 경과일까지, 자료 없는 달과 월중 시작 첫 달은 기준에서 뺀다. 자료 있는 달에 구매가 없으면 0원이다. 거래 후보의 금액은 뷰가 계산한 **구매 순액**(확정 환불을 원구매에 차감)이고 카테고리 변화는 **게시월 지출**이므로 금액 정의가 다르다. 거래 후보의 급증 기준값과 현재 합계는 SQL로 집계한 수시·조정 가능 구매 순액이다. Python은 임계값 판정과 취소 증거·검토 상태를 처리한다. 진행월 거래 후보의 계산된 비율 신호는 내지 않고 차액으로 이유를 설명한다. 연간성 지출의 12개월 비교는 `/read/comparison/contributions.data.twelve_month_items`에서 읽는다.
+
+기존 `expense_total`은 유지한다. 명확한 이름은 분석의 고정비 요약·추이와 대시보드 월 흐름에서는 `total_outflow`, 대출을 제외하는 `vw_fixed_cost_monthly_summary`에서는 `living_spend`다. 대시보드의 `non_loan_expense_total`도 `living_spend`를 함께 준다. 거래 작업 미리보기의 `expense_total`은 `selected_raw_expense_net`(선택 원본 지출 순액, 원통화 그대로)이며 월 흐름표 총지급으로 쓰면 안 된다. 응답 `contract.field_scopes` 또는 `field_scopes`가 이 대응을 명시한다. [전체 대응표](../backend-api-ssot.md#t054t057-remaining-acceptance-2026-11-17)를 따른다.
+
+`vw_monthly_cashflow.savings_rate`는 이제 진행월에 null이다. 홈은 서버의 `residual_rate`를 표시한다. 폐기 예정인 거래처 3개월 평균·재량 속도·구매 후보의 예전 기준선은 제거 승인 때까지 유지한다. 아래 [이전 안내](read-surface-migration.md#7-t054t057-잔여-완료-조건-2026-11-17)의 후속 경로를 사용한다.
 
 ## T062 — 연간성 지출 참고와 사람이 정한 한도
 

@@ -1,7 +1,7 @@
 """T062: additive, empty table for immutable human limit history.
 
 Revision ID: 20261117_0040
-Revises: 20261116_0039
+Revises: 20261117_t054_t057
 """
 
 from collections.abc import Sequence
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20261117_0040"
-down_revision: str | None = "20261116_0039"
+down_revision: str | None = "20261117_t054_t057"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 

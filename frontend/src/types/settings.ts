@@ -102,6 +102,7 @@ export type AnalyticsSettingsSection = {
   readonly asset_liability_health: AssetLiabilityHealthSettings
   readonly bulk_operations: BulkOperationsSettings
   readonly financial_targets: FinancialTargetsSettings
+  readonly comparison?: { readonly baseline_start_date: string | null }
 }
 
 export type AnalyticsSavedSettingsSection = {
@@ -112,15 +113,32 @@ export type AnalyticsSavedSettingsSection = {
   readonly asset_liability_health: AssetLiabilityHealthSavedSettings
   readonly bulk_operations: BulkOperationsSavedSettings
   readonly financial_targets: FinancialTargetsSavedSettings
+  readonly comparison?: { readonly baseline_start_date: string | null }
+}
+
+export type ComparisonSettingsGuide = {
+  readonly title: string
+  readonly summary: string
+  readonly options: readonly {
+    readonly key: string
+    readonly label: string
+    readonly description: string
+    readonly editable: boolean
+    readonly value_label: string
+  }[]
 }
 
 export type AnalyticsSettingsResponse = {
+  readonly comparison_guide?: ComparisonSettingsGuide | null
+
   readonly defaults: AnalyticsSettingsSection
   readonly saved: AnalyticsSavedSettingsSection
   readonly effective: AnalyticsSettingsSection
 }
 
 export type AnalyticsSettingsPatchRequest = {
+  readonly comparison?: { readonly baseline_start_date: string | null }
+
   readonly spending_anomalies?: SpendingAnomaliesSettingsPatch
   readonly discretionary_velocity?: DiscretionaryVelocitySettingsPatch
   readonly purchase_gate?: PurchaseGateSettingsPatch

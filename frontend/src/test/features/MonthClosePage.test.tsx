@@ -128,6 +128,21 @@ function renderPage(path = '/') {
 }
 
 describe('MonthClosePage — 월 결산', () => {
+  it('서버가 준 잔여율을 그대로 표시하며 금액에서 다시 계산하지 않는다', () => {
+    flowState = query({
+      contract: contractFixture(),
+      items: [
+        { ...monthFixture('2026-07', 'closed'), residual_rate: 0.1234 },
+        { ...monthFixture('2026-08', 'in_progress'), residual_rate: null },
+      ],
+    })
+    renderPage()
+    expect(screen.getByText('12.3%')).toBeInTheDocument()
+    expect(screen.queryByText('45.0%')).not.toBeInTheDocument()
+    const progress = screen.getByRole('list', { name: '2026-08 관측 누적' })
+    expect(within(progress).queryByText('현금 잔여율')).not.toBeInTheDocument()
+  })
+
   it('첫 화면은 가장 최근 마감월의 월 흐름표다', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: '월 결산' })).toBeInTheDocument()
