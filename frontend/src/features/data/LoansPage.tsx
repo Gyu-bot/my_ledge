@@ -230,7 +230,7 @@ function AccountsTab() {
 
 function LinksTab() {
   const hasWrite = useWriteAccess()
-  const accounts = useLoanAccounts()
+  const accounts = useLoanAccounts({ include_hidden: true })
   const [filter, setFilter] = useState<{ search: string; linked: LoanLinkStateFilter; account: string; repayment: '' | LoanRepaymentType }>({ search: '', linked: 'all', account: '', repayment: '' })
   const [applied, setApplied] = useState(filter)
   const [page, setPage] = useState(1)

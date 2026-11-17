@@ -84,7 +84,7 @@ export function LoanCandidateCard({
         <Field label="대출 계좌">
           <Select disabled={controlsDisabled} value={effectiveAccountKey} onChange={(event) => setAccountKey(event.target.value)}>
             <option value="">— 선택 —</option>
-            {accounts.map((account) => <option key={accountValue(account)} value={accountValue(account)}>{account.display_name}</option>)}
+            {accounts.map((account) => <option key={accountValue(account)} value={accountValue(account)}>{account.display_name}{account.is_hidden ? ' (숨김)' : ''}</option>)}
           </Select>
         </Field>
         <Field label="상환 성격">

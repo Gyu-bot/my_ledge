@@ -18,7 +18,7 @@ type Tab = 'classify' | 'loan'
 function LoanCandidates() {
   const [ruleTargets, setRuleTargets] = useState<LoanRuleTarget[]>([])
   const unlinked = useLoanTransactionMappings({ linked: 'unlinked', page: 1, per_page: 20 })
-  const loanAccounts = useLoanAccounts()
+  const loanAccounts = useLoanAccounts({ include_hidden: true })
   const items = unlinked.data?.items ?? []
   const total = unlinked.data?.total ?? items.length
   return (

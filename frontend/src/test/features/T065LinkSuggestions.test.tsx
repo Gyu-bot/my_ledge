@@ -36,8 +36,9 @@ describe('T065 사람이 확인하는 연결 제안', () => {
   it('prefills loan history, shows reasons, and sends a manual link only after click', async () => {
     const link = vi.spyOn(transactionApi, 'bulkLoanLink').mockResolvedValue({ updated: 1 })
     const onLinked = vi.fn()
-    wrap(<LoanCandidateCard item={{ transaction_id: 1, date: '2031-05-20', merchant: '합성상환', amount: -51007, effective_category_major: '금융', suggested_loan_account_id: 9, suggestion_basis: 'history', suggestion_confidence: 'high', suggestion_reasons: ['same_payment_method', 'within_day_window', 'merchant_seen'] }} accounts={[account]} onLinked={onLinked} />)
+    wrap(<LoanCandidateCard item={{ transaction_id: 1, date: '2031-05-20', merchant: '합성상환', amount: -51007, effective_category_major: '금융', suggested_loan_account_id: 9, suggestion_basis: 'history', suggestion_confidence: 'high', suggestion_reasons: ['same_payment_method', 'within_day_window', 'merchant_seen'] }} accounts={[{ ...account, is_hidden: true }]} onLinked={onLinked} />)
     expect(screen.getByLabelText('대출 계좌')).toHaveValue('id:9')
+    expect(screen.getByRole('option', { name: '합성계좌 (숨김)' })).toBeInTheDocument()
     expect(screen.getByText(/이력 제안/)).toBeVisible()
     expect(screen.getByText(/출금 수단 일치/)).toBeVisible()
     expect(link).not.toHaveBeenCalled()
