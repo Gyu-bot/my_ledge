@@ -69,6 +69,7 @@ vi.mock('../../hooks/useTransactions', () => ({
     isPending: false,
   }),
   useLoanTransactionMappings: () => query({ total: 0, page: 1, per_page: 40, items: [] }),
+  useAcceptLoanSuggestions: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBulkLinkTransactionsToLoan: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useLoanMerchantRules: () => query({ items: [] }),
   useUpsertLoanMerchantRule: () => ({ mutateAsync: vi.fn(), isPending: false }),

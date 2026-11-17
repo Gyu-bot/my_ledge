@@ -700,7 +700,7 @@ Single and bulk PATCH share field-presence semantics: omitted fields preserve st
   - `items[]`
     - transaction fields: `transaction_id`, `date`, `time`, `type`, effective category, `description`, `merchant`, `amount`, `currency`, `payment_method`, `memo`
     - `link: LoanTransactionLinkItem | null`
-    - `suggested_loan_account_id: int | null`, `suggestion_basis: "rule" | null` — 미연결 행에만 제공
+    - `suggested_loan_account_id: int | null`, `suggestion_basis: "rule" | "history" | null` — 미연결 행에만 제공
 - Behavior:
   - only returns visible `type="지출"` loan repayment candidates
   - excludes deleted and merged transactions
@@ -2278,3 +2278,13 @@ Discovery-only changed keys: `/read/index.entries[key=month_end_projection]` cha
 ### T056 이행 약정 확인
 
 T056 확인 보완: 이행 약정은 `attributes_confirmed_at`으로 사용자의 주기·금액 확인을 기록한다. `/nature/recurring-commitments`와 `/read/commitments`의 대기 여부·대기 수는 추가 메타데이터이며 기존 관측·집계식은 바꾸지 않는다. HTTP `is_edited`는 별도 `legacy_classification_edited` 이력도 포함한다. 지정 출처·축 우선순위는 유지한다. 이행 전 검토는 다시 준비하며 이전 구조의 되돌리기는 `schema_changed`로 거절한다. 상세는 `agents/t056-classification-retirement.md`를 따른다.
+
+
+### T065 PR2 연결 제안 상세
+
+- 대출 제안: 규칙 우선. 이력은 유효 KRW 음수 지출의 이전 연결만 쓰며 미래 관측을 쓰지 않는다. 같은 결제수단의 최근 6개 관측 중, 해당 관측일을 거래 월과 인접 월로 이동한 예정일 중 최소 날짜 차이가 3일 이하인 행을 쓴다. 거래처 또는 원문을 공백/대소문자 정규화한 정확 일치(`merchant_seen`) 또는 해당 행의 절댓값 금액 중앙값 ±15%(`amount_within_band`)가 추가로 필요하다. 결제수단·날짜만이나 거래처만으로 결정하지 않는다. 여러 계좌는 `suggestion_ambiguous=true`, ID null, low, `multiple_accounts`. 단일 계좌에 거래처 연속성·날짜 관측 2개 이상이면 high, 그 외는 medium. 규칙은 high/`registered_rule`. 근거는 `same_payment_method`, `within_day_window`, `merchant_seen`, `amount_within_band`. 스냅샷 부재/숨김만으로 원장 이력을 지우지 않는다.
+- 발견 후보: `payment_method`에 카드/card가 포함된 지출만 조회한다. 활성 계획의 공통 predicate(정확 금액)에 맞는 행은 기존 연결 제안으로 보낸다. 정기 지급 소속은 `vw_transaction_nature.recurring_commitment_id`를 사용해 명시 소속·카테고리/거래처 규칙·유효 기간·개별 제외 계약을 그대로 따른다. 동일 결제수단과 정규화 거래처 또는 원문의 체인을 찾는다. 두 번째 이후 금액은 정확 일치, 첫 관측 차이는 `min(1000, max(100, monthly_amount // 100))` 이내다. 후보 월 금액은 최소 두 번 정확히 관측된 값만 허용한다. 월별 예정일 ±3일에 한 행씩 3회 이상 이어져야 하며 비어 있거나 같은 슬롯에 여러 거래면 연속 관측을 종료한다. 가장 긴 겹치지 않는 체인을 우선하며 같은 길이면 거래처 기준을 우선한다. 동일 키의 끊어진 반복 결제열은 한 번에 가장 긴 체인 하나만 제안하며 연결 뒤 남은 체인을 다시 검토할 수 있다. 첫 예정일은 첫 관측일 ±3일의 일정 중 관측 수 최대·전체 날짜 차이 최소를 제안한다. 첫 관측일이 원장 최소 일자+31일 이내면 `starts_at_data_window_edge=true`다. 총 횟수는 반환하지 않는다.
+- 후보 키는 `[payment_method, continuity_kind + normalized_identity, monthly_amount]`의 SHA-256이다. 날짜·거래 ID를 포함하지 않아 같은 결제열의 재업로드/추가/이전 관측 보강에도 유지하며 같은 키의 반복 결제열도 명시 복원까지 기각한다. `installment_candidate_reviews`는 업로드 검토 digest/되돌리기 범위에 자동 포함된다. 재업로드가 사람이 등록한 기각을 초기화하지 않는다. 이 테이블이 없던 과거 업로드 검토는 재준비해야 하며, 과거 되돌리기 지점은 기존 `schema_changed` 보호에 따라 복원을 거절한다. 배포 전 DB 백업은 별도로 유지한다.
+- 후보 생성 입력의 거래 ID 집합은 최신 후보 전체와 같아야 한다. 사람이 확인한 첫 납부일/총 횟수의 각 최근접 예정일에 ±3일 안으로 들어가고 회차가 중복되지 않아야 한다. 계획·모든 수동 연결은 함께 커밋된다. 첫 납부일을 과거로 조정하면 관측 첫 행은 1보다 큰 회차일 수 있다.
+- 일괄 확인은 조회 결과를 그대로 신뢰하지 않고 잠금 뒤 다시 제안을 계산한다. 할부는 모든 활성 계획의 점유·다중 매칭·같은 슬롯 경쟁을 검사한 high만 허용한다. 대출도 요청 계좌와 현재 단일 제안을 대조한다. 이미 연결된 수동 링크는 후보에서 제외되어 덮어쓰지 않는다. 입력 중복 422, 변경/충돌 409. GET은 쓰지 않으며 이력/발견 결과를 자동 적용하지 않는다.
+- 상세 URL·요청·응답은 `backend-api-ssot.md`의 T065 PR2 절을 따른다. 프런트엔드 일괄 확인 범위는 현재 페이지(대출은 선택이 있으면 그 선택)의 high 추천이며, 수정한 할부 제안은 일괄 대상에서 제외한다. 거래처 규칙 추가는 연결 확인 후 별도의 사람 클릭으로 기존 upsert를 사용한다.

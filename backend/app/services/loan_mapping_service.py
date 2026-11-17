@@ -7,14 +7,17 @@ from typing import TypedDict, assert_never
 from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.models.auto_classification import LoanMerchantRule
+from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_candidate_review import LoanCandidateReview
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.loan_mapping import (
+    LoanSuggestionAcceptRequest,
     LoanAccountCandidateResponse,
     LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
@@ -154,6 +157,9 @@ async def list_loan_transaction_mappings(
     per_page: int,
     review_status: LoanCandidateReviewFilter = "pending",
 ) -> LoanTransactionMappingListResponse:
+    from app.services.loan_account_suggestion_service import load_history_suggestions
+
+    history = await load_history_suggestions(db_session)
     base_query = _build_loan_transaction_mapping_query(
         start_date=start_date,
         end_date=end_date,
@@ -162,6 +168,7 @@ async def list_loan_transaction_mappings(
         loan_account_id=loan_account_id,
         repayment_type=repayment_type,
         review_status=review_status,
+        history_candidate_ids=set(history),
     )
     total = (
         await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
@@ -174,11 +181,19 @@ async def list_loan_transaction_mappings(
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
+    items = [_serialize_mapping_row(row) for row in result.mappings().all()]
+    for item in items:
+        if item.suggestion_basis == "rule":
+            item.suggestion_confidence = "high"
+            item.suggestion_reasons = ["registered_rule"]
+        elif item.link is None and item.transaction_id in history:
+            for key, value in history[item.transaction_id].items():
+                setattr(item, key, value)
     return LoanTransactionMappingListResponse(
         total=total,
         page=page,
         per_page=per_page,
-        items=[_serialize_mapping_row(row) for row in result.mappings().all()],
+        items=items,
     )
 
 
@@ -187,6 +202,9 @@ async def upsert_transaction_loan_link(
     transaction_id: int,
     payload: LoanTransactionLinkUpsertRequest,
 ) -> LoanTransactionLinkItem:
+    await db_session.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )
     await _get_transaction_or_404(db_session, transaction_id)
     account = await _resolve_account(db_session, payload)
     link = await db_session.scalar(
@@ -739,6 +757,7 @@ def _build_loan_transaction_mapping_query(
     loan_account_id: int | None,
     repayment_type: str | None,
     review_status: LoanCandidateReviewFilter,
+    history_candidate_ids: set[int] | None = None,
 ):
     effective_category_major = func.coalesce(
         Transaction.category_major_user,
@@ -778,6 +797,7 @@ def _build_loan_transaction_mapping_query(
         Transaction.payment_method,
     )
     candidate_conditions = [
+        Transaction.id.in_(history_candidate_ids or set()),
         LoanTransactionLink.transaction_id.is_not(None),
         effective_category_major == "금융",
         rule_account_id.is_not(None),
@@ -998,7 +1018,10 @@ async def _load_transactions_by_ids_or_404(
 ) -> list[Transaction]:
     unique_ids = list(dict.fromkeys(transaction_ids))
     result = await db_session.execute(
-        select(Transaction).where(Transaction.id.in_(unique_ids))
+        select(Transaction)
+        .where(Transaction.id.in_(unique_ids))
+        .order_by(Transaction.id)
+        .with_for_update()
     )
     transactions = list(result.scalars().all())
     found_ids = {transaction.id for transaction in transactions}
@@ -1374,3 +1397,80 @@ def _normalize_required_text(value: str | None) -> str:
 def _normalize_optional_text(value: str | None) -> str | None:
     normalized = (value or "").strip()
     return normalized or None
+
+
+async def accept_loan_suggestions(
+    db_session: AsyncSession, payload: LoanSuggestionAcceptRequest
+) -> LoanTransactionLinkBulkUpsertResponse:
+    """Recheck each human-confirmed target and commit all links atomically."""
+    ids = [item.transaction_id for item in payload.items]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="transaction_ids must be unique")
+    # Lock in stable order before checking fresh links/suggestions.
+    await db_session.execute(
+        select(Transaction)
+        .where(Transaction.id.in_(ids))
+        .order_by(Transaction.id)
+        .with_for_update()
+    )
+    if (
+        await db_session.scalar(
+            select(InstallmentTransactionLink.id)
+            .where(InstallmentTransactionLink.transaction_id.in_(ids))
+            .limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="할부 연결이 있는 거래는 대출 추천으로 연결할 수 없습니다.",
+        )
+    mappings = await list_loan_transaction_mappings(
+        db_session,
+        start_date=None,
+        end_date=None,
+        search=None,
+        linked="unlinked",
+        loan_account_id=None,
+        repayment_type=None,
+        page=1,
+        per_page=2**31 - 1,
+    )
+    by_id = {item.transaction_id: item for item in mappings.items}
+    loan_keys = []
+    for requested in payload.items:
+        item = by_id.get(requested.transaction_id)
+        if (
+            item is None
+            or item.suggestion_ambiguous
+            or item.suggested_loan_account_id != requested.loan_account_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="추천이 변경되었습니다. 새로고침 후 다시 확인하세요.",
+            )
+        account = await db_session.get(LoanAccount, requested.loan_account_id)
+        if account is None:
+            raise HTTPException(status_code=409, detail="대출 계좌가 변경되었습니다.")
+        loan_keys.append(_account_key(account.lender, account.product_name))
+    for requested in payload.items:
+        db_session.add(
+            LoanTransactionLink(
+                transaction_id=requested.transaction_id,
+                loan_account_id=requested.loan_account_id,
+                repayment_type="unknown",
+                source="manual",
+            )
+        )
+    try:
+        await db_session.flush()
+        await apply_loan_repayment_estimates_for_latest_snapshots(
+            db_session, loan_keys=loan_keys
+        )
+        await db_session.commit()
+    except IntegrityError as exc:
+        await db_session.rollback()
+        raise HTTPException(
+            status_code=409, detail="연결이 변경되었습니다. 새로고침하세요."
+        ) from exc
+    return LoanTransactionLinkBulkUpsertResponse(updated=len(ids))

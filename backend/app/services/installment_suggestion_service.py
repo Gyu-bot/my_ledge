@@ -6,10 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auto_classification import MerchantAliasRule
+from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.transaction import Transaction
 from app.schemas.installment import (
+    InstallmentSuggestionAcceptRequest,
+    InstallmentTransactionLinkBulkUpsertResponse,
     InstallmentSuggestionConfidence,
     InstallmentTransactionSuggestionListResponse,
 )
@@ -128,6 +131,11 @@ async def _load_unlinked_expense_transactions(
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
         .where(InstallmentTransactionLink.id.is_(None))
+        .where(
+            ~select(LoanTransactionLink.id)
+            .where(LoanTransactionLink.transaction_id == Transaction.id)
+            .exists()
+        )
         .order_by(Transaction.date, Transaction.time, Transaction.id)
     )
     return list(result.scalars().all())
@@ -351,3 +359,61 @@ def _score_match(
     else:
         confidence = "low"
     return capped_score, confidence, reason_labels
+
+
+async def accept_installment_suggestions(
+    db_session: AsyncSession, payload: InstallmentSuggestionAcceptRequest
+) -> InstallmentTransactionLinkBulkUpsertResponse:
+    """Only explicit, fresh high-confidence, conflict-free human confirmations."""
+    from sqlalchemy.exc import IntegrityError
+
+    ids = [item.transaction_id for item in payload.items]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="transaction_ids must be unique")
+    await db_session.execute(
+        select(Transaction)
+        .where(Transaction.id.in_(ids))
+        .order_by(Transaction.id)
+        .with_for_update()
+    )
+    # Serialize against plan edits and other bulk confirmations.
+    await db_session.execute(
+        select(InstallmentPlan)
+        .where(
+            InstallmentPlan.id.in_({item.installment_plan_id for item in payload.items})
+        )
+        .order_by(InstallmentPlan.id)
+        .with_for_update()
+    )
+    suggestions = await load_installment_suggestion_candidates(db_session)
+    valid = {
+        (item.transaction.id, item.plan.id, item.installment_number)
+        for item in suggestions
+        if item.confidence == "high" and item.conflict_reason is None
+    }
+    if any(
+        (item.transaction_id, item.installment_plan_id, item.installment_number)
+        not in valid
+        for item in payload.items
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="추천이 변경되었거나 일괄 수락할 수 없습니다. 새로고침하세요.",
+        )
+    try:
+        for item in payload.items:
+            db_session.add(
+                InstallmentTransactionLink(
+                    transaction_id=item.transaction_id,
+                    installment_plan_id=item.installment_plan_id,
+                    installment_number=item.installment_number,
+                    source="manual",
+                )
+            )
+        await db_session.commit()
+    except IntegrityError as exc:
+        await db_session.rollback()
+        raise HTTPException(
+            status_code=409, detail="연결이 변경되었습니다. 새로고침하세요."
+        ) from exc
+    return InstallmentTransactionLinkBulkUpsertResponse(updated=len(ids))

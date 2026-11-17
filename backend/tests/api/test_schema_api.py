@@ -34,6 +34,7 @@ def test_expected_tables_exist() -> None:
         "loan_candidate_reviews",
         "loan_merchant_rules",
         "loan_transaction_links",
+        "installment_candidate_reviews",
         "installment_plans",
         "installment_transaction_links",
         "purchase_gate_reviews",

@@ -225,6 +225,11 @@ export interface LoanTransactionMappingItem {
   payment_method: string | null
   memo: string | null
   link: LoanTransactionLinkItem | null
+  suggested_loan_account_id?: number | null
+  suggestion_basis?: 'rule' | 'history' | null
+  suggestion_confidence?: 'high' | 'medium' | 'low' | null
+  suggestion_reasons?: string[]
+  suggestion_ambiguous?: boolean
 }
 
 export interface LoanTransactionMappingListResponse {
@@ -475,4 +480,33 @@ export interface LoanMerchantRuleListResponse {
 
 export interface AutoClassificationApplyResponse {
   updated: number
+}
+
+export interface LoanSuggestionAcceptRequest {
+  items: { transaction_id: number; loan_account_id: number }[]
+}
+
+export interface InstallmentPlanCandidate {
+  series_key: string
+  observed_count: number
+  first_observed_date: string
+  last_observed_date: string
+  first_payment_date: string
+  payment_method: string
+  merchant: string
+  monthly_amount: number
+  transaction_ids: number[]
+  starts_at_data_window_edge: boolean
+  review_status: 'pending' | 'not_installment'
+}
+
+export interface InstallmentCandidateCreateRequest {
+  display_name: string
+  total_installments: number
+  first_payment_date: string
+  transaction_ids: number[]
+}
+
+export interface InstallmentSuggestionAcceptRequest {
+  items: { transaction_id: number; installment_plan_id: number; installment_number: number }[]
 }

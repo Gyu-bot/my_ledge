@@ -151,8 +151,19 @@ GET `analytics/fixed-cost-summary`, `analytics/fixed-cost-trend`, `analytics/rec
 
 - `apply_loan_rules_on_upload`은 기본 `true`이며 기존 저장 행도 이행에서 활성화한다. 사람이 이후 끄는 설정은 유지된다. 사람이 등록한 `LoanMerchantRule`만 `/upload`, `/upload/apply`, reviewed apply에서 전체 유효 지출 원장에 적용한다. 선택한 신규 행 외 기존 미연결·비수동 연결도 재검사하며 `source=manual`은 덮어쓰지 않는다.
 - 현재 두 apply 경로의 규칙 연결은 업로드와 같은 트랜잭션이며 되돌리기 snapshot과 변경 감지에 `loan_transaction_links`가 포함된다. reviewed apply는 규칙으로 바뀌는 추정값을 승인 미리보기에 포함한다.
-- `GET /api/v1/loan-transaction-links`는 규칙과 정확히 일치하는 미연결 행도 포함하고 `suggested_loan_account_id`, `suggestion_basis="rule"`을 제공한다. 업로드 설정이 꺼져 있어도 읽기 제안은 제공하며 실제 연결은 생성하지 않는다. 거래처 규칙이 원문 규칙보다 우선한다. 연결된 행의 제안 필드는 null이다.
+- `GET /api/v1/loan-transaction-links`는 규칙과 정확히 일치하는 미연결 행도 포함하고 `suggested_loan_account_id`, `suggestion_basis="rule"`을 제공한다. 이력 제안의 상세 계약은 아래 PR2 항목을 따른다. 업로드 설정이 꺼져 있어도 읽기 제안은 제공하며 실제 연결은 생성하지 않는다. 거래처 규칙이 원문 규칙보다 우선한다. 연결된 행의 제안 계좌·기준·신뢰도는 null, 근거는 빈 목록, 모호성은 false다.
 - 할부 제안과 전망은 거래처 소문자·공백 정규화, 결제수단, 유효 회차 중 가장 가까운 예정일 ±7일을 공유한다. 월경계 게시도 앞뒤 회차와 비교한다. 전망은 정확한 금액만, 제안은 ±10%(최소 10,000)까지 허용한다. 기존 ±3일 밖의 ±4~7일 제안은 최대 medium(점수 89)이다. 제안과 전망의 읽기는 연결을 쓰지 않는다.
+
+
+#### PR2: 사람 확인용 연결 제안과 계획 후보
+
+- 대출 후보 응답에 `suggestion_basis=rule|history|null`, `suggestion_confidence=high|medium|low|null`, `suggestion_reasons: string[]`, `suggestion_ambiguous: bool`을 제공한다. 규칙 우선이며 기존 연결은 제안하지 않는다. 이력은 같은 결제수단의 이전 유효 KRW 지출 연결 최대 6건에서 날짜 ±3일과 거래처/원문 연속성 또는 최근 금액 중앙값 ±15%를 함께 요구한다. 여러 계좌가 해당하면 ID 없이 모호함을 반환한다. 거래처 연속성 + 날짜 일치 이력 2건 이상은 high, 나머지는 medium이다. 추론 결과를 업로드나 GET에서 연결하지 않는다.
+- `POST /api/v1/transactions/loan-links/accept-suggestions`: `{items:[{transaction_id,loan_account_id}]}`. 최대 200건의 사람이 확인한 계좌를 서버의 최신 제안과 대조하고 원자적으로 `source=manual` 연결한다. 모호/변경/이미 연결된 행은 409로 전체 거절한다. X-API-Key 필수.
+- `GET /api/v1/installment-plan-candidates?include_dismissed=false`: 미연결 KRW 카드 음수 지출에서 동일 결제수단·정규화 거래처 또는 동일 정규화 원문의 3개월 이상 연속 관측을 찾는다. 기존 대출/할부 연결·활성 계획의 정확 금액 매칭·정기 지급 묶음 소속은 제외한다. 활성 계획에 맞는 행은 기존 연결 제안에서 확인한다. 금액은 동일하며 첫 관측만 제한된 반올림 차이를 허용한다. 예정일 ±3일은 월경계를 포함한다. 후보는 관측 건수·기간·결제수단·거래처·월 금액·거래 ID·첫 납부일 제안·자료 시작 경계 여부를 제공하며 총 횟수를 추정하지 않는다. 정기 구독도 후보일 수 있으므로 사람이 확인한다.
+- `PATCH /api/v1/installment-plan-candidates/{series_key}/review`: `review_status=pending|not_installment`. 별도 이행 테이블에 기각/복원을 저장한다. 결제수단·연속성 기준·금액의 해시 키는 거래 ID나 자료 시작일과 무관해 재업로드·관측 추가/이전 관측 보강에도 유지된다. 동일한 키의 재발생은 명시 복원까지 기각한다.
+- `POST /api/v1/installment-plan-candidates/{series_key}/create-plan`: 사람이 `display_name`, 필수 `total_installments`, 확인한 `first_payment_date`, 현재 후보의 `transaction_ids`를 보낸다. 최신 후보 일치·날짜/회차 범위를 검증하고 계획과 관측 회차의 수동 연결을 한 트랜잭션으로 생성한다. 변경된 후보 409, 유효하지 않은 입력 422. 총 횟수/첫 납부일로 관측 이전 회차도 사람이 지정할 수 있다.
+- `POST /api/v1/transactions/installment-links/accept-suggestions`: `{items:[{transaction_id,installment_plan_id,installment_number}]}`. 최대 200건, 최신 high·충돌 없음 제안만 원자적으로 수동 연결한다. 하나라도 변경/모호/충돌/기존 연결이면 409. 모든 쓰기는 X-API-Key 필수.
+- 월말 전망은 같은 게시 월의 서로 다른 nearest 회차를 개별 연결 미확인으로 센다. 같은 회차에 여러 거래가 맞으면 기존처럼 보류한다. 읽기만으로 연결하지 않는다.
 
 ### Transactions Read
 

@@ -178,3 +178,32 @@ async def test_no_boundary_payment_does_not_extend_the_forecast_schedule(
     assert installment.link_unconfirmed_count == 0
     assert installment.known_expected_remaining == 0
     assert installment.missing_reasons == []
+
+
+async def test_two_different_occurrences_posted_in_one_month_are_unconfirmed_individually(
+    db_session,
+):
+    registered = plan(date(2031, 5, 30))
+    first = transaction(date(2031, 6, 1))
+    second = transaction(date(2031, 6, 30))
+    second.id = 2
+    db_session.add_all([registered, first, second])
+    await db_session.commit()
+    suggestions = await list_installment_transaction_suggestions(
+        db_session, installment_plan_id=registered.id, page=1, per_page=40
+    )
+    assert [item.suggested_installment_number for item in suggestions.items] == [1, 2]
+    projection = await get_monthly_projection(
+        db_session, reference_date=date(2031, 6, 30)
+    )
+    installment = next(
+        item for item in projection.expense_components if item.kind == "installment"
+    )
+    assert installment.link_unconfirmed_count == 2
+    assert installment.known_expected_remaining == 0
+    assert (
+        await db_session.scalar(
+            select(func.count()).select_from(InstallmentTransactionLink)
+        )
+        == 0
+    )

@@ -2,6 +2,9 @@ import type { QueryClient } from '@tanstack/react-query'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transactionApi } from '../api/transactions'
 import type {
+  LoanSuggestionAcceptRequest,
+  InstallmentCandidateCreateRequest,
+  InstallmentSuggestionAcceptRequest,
   TransactionListParams,
   TransactionUpdateRequest,
   TransactionBulkUpdateRequest,
@@ -374,4 +377,29 @@ export function useUnlinkInactiveTransactionFromInstallment() {
     mutationFn: (id: number) => transactionApi.unlinkTransactionFromInstallment(id, { require_inactive: true }),
     onSuccess: () => invalidateTransactionDependents(qc),
   })
+}
+
+
+export function useAcceptLoanSuggestions() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (data: LoanSuggestionAcceptRequest) => transactionApi.acceptLoanSuggestions(data), onSuccess: () => invalidateTransactionDependents(qc) })
+}
+
+export function useInstallmentPlanCandidates(includeDismissed = false) {
+  return useQuery({ queryKey: ['transactions', 'installmentPlanCandidates', includeDismissed], queryFn: () => transactionApi.installmentPlanCandidates(includeDismissed) })
+}
+
+export function useReviewInstallmentCandidate() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: ({ key, status }: { key: string; status: 'pending' | 'not_installment' }) => transactionApi.reviewInstallmentCandidate(key, status), onSuccess: () => invalidateTransactionDependents(qc) })
+}
+
+export function useCreatePlanFromCandidate() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: ({ key, data }: { key: string; data: InstallmentCandidateCreateRequest }) => transactionApi.createPlanFromCandidate(key, data), onSuccess: () => invalidateTransactionDependents(qc) })
+}
+
+export function useAcceptInstallmentSuggestions() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (data: InstallmentSuggestionAcceptRequest) => transactionApi.acceptInstallmentSuggestions(data), onSuccess: () => invalidateTransactionDependents(qc) })
 }
