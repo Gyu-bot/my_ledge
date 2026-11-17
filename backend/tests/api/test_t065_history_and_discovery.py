@@ -458,7 +458,21 @@ async def test_installment_bulk_rejects_medium_confidence(
 
 
 @pytest.mark.parametrize(
-    "payment", ["합성", "합성 ", "  합성  ", "가상신용", "가상 Card"]
+    "payment",
+    [
+        "합성",
+        "합성 ",
+        "  합성  ",
+        "가상신용",
+        "가상 Card",
+        "합성 포인트카드",
+        "Sample Cashback Card",
+        "합성페이 신용카드",
+        "Sample Money CARD",
+        "합성통장카드",
+        "CMA Card",
+        "선불카드",
+    ],
 )
 async def test_short_or_padded_card_names_remain_discovery_candidates(
     async_client, db_session, payment

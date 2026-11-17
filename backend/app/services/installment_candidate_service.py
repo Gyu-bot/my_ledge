@@ -58,6 +58,10 @@ _NON_CARD_PAYMENT_MARKERS = (
 
 def _is_card_candidate(payment_method: str | None) -> bool:
     normalized = (payment_method or "").strip().casefold()
+    # Explicit card names retain their prior inclusion, even when a card name
+    # contains a points/payment brand or an account-like word.
+    if "카드" in normalized or "card" in normalized:
+        return True
     return bool(normalized) and not any(
         marker in normalized for marker in _NON_CARD_PAYMENT_MARKERS
     )
