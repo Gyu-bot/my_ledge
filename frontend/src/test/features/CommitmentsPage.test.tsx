@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { CommitmentsPage } from '../../features/commitments/CommitmentsPage'
 import { dataStatusFixture, failed, loading, query } from './metricsFixtures'
-import { commitmentsFixture, txFixture } from './workbenchFixtures'
+import { commitmentItem, commitmentsFixture, txFixture } from './workbenchFixtures'
 
 let commitmentsState: ReturnType<typeof query> | ReturnType<typeof failed> | ReturnType<typeof loading>
 const periodsAsked: Array<string | null> = []
@@ -77,6 +77,18 @@ describe('CommitmentsPage — 약정 현황', () => {
 
     expect(screen.getByText('₩650,000')).toBeInTheDocument()
     expect(screen.getByText(/기록된 약정의 속성입니다. 앞으로의 지급을 내다보지 않습니다/)).toBeInTheDocument()
+  })
+
+  it('저장된 대출 추정값과 월 관측액을 구별하고 재계산 근거를 보인다', () => {
+    commitmentsState = query(commitmentsFixture([commitmentItem({
+      monthly_burden: 80,
+      monthly_burden_source: 'estimated_from_linked_transactions',
+      last_observed_amount: -60,
+    })]))
+    renderPage()
+    const loan = within(screen.getByRole('list', { name: '약정' })).getAllByRole('listitem')[0]
+    expect(within(loan).getByText('₩80')).toBeInTheDocument()
+    expect(within(loan).getByText(/저장된 자동 추정값 · 재계산 시 월 흐름표의 원화 대출 지급 순액 기준/)).toBeInTheDocument()
   })
 
   it('관측 상태를 세 상태와 두 보조 상태로 쉬운 말로 보이고 "미납"이라는 말을 쓰지 않는다', () => {

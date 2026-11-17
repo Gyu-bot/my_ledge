@@ -318,7 +318,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `near_liquid_total` | `liquidity_tier='near_liquid'` 자산 합계. 기본 비상금 계산에는 바로 더하지 않는다. |
 | `illiquid_total` | `liquidity_tier='illiquid'` 자산 합계. |
 | `loan_balance_total` | 최신 대출 snapshot 기준 잔액 합계. |
-| `monthly_debt_payment_total` | `loans.monthly_payment` 합계. `monthly_payment_source='manual'`이면 사용자 확정값이고, `estimated_from_linked_transactions`이면 My Ledge가 완료된 월의 대출 연결 거래로 보강한 추정값이다. 마이너스 통장(`loan_kind='overdraft'`)은 최근 완료월 평균, 그 외 대출은 완료월 중앙값을 사용한다. |
+| `monthly_debt_payment_total` | `loans.monthly_payment` 합계. `monthly_payment_source='manual'`이면 사용자 확정값이고, `estimated_from_linked_transactions`이면 My Ledge가 완료된 월의 공통 흐름표 대출 지급 순액으로 보강한 추정값이다. 유효 KRW 지출만 포함하고 확정 배분 환불은 기록된 달에 원 상환 대출로 차감한다. 마이너스 통장(`loan_kind='overdraft'`)은 최근 완료월 평균, 그 외 대출은 완료월 중앙값을 사용한다. |
 | `asset_row_count`, `loan_row_count` | snapshot 원천 row 수. 데이터 완성도 확인용이다. |
 
 `vw_asset_snapshot_canonical`은 자산 상태를 계산한 표준값이지 "건강/위험" 최종 label이 아니다. 비상금 개월 수는 `/metrics/net-worth/emergency-fund`의 산식·미정 비중·기준일과 함께 해석한다.
@@ -545,6 +545,9 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `status_reasons[]`(코드·이름) | `status_reasons[]`(문장) | 상태의 이유 |
 
 ## T054/T057 보완 (2026-11-17)
+
+대출 월상환 추정의 관측 실적은 계좌별·월별 `committed_loan_total`과 같은 SQL 정의다. 원화 외 통화·비지출 연결·대체된 원본 제외와 확정 환불 귀속 때문에 이전 원본 합계와 다를 수 있다. 환불 초과 월은 음수 실적이며 최종 추정에만 0 하한을 둔다. 관측월 수와 상환 성격도 같은 줄에서 읽으므로 추정 가능 여부·상환 방식이 달라질 수 있다. 평균·중앙값은 실적이 아니라 추정이다. 대출·재무상태의 월상환 카드와 약정의 월 부담은 저장된 추정값을 읽고, 과거 저장값은 기존 재계산·연결 변경·가져오기 때 갱신한다. 수동값은 보존한다. 업로드 검토의 예상 스냅샷은 날짜·금액 변경을 먼저 반영한 같은 SQL 결과다. 현재 가져오기 화면의 거래 변경 미리보기와 이 예상 스냅샷 API를 혼동하지 않는다.
+
 
 `/read/review-items.data.comparison`은 거래 후보와 카테고리 변화 양쪽의 대상월·실제 기준월 목록·기준 구간 시작일·부분월 처리 방식을 설명한다. 기본은 최근 6개 마감월 중앙값이며, 진행월은 같은 경과일까지, 자료 없는 달과 월중 시작 첫 달은 기준에서 뺀다. 자료 있는 달에 구매가 없으면 0원이다. 거래 후보의 금액은 뷰가 계산한 **구매 순액**(확정 환불을 원구매에 차감)이고 카테고리 변화는 **게시월 지출**이므로 금액 정의가 다르다. 거래 후보의 급증 기준값과 현재 합계는 SQL로 집계한 수시·조정 가능 구매 순액이다. Python은 임계값 판정과 취소 증거·검토 상태를 처리한다. 진행월 거래 후보의 계산된 비율 신호는 내지 않고 차액으로 이유를 설명한다. 연간성 지출의 12개월 비교는 `/read/comparison/contributions.data.twelve_month_items`에서 읽는다.
 

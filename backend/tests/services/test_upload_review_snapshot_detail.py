@@ -24,6 +24,7 @@ from app.models.user_profile_snapshot import UserProfileSnapshot
 from app.parsers.snapshots import SnapshotParseResult
 from app.schemas.upload import UploadPreviewSourceRow
 from app.schemas.upload_review import ReviewDecision, ReviewRevision
+from app.services.metric_views import metric_view_ddl
 from app.services import loan_mapping_service as loans
 from app.services import upload_review_service as svc
 from app.services.upload_service import replace_snapshots
@@ -79,6 +80,8 @@ async def detail_db(request, db_session):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            for statement in metric_view_ddl(conn.dialect):
+                await conn.exec_driver_sql(statement)
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
             yield db
     finally:

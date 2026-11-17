@@ -184,7 +184,7 @@ describe('LoansPage', () => {
     renderPage()
     expect(screen.getByText('완료월 관측이 부족합니다')).toBeInTheDocument()
     expect(screen.getByText('관측 1개월 / 최소 2개월 (2026-05)')).toBeInTheDocument()
-    expect(screen.getByText('완료월별 상환액 중앙값')).toBeInTheDocument()
+    expect(screen.getByText('완료월별 순상환액 중앙값')).toBeInTheDocument()
   })
 
   it('자동 설정으로 원복하면 저장을 끄고 되돌린 필드는 다른 메타 저장에서도 제외한다', async () => {

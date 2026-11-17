@@ -137,7 +137,7 @@ export const SETTING_HELP = {
   },
   assetPaymentObservations: {
     title: '월상환 최소 관측',
-    description: '월상환액을 추정하기 위해 필요한 최소 관측 거래 수입니다.',
+    description: '월상환액을 추정하기 위해 필요한 최소 관측 완료월 수입니다.',
   },
   assetPaymentConfirmation: {
     title: '부채 상환 확인 필요',
