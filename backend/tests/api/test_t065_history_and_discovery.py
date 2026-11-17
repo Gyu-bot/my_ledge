@@ -455,3 +455,68 @@ async def test_installment_bulk_rejects_medium_confidence(
         )
         == 0
     )
+
+
+@pytest.mark.parametrize(
+    "payment",
+    [
+        "합성",
+        "합성 ",
+        "  합성  ",
+        "가상신용",
+        "가상 Card",
+        "합성 포인트카드",
+        "Sample Cashback Card",
+        "합성페이 신용카드",
+        "Sample Money CARD",
+        "합성통장카드",
+        "CMA Card",
+        "선불카드",
+    ],
+)
+async def test_short_or_padded_card_names_remain_discovery_candidates(
+    async_client, db_session, payment
+):
+    rows = await seed_series(db_session, payment=payment)
+    candidates = (await async_client.get("/api/v1/installment-plan-candidates")).json()[
+        "items"
+    ]
+    assert len(candidates) == 1
+    assert candidates[0]["transaction_ids"] == [row.id for row in rows]
+    # Keep the ledger spelling and existing series key/plan matching contracts.
+    assert candidates[0]["payment_method"] == payment
+
+
+@pytest.mark.parametrize(
+    "payment",
+    [
+        None,
+        "",
+        "   ",
+        "합성통장",
+        "저축예금 ",
+        "가상저축",
+        "합성적금",
+        " 합성계좌 ",
+        "자유입출금",
+        "cMa",
+        "합성파킹",
+        "간편결제",
+        "합성페이",
+        "Sample Pay",
+        "선불결제",
+        "합성머니",
+        "Sample Money",
+        "포인트",
+        "Sample POINT",
+        " 현금 ",
+        "CASH",
+    ],
+)
+async def test_non_card_payment_forms_are_excluded_from_discovery(
+    async_client, db_session, payment
+):
+    await seed_series(db_session, payment=payment)
+    assert (await async_client.get("/api/v1/installment-plan-candidates")).json()[
+        "items"
+    ] == []
