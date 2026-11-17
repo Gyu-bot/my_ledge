@@ -151,7 +151,7 @@ GET `analytics/fixed-cost-summary`, `analytics/fixed-cost-trend`, `analytics/rec
 
 - `apply_loan_rules_on_upload`은 기본 `true`이며 기존 저장 행도 이행에서 활성화한다. 사람이 이후 끄는 설정은 유지된다. 사람이 등록한 `LoanMerchantRule`만 `/upload`, `/upload/apply`, reviewed apply에서 전체 유효 지출 원장에 적용한다. 선택한 신규 행 외 기존 미연결·비수동 연결도 재검사하며 `source=manual`은 덮어쓰지 않는다.
 - 현재 두 apply 경로의 규칙 연결은 업로드와 같은 트랜잭션이며 되돌리기 snapshot과 변경 감지에 `loan_transaction_links`가 포함된다. reviewed apply는 규칙으로 바뀌는 추정값을 승인 미리보기에 포함한다.
-- `GET /api/v1/loan-transaction-links`는 규칙과 정확히 일치하는 미연결 행도 포함하고 `suggested_loan_account_id`, `suggestion_basis="rule"`을 제공한다. 이력 제안의 상세 계약은 아래 PR2 항목을 따른다. 업로드 설정이 꺼져 있어도 읽기 제안은 제공하며 실제 연결은 생성하지 않는다. 거래처 규칙이 원문 규칙보다 우선한다. 연결된 행의 제안 필드는 null이다.
+- `GET /api/v1/loan-transaction-links`는 규칙과 정확히 일치하는 미연결 행도 포함하고 `suggested_loan_account_id`, `suggestion_basis="rule"`을 제공한다. 이력 제안의 상세 계약은 아래 PR2 항목을 따른다. 업로드 설정이 꺼져 있어도 읽기 제안은 제공하며 실제 연결은 생성하지 않는다. 거래처 규칙이 원문 규칙보다 우선한다. 연결된 행의 제안 계좌·기준·신뢰도는 null, 근거는 빈 목록, 모호성은 false다.
 - 할부 제안과 전망은 거래처 소문자·공백 정규화, 결제수단, 유효 회차 중 가장 가까운 예정일 ±7일을 공유한다. 월경계 게시도 앞뒤 회차와 비교한다. 전망은 정확한 금액만, 제안은 ±10%(최소 10,000)까지 허용한다. 기존 ±3일 밖의 ±4~7일 제안은 최대 medium(점수 89)이다. 제안과 전망의 읽기는 연결을 쓰지 않는다.
 
 
