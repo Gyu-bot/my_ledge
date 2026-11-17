@@ -27,6 +27,9 @@ def test_settings_load_from_project_root_env_file(tmp_path: Path, monkeypatch) -
         else:
             env_file.write_text(original_contents)
 
-    assert settings.database_url == "postgresql+asyncpg://user:pass@localhost:5432/my_ledge"
+    assert (
+        settings.database_url
+        == "postgresql+asyncpg://user:pass@localhost:5432/my_ledge"
+    )
     assert settings.api_key == "test-api-key"
     assert settings.cors_origins == ["https://a.example.com", "https://b.example.com"]

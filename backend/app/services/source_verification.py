@@ -202,10 +202,7 @@ async def _row_exists_by_import_fallback(
     )
     row_seconds = seconds_since_midnight_from_row(row)
     for candidate in result.scalars().all():
-        if (
-            abs(seconds_since_midnight_from_transaction(candidate) - row_seconds)
-            <= 60
-        ):
+        if abs(seconds_since_midnight_from_transaction(candidate) - row_seconds) <= 60:
             return True
     return False
 

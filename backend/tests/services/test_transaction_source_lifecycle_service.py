@@ -205,8 +205,7 @@ async def test_source_lifecycle_handles_missing_optional_fields(
     assert second_result.tx_skipped == 1
     assert stored is not None
     assert (
-        stored.source_lifecycle_status
-        == TransactionSourceLifecycleStatus.ACTIVE.value
+        stored.source_lifecycle_status == TransactionSourceLifecycleStatus.ACTIVE.value
     )
     assert stored.source_row_hash is not None
 

@@ -19,7 +19,9 @@ depends_on: Sequence[str] | None = None
 
 def upgrade() -> None:
     op.add_column("transactions", sa.Column("spend_necessity", sa.String(20)))
-    op.add_column("category_classification_rules", sa.Column("spend_necessity", sa.String(20)))
+    op.add_column(
+        "category_classification_rules", sa.Column("spend_necessity", sa.String(20))
+    )
     op.add_column("asset_snapshots", sa.Column("liquidity_tier", sa.String(30)))
     op.add_column("asset_snapshots", sa.Column("is_cash_equivalent", sa.Boolean()))
     op.add_column("loans", sa.Column("monthly_payment", sa.Numeric(15, 2)))
@@ -29,8 +31,18 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("alias_pattern", sa.String(500), nullable=False),
         sa.Column("normalized_merchant", sa.String(500), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.UniqueConstraint("alias_pattern", name="uq_merchant_alias_rules_pattern"),
     )
     op.execute(

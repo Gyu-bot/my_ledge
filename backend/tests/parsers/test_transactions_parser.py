@@ -35,7 +35,9 @@ def test_parse_transactions_preserves_positive_expense_amounts(
 
     parsed = parse_transactions(workbook)
 
-    positive_expense = next(row for row in parsed if row["type"] == "지출" and row["amount"] > 0)
+    positive_expense = next(
+        row for row in parsed if row["type"] == "지출" and row["amount"] > 0
+    )
 
     assert positive_expense["amount"] == 23200
     assert positive_expense["description"] == "쿠팡이츠"
