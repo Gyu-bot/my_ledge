@@ -12,6 +12,7 @@ export type AdjustabilitySource =
   | 'not_applicable'
 export type PaymentForm = 'committed' | 'ad_hoc' | 'not_applicable'
 export type CommitmentKind = 'loan' | 'installment' | 'recurring'
+export type MerchantMatch = 'exact' | 'prefix'
 export type CommitmentScope = 'merchant' | 'category'
 export type CommitmentCycle = 'monthly' | 'yearly' | 'n_times'
 export type CommitmentAmountKind = 'fixed' | 'variable'
@@ -36,6 +37,7 @@ export interface RecurringCommitment {
   id: number
   label: string | null
   match_scope: CommitmentScope
+  merchant_match: MerchantMatch
   merchant: string | null
   category_major: string
   category_minor: string | null
@@ -49,6 +51,10 @@ export interface RecurringCommitment {
   memo: string | null
   attributes_confirmed_at: string | null
   needs_attribute_confirmation: boolean
+  observed_transaction_count: number
+  first_observed_date: string | null
+  last_observed_date: string | null
+  low_observation: boolean
   member_transaction_count: number
   first_member_date: string | null
   last_member_date: string | null
@@ -69,6 +75,7 @@ export interface RecurringCommitmentAttributes {
 
 export interface RecurringCommitmentCreateRequest extends RecurringCommitmentAttributes {
   match_scope: CommitmentScope
+  merchant_match?: MerchantMatch
   merchant: string | null
   category_major: string
   category_minor: string | null
@@ -88,6 +95,7 @@ export interface NatureCommitmentRef {
   match: 'rule' | 'explicit'
   label: string | null
   match_scope: CommitmentScope
+  merchant_match: MerchantMatch
   merchant: string | null
   category_major: string
   category_minor: string | null
@@ -159,3 +167,16 @@ export interface TransferPurposeRuleCreateRequest {
 }
 
 export type TransferPurposeRuleUpdateRequest = Partial<TransferPurposeRuleCreateRequest>
+
+export interface RecurringMergeSuggestion {
+  ids: number[]
+  suggested_prefix: string
+  target_id: number
+}
+
+export interface RecurringCommitmentMergeRequest {
+  target_id: number
+  source_ids: number[]
+  merchant_match?: MerchantMatch
+  merchant?: string
+}

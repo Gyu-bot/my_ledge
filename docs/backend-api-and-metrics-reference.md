@@ -1895,13 +1895,13 @@ Plan reference: `Implentation-plan.md` section 2.2 and task `T056`. Code: `backe
 
 | Table | Grain | Meaning |
 |---|---|---|
-| `recurring_commitments` | bundle | 정기 지급 묶음: `match_scope` (`merchant`/`category`), `merchant`, `category_major`, `category_minor`, `cycle` (`monthly`/`yearly`/`n_times`/null), `total_count`, `amount_kind` (`fixed`/`variable`/null), `adjustability` (null = 미정), `start_date`, `end_date`, `origin` (`migration`/`user`/`legacy_edit`), `label`, `memo` |
+| `recurring_commitments` | bundle | 정기 지급 묶음: `match_scope` (`merchant`/`category`), `merchant_match` (`exact`/`prefix`, 기본 exact), `merchant`, `category_major`, `category_minor`, `cycle` (`monthly`/`yearly`/`n_times`/null), `total_count`, `amount_kind` (`fixed`/`variable`/null), `adjustability` (null = 미정), `start_date`, `end_date`, `origin` (`migration`/`user`/`legacy_edit`), `label`, `memo` |
 | `category_adjustability_defaults` | category key | `adjustability` default; `category_minor=null` covers the whole major |
 | `transaction_nature_overrides` | transaction | `adjustability` (transaction level), `commitment_id` (explicit membership), `excluded_from_commitments`, `installment_link_unconfirmed`, `necessity_conflict`, `source` |
 
 ### Resolution (`vw_transaction_nature`)
 
-- Membership: no membership for non-`지출`, loan/installment-linked or excluded rows; else explicit `commitment_id`, else the first bundle whose rule matches — same effective category (`category_major` equal, `category_minor IS NOT DISTINCT FROM`), same `merchant` for `match_scope='merchant'`, `start_date <= date <= end_date` with open ends — ordered merchant scope first, then lowest id.
+- Membership: no membership for non-`지출`, loan/installment-linked or excluded rows; else explicit `commitment_id`, else the first bundle whose rule matches — same effective category (`category_major` equal, `category_minor IS NOT DISTINCT FROM`), merchant 범위에서는 `merchant_match=exact` 동등 비교 또는 `prefix` 정규화 접두 비교, `start_date <= date <= end_date` (열린 끝 허용). T066 이후 우선순위는 merchant exact → 긴 merchant prefix → category → id다.
 - Adjustability: `not_applicable` for non-`지출`; `protected` while a loan or installment link exists; else `COALESCE(transaction, commitment, category default, 'undecided')`. Category default = exact `(major, minor)` row, else the `(major, NULL)` row. `adjustability_source` names the level that supplied the value.
 - `GET /api/v1/nature/transactions/{id}` returns the same values (tested equal to the view) plus the legacy columns.
 
@@ -2288,3 +2288,14 @@ T056 확인 보완: 이행 약정은 `attributes_confirmed_at`으로 사용자�
 - 후보 생성 입력의 거래 ID 집합은 최신 후보 전체와 같아야 한다. 사람이 확인한 첫 납부일/총 횟수의 각 최근접 예정일에 ±3일 안으로 들어가고 회차가 중복되지 않아야 한다. 계획·모든 수동 연결은 함께 커밋된다. 첫 납부일을 과거로 조정하면 관측 첫 행은 1보다 큰 회차일 수 있다.
 - 일괄 확인은 조회 결과를 그대로 신뢰하지 않고 잠금 뒤 다시 제안을 계산한다. 할부는 모든 활성 계획의 점유·다중 매칭·같은 슬롯 경쟁을 검사한 high만 허용한다. 대출도 요청 계좌와 현재 단일 제안을 대조한다. 이미 연결된 수동 링크는 후보에서 제외되어 덮어쓰지 않는다. 입력 중복 422, 변경/충돌 409. GET은 쓰지 않으며 이력/발견 결과를 자동 적용하지 않는다.
 - 상세 URL·요청·응답은 `backend-api-ssot.md`의 T065 PR2 절을 따른다. 프런트엔드 일괄 확인 범위는 현재 페이지(대출은 선택이 있으면 그 선택)의 high 추천이며, 수정한 할부 제안은 일괄 대상에서 제외한다. 거래처 규칙 추가는 연결 확인 후 별도의 사람 클릭으로 기존 upsert를 사용한다.
+
+
+### T066 정기 지급 정리·접두 매칭
+
+계약 상세는 [정기 지급 API](backend-api-ssot.md#nature-axes-t056-지급-형태--조정-가능성)를 따른다. 0045는 `recurring_commitments.merchant_match`를 NOT NULL·server_default exact로 추가하고 `vw_transaction_nature`의 규칙 서브쿼리만 교체한다. 다른 뷰는 교체하지 않는다. downgrade는 직전 뷰 정의를 복원한 뒤 컬럼을 제거한다. 기존 exact 거래 매칭과 수치 산식은 유지한다.
+
+공통 `commitment_match_predicate`/`commitment_match_order`를 뷰와 `nature_axes_service.find_rule_commitment_id`가 함께 사용한다. 월말 전망·약정 읽기·할부 후보는 그 뷰의 최종 commitment id를 사용하므로 별도 merchant 매처를 만들지 않는다. prefix는 공백(스페이스/탭/개행/CR) 제거·소문자화 뒤 `substr(merchant, 1, length(prefix)) = prefix`로 비교해 SQL LIKE 특수문자도 문자 그대로 처리한다. exact는 종전 문자열 동등 비교를 유지한다. 규칙 순서는 exact → 긴 prefix → category → id다. 월말 이후 전망은 추가하지 않는다.
+
+관측은 `vw_transaction_nature`의 유효 거래 행(모든 통화)을 약정 id별 count/min(date)/max(date)로 집계한다. 삭제·병합·superseded 거래를 제외하고 기존 정기 지급 편집 화면의 member 집계와 같다. 월 흐름표의 KRW 금액·환불 귀속 line 수와는 구분한다. low_observation은 이행 출처·미확인·관측 ≤1 조건이며 반복성 판정이 아니다.
+
+합치기 제안은 merchant 범위의 거래처 끝 ASCII 숫자를 제거하고 공백 제거·소문자화한 줄기를 카테고리 major/minor와 묶는다. 제안 대상 id는 최소 id이며 사용자가 다른 대상을 고를 수 있다. 생성/수정/합치기에서 prefix는 정규화 후 최소 2글자다. 합치기·일괄 삭제는 인증된 한 트랜잭션과 공통 설정 lock 안에서 실행한다. 합치기의 대상 속성 유지·충돌 시 확인 해제·source 명시 연결 이전, 삭제 시 override 보존/제거 규칙은 SSOT와 같다. 자동 삭제·합치기·확인은 없다.

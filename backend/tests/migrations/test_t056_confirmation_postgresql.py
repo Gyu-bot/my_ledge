@@ -156,6 +156,12 @@ async def capture(factory):
 async def test_roundtrip_preserves_all_read_analytics_and_axes(migrated_db):
     url, schema, engine, factory = migrated_db
     async with factory() as db:
+        # 과거 0042 왕복 검증에서 현재 ORM이 읽는 후속 메타데이터를 준비한다.
+        await db.execute(
+            text(
+                "ALTER TABLE recurring_commitments ADD COLUMN merchant_match VARCHAR(10) NOT NULL DEFAULT 'exact'"
+            )
+        )
         await build_read_surface_ledger(db, purchases_per_month=8)
         manual = tx(
             "synthetic-manual",
@@ -259,6 +265,11 @@ async def test_roundtrip_preserves_all_read_analytics_and_axes(migrated_db):
 async def test_mixed_migrated_members_need_confirmation(migrated_db, decision):
     _, _, _, factory = migrated_db
     async with factory() as db:
+        await db.execute(
+            text(
+                "ALTER TABLE recurring_commitments ADD COLUMN merchant_match VARCHAR(10) NOT NULL DEFAULT 'exact'"
+            )
+        )
         commitment = RecurringCommitment(
             match_scope="category", category_major="synthetic", origin="migration"
         )

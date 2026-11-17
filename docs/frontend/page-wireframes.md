@@ -286,6 +286,8 @@ Shell rules:
 - 기본값: `GET|PUT /nature/category-defaults`, `DELETE /nature/category-defaults/{id}`(선택을 "정하지 않음"으로 돌릴 때, 알림에서 되돌리기). 카테고리 목록은 `/transactions/filter-options`, 미정 금액은 지출 큐브. 카테고리 이름은 바꾸지 않는다.
 - 묶음: `GET|POST /nature/recurring-commitments`, `PATCH …/{id}`, `POST …/{id}/end`(마지막 날), `DELETE …/{id}`(확인 문구 "지우기"). 끝남 여부는 오늘이 아니라 거래 기준일로 본다. 등록 폼의 값은 비어서 시작한다(분류 큐에서 넘어온 거래처·카테고리만 채움). 주소 `?tab=recurring&new=1&merchant=&category_major=&category_minor=`, `&edit={id}`.
 
+T066 보완: 각 묶음에 관측 건수·첫/마지막 관측일과 정확/접두 방식을 표시한다. 관측 ≤1이고 이행 출처·미확인인 항목은 "1회만 관측 (이전 분류에서 옮김, 미확인)" 배지·필터·개수로 표시한다(`?observation=low` 진입 가능). 보이는 항목 전체 선택·개별 선택 후 일괄 삭제 또는 같은 대분류·소분류 합치기를 실행할 수 있다. 합치기 제안 카드의 "N개를 하나로 합치기"는 대상·제안 접두어를 채운 확인 대화상자를 연다. 대상 속성 유지·충돌 시 확인 해제·명시 연결 이전·규칙 재매칭 영향을 설명하고 문구를 입력한 뒤 한 API 요청으로 실행한다. 생성/수정 폼에도 "정확히 같음 / 이 글자로 시작"을 추가한다. 390px에서는 필터 탭을 가로 스크롤하고 행동 버튼은 줄바꿈하며 확인 대화상자는 화면 높이를 넘으면 세로 스크롤한다.
+
 ## Data Status `/data/status` (작업대 · 자료 현황, T059)
 
 ```text

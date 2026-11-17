@@ -294,6 +294,14 @@ METRIC_TRANSACTIONS_VIEW = view_table(
 )
 
 
+def normalized_commitment_merchant(value):  # type: ignore[no-untyped-def]
+    """접두 일치 전용: 공백(스페이스/탭/개행/CR)을 제거하고 소문자로 맞춘다."""
+    result = func.lower(func.trim(value))
+    for whitespace in (" ", "\t", "\n", "\r"):
+        result = func.replace(result, whitespace, "")
+    return result
+
+
 def commitment_match_predicate(
     commitments,  # type: ignore[no-untyped-def]
     *,
@@ -304,7 +312,7 @@ def commitment_match_predicate(
 ) -> ColumnElement[bool]:
     """A recurring commitment's rule matches a transaction (T056).
 
-    Merchant-scope bundles need the same merchant; both scopes need the same
+    Merchant scope uses exact equality or a literal normalized prefix; both need the same
     effective category (major, and minor including "no minor"), and the date
     must fall in ``[start_date, end_date]`` (open ends allowed). Shared by the
     SQL view and the write-through service so membership has one definition.
@@ -316,7 +324,23 @@ def commitment_match_predicate(
             commitments.c.match_scope == "category",
             and_(
                 commitments.c.match_scope == "merchant",
-                commitments.c.merchant == merchant,
+                or_(
+                    and_(
+                        commitments.c.merchant_match == "exact",
+                        commitments.c.merchant == merchant,
+                    ),
+                    and_(
+                        commitments.c.merchant_match == "prefix",
+                        func.substr(
+                            normalized_commitment_merchant(merchant),
+                            1,
+                            func.length(
+                                normalized_commitment_merchant(commitments.c.merchant)
+                            ),
+                        )
+                        == normalized_commitment_merchant(commitments.c.merchant),
+                    ),
+                ),
             ),
         ),
         or_(commitments.c.start_date.is_(None), commitments.c.start_date <= on_date),
@@ -325,9 +349,26 @@ def commitment_match_predicate(
 
 
 def commitment_match_order(commitments) -> tuple[ColumnElement, ...]:  # type: ignore[no-untyped-def]
-    """Merchant-scope bundles win over category-scope ones; then lowest id."""
+    """Exact merchant, longest normalized prefix, category; then lowest id."""
     return (
-        case((commitments.c.match_scope == "merchant", 0), else_=1),
+        case(
+            (
+                and_(
+                    commitments.c.match_scope == "merchant",
+                    commitments.c.merchant_match == "exact",
+                ),
+                0,
+            ),
+            (commitments.c.match_scope == "merchant", 1),
+            else_=2,
+        ),
+        case(
+            (
+                commitments.c.merchant_match == "prefix",
+                -func.length(normalized_commitment_merchant(commitments.c.merchant)),
+            ),
+            else_=0,
+        ),
         commitments.c.id,
     )
 

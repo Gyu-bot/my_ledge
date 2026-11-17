@@ -48,6 +48,9 @@ def _normalize(sql: str) -> str:
 def test_frozen_metric_view_sql_matches_runtime_definitions() -> None:
     migration = _load(LATEST_METRIC_MIGRATION)
     frozen = dict(migration.METRIC_VIEW_SQL)
+    frozen["vw_transaction_nature"] = _load(
+        VERSIONS / "20261117_0045_recurring_merchant_prefix.py"
+    ).AFTER
 
     assert list(frozen) == [view.name for view in METRIC_VIEWS]
     for view in METRIC_VIEWS:
@@ -86,7 +89,7 @@ def test_legacy_aggregate_views_read_the_flow_lines_only() -> None:
 
 def test_metric_views_read_the_two_axis_tables() -> None:
     frozen = dict(_load(LATEST_METRIC_MIGRATION).METRIC_VIEW_SQL)
-    nature = frozen["vw_transaction_nature"]
+    nature = _load(VERSIONS / "20261117_0045_recurring_merchant_prefix.py").AFTER
     for table in (
         "transaction_nature_overrides",
         "recurring_commitments",

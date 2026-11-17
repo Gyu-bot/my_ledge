@@ -6,6 +6,7 @@
 """
 
 from datetime import date, datetime, timezone
+import re
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, exists, func, inspect, select, update
@@ -19,12 +20,17 @@ from app.models.nature_axes import (
     TransactionNatureOverride,
 )
 from app.models.transaction import Transaction
+from app.services.recurring_configuration_lock import lock_recurring_configuration
 from app.schemas.nature_axes import (
     CategoryAdjustabilityDefaultListResponse,
     CategoryAdjustabilityDefaultRequest,
     CategoryAdjustabilityDefaultResponse,
     NatureCommitmentRef,
     NatureLevels,
+    RecurringCommitmentBulkDeleteRequest,
+    RecurringCommitmentMergeRequest,
+    RecurringMergeSuggestion,
+    _check_merchant_match,
     RecurringCommitmentCreateRequest,
     RecurringCommitmentListResponse,
     RecurringCommitmentResponse,
@@ -280,6 +286,7 @@ def _serialize_commitment(
         label=row.label,
         match_scope=row.match_scope,  # type: ignore[arg-type]
         merchant=row.merchant,
+        merchant_match=row.merchant_match,
         category_major=row.category_major,
         category_minor=row.category_minor,
         cycle=row.cycle,  # type: ignore[arg-type]
@@ -294,12 +301,41 @@ def _serialize_commitment(
         needs_attribute_confirmation=(
             row.origin == "migration" and row.attributes_confirmed_at is None
         ),
+        observed_transaction_count=count,
+        first_observed_date=first,
+        last_observed_date=last,
+        low_observation=row.origin == "migration"
+        and row.attributes_confirmed_at is None
+        and count <= 1,
         member_transaction_count=count,
         first_member_date=first,
         last_member_date=last,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def merge_suggestions(
+    rows: list[RecurringCommitment],
+) -> list[RecurringMergeSuggestion]:
+    groups: dict[tuple[str, str | None, str], list[RecurringCommitment]] = {}
+    for row in rows:
+        if row.match_scope != "merchant" or not row.merchant:
+            continue
+        stem = "".join(re.sub(r"[0-9]+$", "", row.merchant.strip()).split()).lower()
+        if len(stem) >= 2:
+            groups.setdefault(
+                (row.category_major, row.category_minor, stem), []
+            ).append(row)
+    return [
+        RecurringMergeSuggestion(
+            ids=sorted(r.id for r in group),
+            suggested_prefix=key[2],
+            target_id=min(r.id for r in group),
+        )
+        for key, group in groups.items()
+        if len(group) >= 2
+    ]
 
 
 async def list_commitments(db_session: AsyncSession) -> RecurringCommitmentListResponse:
@@ -311,6 +347,7 @@ async def list_commitments(db_session: AsyncSession) -> RecurringCommitmentListR
     stats = await _member_stats(db_session)
     return RecurringCommitmentListResponse(
         items=[_serialize_commitment(row, stats) for row in rows],
+        merge_suggestions=merge_suggestions(rows),
         pending_confirmation_count=sum(
             row.origin == "migration" and row.attributes_confirmed_at is None
             for row in rows
@@ -338,6 +375,7 @@ async def _respond(
 async def create_commitment(
     db_session: AsyncSession, payload: RecurringCommitmentCreateRequest
 ) -> RecurringCommitmentResponse:
+    await lock_recurring_configuration(db_session)
     data = payload.model_dump()
     data["merchant"] = (data["merchant"] or "").strip() or None
     data["category_minor"] = (data["category_minor"] or "").strip() or None
@@ -351,6 +389,7 @@ async def update_commitment(
     commitment_id: int,
     payload: RecurringCommitmentUpdateRequest,
 ) -> RecurringCommitmentResponse:
+    await lock_recurring_configuration(db_session)
     row = await _commitment_or_404(db_session, commitment_id)
     changes = payload.model_dump(exclude_unset=True)
     confirm_attributes = changes.pop("confirm_attributes", False)
@@ -372,6 +411,9 @@ async def update_commitment(
     if row.match_scope == "category":
         row.merchant = None
     try:
+        if "merchant" in changes:
+            row.merchant = (row.merchant or "").strip() or None
+        _check_merchant_match(row.match_scope, row.merchant_match, row.merchant)
         _check_cycle_and_dates(row.cycle, row.total_count, row.start_date, row.end_date)
     except ValueError as exc:
         await db_session.rollback()
@@ -386,6 +428,7 @@ async def update_commitment(
 async def end_commitment(
     db_session: AsyncSession, commitment_id: int, end_date: date
 ) -> RecurringCommitmentResponse:
+    await lock_recurring_configuration(db_session)
     row = await _commitment_or_404(db_session, commitment_id)
     if row.start_date is not None and end_date < row.start_date:
         raise HTTPException(
@@ -396,15 +439,24 @@ async def end_commitment(
     return await _respond(db_session, row)
 
 
-async def delete_commitment(db_session: AsyncSession, commitment_id: int) -> None:
-    row = await _commitment_or_404(db_session, commitment_id)
-    # Same as the PostgreSQL ON DELETE SET NULL, also for SQLite tests.
+async def _delete_commitments(db_session: AsyncSession, ids: list[int]) -> None:
+    rows = (
+        await db_session.scalars(
+            select(RecurringCommitment)
+            .where(RecurringCommitment.id.in_(ids))
+            .order_by(RecurringCommitment.id)
+            .with_for_update()
+        )
+    ).all()
+    if len(rows) != len(ids):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Recurring commitment not found")
     await db_session.execute(
         update(TransactionNatureOverride)
-        .where(TransactionNatureOverride.commitment_id == commitment_id)
+        .where(TransactionNatureOverride.commitment_id.in_(ids))
         .values(commitment_id=None)
     )
-    await db_session.delete(row)
+    for row in rows:
+        await db_session.delete(row)
     await db_session.flush()
     await db_session.execute(
         delete(TransactionNatureOverride).where(
@@ -415,7 +467,82 @@ async def delete_commitment(db_session: AsyncSession, commitment_id: int) -> Non
             TransactionNatureOverride.necessity_conflict.is_(False),
         )
     )
+
+
+async def bulk_delete_commitments(
+    db_session: AsyncSession, payload: RecurringCommitmentBulkDeleteRequest
+) -> None:
+    await lock_recurring_configuration(db_session)
+    await _delete_commitments(db_session, payload.ids)
     await db_session.commit()
+
+
+async def delete_commitment(db_session: AsyncSession, commitment_id: int) -> None:
+    await bulk_delete_commitments(
+        db_session, RecurringCommitmentBulkDeleteRequest(ids=[commitment_id])
+    )
+
+
+async def merge_commitments(
+    db_session: AsyncSession, payload: RecurringCommitmentMergeRequest
+) -> RecurringCommitmentResponse:
+    await lock_recurring_configuration(db_session)
+    ids = [payload.target_id, *payload.source_ids]
+    rows = (
+        await db_session.scalars(
+            select(RecurringCommitment)
+            .where(RecurringCommitment.id.in_(ids))
+            .order_by(RecurringCommitment.id)
+            .with_for_update()
+        )
+    ).all()
+    if len(rows) != len(ids):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Recurring commitment not found")
+    target = next(row for row in rows if row.id == payload.target_id)
+    if any(
+        (row.category_major, row.category_minor)
+        != (target.category_major, target.category_minor)
+        for row in rows
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "All commitments must have the same category",
+        )
+    mode = payload.merchant_match or target.merchant_match
+    merchant = (
+        payload.merchant.strip() if payload.merchant is not None else target.merchant
+    )
+    try:
+        _check_merchant_match(target.match_scope, mode, merchant)
+        if target.match_scope == "merchant" and not merchant:
+            raise ValueError("merchant is required")
+        if target.match_scope == "category" and payload.merchant is not None:
+            raise ValueError("category scope cannot have merchant")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    target.merchant_match, target.merchant = mode, merchant
+    # NULL 시작일은 제한 없음이므로 가장 이른 범위다. 종료일 등 속성은 대상 유지.
+    target.start_date = (
+        None
+        if any(row.start_date is None for row in rows)
+        else min(row.start_date for row in rows)
+    )
+    # 충돌은 대상 값을 유지하되 확인을 해제한다. 합치기가 속성 확인은 아니다.
+    attrs = ("cycle", "total_count", "amount_kind", "adjustability", "end_date")
+    if any(
+        any(getattr(row, field) != getattr(target, field) for field in attrs)
+        for row in rows
+    ):
+        target.attributes_confirmed_at = None
+    await db_session.execute(
+        update(TransactionNatureOverride)
+        .where(TransactionNatureOverride.commitment_id.in_(payload.source_ids))
+        .values(commitment_id=target.id)
+    )
+    for row in rows:
+        if row.id != target.id:
+            await db_session.delete(row)
+    return await _respond(db_session, target)
 
 
 # --------------------------------------------------------------------------
@@ -500,6 +627,7 @@ async def explain_transaction(
                 label=commitment.label,
                 match_scope=commitment.match_scope,  # type: ignore[arg-type]
                 merchant=commitment.merchant,
+                merchant_match=commitment.merchant_match,
                 category_major=commitment.category_major,
                 category_minor=commitment.category_minor,
                 cycle=commitment.cycle,  # type: ignore[arg-type]

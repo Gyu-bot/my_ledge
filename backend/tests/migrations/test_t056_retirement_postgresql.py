@@ -111,6 +111,12 @@ def test_views_roundtrip_and_read_values_are_identical(scratch_url):
                         "TIMESTAMPTZ"
                     )
                 )
+                await db.execute(
+                    text(
+                        "ALTER TABLE recurring_commitments ADD COLUMN merchant_match "
+                        "VARCHAR(10) NOT NULL DEFAULT 'exact'"
+                    )
+                )
                 await build_read_surface_ledger(db, purchases_per_month=8)
         finally:
             await engine.dispose()

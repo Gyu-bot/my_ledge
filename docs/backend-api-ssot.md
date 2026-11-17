@@ -254,7 +254,7 @@ All aggregate analytics responses above now also carry an optional `contract` ob
 
 ### Nature Axes (T056: 지급 형태 · 조정 가능성)
 
-Every route requires `X-API-Key` (reads included). Writes are explicit human input only; nothing here proposes or fills a value.
+Every route requires `X-API-Key` (reads included). 쓰기는 사람이 명시적으로 실행한다. T066 합치기 제안은 표시만 하며 자동 실행·확인은 하지 않는다.
 
 T056 확인 보완: 약정 행에 `attributes_confirmed_at`, `needs_attribute_confirmation`을 추가한다. 이행 출처이고 확인 시각이 없으면 대기다. 목록은 끝난 약정까지 포함한 `pending_confirmation_count`를 준다. `/read/commitments`는 상세 행에 같은 두 필드, 요약 행에 대기 여부, data에 필터 전 대기 수를 추가한다. 확인된 빈 주기는 그대로 빈 값이며 관측·월 부담 계산은 바꾸지 않는다. `transactions.legacy_classification_edited`는 이전 manual 분류 이력을 보존하며 HTTP `is_edited`에만 더한다. 축 지정 출처는 바꾸지 않는다. 이행 전 준비된 검토는 재준비하며, 이전 컬럼 집합의 되돌리기는 목록에서 불가 표시하고 `schema_changed`로 거절한다. [상세·후속 삭제 조건](agents/t056-classification-retirement.md).
 
@@ -266,11 +266,22 @@ T056 확인 보완: 약정 행에 `attributes_confirmed_at`, `needs_attribute_co
 | `GET` | `/api/v1/nature/recurring-commitments` | live | Recurring-payment bundles (정기 지급) with attributes and `member_transaction_count`, `first_member_date`, `last_member_date` (effective rows resolved to the bundle) |
 | `POST` | `/api/v1/nature/recurring-commitments` | live | `201`. `match_scope=merchant\|category`, `merchant` (required for merchant scope, null for category scope), `category_major`, `category_minor?`, `cycle=monthly\|yearly\|n_times\|null`, `total_count` (n_times only), `amount_kind=fixed\|variable\|null`, `adjustability=protected\|adjustable\|null`, `start_date?`, `end_date?`, `label?`, `memo?`; `origin='user'` |
 | `PATCH` | `/api/v1/nature/recurring-commitments/{id}` | live | 부분 수정. 명시한 필드만 변경하고 null은 비운다. 이행 약정의 `cycle`/`amount_kind` 저장 또는 `{confirm_attributes: true}`는 현재 두 속성의 사용자 확인을 기록한다. 메모·종료는 확인하지 않는다. 허용 주기는 기존 그대로, 잘못된 값은 422. |
+| `POST` | `/api/v1/nature/recurring-commitments/merge` | live | T066. `{target_id, source_ids[], merchant_match?, merchant?}` → 대상 행 `200`. 동일 대분류·소분류만, 전체 원자 실행. 대상 제외·중복/비양수/빈 source는 422, 미존재 404. |
+| `POST` | `/api/v1/nature/recurring-commitments/bulk-delete` | live | T066. `{ids[]}` → `204`. 1–1000개의 고유 양수 ID. 하나라도 미존재면 404, 입력 오류 422, 삭제·override 해제 전체 원자 실행. |
 | `POST` | `/api/v1/nature/recurring-commitments/{id}/end` | live | `{end_date}` (not before `start_date`); later transactions stop matching |
 | `DELETE` | `/api/v1/nature/recurring-commitments/{id}` | live | `204`; explicit memberships pointing to it are cleared |
 | `GET` | `/api/v1/nature/transactions/{id}` | live | Resolved axes with the value at every precedence level, the commitment and how it matched (`rule`/`explicit`), flags and override source. `effective=false` (axes null) for deleted/merged/superseded rows |
 | `PUT` | `/api/v1/nature/transactions/{id}/adjustability` | live | Transaction-level `{adjustability: protected\|adjustable}` (highest precedence); `422` for 수입/이체; clears `necessity_conflict` |
 | `DELETE` | `/api/v1/nature/transactions/{id}/adjustability` | live | Clears the transaction-level value; the commitment or category default applies again |
+
+T066 정리 계약:
+
+- 생성·수정·응답의 `merchant_match=exact|prefix` (기본 exact). 기존 행의 exact 비교는 기존과 같다. prefix는 거래처와 접두어의 스페이스·탭·개행·CR을 제거하고 소문자로 비교하며 `%`, `_`는 와일드카드가 아니다. 앞뒤 공백을 제거해 저장하고 공백 제외 최소 2글자, merchant 범위에만 허용한다. 카테고리(major+minor, null 포함)와 시작/종료일 조건은 유지한다. 규칙 우선순위는 merchant exact → 정규화 길이가 긴 merchant prefix → category, 같은 순위는 id 오름차순이다. 명시 연결·개별 제외·대출/할부 우선순위는 그대로다.
+- 목록 항목의 `observed_transaction_count`, `first_observed_date`, `last_observed_date`는 기존 `member_transaction_count`, `first_member_date`, `last_member_date`와 같은 유효 거래 집계의 별칭이다. 관측은 결제 횟수의 추정이 아니라 현재 소속 거래 수다. `low_observation = origin='migration' AND attributes_confirmed_at IS NULL AND count <= 1`; 0건도 포함한다.
+- 목록의 `merge_suggestions[] = {ids, suggested_prefix, target_id}`: 같은 카테고리에서 거래처 끝 ASCII 숫자를 제거한 뒤 공백 제거·소문자화 줄기가 같은 merchant 묶음 2개 이상만 제안한다. 접두어 2글자 이상, 대상은 최소 id. 제안은 동일 계약이라는 확정이 아니다.
+- 합치기는 source의 명시적 `transaction_nature_overrides.commitment_id`를 target으로 옮기고 source 행을 지운다. 거래별 조정 가능성·제외/플래그·출처와 거래 원본은 보존한다. 시작일은 가장 이른 값(하나라도 null이면 무제한 null), 나머지 속성(주기·횟수·금액 종류·조정 가능성·종료일·이름·메모·origin)은 대상 값을 유지한다. 주기·횟수·금액 종류·조정 가능성·종료일 중 충돌이 있으면 대상 확인 시각을 해제하고, 충돌이 없으면 대상 확인 상태를 유지한다. source 확인으로 target을 확인 처리하지 않는다. 규칙 기반 소속은 합친 뒤 규칙으로 재계산되므로 사용자가 확인한 방식·접두어·대상 종료일에 따라 관측과 월말 전망이 달라질 수 있다.
+- 일괄 삭제는 단건 삭제와 같은 의미다. 명시적 소속을 해제하고 비어 있는 override는 제거한다. 거래별 조정 가능성·제외/기타 플래그가 남으면 보존한다. 남은 규칙이 있으면 다시 매칭되고 없으면 수시 지출이 된다. 모든 정기 지급 설정 쓰기는 같은 PostgreSQL 트랜잭션 advisory lock을 사용한다.
+- 0045는 스키마와 뷰만 바꾼다. 자동 데이터 정리는 없다. 스키마가 바뀌므로 이전 가져오기 검토는 재준비해야 하며 이전 구조의 되돌리기는 기존 계약대로 거절한다.
 
 ### Net Worth and Transfer Purpose (T061: 재무상태와 순자산 대조)
 

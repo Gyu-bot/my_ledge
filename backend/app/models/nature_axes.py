@@ -19,6 +19,7 @@ from datetime import date as date_type, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -43,6 +44,9 @@ NATURE_ORIGINS = ("migration", "user", "legacy_edit")
 class RecurringCommitment(TimestampMixin, Base):
     __tablename__ = "recurring_commitments"
     __table_args__ = (
+        CheckConstraint(
+            "merchant_match IN ('exact', 'prefix')", name="ck_recurring_merchant_match"
+        ),
         Index(
             "ix_recurring_commitments_category_merchant",
             "category_major",
@@ -53,6 +57,9 @@ class RecurringCommitment(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     label: Mapped[str | None] = mapped_column(String(200))
     match_scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    merchant_match: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="exact", server_default="exact"
+    )
     merchant: Mapped[str | None] = mapped_column(String(500))
     category_major: Mapped[str] = mapped_column(String(50), nullable=False)
     category_minor: Mapped[str | None] = mapped_column(String(50))

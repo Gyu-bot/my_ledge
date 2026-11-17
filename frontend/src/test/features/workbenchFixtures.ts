@@ -121,8 +121,9 @@ export function txFixture(id: number, overrides: Partial<TransactionResponse> = 
 
 export function recurringFixture(overrides: Partial<RecurringCommitment> = {}): RecurringCommitment {
   return {
-    id: 7, label: null, match_scope: 'merchant', merchant: '샘플 구독', category_major: '샘플 구독료', category_minor: null,
+    id: 7, label: null, match_scope: 'merchant', merchant_match: 'exact', merchant: '샘플 구독', category_major: '샘플 구독료', category_minor: null,
     cycle: 'monthly', total_count: null, amount_kind: 'fixed', adjustability: 'adjustable', start_date: '2026-01-01', end_date: null,
+    observed_transaction_count: 7, first_observed_date: '2026-01-05', last_observed_date: '2026-07-05', low_observation: false,
     attributes_confirmed_at: null, needs_attribute_confirmation: false,
     origin: 'user', memo: null, member_transaction_count: 7, first_member_date: '2026-01-05', last_member_date: '2026-07-05',
     created_at: '', updated_at: '', ...overrides,

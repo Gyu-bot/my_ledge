@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom'
 import { Toaster } from '../../ds/toast'
 import { NatureSettingsPage } from '../../features/workbench/NatureSettingsPage'
-import type { CategoryAdjustabilityDefault, RecurringCommitment } from '../../types/nature'
+import type { CategoryAdjustabilityDefault, RecurringCommitment, RecurringMergeSuggestion } from '../../types/nature'
 import { cubeFixture, dataStatusFixture, failed, query } from './metricsFixtures'
 import { recurringFixture } from './workbenchFixtures'
 
@@ -14,10 +14,13 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   end: vi.fn(),
   remove: vi.fn(),
+  bulkRemove: vi.fn(),
+  merge: vi.fn(),
 }))
 
 let defaults: CategoryAdjustabilityDefault[] = []
 let commitments: RecurringCommitment[] = []
+let suggestions: RecurringMergeSuggestion[] = []
 let commitmentsFail = false
 
 vi.mock('../../hooks/useMetrics', () => ({
@@ -41,10 +44,12 @@ vi.mock('../../hooks/useNature', () => ({
   useCategoryDefaults: () => query({ items: defaults }),
   useSetCategoryDefault: () => ({ mutateAsync: mocks.setDefault, isPending: false }),
   useDeleteCategoryDefault: () => ({ mutateAsync: mocks.deleteDefault, isPending: false }),
-  useRecurringCommitments: () => (commitmentsFail ? failed('503: down') : query({ items: commitments })),
+  useRecurringCommitments: () => (commitmentsFail ? failed('503: down') : query({ items: commitments, merge_suggestions: suggestions })),
   useCreateRecurringCommitment: () => ({ mutateAsync: mocks.create, isPending: false }),
   useUpdateRecurringCommitment: () => ({ mutateAsync: mocks.update, isPending: false }),
   useEndRecurringCommitment: () => ({ mutateAsync: mocks.end, isPending: false }),
+  useMergeRecurringCommitments: () => ({ mutateAsync: mocks.merge, isPending: false }),
+  useBulkDeleteRecurringCommitments: () => ({ mutateAsync: mocks.bulkRemove, isPending: false }),
   useDeleteRecurringCommitment: () => ({ mutateAsync: mocks.remove, isPending: false }),
 }))
 
@@ -66,6 +71,7 @@ beforeEach(() => {
     recurringFixture({ id: 8, label: '샘플 보험', match_scope: 'category', merchant: null, category_major: '샘플 보험료', cycle: null, amount_kind: null, adjustability: null, origin: 'migration', member_transaction_count: 12 }),
     recurringFixture({ id: 9, label: '샘플 끝난 구독', end_date: '2026-03-31' }),
   ]
+  suggestions = []
   commitmentsFail = false
   for (const mock of Object.values(mocks)) mock.mockReset().mockResolvedValue({ id: 99, member_transaction_count: 4 })
 })
@@ -118,7 +124,7 @@ describe('NatureSettingsPage — 정기 지급 묶음', () => {
     fireEvent.change(within(form).getByLabelText('주기'), { target: { value: 'monthly' } })
     fireEvent.click(within(form).getByRole('button', { name: '정기 지급 등록' }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({
-      label: null, match_scope: 'merchant', merchant: '샘플 카페', category_major: '샘플 식비', category_minor: '카페',
+      label: null, match_scope: 'merchant', merchant_match: 'exact', merchant: '샘플 카페', category_major: '샘플 식비', category_minor: '카페',
       cycle: 'monthly', total_count: null, amount_kind: null, adjustability: null, start_date: null, end_date: null, memo: null,
     }))
   })
@@ -188,4 +194,49 @@ it('빈 주기를 저장해도 다른 주기를 미리 고르지 않는다', asy
   expect(within(form).getByLabelText('금액')).toHaveValue('')
   fireEvent.click(within(form).getByRole('button', { name: '고친 내용 저장' }))
   await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ id: 8, data: expect.objectContaining({ cycle: null, amount_kind: null }) }))
+})
+
+
+describe('T066 정기 지급 정리', () => {
+  it('낮은 관측 필터와 관측 기간을 표시하고 확인 뒤 일괄 삭제한다', async () => {
+    commitments = [recurringFixture({ origin: 'migration', low_observation: true, observed_transaction_count: 1 }), recurringFixture({ id: 8, merchant: '샘플 다른 구독' })]
+    renderPage('/data/nature?tab=recurring&observation=low')
+    expect(within(screen.getByRole('list', { name: '정기 지급 묶음' })).getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByText(/관측 1회/)).toHaveTextContent('2026-01-05 ~ 2026-07-05')
+    fireEvent.click(screen.getByRole('button', { name: '보이는 항목 모두 선택' }))
+    fireEvent.click(screen.getByRole('button', { name: '선택 일괄 삭제' }))
+    const dialog = screen.getByRole('alertdialog', { name: '정기 지급 1개 일괄 삭제' })
+    expect(within(dialog).getByText(/명시적 묶음 연결을 해제/)).toBeInTheDocument()
+    expect(mocks.bulkRemove).not.toHaveBeenCalled()
+    fireEvent.change(within(dialog).getByPlaceholderText('확인 문구 입력'), { target: { value: '지우기' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '1개 삭제' }))
+    await waitFor(() => expect(mocks.bulkRemove).toHaveBeenCalledWith([7]))
+  })
+
+  it('제안 접두어를 미리 채우고 대상과 일치 방식을 확인한 뒤 합친다', async () => {
+    commitments = [recurringFixture({ merchant: '샘플 구독01' }), recurringFixture({ id: 8, merchant: '샘플 구독02' })]
+    suggestions = [{ ids: [7, 8], target_id: 7, suggested_prefix: '샘플구독' }]
+    renderPage('/data/nature?tab=recurring')
+    expect(mocks.merge).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '2개를 하나로 합치기' }))
+    const dialog = screen.getByRole('alertdialog', { name: '정기 지급 합치기' })
+    expect(within(dialog).getByLabelText('합친 뒤 거래처·접두어')).toHaveValue('샘플구독')
+    expect(within(dialog).getByLabelText('합친 뒤 일치 방식')).toHaveValue('prefix')
+    fireEvent.change(within(dialog).getByLabelText('합친 뒤 거래처·접두어'), { target: { value: 'a' } })
+    fireEvent.change(within(dialog).getByPlaceholderText('확인 문구 입력'), { target: { value: '합치기' } })
+    expect(within(dialog).getByRole('button', { name: '확인하고 합치기' })).toBeDisabled()
+    fireEvent.change(within(dialog).getByLabelText('남길 대상'), { target: { value: '8' } })
+    fireEvent.change(within(dialog).getByLabelText('합친 뒤 일치 방식'), { target: { value: 'prefix' } })
+    fireEvent.change(within(dialog).getByLabelText('합친 뒤 거래처·접두어'), { target: { value: '샘플구독' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '확인하고 합치기' }))
+    await waitFor(() => expect(mocks.merge).toHaveBeenCalledWith({ target_id: 8, source_ids: [7], merchant_match: 'prefix', merchant: '샘플구독' }))
+  })
+
+  it('서로 다른 카테고리 선택은 합칠 수 없다', () => {
+    commitments = [recurringFixture(), recurringFixture({ id: 8, category_minor: '다른 소분류' })]
+    renderPage('/data/nature?tab=recurring')
+    fireEvent.click(screen.getByRole('button', { name: '보이는 항목 모두 선택' }))
+    expect(screen.getByRole('button', { name: '선택 합치기' })).toBeDisabled()
+    expect(screen.getByText('대분류와 소분류가 같은 항목만 합칠 수 있습니다.')).toBeInTheDocument()
+  })
 })
