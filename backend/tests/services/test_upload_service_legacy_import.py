@@ -200,9 +200,7 @@ async def test_import_transactions_replaces_snapshot_rows_for_same_snapshot_date
         .where(AssetSnapshot.product_name == "KB국민ONE통장-저축예금")
     )
     existing_loan = await db_session.scalar(
-        select(Loan)
-        .where(Loan.snapshot_date == date(2026, 3, 24))
-        .limit(1)
+        select(Loan).where(Loan.snapshot_date == date(2026, 3, 24)).limit(1)
     )
     assert existing_asset is not None
     assert existing_loan is not None

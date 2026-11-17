@@ -17,6 +17,10 @@ from uuid import uuid4
 from sqlalchemy import func, select, text, update
 
 from app.services import upload_rollback_service as rollback_points
+from app.services.auto_classification_service import (
+    apply_enabled_auto_classification_after_upload,
+    get_auto_classification_settings,
+)
 from app.models import Base
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
 from app.models.upload_log import UploadLog
@@ -182,13 +186,23 @@ def restore_typed(value):
     return value
 
 
-def decision_transaction_overrides(entries, decisions):
-    overrides = {}
+async def decision_transaction_projection(db, entries, decisions):
+    overrides, additions = {}, []
     for entry, decision in zip(entries, decisions, strict=True):
-        if decision["action"] == "update":
-            row = UploadPreviewSourceRow.model_validate(entry["incoming_source"])
-            overrides[decision["target_id"]] = {"date": row.date, "amount": row.amount}
-    return overrides
+        if decision["action"] == "keep":
+            continue
+        row = UploadPreviewSourceRow.model_validate(entry["incoming_source"])
+        values = {**row.model_dump(), "merchant": row.description}
+        if decision["action"] == "add":
+            additions.append(values)
+        elif decision["action"] == "update":
+            existing = await db.get(Transaction, decision["target_id"])
+            # 실제 source update와 똑같이 사용자의 거래처 수정과 메모를 보존한다.
+            if existing.merchant != existing.description:
+                values["merchant"] = existing.merchant
+            values.pop("memo", None)
+            overrides[decision["target_id"]] = values
+    return overrides, additions
 
 
 async def snapshot_effects(db, snapshot_date, snapshots, entries=(), decisions=()):
@@ -205,9 +219,14 @@ async def snapshot_effects(db, snapshot_date, snapshots, entries=(), decisions=(
         (r["side"], r["category"], r["product_name"])
         for r in normalized.asset_snapshots
     }
-    overrides = decision_transaction_overrides(entries, decisions)
+    overrides, additions = await decision_transaction_projection(db, entries, decisions)
+    settings = await get_auto_classification_settings(db)
     after["loans"] = await project_loan_repayment_estimates(
-        db, after["loans"], transaction_overrides=overrides
+        db,
+        after["loans"],
+        transaction_overrides=overrides,
+        transaction_additions=additions,
+        apply_loan_rules=settings.apply_loan_rules_on_upload,
     )
     for name, model in SNAPSHOT_MODELS.items():
         before = [
@@ -302,7 +321,8 @@ async def snapshot_effects(db, snapshot_date, snapshots, entries=(), decisions=(
         "missing_profile_policy": "preserve existing profile unchanged when optional profile absent",
         "source_evidence": "append raw BankSalad evidence in the same transaction",
         "metadata_carry_forward": "shared exact asset identities and same-date loan user metadata",
-        "loan_estimates": "recompute repayment estimates for incoming latest loan keys; user fields retained",
+        "loan_estimates": "recompute repayment estimates for incoming latest loan keys after enabled person-registered rules; manual links and user fields retained",
+        "apply_loan_rules_on_upload": settings.apply_loan_rules_on_upload,
         "digest_scope": "all registered finance tables except review operations; conservative invalidation",
     }
 
@@ -710,7 +730,7 @@ async def apply_review(
         for entry, decision in zip(op.payload["entries"], values, strict=True):
             if decision["action"] == "keep":
                 kept.append(entry["entry_id"])
-                continue  # no lifecycle, timestamp, user-field or link touch
+                continue  # no source/lifecycle edit; enabled registered rules run below
             row = parsed_rows[int(entry["entry_id"]) - 1]
             if (
                 UploadPreviewSourceRow.model_validate(row).model_dump(mode="json")
@@ -743,6 +763,7 @@ async def apply_review(
                     "transaction_id": tx.id,
                 }
             )
+        await apply_enabled_auto_classification_after_upload(db)
         normalized = await replace_snapshots(
             db, snapshot_date, snapshots, preserve_missing_profile=True
         )

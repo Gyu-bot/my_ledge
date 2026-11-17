@@ -316,3 +316,78 @@ async def test_legacy_upload_creates_point_and_releases_lock(pg, tmp_path):
         await rb.rollback_upload(db, result.upload_id, accept_changes=False)
     async with pg() as db:
         assert await state(db) == before
+
+
+@pytest.mark.parametrize("mode", ["explicit", "reviewed"])
+async def test_rule_applied_upload_rollback_restores_links_and_detects_link_edits(
+    pg, tmp_path, mode
+):
+    from app.models.auto_classification import LoanMerchantRule
+    from app.models.loan_account import LoanAccount
+    from app.models.loan_transaction_link import LoanTransactionLink
+
+    assert "loan_transaction_links" in {table.name for table in rb.scope_tables()}
+    async with pg() as db:
+        account = LoanAccount(lender="synthetic-lender", product_name="loan")
+        manual = tx(name="synthetic-rule", seconds=1)
+        db.add_all([account, manual])
+        await db.flush()
+        db.add_all(
+            [
+                LoanMerchantRule(
+                    merchant="synthetic-rule",
+                    loan_account_id=account.id,
+                    repayment_type="mixed",
+                ),
+                LoanTransactionLink(
+                    transaction_id=manual.id,
+                    loan_account_id=account.id,
+                    source="manual",
+                    repayment_type="interest",
+                ),
+            ]
+        )
+        await db.commit()
+        before = await state(db)
+        data = workbook([row("synthetic-rule", -200)])
+        if mode == "explicit":
+            upload_id = (await safe_apply(db, data, tmp_path)).upload_id
+        else:
+            plan = await prepare(db, data)
+            upload_id = (await apply(db, plan, tmp_path, data)).result.upload_id
+    async with pg() as db:
+        assert (
+            await db.scalar(select(func.count()).select_from(LoanTransactionLink)) == 2
+        )
+        point = await db.scalar(select(UploadRollbackPoint))
+        assert len(point.snapshot["loan_transaction_links"]) == 1
+        assert (await rb.list_points(db))[0]["changed_tables"] == []
+        # 업로드가 만든 연결 자체는 post fingerprint에 포함된다. 이후 편집만 감지한다.
+        await db.execute(
+            update(LoanTransactionLink)
+            .where(LoanTransactionLink.source == "auto")
+            .values(memo="synthetic later edit")
+        )
+        await db.commit()
+        assert (await rb.list_points(db))[0]["changed_tables"] == [
+            "loan_transaction_links"
+        ]
+        with pytest.raises(rb.RollbackError) as refused:
+            await rb.rollback_upload(db, upload_id, accept_changes=False)
+        assert refused.value.changed_tables == ["loan_transaction_links"]
+    async with pg() as db:
+        result = await rb.rollback_upload(db, upload_id, accept_changes=True)
+        assert result["restored_counts"]["loan_transaction_links"] == 1
+    async with pg() as db:
+        assert await state(db) == before
+        link = await db.scalar(select(LoanTransactionLink))
+        assert (link.source, link.repayment_type) == ("manual", "interest")
+
+
+async def test_pg_reviewed_rule_projection_matches_applied_estimates(pg, tmp_path):
+    from test_upload_loan_rule_application import (
+        test_reviewed_preview_projects_new_rule_links_without_writes,
+    )
+
+    async with pg() as db:
+        await test_reviewed_preview_projects_new_rule_links_without_writes(db, tmp_path)

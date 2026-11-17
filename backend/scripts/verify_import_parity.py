@@ -39,7 +39,9 @@ async def _run(
 ) -> dict[str, object]:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     try:
         async with session_factory() as session:

@@ -176,10 +176,7 @@ async def test_installment_suggestions_expose_conflicts_without_linked_duplicate
     assert payload["items"][0]["transaction"]["transaction_id"] == candidate.id
     assert payload["items"][0]["suggested_installment_number"] == 2
     assert payload["items"][0]["is_usable"] is False
-    assert (
-        payload["items"][0]["conflict_reason"]
-        == "installment_number_already_linked"
-    )
+    assert payload["items"][0]["conflict_reason"] == "installment_number_already_linked"
 
 
 async def test_installment_suggestions_reject_malformed_inputs(

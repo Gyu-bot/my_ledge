@@ -5,9 +5,10 @@ from statistics import median
 from typing import TypedDict, assert_never
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.auto_classification import LoanMerchantRule
 from app.models.loan import Loan
 from app.models.loan_account import LoanAccount
 from app.models.loan_candidate_review import LoanCandidateReview
@@ -452,9 +453,14 @@ def loan_repayment_estimate_values(
 
 
 async def project_loan_repayment_estimates(
-    db_session, loans, *, transaction_overrides=None
+    db_session,
+    loans,
+    *,
+    transaction_overrides=None,
+    transaction_additions=(),
+    apply_loan_rules=False,
 ):
-    """Read only: incoming loans are latest; adds have no pre-existing links."""
+    """Read-only loan estimate after approved transactions and registered rules."""
     if not loans:
         return []
     effective = (
@@ -469,6 +475,8 @@ async def project_loan_repayment_estimates(
             reference_date=row["snapshot_date"],
             lookback_months=effective.monthly_payment_estimate_lookback_months,
             transaction_overrides=transaction_overrides,
+            transaction_additions=transaction_additions,
+            apply_loan_rules=apply_loan_rules,
         )
         values = loan_repayment_estimate_values(
             row,
@@ -740,6 +748,27 @@ def _build_loan_transaction_mapping_query(
         Transaction.category_minor_user,
         Transaction.category_minor,
     ).label("effective_category_minor")
+    # Same precedence as rule application: merchant before description. Reading
+    # this suggestion does not depend on the upload toggle and never writes links.
+    rule_account_id = (
+        select(LoanMerchantRule.loan_account_id)
+        .where(
+            or_(
+                (LoanMerchantRule.match_field == "merchant")
+                & (LoanMerchantRule.merchant == Transaction.merchant),
+                (LoanMerchantRule.match_field == "description")
+                & (LoanMerchantRule.merchant == Transaction.description),
+            )
+        )
+        .order_by(case((LoanMerchantRule.match_field == "merchant", 0), else_=1))
+        .limit(1)
+        .correlate(Transaction)
+        .scalar_subquery()
+    )
+    suggested_account_id = case(
+        (LoanTransactionLink.transaction_id.is_(None), rule_account_id),
+        else_=None,
+    ).label("suggested_loan_account_id")
     candidate_patterns = ["대출", "상환", "이자", "원리금", "원금·이자", "원금 이자"]
     text_columns = (
         effective_category_major,
@@ -751,6 +780,7 @@ def _build_loan_transaction_mapping_query(
     candidate_conditions = [
         LoanTransactionLink.transaction_id.is_not(None),
         effective_category_major == "금융",
+        rule_account_id.is_not(None),
     ]
     for pattern in candidate_patterns:
         like_pattern = f"%{pattern}%"
@@ -782,6 +812,7 @@ def _build_loan_transaction_mapping_query(
             LoanAccount.product_name,
             LoanAccount.display_name_user,
             LoanAccount.loan_kind,
+            suggested_account_id,
         )
         .select_from(Transaction)
         .outerjoin(
@@ -878,6 +909,10 @@ def _serialize_mapping_row(row) -> LoanTransactionMappingItem:
         payment_method=row["payment_method"],
         memo=row["transaction_memo"],
         link=link,
+        suggested_loan_account_id=row["suggested_loan_account_id"],
+        suggestion_basis="rule"
+        if row["suggested_loan_account_id"] is not None
+        else None,
     )
 
 
@@ -1078,6 +1113,8 @@ async def _load_linked_repayment_observations(
     reference_date: date,
     lookback_months: int,
     transaction_overrides: dict[int, dict] | None = None,
+    transaction_additions=(),
+    apply_loan_rules=False,
 ) -> LinkedRepaymentObservations:
     window_start = _month_window_start(reference_date, lookback_months)
     window_end = _complete_month_window_end(reference_date)
@@ -1088,7 +1125,12 @@ async def _load_linked_repayment_observations(
             "observation_months": [],
         }
 
-    lines = repayment_flow_lines(transaction_overrides)
+    lines, loan_links = repayment_flow_lines(
+        transaction_overrides,
+        transaction_additions=transaction_additions,
+        apply_loan_rules=apply_loan_rules,
+        include_links=True,
+    )
     scope = (
         select(lines)
         .join(LoanAccount, LoanAccount.id == lines.c.loan_account_id)
@@ -1108,10 +1150,10 @@ async def _load_linked_repayment_observations(
     # Repayment type follows the attributed purchase, including allocated refunds.
     # This is evidence for the estimator, not another amount aggregation.
     type_rows = await db_session.execute(
-        select(scope.c.period, LoanTransactionLink.repayment_type)
+        select(scope.c.period, loan_links.c.repayment_type)
         .join(
-            LoanTransactionLink,
-            LoanTransactionLink.transaction_id == scope.c.attributed_transaction_id,
+            loan_links,
+            loan_links.c.transaction_id == scope.c.attributed_transaction_id,
         )
         .distinct()
     )

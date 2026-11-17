@@ -195,7 +195,7 @@ Coverage and income model:
 
 Expense model (T064 round 2):
 
-0. Partition (R6). Expense rows are read from `vw_metric_flow_lines` (12 months before the reference month through `as_of_date`; monthly assumptions still learn from the six-month window). Every line goes to exactly one component, in this order: `commitment_kind=loan` (loan link) → loan; `commitment_kind=installment` → installment; an unlinked line equal to a person-registered loan merchant rule (`loan_merchant_rules`, merchant or description) → loan (R1); an unlinked line matching an active installment plan exactly (amount, normalized merchant, payment method, ±7 days of a scheduled date) → installment (R2); `commitment_kind=recurring` (T056 recurring commitment) → recurring, grouped by `recurring_commitment_id`; an unlinked line a person marked as installment (`mapping_note=installment_link_unconfirmed`) → installment; everything else → variable. The legacy `cost_kind`/`recurring_payment_kind` columns are no longer read directly; they reach the forecast only through the T056 write-through. Nothing is linked or classified by the forecast.
+0. Partition (R6). Expense rows are read from `vw_metric_flow_lines` (12 months before the reference month through `as_of_date`; monthly assumptions still learn from the six-month window). Every line goes to exactly one component, in this order: `commitment_kind=loan` (loan link) → loan; `commitment_kind=installment` → installment; an unlinked line equal to a person-registered loan merchant rule (`loan_merchant_rules`, merchant or description) → loan (R1); an unlinked line matching an active installment plan exactly (exact amount, shared normalized merchant, payment method, ±7 days of the nearest valid scheduled date, including month-boundary posting) → installment (R2); `commitment_kind=recurring` (T056 recurring commitment) → recurring, grouped by `recurring_commitment_id`; an unlinked line a person marked as installment (`mapping_note=installment_link_unconfirmed`) → installment; everything else → variable. The legacy `cost_kind`/`recurring_payment_kind` columns are no longer read directly; they reach the forecast only through the T056 write-through. Nothing is linked or classified by the forecast.
 1. Loan (R1). For each latest-snapshot loan with a balance, the loan is added only when its loan account has an expense line (linked or rule-matched) in the latest adequately covered closed month or in the reference month. Otherwise it is listed in `not_in_expense_commitments` with a loan-component warning and adds nothing (the repayment may be booked as a transfer, paid from an account outside the ledger, or unlinked and therefore already in the variable baseline). An added loan contributes `max(round(monthly_payment) - this month's linked or rule-matched repayments, 0)`; rule-matched repayments are counted in `link_unconfirmed_*` with a warning. A missing monthly payment on an added loan makes the component incomplete. An unlinked, non-rule expense this month whose category contains `대출` withholds the loan component only when at least one loan is added (it could be that loan's repayment). No repayment day is inferred.
 2. Installment (R2, R3). Active current-month schedules subtract linked actuals, or a unique unlinked plan-rule match this month (counted in `link_unconfirmed_*`, plan-name-prefixed warning). A plan's current occurrence is any payment linked to that plan and dated in the reference month, whatever installment number the link carries (R3); a different number adds a warning instead of adding the scheduled amount again. Without such a payment, the link of the computed number elsewhere in the six-month window still counts. Plan-rule matches and person-marked installment rows never enter the variable baseline; a person-marked row this month without a link withholds the component. Ambiguity or loan overlap remains unknown. A past unlinked due amount is excluded from future obligations and reported for review.
 3. Recurring (R6, R5, R4). One source per registered commitment, from its flow lines. Gross outgoing payments drive learning; current gross payments are subtracted; refunds reduce actual net expense but never restore an observed obligation. Stable evidence needs at least three covered months within the ±30% median band and the immediately previous calendar month among them. A weak source with current observations is kept (low confidence) only when the commitment's `cycle` is `monthly`. If only a current gross payment exists, that cycle is observed and nothing further is added (review warning). Refund-only sources remain unknown. If the previous month has inadequate overall coverage, an older stable pattern ending in the latest adequately covered month is retained with low confidence. A commitment with no source (stopped, unstable without a monthly cycle) is simply not assumed: its lines never move into the variable baseline (R5). A commitment `end_date` caps the remaining days; a commitment ended before the reference month without a current payment yields no source. A `cycle=yearly` commitment is assumed only in the month it was paid last year (12 months earlier), with that month's payment total as the baseline and the same remaining-day rule.
@@ -700,10 +700,12 @@ Single and bulk PATCH share field-presence semantics: omitted fields preserve st
   - `items[]`
     - transaction fields: `transaction_id`, `date`, `time`, `type`, effective category, `description`, `merchant`, `amount`, `currency`, `payment_method`, `memo`
     - `link: LoanTransactionLinkItem | null`
+    - `suggested_loan_account_id: int | null`, `suggestion_basis: "rule" | null` — 미연결 행에만 제공
 - Behavior:
   - only returns visible `type="지출"` loan repayment candidates
   - excludes deleted and merged transactions
   - candidate scope is intentionally broad for manual mapping: already linked rows, `금융` major-category expense rows, or rows whose category/description/merchant/payment method contains loan repayment terms such as `대출`, `상환`, `이자`, `원리금`, `원금·이자`
+  - 사람이 등록한 `LoanMerchantRule`과 정확히 일치하는 행도 후보에 포함한다. 거래처 규칙이 원문 규칙보다 우선하며 업로드 적용 설정이 꺼져 있어도 제안은 제공한다. GET은 연결을 생성하지 않고 이미 연결된 행에는 제안을 반환하지 않는다.
   - `search` matches transaction text and linked loan account lender/product text
   - ordered by `date desc, time desc, id desc`
 
@@ -853,8 +855,9 @@ Single and bulk PATCH share field-presence semantics: omitted fields preserve st
   - all active plans participate in conflict detection before `installment_plan_id` filters returned suggestions
   - suggests only expense (`지출`) rows with `amount < 0`, not deleted, and not already linked
   - ordering is deterministic: `expected_billing_date`, `plan.display_name`, `transaction.date`, `transaction.id`
-  - amount/날짜 일치성은 허용 오차(`amount tolerance`, `billing day tolerance`)를 적용한 뒤 점수(score)와 confidence를 산정한다
-  - KRW and a configured plan payment method must match. Exact merchant matching is preferred; confirmed alias continuity can propose an alternate merchant only with exact amount/payment evidence, at most medium confidence. A similar amount alone is insufficient.
+  - 금액 허용 오차는 월 납부액의 ±10%(최소 10,000), 날짜는 예정일 ±7일이다. 날짜·거래처 정규화·월경계 처리는 전망과 같은 읽기 전용 predicate를 쓴다. 달 차이로 계산한 회차와 앞뒤 회차 중 1..총 횟수 내 가장 가까운 예정일을 고른다. 첫/마지막 예정일의 월경계 이동도 허용한다.
+  - 기존 전망 숫자 보존을 위해 날짜 창은 전망의 ±7일을 유지하고 제안을 확장한다. ±4~7일 제안은 최대 medium(점수 89)이며 high 일괄 수락 대상이 아니다. 전망은 정확한 금액만 허용하는 부분집합이다. 거래처는 소문자·연속 공백 정규화를 공유한다.
+  - KRW and a configured plan payment method must match. Normalized merchant matching is preferred; confirmed alias continuity can propose an alternate merchant only with exact amount/payment evidence, at most medium confidence. A similar amount alone is insufficient.
   - ambiguous plans, competing transactions and occupied installments are unusable suggestions; no GET creates or changes links
   - 제안은 advisory only이며, 제안된 회차를 UI가 수동 링크 payload(`installment_number`)로 전달할 수 있다
 
@@ -1403,11 +1406,12 @@ Historical unsupported default scopes remain visible in `saved`; `effective.defa
 #### `GET /api/v1/auto-classification/settings`
 
 - Auth: API key required
-- Purpose: read upload auto-apply toggles for category, recurring category, and loan merchant rules
+- Purpose: 사람이 등록한 대출 규칙의 업로드 적용 설정을 읽는다.
 - Response fields:
-  - `apply_cost_rules_on_upload`
-  - `apply_loan_rules_on_upload`
-  - `apply_recurring_rules_on_upload`
+  - `apply_loan_rules_on_upload` (기본값 `true`)
+- T065 이행에서 기존 저장 행도 `true`로 전환한다. 이후 사용자가 PATCH로 끌 수 있다. `/upload`, `/upload/apply`와 reviewed apply에서 전체 유효 지출 원장에 적용한다. 선택 외 기존 행도 재검사하며 추론 이력은 자동 연결하지 않는다.
+- 현재 두 apply 경로에서는 거래·규칙 연결·대출 추정·되돌리기 지점을 같은 트랜잭션으로 반영한다. rollback snapshot은 `loan_transaction_links`를 포함하며, 반영 후 변경 감지도 해당 표를 검사한다. 수동 연결(`source=manual`)은 보존한다.
+- reviewed apply는 규칙 적용에 따른 대출 추정 변화도 승인 미리보기에 투영하며 승인 후 규칙/설정 변경은 재검토가 필요하다.
 
 #### `PATCH /api/v1/auto-classification/settings`
 

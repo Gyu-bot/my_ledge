@@ -65,12 +65,17 @@ async def capture(url):
                 ).all()
             )
             rows = {
-                name: [
-                    dict(r)
-                    for r in (
-                        await db.execute(text(f'SELECT * FROM "{name}"'))
-                    ).mappings()
-                ]
+                # Views without ORDER BY have no row-order contract. Compare
+                # every restored value deterministically across view recreation.
+                name: sorted(
+                    [
+                        dict(r)
+                        for r in (
+                            await db.execute(text(f'SELECT * FROM "{name}"'))
+                        ).mappings()
+                    ],
+                    key=lambda row: json.dumps(row, sort_keys=True, default=str),
+                )
                 for name in definitions
             }
             transactions = [

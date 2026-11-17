@@ -202,9 +202,9 @@ async def test_loan_merchant_rules_can_match_original_description(
     assert link.source == "auto"
 
 
-async def test_auto_classification_settings_default_to_disabled(
+async def test_auto_classification_settings_default_to_enabled(
     db_session: AsyncSession,
 ) -> None:
     settings = await get_auto_classification_settings(db_session)
 
-    assert settings.apply_loan_rules_on_upload is False
+    assert settings.apply_loan_rules_on_upload is True

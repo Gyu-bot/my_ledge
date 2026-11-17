@@ -69,7 +69,8 @@ async def detail_db(request, db_session):
     parsed = make_url(url)
     assert parsed.host in {"localhost", "127.0.0.1", "::1"}
     assert parsed.port not in {None, 5432}
-    assert parsed.username == parsed.database == "review_synthetic"
+    assert parsed.username == "review_synthetic"
+    assert parsed.database == "review_synthetic" or parsed.database.startswith("t065_")
     schema = "review_detail_" + uuid4().hex
     admin = create_async_engine(url)
     async with admin.begin() as conn:

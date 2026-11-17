@@ -31,7 +31,9 @@ def available_candidates(
     reserved_existing_ids: set[int],
 ) -> list[Transaction]:
     return [
-        candidate for candidate in candidates if candidate.id not in reserved_existing_ids
+        candidate
+        for candidate in candidates
+        if candidate.id not in reserved_existing_ids
     ]
 
 

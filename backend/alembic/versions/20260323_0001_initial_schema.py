@@ -30,15 +30,41 @@ def upgrade() -> None:
         sa.Column("category_minor_user", sa.String(length=50), nullable=True),
         sa.Column("description", sa.String(length=500), nullable=False),
         sa.Column("amount", sa.Integer(), nullable=False),
-        sa.Column("currency", sa.String(length=5), server_default=sa.text("'KRW'"), nullable=False),
+        sa.Column(
+            "currency",
+            sa.String(length=5),
+            server_default=sa.text("'KRW'"),
+            nullable=False,
+        ),
         sa.Column("payment_method", sa.String(length=100), nullable=True),
         sa.Column("memo", sa.Text(), nullable=True),
-        sa.Column("is_deleted", sa.Boolean(), server_default=sa.false(), nullable=False),
+        sa.Column(
+            "is_deleted", sa.Boolean(), server_default=sa.false(), nullable=False
+        ),
         sa.Column("merged_into_id", sa.Integer(), nullable=True),
-        sa.Column("source", sa.String(length=10), server_default=sa.text("'import'"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["merged_into_id"], ["transactions.id"], name=op.f("fk_transactions_merged_into_id_transactions")),
+        sa.Column(
+            "source",
+            sa.String(length=10),
+            server_default=sa.text("'import'"),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["merged_into_id"],
+            ["transactions.id"],
+            name=op.f("fk_transactions_merged_into_id_transactions"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_transactions")),
     )
     op.create_index("idx_tx_datetime", "transactions", ["date", "time"], unique=False)
@@ -51,9 +77,20 @@ def upgrade() -> None:
         sa.Column("category", sa.String(length=50), nullable=False),
         sa.Column("product_name", sa.String(length=200), nullable=False),
         sa.Column("amount", sa.Numeric(15, 2), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_asset_snapshots")),
-        sa.UniqueConstraint("snapshot_date", "side", "category", "product_name", name=op.f("uq_asset_snapshots_snapshot_date_side_category_product_name")),
+        sa.UniqueConstraint(
+            "snapshot_date",
+            "side",
+            "category",
+            "product_name",
+            name=op.f("uq_asset_snapshots_snapshot_date_side_category_product_name"),
+        ),
     )
 
     op.create_table(
@@ -66,9 +103,19 @@ def upgrade() -> None:
         sa.Column("cost_basis", sa.Numeric(15, 2), nullable=True),
         sa.Column("market_value", sa.Numeric(15, 2), nullable=True),
         sa.Column("return_rate", sa.Numeric(8, 4), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_investments")),
-        sa.UniqueConstraint("snapshot_date", "broker", "product_name", name=op.f("uq_investments_snapshot_date_broker_product_name")),
+        sa.UniqueConstraint(
+            "snapshot_date",
+            "broker",
+            "product_name",
+            name=op.f("uq_investments_snapshot_date_broker_product_name"),
+        ),
     )
 
     op.create_table(
@@ -83,15 +130,30 @@ def upgrade() -> None:
         sa.Column("interest_rate", sa.Numeric(5, 2), nullable=True),
         sa.Column("start_date", sa.Date(), nullable=True),
         sa.Column("maturity_date", sa.Date(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_loans")),
-        sa.UniqueConstraint("snapshot_date", "lender", "product_name", name=op.f("uq_loans_snapshot_date_lender_product_name")),
+        sa.UniqueConstraint(
+            "snapshot_date",
+            "lender",
+            "product_name",
+            name=op.f("uq_loans_snapshot_date_lender_product_name"),
+        ),
     )
 
     op.create_table(
         "upload_logs",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("uploaded_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "uploaded_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("filename", sa.String(length=200), nullable=True),
         sa.Column("snapshot_date", sa.Date(), nullable=True),
         sa.Column("tx_total", sa.Integer(), nullable=True),

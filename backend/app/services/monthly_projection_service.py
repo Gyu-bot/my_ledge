@@ -54,6 +54,7 @@ from app.schemas.income_projection import (
     income_source_key,
 )
 from app.services.income_expectations_service import get_income_expectations
+from app.services.installment_plan_match import match_installment_plan
 from app.services.settings_service import (
     baseline_start_period,
     get_comparison_settings,
@@ -547,16 +548,15 @@ def _income_sources(
 
 
 def _plan_matches(row: dict[str, Any], plan: InstallmentPlan) -> bool:
-    end = _shift_month(plan.first_payment_date, plan.total_installments - 1)
-    due = _due(row["date"], plan.first_payment_date.day)
     return (
-        abs(row["amount"]) == plan.monthly_amount
-        and abs((row["date"] - due).days) <= 7
-        and income_source_key(row["merchant"]) == income_source_key(plan.merchant)
-        and (
-            not plan.payment_method or row.get("payment_method") == plan.payment_method
+        match_installment_plan(
+            plan=plan,
+            transaction_date=row["date"],
+            amount=row["amount"],
+            merchant=row["merchant"],
+            payment_method=row.get("payment_method"),
         )
-        and plan.first_payment_date.replace(day=1) <= row["date"] <= _month_end(end)
+        is not None
     )
 
 
@@ -1243,15 +1243,30 @@ def _expense_components(
     installment_unconfirmed: list[dict[str, Any]] = []
     used_actual_ids: set[int] = set()
     for plan in plans:
+        candidates = [
+            row
+            for row in partitions["installment"]
+            if row["transaction_id"] not in used_actual_ids
+            and row["transaction_id"] not in link_map
+            and row.get("line_kind") != "refund_allocation"
+            and _plan_matches(row, plan)
+            and _period(row["date"]) == period
+            and -row["amount"] == plan.monthly_amount
+        ]
         offset = (
             (reference.year - plan.first_payment_date.year) * 12
             + reference.month
             - plan.first_payment_date.month
         )
         if offset < 0 or offset >= plan.total_installments:
-            continue
-        number = offset + 1
-        due = _shift_month(plan.first_payment_date, offset)
+            # A first/final payment may post across the plan's month range.
+            # Include that observed occurrence without extending its schedule.
+            if not candidates:
+                continue
+            number = min(max(offset + 1, 1), plan.total_installments)
+        else:
+            number = offset + 1
+        due = _shift_month(plan.first_payment_date, number - 1)
         plan_links = [
             link
             for link in links
@@ -1280,17 +1295,6 @@ def _expense_components(
         # Read-only reconciliation (R2): exact plan payer/method, date, and
         # amount. Never create a mapping automatically; show it as unconfirmed.
         if not matched:
-            candidates = [
-                row
-                for row in partitions["installment"]
-                if row["transaction_id"] not in used_actual_ids
-                and row["transaction_id"] not in link_map
-                and row.get("line_kind") != "refund_allocation"
-                and _plan_matches(row, plan)
-                and _period(row["date"]) == period
-                and abs((row["date"] - due).days) <= 7
-                and -row["amount"] == plan.monthly_amount
-            ]
             if len(candidates) == 1:
                 matched = candidates
                 installment_unconfirmed.extend(candidates)

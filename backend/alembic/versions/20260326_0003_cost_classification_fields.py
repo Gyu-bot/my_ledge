@@ -18,7 +18,9 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("transactions", sa.Column("cost_kind", sa.String(length=20), nullable=True))
+    op.add_column(
+        "transactions", sa.Column("cost_kind", sa.String(length=20), nullable=True)
+    )
     op.add_column(
         "transactions",
         sa.Column("fixed_cost_necessity", sa.String(length=20), nullable=True),

@@ -18,7 +18,9 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("transactions", sa.Column("merchant", sa.String(length=500), nullable=True))
+    op.add_column(
+        "transactions", sa.Column("merchant", sa.String(length=500), nullable=True)
+    )
     op.execute("UPDATE transactions SET merchant = description WHERE merchant IS NULL")
     op.alter_column("transactions", "merchant", nullable=False)
 

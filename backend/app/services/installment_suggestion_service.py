@@ -1,6 +1,5 @@
 from collections import Counter, defaultdict
 from dataclasses import replace
-from datetime import date
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -18,9 +17,12 @@ from app.services.installment_suggestion_types import (
     InstallmentSuggestionCandidate,
     serialize_installment_suggestion,
 )
-from app.services.installment_service import _add_months, _inactive_transaction_state
+from app.services.installment_service import _inactive_transaction_state
+from app.services.installment_plan_match import (
+    match_installment_plan,
+    normalized_plan_merchant,
+)
 
-_BILLING_DATE_TOLERANCE_DAYS = 3
 _AMOUNT_TOLERANCE_RATIO = 0.10
 _AMOUNT_TOLERANCE_FLOOR = 10_000
 
@@ -216,22 +218,21 @@ def _match_transaction_to_plan(
     )
     if merchant_reason is None:
         return None
-    installment_number = _suggest_installment_number(
-        first_payment_date=plan.first_payment_date,
+    match = match_installment_plan(
+        plan=plan,
         transaction_date=transaction.date,
+        amount=transaction.amount,
+        merchant=transaction.merchant,
+        payment_method=transaction.payment_method,
+        amount_tolerance=_amount_tolerance(plan.monthly_amount),
+        confirmed_merchant_continuity=True,
     )
-    if installment_number < 1 or installment_number > plan.total_installments:
+    if match is None:
         return None
-    expected_billing_date = _add_months(
-        plan.first_payment_date,
-        installment_number - 1,
-    )
-    amount_delta = abs(abs(transaction.amount) - plan.monthly_amount)
-    if amount_delta > _amount_tolerance(plan.monthly_amount):
-        return None
-    billing_day_delta = abs((transaction.date - expected_billing_date).days)
-    if billing_day_delta > _BILLING_DATE_TOLERANCE_DAYS:
-        return None
+    installment_number = match.installment_number
+    expected_billing_date = match.expected_billing_date
+    amount_delta = match.amount_delta
+    billing_day_delta = match.billing_day_delta
     score, confidence, reason_labels = _score_match(
         transaction=transaction,
         plan=plan,
@@ -275,7 +276,9 @@ def _merchant_continuity_reason(
     linked_evidence: list[Transaction],
     alias_rules: list[MerchantAliasRule],
 ) -> str | None:
-    if transaction.merchant == plan.merchant:
+    if normalized_plan_merchant(transaction.merchant) == normalized_plan_merchant(
+        plan.merchant
+    ):
         return "same_merchant"
     # Alias/description continuity is only evidence for review. Require exact
     # amount and an observed payment method; loose text similarity is insufficient.
@@ -310,19 +313,6 @@ def _merchant_continuity_reason(
     return None
 
 
-def _suggest_installment_number(
-    *,
-    first_payment_date: date,
-    transaction_date: date,
-) -> int:
-    return (
-        (transaction_date.year - first_payment_date.year) * 12
-        + transaction_date.month
-        - first_payment_date.month
-        + 1
-    )
-
-
 def _amount_tolerance(monthly_amount: int) -> int:
     return max(int(monthly_amount * _AMOUNT_TOLERANCE_RATIO), _AMOUNT_TOLERANCE_FLOOR)
 
@@ -351,7 +341,9 @@ def _score_match(
     ):
         score += 5
         reason_labels.append("same_payment_method")
-    capped_score = min(score, 100)
+    # Preserve the forecast's seven-day window in suggestions, but keep
+    # wider date deviations out of high-confidence bulk confirmation.
+    capped_score = min(score, 89 if billing_day_delta > 3 else 100)
     if capped_score >= 90:
         confidence: InstallmentSuggestionConfidence = "high"
     elif capped_score >= 80:

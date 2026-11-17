@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.transaction import Transaction
 from app.parsers.transactions import TransactionRow
 from app.services.upload_service import import_transactions_from_workbook
-from test_upload_service_legacy_helpers import parse_transactions_from_bytes, transaction_conditions
+from test_upload_service_legacy_helpers import (
+    parse_transactions_from_bytes,
+    transaction_conditions,
+)
 
 
 type TransactionReconciliationKey = tuple[
