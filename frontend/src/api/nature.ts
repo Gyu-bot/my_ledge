@@ -4,6 +4,8 @@ import type {
   CategoryAdjustabilityDefault,
   CategoryAdjustabilityDefaultRequest,
   RecurringCommitment,
+  RecurringMergeSuggestion,
+  RecurringCommitmentMergeRequest,
   RecurringCommitmentCreateRequest,
   RecurringCommitmentUpdateRequest,
   TransactionNature,
@@ -29,7 +31,7 @@ export const natureApi = {
 
   deleteCategoryDefault: (id: number) => apiFetch<void>(`/nature/category-defaults/${id}`, { method: 'DELETE' }),
 
-  commitments: () => apiFetch<{ items: RecurringCommitment[]; pending_confirmation_count: number }>('/nature/recurring-commitments'),
+  commitments: () => apiFetch<{ items: RecurringCommitment[]; pending_confirmation_count: number; merge_suggestions: RecurringMergeSuggestion[] }>('/nature/recurring-commitments'),
 
   createCommitment: (data: RecurringCommitmentCreateRequest) =>
     apiFetch<RecurringCommitment>('/nature/recurring-commitments', {
@@ -53,6 +55,12 @@ export const natureApi = {
     }),
 
   deleteCommitment: (id: number) => apiFetch<void>(`/nature/recurring-commitments/${id}`, { method: 'DELETE' }),
+
+  mergeCommitments: (data: RecurringCommitmentMergeRequest) =>
+    apiFetch<RecurringCommitment>('/nature/recurring-commitments/merge', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+
+  bulkDeleteCommitments: (ids: number[]) =>
+    apiFetch<void>('/nature/recurring-commitments/bulk-delete', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ ids }) }),
 
   transaction: (id: number) => apiFetch<TransactionNature>(`/nature/transactions/${id}`),
 

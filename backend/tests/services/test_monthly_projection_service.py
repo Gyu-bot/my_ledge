@@ -1078,3 +1078,41 @@ async def test_ambiguous_installment_matches_still_block_month_end(db_session):
     assert result.expected_remaining_expense is None
     assert any("여러 건" in reason for reason in result.missing_reasons)
     assert recurring_source(result, "Example New Subscription").confidence == "low"
+
+
+async def test_t066_prefix_next_month_and_exact_projection_conservation(db_session):
+    """다음 달 다른 끝 숫자도 같은 약정이며 exact 기준 전망 숫자를 보존한다."""
+    from app.models.nature_axes import RecurringCommitment
+
+    await seed_history(db_session)
+    await classify(db_session)
+    commitment = await db_session.scalar(
+        select(RecurringCommitment).where(
+            RecurringCommitment.merchant == "Example Recurring"
+        )
+    )
+    assert commitment is not None
+    db_session.add(tx(REFERENCE, -5_000, merchant="Example Recurring", category="생활"))
+    await db_session.commit()
+    baseline = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    rows = (
+        await db_session.scalars(
+            select(Transaction).where(Transaction.merchant == "Example Recurring")
+        )
+    ).all()
+    for row in rows:
+        row.merchant = f"Example Recurring{row.date.month:02d}"
+    commitment.merchant_match = "prefix"
+    await db_session.commit()
+    after = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    assert after.expected_remaining_expense == baseline.expected_remaining_expense
+    before_source = recurring_source(baseline)
+    after_source = recurring_source(after)
+    assert (
+        after_source.observed_payment_amount
+        == before_source.observed_payment_amount
+        == 5_000
+    )
+    assert after_source.expected_remaining == before_source.expected_remaining == 0
+    assert after.projected_month_end_net == baseline.projected_month_end_net
+    assert after.model_dump() == baseline.model_dump()

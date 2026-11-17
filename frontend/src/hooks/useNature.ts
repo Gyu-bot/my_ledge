@@ -5,6 +5,7 @@ import type {
   AdjustabilityValue,
   CategoryAdjustabilityDefaultRequest,
   RecurringCommitmentCreateRequest,
+  RecurringCommitmentMergeRequest,
   RecurringCommitmentUpdateRequest,
   TransferPurposeRuleCreateRequest,
   TransferPurposeRuleUpdateRequest,
@@ -191,4 +192,14 @@ export function useBulkTransactionAdjustability() {
     },
     onSettled: () => invalidateClassificationDependents(qc),
   })
+}
+
+export function useMergeRecurringCommitments() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (data: RecurringCommitmentMergeRequest) => natureApi.mergeCommitments(data), onSuccess: () => invalidateClassificationDependents(qc) })
+}
+
+export function useBulkDeleteRecurringCommitments() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (ids: number[]) => natureApi.bulkDeleteCommitments(ids), onSuccess: () => invalidateClassificationDependents(qc) })
 }

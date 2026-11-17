@@ -20,6 +20,7 @@ AdjustabilitySource = Literal[
 ]
 PaymentForm = Literal["committed", "ad_hoc", "not_applicable"]
 CommitmentKind = Literal["loan", "installment", "recurring"]
+MerchantMatch = Literal["exact", "prefix"]
 CommitmentScope = Literal["merchant", "category"]
 CommitmentCycle = Literal["monthly", "yearly", "n_times"]
 CommitmentAmountKind = Literal["fixed", "variable"]
@@ -83,8 +84,20 @@ def _check_cycle_and_dates(
         raise ValueError("end_date must not be before start_date")
 
 
+def _check_merchant_match(scope: str, mode: str, merchant: str | None) -> None:
+    if mode not in ("exact", "prefix"):
+        raise ValueError("merchant_match must be exact or prefix")
+    if mode == "prefix" and (
+        scope != "merchant" or len("".join((merchant or "").split())) < 2
+    ):
+        raise ValueError(
+            "prefix requires a merchant scope and at least 2 non-space characters"
+        )
+
+
 class RecurringCommitmentCreateRequest(_CommitmentAttributes):
     match_scope: CommitmentScope
+    merchant_match: MerchantMatch = "exact"
     merchant: str | None = Field(default=None, max_length=500)
     category_major: str = Field(min_length=1, max_length=50)
     category_minor: str | None = Field(default=None, max_length=50)
@@ -95,6 +108,7 @@ class RecurringCommitmentCreateRequest(_CommitmentAttributes):
             raise ValueError("merchant is required for match_scope=merchant")
         if self.match_scope == "category" and self.merchant is not None:
             raise ValueError("merchant must be null for match_scope=category")
+        _check_merchant_match(self.match_scope, self.merchant_match, self.merchant)
         _check_cycle_and_dates(
             self.cycle, self.total_count, self.start_date, self.end_date
         )
@@ -109,6 +123,7 @@ class RecurringCommitmentUpdateRequest(BaseModel):
     confirm_attributes: bool = False
     label: str | None = Field(default=None, max_length=200)
     match_scope: CommitmentScope | None = None
+    merchant_match: MerchantMatch | None = None
     merchant: str | None = Field(default=None, max_length=500)
     category_major: str | None = Field(default=None, min_length=1, max_length=50)
     category_minor: str | None = Field(default=None, max_length=50)
@@ -129,6 +144,7 @@ class RecurringCommitmentResponse(BaseModel):
     id: int
     label: str | None
     match_scope: CommitmentScope
+    merchant_match: MerchantMatch = "exact"
     merchant: str | None
     category_major: str
     category_minor: str | None
@@ -142,6 +158,10 @@ class RecurringCommitmentResponse(BaseModel):
     memo: str | None
     attributes_confirmed_at: datetime | None
     needs_attribute_confirmation: bool
+    observed_transaction_count: int = 0
+    first_observed_date: date | None = None
+    last_observed_date: date | None = None
+    low_observation: bool = False
     member_transaction_count: int = Field(
         description="Effective transactions currently resolved to this commitment."
     )
@@ -151,9 +171,47 @@ class RecurringCommitmentResponse(BaseModel):
     updated_at: datetime
 
 
+class RecurringMergeSuggestion(BaseModel):
+    ids: list[int]
+    suggested_prefix: str
+    target_id: int
+
+
+class RecurringCommitmentMergeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_id: int = Field(gt=0)
+    source_ids: list[int] = Field(min_length=1, max_length=1000)
+    merchant_match: MerchantMatch | None = None
+    merchant: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_ids(self) -> "RecurringCommitmentMergeRequest":
+        if (
+            self.target_id in self.source_ids
+            or len(set(self.source_ids)) != len(self.source_ids)
+            or min(self.source_ids) < 1
+        ):
+            raise ValueError(
+                "source_ids must be unique positive IDs excluding target_id"
+            )
+        return self
+
+
+class RecurringCommitmentBulkDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ids: list[int] = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_ids(self) -> "RecurringCommitmentBulkDeleteRequest":
+        if len(set(self.ids)) != len(self.ids) or min(self.ids) < 1:
+            raise ValueError("ids must be unique positive IDs")
+        return self
+
+
 class RecurringCommitmentListResponse(BaseModel):
     items: list[RecurringCommitmentResponse]
     pending_confirmation_count: int
+    merge_suggestions: list[RecurringMergeSuggestion] = Field(default_factory=list)
 
 
 class TransactionAdjustabilityRequest(BaseModel):
@@ -174,6 +232,7 @@ class NatureCommitmentRef(BaseModel):
     match: Literal["rule", "explicit"]
     label: str | None
     match_scope: CommitmentScope
+    merchant_match: MerchantMatch = "exact"
     merchant: str | None
     category_major: str
     category_minor: str | None

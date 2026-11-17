@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { RecurringCleanupControls } from './RecurringCleanupControls'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
 import { Card } from '../../ds/Card'
@@ -23,6 +24,7 @@ import type {
   CommitmentAmountKind,
   CommitmentCycle,
   CommitmentScope,
+  MerchantMatch,
   RecurringCommitment,
   RecurringCommitmentCreateRequest,
 } from '../../types/nature'
@@ -41,6 +43,7 @@ import {
 interface FormState {
   label: string
   match_scope: CommitmentScope
+  merchant_match: MerchantMatch
   merchant: string
   category_major: string
   category_minor: string
@@ -56,6 +59,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   label: '',
   match_scope: 'merchant',
+  merchant_match: 'exact',
   merchant: '',
   category_major: '',
   category_minor: '',
@@ -72,6 +76,7 @@ function formFrom(item: RecurringCommitment): FormState {
   return {
     label: item.label ?? '',
     match_scope: item.match_scope,
+    merchant_match: item.merchant_match,
     merchant: item.merchant ?? '',
     category_major: item.category_major,
     category_minor: item.category_minor ?? '',
@@ -88,6 +93,7 @@ function formFrom(item: RecurringCommitment): FormState {
 function validate(form: FormState): string | null {
   if (!form.category_major.trim()) return '대분류를 고르세요.'
   if (form.match_scope === 'merchant' && !form.merchant.trim()) return '거래처 단위로 묶으려면 거래처 이름이 필요합니다.'
+  if (form.match_scope === 'merchant' && form.merchant_match === 'prefix' && form.merchant.replace(/\s/g, '').length < 2) return '접두어는 공백을 빼고 2글자 이상 입력하세요.'
   if (form.cycle === 'n_times') {
     const count = Number(form.total_count)
     if (!Number.isInteger(count) || count < 1) return '정해진 횟수 약정은 전체 횟수(1 이상)가 필요합니다.'
@@ -100,6 +106,7 @@ function requestFrom(form: FormState): RecurringCommitmentCreateRequest {
   return {
     label: form.label.trim() || null,
     match_scope: form.match_scope,
+    merchant_match: form.match_scope === 'merchant' ? form.merchant_match : 'exact',
     merchant: form.match_scope === 'merchant' ? form.merchant.trim() : null,
     category_major: form.category_major.trim(),
     category_minor: form.category_minor.trim() || null,
@@ -161,6 +168,11 @@ function CommitmentForm({
             <TextInput value={form.merchant} disabled={!hasWrite} onChange={(event) => set('merchant', event.target.value)} />
           </Field>
         ) : null}
+        {form.match_scope === 'merchant' ? <Field label="일치 방식" hint="접두 일치는 공백과 대소문자를 정규화합니다. 카테고리와 기간도 같아야 합니다.">
+          <Select value={form.merchant_match} onChange={(event) => set('merchant_match', event.target.value as MerchantMatch)} disabled={!hasWrite}>
+            <option value="exact">정확히 같음</option><option value="prefix">이 글자로 시작</option>
+          </Select>
+        </Field> : null}
         <Field label="대분류">
           <Select value={form.category_major} disabled={!hasWrite} onChange={(event) => setForm((current) => ({ ...current, category_major: event.target.value, category_minor: '' }))}>
             <option value="">고르세요</option>
@@ -229,7 +241,7 @@ function isEnded(item: RecurringCommitment, today: string): boolean {
   return item.end_date != null && item.end_date < today
 }
 
-function CommitmentRow({ item, startEditing, editing, onDone }: { item: RecurringCommitment; startEditing: () => void; editing: boolean; onDone: () => void }) {
+function CommitmentRow({ item, startEditing, editing, onDone, selected, onSelect }: { selected: boolean; onSelect: () => void; item: RecurringCommitment; startEditing: () => void; editing: boolean; onDone: () => void }) {
   const hasWrite = useWriteAccess()
   const update = useUpdateRecurringCommitment()
   const end = useEndRecurringCommitment()
@@ -284,8 +296,11 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
+            <input type="checkbox" aria-label={`${bundleName(item)} 선택`} checked={selected} onChange={onSelect} disabled={!hasWrite} />
             <h3 className="break-all text-label font-semibold text-text-primary">{bundleName(item)}</h3>
             <Badge variant="neutral">{SCOPE_TEXT[item.match_scope]}</Badge>
+            {item.low_observation ? <Badge variant="warn">1회만 관측 (이전 분류에서 옮김, 미확인)</Badge> : null}
+            {item.match_scope === 'merchant' ? <Badge variant="neutral">{item.merchant_match === 'prefix' ? '이 글자로 시작' : '정확히 같음'}</Badge> : null}
             {item.needs_attribute_confirmation ? <Badge variant="warn">확인 필요</Badge> : null}
             {item.origin !== 'user' ? <Badge variant="neutral">{ORIGIN_TEXT[item.origin]}</Badge> : null}
           </div>
@@ -298,8 +313,8 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
           </p>
           <p className="tnum text-caption text-text-muted">
             기간 {item.start_date ? formatDateKo(item.start_date) : '처음부터'} ~ {item.end_date ? formatDateKo(item.end_date) : '끝 없음'}
-            {' · '}속한 거래 {item.member_transaction_count}건
-            {item.first_member_date ? ` (${item.first_member_date} ~ ${item.last_member_date})` : ''}
+            {' · '}관측 {item.observed_transaction_count}회
+            {item.first_observed_date ? ` (${item.first_observed_date} ~ ${item.last_observed_date})` : ''}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -343,14 +358,15 @@ function CommitmentRow({ item, startEditing, editing, onDone }: { item: Recurrin
   )
 }
 
-type ListFilter = 'active' | 'ended' | 'all' | 'pending'
+type ListFilter = 'active' | 'ended' | 'all' | 'pending' | 'low'
 
 /** 정기 지급 묶음 등록·고치기·끝내기 (2.2 지급 형태 "약정"). 후보를 자동으로 등록하지 않는다. */
 export function RecurringCommitmentsEditor({ today }: { today: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const commitments = useRecurringCommitments()
   const create = useCreateRecurringCommitment()
-  const [filter, setFilter] = useState<ListFilter>(searchParams.get('confirmation') === 'pending' ? 'pending' : 'active')
+  const [filter, setFilter] = useState<ListFilter>(searchParams.get('observation') === 'low' ? 'low' : searchParams.get('confirmation') === 'pending' ? 'pending' : 'active')
+  const [selected, setSelected] = useState<number[]>([])
   const [search, setSearch] = useState('')
   const creating = searchParams.get('new') === '1'
   const editId = Number(searchParams.get('edit')) || null
@@ -385,7 +401,7 @@ export function RecurringCommitmentsEditor({ today }: { today: string }) {
 
   const items = commitments.data?.items ?? []
   const visible = items
-    .filter((item) => filter === 'all' || (filter === 'pending' ? item.needs_attribute_confirmation : filter === 'ended' ? isEnded(item, today) : !isEnded(item, today)) || item.id === editId)
+    .filter((item) => filter === 'all' || (filter === 'low' ? item.low_observation : filter === 'pending' ? item.needs_attribute_confirmation : filter === 'ended' ? isEnded(item, today) : !isEnded(item, today)) || item.id === editId)
     .filter((item) => !search || bundleName(item).includes(search))
     .sort((a, b) => Number(isEnded(a, today)) - Number(isEnded(b, today)) || bundleName(a).localeCompare(bundleName(b), 'ko'))
 
@@ -410,7 +426,7 @@ export function RecurringCommitmentsEditor({ today }: { today: string }) {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <SegmentedControl
           ariaLabel="정기 지급 보기"
-          options={[{ value: 'active', label: '진행 중' }, { value: 'ended', label: '끝난 것' }, { value: 'all', label: '모두' }, { value: 'pending', label: `확인 필요 ${commitments.data?.pending_confirmation_count ?? 0}` }] as const}
+          options={[{ value: 'active', label: '진행 중' }, { value: 'ended', label: '끝난 것' }, { value: 'all', label: '모두' }, { value: 'pending', label: `확인 필요 ${commitments.data?.pending_confirmation_count ?? 0}` }, { value: 'low', label: `1회만 관측 (이전 분류에서 옮김, 미확인) ${items.filter((item) => item.low_observation).length}` }] as const}
           value={filter}
           onChange={setFilter}
         />
@@ -419,6 +435,7 @@ export function RecurringCommitmentsEditor({ today }: { today: string }) {
           <TextInput value={search} onChange={(event) => setSearch(event.target.value)} className="w-40" />
         </label>
       </div>
+      <RecurringCleanupControls items={items} visibleIds={visible.map((item) => item.id)} selected={selected} setSelected={setSelected} suggestions={commitments.data?.merge_suggestions ?? []} />
       {commitments.isLoading ? <ListSkeleton rows={4} /> : commitments.error ? (
         <ErrorState message={loadErrorMessage(commitments.error)} onRetry={() => void commitments.refetch()} />
       ) : visible.length === 0 ? (
@@ -429,6 +446,8 @@ export function RecurringCommitmentsEditor({ today }: { today: string }) {
             <CommitmentRow
               key={item.id}
               item={item}
+              selected={selected.includes(item.id)}
+              onSelect={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
               editing={editId === item.id}
               startEditing={() => setParams({ edit: String(item.id) })}
               onDone={() => setParams({ edit: null })}

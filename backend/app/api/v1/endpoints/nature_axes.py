@@ -9,6 +9,8 @@ from app.schemas.nature_axes import (
     CategoryAdjustabilityDefaultListResponse,
     CategoryAdjustabilityDefaultRequest,
     CategoryAdjustabilityDefaultResponse,
+    RecurringCommitmentBulkDeleteRequest,
+    RecurringCommitmentMergeRequest,
     RecurringCommitmentCreateRequest,
     RecurringCommitmentEndRequest,
     RecurringCommitmentListResponse,
@@ -67,6 +69,25 @@ async def post_recurring_commitment(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> RecurringCommitmentResponse:
     return await service.create_commitment(db_session, payload)
+
+
+@router.post("/recurring-commitments/merge", response_model=RecurringCommitmentResponse)
+async def post_merge_commitments(
+    payload: RecurringCommitmentMergeRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> RecurringCommitmentResponse:
+    return await service.merge_commitments(db_session, payload)
+
+
+@router.post(
+    "/recurring-commitments/bulk-delete", status_code=status.HTTP_204_NO_CONTENT
+)
+async def post_bulk_delete_commitments(
+    payload: RecurringCommitmentBulkDeleteRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await service.bulk_delete_commitments(db_session, payload)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch(

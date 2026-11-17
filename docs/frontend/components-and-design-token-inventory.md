@@ -206,3 +206,6 @@ Current frontend server state is TanStack Query based.
 ### T056 이행 약정 확인
 
 T056 확인 보완: `CommitmentsPage`와 `RecurringCommitmentsEditor`는 기존 Badge·Toggle·SegmentedControl·Button으로 확인 필요 상태·수·필터를 표시한다. 편집 저장과 현재 주기·금액 그대로 확인을 기존 PATCH로 보낸다. 확인 대기는 끝난 약정도 포함한다. 새 토큰·컴포넌트 체계·페이지는 추가하지 않는다.
+
+
+T066 정기 지급 정리: `RecurringCommitmentsEditor`는 관측 건수·기간, 이행 출처·미확인·관측 ≤1 필터와 수, 선택 체크박스와 일치 방식(exact/prefix)을 표시한다. `RecurringCleanupControls`는 합치기 제안 카드, 대상·일치 방식·접두어 미리 채움, 같은 카테고리 선택 합치기와 원자적 일괄 삭제를 기존 Ledger DS `Button`·`Field`·`Select`·`TextInput`·`ConfirmDanger`로 구성한다. 확인 문구 전에는 실행하지 않는다. `ConfirmDanger.confirmDisabled`는 입력 오류와 처리 중 상태를 구분하며 작은 화면의 대화상자는 세로 스크롤을 허용한다. 새 토큰은 없다.

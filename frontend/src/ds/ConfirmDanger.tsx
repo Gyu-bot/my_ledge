@@ -10,6 +10,7 @@ interface ConfirmDangerProps {
   confirmPhrase: string
   confirmLabel: string
   pending?: boolean
+  confirmDisabled?: boolean
   onConfirm: () => void
 }
 
@@ -22,6 +23,7 @@ export function ConfirmDanger({
   confirmPhrase,
   confirmLabel,
   pending,
+  confirmDisabled,
   onConfirm,
 }: ConfirmDangerProps) {
   const [value, setValue] = useState('')
@@ -31,7 +33,7 @@ export function ConfirmDanger({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="닫기" className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div role="alertdialog" aria-label={title} className="relative w-full max-w-md rounded-lg border border-expense-border bg-bg-surface p-5 shadow-raised">
+      <div role="alertdialog" aria-label={title} className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-expense-border bg-bg-surface p-5 shadow-raised">
         <h2 className="text-section text-expense">{title}</h2>
         {description ? <div className="mt-2 text-caption text-text-muted">{description}</div> : null}
         <div className="mt-3 text-caption text-text-secondary">
@@ -46,7 +48,7 @@ export function ConfirmDanger({
         />
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button variant="danger" disabled={!matched || pending} onClick={onConfirm}>
+          <Button variant="danger" disabled={!matched || pending || confirmDisabled} onClick={onConfirm}>
             {pending ? '처리 중…' : confirmLabel}
           </Button>
         </div>
