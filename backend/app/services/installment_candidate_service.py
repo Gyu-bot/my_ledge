@@ -32,6 +32,37 @@ from app.services.installment_plan_match import (
 from app.services.installment_service import _add_months, _load_plan_or_500
 
 
+# This is a discovery filter, not asset liquidity classification. Unknown
+# non-empty names remain review candidates; only known non-card forms are out.
+_NON_CARD_PAYMENT_MARKERS = (
+    "통장",
+    "예금",
+    "저축",
+    "적금",
+    "계좌",
+    "입출금",
+    "cma",
+    "파킹",
+    "간편결제",
+    "선불",
+    "페이",
+    "pay",
+    "머니",
+    "money",
+    "포인트",
+    "point",
+    "현금",
+    "cash",
+)
+
+
+def _is_card_candidate(payment_method: str | None) -> bool:
+    normalized = (payment_method or "").strip().casefold()
+    return bool(normalized) and not any(
+        marker in normalized for marker in _NON_CARD_PAYMENT_MARKERS
+    )
+
+
 def _key(payment_method: str, identity: str, amount: int) -> str:
     # No transaction IDs or date-window boundary: append/backfill/re-upload keeps
     # a dismissal. Repeated identical series stay dismissed until explicit restore.
@@ -45,9 +76,7 @@ def discover_series(
 ) -> list[InstallmentPlanCandidate]:
     groups = defaultdict(list)
     for row in transactions:
-        if not row.payment_method or not (
-            "카드" in row.payment_method or "card" in row.payment_method.casefold()
-        ):
+        if not _is_card_candidate(row.payment_method):
             continue
         for kind, value in (
             ("merchant", row.merchant),
