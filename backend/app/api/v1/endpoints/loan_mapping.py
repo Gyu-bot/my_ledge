@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.loan_mapping import (
+    LoanSuggestionAcceptRequest,
     LoanAccountCandidateResponse,
     LoanAccountMetadataUpdateRequest,
     LoanAccountsResponse,
@@ -24,6 +25,7 @@ from app.schemas.loan_mapping import (
     TransactionLoanLinkResponse,
 )
 from app.services.loan_mapping_service import (
+    accept_loan_suggestions,
     bulk_upsert_transaction_loan_links,
     delete_transaction_loan_link,
     get_transaction_loan_link,
@@ -160,3 +162,15 @@ async def post_recalculate_loan_estimates(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> LoanEstimateRecalculateResponse:
     return await recalculate_loan_repayment_estimates(db_session, payload)
+
+
+@router.post(
+    "/transactions/loan-links/accept-suggestions",
+    response_model=LoanTransactionLinkBulkUpsertResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def post_accept_loan_suggestions(
+    payload: LoanSuggestionAcceptRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LoanTransactionLinkBulkUpsertResponse:
+    return await accept_loan_suggestions(db_session, payload)

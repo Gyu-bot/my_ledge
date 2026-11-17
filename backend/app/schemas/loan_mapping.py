@@ -145,7 +145,10 @@ class LoanTransactionMappingItem(BaseModel):
     memo: str | None
     link: LoanTransactionLinkItem | None
     suggested_loan_account_id: int | None = None
-    suggestion_basis: Literal["rule"] | None = None
+    suggestion_basis: Literal["rule", "history"] | None = None
+    suggestion_confidence: Literal["high", "medium", "low"] | None = None
+    suggestion_reasons: list[str] = Field(default_factory=list)
+    suggestion_ambiguous: bool = False
 
 
 class LoanTransactionMappingListResponse(BaseModel):
@@ -170,3 +173,12 @@ class LoanEstimateRecalculationItem(LoanRepaymentEstimateMetadata):
 
 class LoanEstimateRecalculateResponse(BaseModel):
     items: list[LoanEstimateRecalculationItem]
+
+
+class LoanSuggestionAcceptItem(BaseModel):
+    transaction_id: int
+    loan_account_id: int
+
+
+class LoanSuggestionAcceptRequest(BaseModel):
+    items: list[LoanSuggestionAcceptItem] = Field(min_length=1, max_length=200)

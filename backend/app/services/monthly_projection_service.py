@@ -54,7 +54,10 @@ from app.schemas.income_projection import (
     income_source_key,
 )
 from app.services.income_expectations_service import get_income_expectations
-from app.services.installment_plan_match import match_installment_plan
+from app.services.installment_plan_match import (
+    match_installment_plan,
+    nearest_installment_number,
+)
 from app.services.settings_service import (
     baseline_start_period,
     get_comparison_settings,
@@ -1295,7 +1298,17 @@ def _expense_components(
         # Read-only reconciliation (R2): exact plan payer/method, date, and
         # amount. Never create a mapping automatically; show it as unconfirmed.
         if not matched:
-            if len(candidates) == 1:
+            candidates_by_number: dict[int, list[dict[str, Any]]] = defaultdict(list)
+            for candidate in candidates:
+                occurrence = nearest_installment_number(
+                    first_payment_date=plan.first_payment_date,
+                    transaction_date=candidate["date"],
+                    total_installments=plan.total_installments,
+                )
+                candidates_by_number[occurrence].append(candidate)
+            if candidates and all(
+                len(rows) == 1 for rows in candidates_by_number.values()
+            ):
                 matched = candidates
                 installment_unconfirmed.extend(candidates)
                 installment_warnings.append(

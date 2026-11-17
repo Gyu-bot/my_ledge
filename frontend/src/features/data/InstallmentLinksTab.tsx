@@ -1,3 +1,4 @@
+import { writeErrorMessage } from '../analysis/text'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../ds/Button'
@@ -5,6 +6,7 @@ import { Card } from '../../ds/Card'
 import { Select } from '../../ds/Field'
 import { toast } from '../../ds/toastStore'
 import {
+  useAcceptInstallmentSuggestions,
   useBulkLinkTransactionsToInstallment,
   useInstallmentPlans,
   useInstallmentTransactionMappings,
@@ -42,6 +44,7 @@ export function InstallmentLinksTab() {
   const [rowDrafts, setRowDrafts] = useState<Record<number, { plan: string; number: string }>>({})
   const [suggestionRowDrafts, setSuggestionRowDrafts] = useState<Record<string, InstallmentSuggestionDraft>>({})
 
+  const accept = useAcceptInstallmentSuggestions()
   const link = useLinkTransactionToInstallment()
   const unlink = useUnlinkTransactionFromInstallment()
   const unlinkInactive = useUnlinkInactiveTransactionFromInstallment()
@@ -58,6 +61,14 @@ export function InstallmentLinksTab() {
     per_page: PAGE_SIZE,
     installment_plan_id: applied.plan ? Number(applied.plan) : undefined,
   })
+
+  const eligibleSuggestions = (suggestions.data?.items ?? []).filter((item) => item.confidence === 'high' && item.is_usable && !item.conflict_reason && !suggestionRowDrafts[getInstallmentSuggestionKey(item.transaction.transaction_id, item.installment_plan_id)])
+  async function acceptSuggested() {
+    try {
+      const result = await accept.mutateAsync({ items: eligibleSuggestions.map((item) => ({ transaction_id: item.transaction.transaction_id, installment_plan_id: item.installment_plan_id, installment_number: item.suggested_installment_number })) })
+      toast.success(`${result.updated}건 추천을 수락했습니다`)
+    } catch (error) { toast.error('추천 일괄 수락 실패', { description: writeErrorMessage(error) }) }
+  }
 
   const inputCls = 'rounded-md border border-border bg-bg-inset px-2.5 py-1.5 text-caption text-text-secondary'
 
@@ -210,6 +221,10 @@ export function InstallmentLinksTab() {
         </div>
       </Card>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-muted">
+        <span>현재 페이지의 신뢰도 높음 · 충돌 없음 · 수정하지 않은 제안 {eligibleSuggestions.length}건을 확인하고 연결합니다.</span>
+        <Button disabled={!hasWrite || !eligibleSuggestions.length || accept.isPending || link.isPending || bulkLink.isPending} onClick={() => void acceptSuggested()}>추천 일괄 수락 ({eligibleSuggestions.length})</Button>
+      </div>
       <InstallmentSuggestionCard
         hasWrite={hasWrite}
         inputClassName={inputCls}

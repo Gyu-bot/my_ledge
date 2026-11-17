@@ -158,3 +158,46 @@ class InstallmentTransactionSuggestionListResponse(PaginatedResponse):
 
 class TransactionInstallmentLinkResponse(BaseModel):
     link: InstallmentTransactionLinkItem | None
+
+
+class InstallmentPlanCandidate(BaseModel):
+    series_key: str
+    observed_count: int
+    first_observed_date: date
+    last_observed_date: date
+    first_payment_date: date
+    payment_method: str
+    merchant: str
+    monthly_amount: int
+    transaction_ids: list[int]
+    starts_at_data_window_edge: bool
+    review_status: Literal["pending", "not_installment"] = "pending"
+
+
+class InstallmentPlanCandidateListResponse(BaseModel):
+    items: list[InstallmentPlanCandidate]
+
+
+class InstallmentCandidateReviewRequest(BaseModel):
+    review_status: Literal["pending", "not_installment"]
+
+
+class InstallmentCandidateReviewResponse(InstallmentCandidateReviewRequest):
+    series_key: str
+
+
+class InstallmentCandidateCreateRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=200)
+    total_installments: int = Field(ge=1, le=120)
+    first_payment_date: date
+    transaction_ids: list[int] = Field(min_length=3, max_length=120)
+
+
+class InstallmentSuggestionAcceptItem(BaseModel):
+    transaction_id: int
+    installment_plan_id: int
+    installment_number: int = Field(ge=1)
+
+
+class InstallmentSuggestionAcceptRequest(BaseModel):
+    items: list[InstallmentSuggestionAcceptItem] = Field(min_length=1, max_length=200)

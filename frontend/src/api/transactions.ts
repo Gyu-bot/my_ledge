@@ -3,6 +3,10 @@ import { monthSpanToDateRange, monthToDateRange } from '../lib/dateRange'
 import type {
   TransactionListResponse,
   TransactionResponse,
+  LoanSuggestionAcceptRequest,
+  InstallmentPlanCandidate,
+  InstallmentCandidateCreateRequest,
+  InstallmentSuggestionAcceptRequest,
   TransactionListParams,
   TransactionFilterOptionsResponse,
   TransactionUpdateRequest,
@@ -173,6 +177,21 @@ export const transactionApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
+
+  acceptLoanSuggestions: (data: LoanSuggestionAcceptRequest) =>
+    apiFetch<{ updated: number }>('/transactions/loan-links/accept-suggestions', { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
+
+  installmentPlanCandidates: (includeDismissed = false) =>
+    apiFetch<{ items: InstallmentPlanCandidate[] }>(`/installment-plan-candidates?include_dismissed=${includeDismissed}`),
+
+  reviewInstallmentCandidate: (key: string, status: 'pending' | 'not_installment') =>
+    apiFetch<{ series_key: string; review_status: 'pending' | 'not_installment' }>(`/installment-plan-candidates/${key}/review`, { method: 'PATCH', body: JSON.stringify({ review_status: status }), headers: { 'Content-Type': 'application/json' } }),
+
+  createPlanFromCandidate: (key: string, data: InstallmentCandidateCreateRequest) =>
+    apiFetch<InstallmentPlanResponse>(`/installment-plan-candidates/${key}/create-plan`, { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
+
+  acceptInstallmentSuggestions: (data: InstallmentSuggestionAcceptRequest) =>
+    apiFetch<{ updated: number }>('/transactions/installment-links/accept-suggestions', { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
 
   loanTransactionMappings: (params: LoanTransactionMappingParams = {}) =>
     apiFetch<LoanTransactionMappingListResponse>(`/loan-transaction-links${buildQuery(params)}`),

@@ -79,7 +79,7 @@ export function InstallmentMappingsSection({
           </div>
         ) : items.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-label">
+            <table className="w-full min-w-[760px] border-collapse text-label">
               <thead className="bg-bg-inset">
                 <tr>
                   <th className="px-3 py-2">

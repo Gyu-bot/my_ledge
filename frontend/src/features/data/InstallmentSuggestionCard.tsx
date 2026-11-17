@@ -94,7 +94,8 @@ export function InstallmentSuggestionCard({
         </div>
       ) : items.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-label">
+          <p className="px-4 pt-2 text-caption text-text-muted md:hidden">표를 좌우로 밀어 회차와 연결을 확인하세요.</p>
+          <table className="w-full min-w-[900px] border-collapse text-label">
             <thead className="bg-bg-inset">
               <tr>
                 {['계획', '거래처', '금액·청구일 차이', '신뢰도·사유', '제안 회차', '충돌 상태', '빠른 연결'].map((header) => (

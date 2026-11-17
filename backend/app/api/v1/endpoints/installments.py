@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.security import require_api_key
 from app.schemas.installment import (
+    InstallmentPlanCandidateListResponse,
+    InstallmentCandidateReviewRequest,
+    InstallmentCandidateReviewResponse,
+    InstallmentCandidateCreateRequest,
+    InstallmentSuggestionAcceptRequest,
     InstallmentLinkStateFilter,
     InstallmentPlanCreateRequest,
     InstallmentPlanListResponse,
@@ -165,3 +170,65 @@ async def delete_installment_link_for_transaction(
         db_session, transaction_id, require_inactive=require_inactive
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/installment-plan-candidates", response_model=InstallmentPlanCandidateListResponse
+)
+async def get_installment_plan_candidates(
+    include_dismissed: bool = False, db_session: AsyncSession = Depends(get_db_session)
+) -> InstallmentPlanCandidateListResponse:
+    from app.services.installment_candidate_service import (
+        list_installment_plan_candidates,
+    )
+
+    return await list_installment_plan_candidates(
+        db_session, include_dismissed=include_dismissed
+    )
+
+
+@router.patch(
+    "/installment-plan-candidates/{series_key}/review",
+    response_model=InstallmentCandidateReviewResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def patch_installment_candidate_review(
+    series_key: str,
+    payload: InstallmentCandidateReviewRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> InstallmentCandidateReviewResponse:
+    from app.services.installment_candidate_service import review_installment_candidate
+
+    return await review_installment_candidate(db_session, series_key, payload)
+
+
+@router.post(
+    "/installment-plan-candidates/{series_key}/create-plan",
+    response_model=InstallmentPlanResponse,
+    status_code=201,
+    dependencies=[Depends(require_api_key)],
+)
+async def post_installment_candidate_plan(
+    series_key: str,
+    payload: InstallmentCandidateCreateRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> InstallmentPlanResponse:
+    from app.services.installment_candidate_service import create_plan_from_candidate
+
+    return await create_plan_from_candidate(db_session, series_key, payload)
+
+
+@router.post(
+    "/transactions/installment-links/accept-suggestions",
+    response_model=InstallmentTransactionLinkBulkUpsertResponse,
+    dependencies=[Depends(require_api_key)],
+)
+async def post_accept_installment_suggestions(
+    payload: InstallmentSuggestionAcceptRequest,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> InstallmentTransactionLinkBulkUpsertResponse:
+    from app.services.installment_suggestion_service import (
+        accept_installment_suggestions,
+    )
+
+    return await accept_installment_suggestions(db_session, payload)

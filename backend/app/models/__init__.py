@@ -14,6 +14,7 @@ from app.models.auto_classification import (
 )
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.base import Base, TimestampMixin
+from app.models.installment_candidate_review import InstallmentCandidateReview
 from app.models.installment_plan import InstallmentPlan
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.insurance_contract import InsuranceContract
@@ -49,6 +50,7 @@ __all__ = [
     "CategoryAdjustabilityDefault",
     "CategoryClassificationRule",
     "Investment",
+    "InstallmentCandidateReview",
     "InstallmentPlan",
     "InstallmentTransactionLink",
     "InsuranceContract",

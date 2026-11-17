@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { LoanRulePrompt, type LoanRuleTarget } from './LoanRulePrompt'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Card } from '../../ds/Card'
@@ -14,12 +16,14 @@ import { LoanCandidateCard } from './LoanCandidateCard'
 type Tab = 'classify' | 'loan'
 
 function LoanCandidates() {
+  const [ruleTargets, setRuleTargets] = useState<LoanRuleTarget[]>([])
   const unlinked = useLoanTransactionMappings({ linked: 'unlinked', page: 1, per_page: 20 })
   const loanAccounts = useLoanAccounts()
   const items = unlinked.data?.items ?? []
   const total = unlinked.data?.total ?? items.length
   return (
     <Card title="대출 연결 후보" meta="대출 상환처럼 보이지만 대출에 연결되지 않은 지출입니다. 연결하면 약정(대출 원리금)으로 집계됩니다.">
+      {ruleTargets.length > 0 && <LoanRulePrompt targets={ruleTargets} onClose={() => setRuleTargets([])} />}
       {unlinked.isLoading ? <ListSkeleton rows={3} /> : unlinked.error ? (
         <ErrorState message={loadErrorMessage(unlinked.error)} onRetry={() => void unlinked.refetch()} />
       ) : items.length === 0 ? (
@@ -29,7 +33,8 @@ function LoanCandidates() {
           {items.map((item) => (
             <LoanCandidateCard
               key={`loan-${item.transaction_id}`}
-              item={{ transaction_id: item.transaction_id, date: item.date.slice(5), merchant: item.merchant, amount: item.amount, effective_category_major: item.effective_category_major }}
+              item={item}
+              onLinked={setRuleTargets}
               accounts={loanAccounts.data?.items ?? []}
             />
           ))}

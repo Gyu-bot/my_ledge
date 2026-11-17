@@ -1,4 +1,7 @@
+import { writeErrorMessage } from '../analysis/text'
 import { useState } from 'react'
+import { LoanCandidateCard } from '../workbench/LoanCandidateCard'
+import { LoanRulePrompt, type LoanRuleTarget } from '../workbench/LoanRulePrompt'
 import { Card } from '../../ds/Card'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
@@ -12,6 +15,7 @@ import { toast } from '../../ds/toastStore'
 import { EM_DASH, formatSignedWon, formatWon } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import {
+  useAcceptLoanSuggestions,
   useApplyLoanMerchantRules,
   useBulkLinkTransactionsToLoan,
   useLoanAccounts,
@@ -234,6 +238,8 @@ function LinksTab() {
   const [linkAccount, setLinkAccount] = useState('')
   const [linkRepayment, setLinkRepayment] = useState<LoanRepaymentType>('mixed')
   const link = useBulkLinkTransactionsToLoan()
+  const accept = useAcceptLoanSuggestions()
+  const [ruleTargets, setRuleTargets] = useState<LoanRuleTarget[]>([])
 
   const mappings = useLoanTransactionMappings({
     page, per_page: PAGE_SIZE,
@@ -256,12 +262,24 @@ function LinksTab() {
         repayment_type: linkRepayment,
         memo: null,
       })
+      if (account.loan_account_id !== null) setRuleTargets(items.filter((item) => selected.has(item.transaction_id)).map((item) => ({ merchant: item.merchant, accountId: account.loan_account_id as number, repayment: linkRepayment })))
       toast.success(`${result.updated}건 대출 연결 완료`)
       setSelected(new Set())
       setLinkAccount('')
     } catch (error) {
       toast.error('대출 연결 실패', { description: String(error) })
     }
+  }
+
+  const eligible = items.filter((item) => !item.link && item.suggested_loan_account_id && !item.suggestion_ambiguous && item.suggestion_confidence === 'high' && (selected.size === 0 || selected.has(item.transaction_id)))
+  async function acceptSuggested() {
+    if (!eligible.length) return
+    try {
+      const result = await accept.mutateAsync({ items: eligible.map((item) => ({ transaction_id: item.transaction_id, loan_account_id: item.suggested_loan_account_id! })) })
+      setRuleTargets(eligible.map((item) => ({ merchant: item.merchant, accountId: item.suggested_loan_account_id!, repayment: 'unknown' })))
+      setSelected(new Set())
+      toast.success(`${result.updated}건 추천 연결 완료`)
+    } catch (error) { toast.error('추천 연결 실패', { description: writeErrorMessage(error) }) }
   }
 
   const inputCls = 'rounded-md border border-border bg-bg-inset px-2.5 py-1.5 text-caption text-text-secondary'
@@ -277,10 +295,19 @@ function LinksTab() {
         </div>
       </Card>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-text-muted">
+        <span>이력 제안은 사람이 확인해야 연결됩니다. {selected.size ? '선택한 거래 중' : '현재 페이지 중'} 신뢰도 높은 추천 {eligible.length}건</span>
+        <Button disabled={!hasWrite || !eligible.length || accept.isPending || link.isPending} onClick={() => void acceptSuggested()}>추천대로 일괄 연결 ({eligible.length})</Button>
+      </div>
+      {ruleTargets.length > 0 && <LoanRulePrompt targets={ruleTargets} onClose={() => setRuleTargets([])} />}
+      <div className="grid gap-3 md:hidden">{items.map((item) => <div key={item.transaction_id}>
+        <label className="mb-1 flex items-center gap-2 text-caption text-text-muted"><input type="checkbox" aria-label={`${item.merchant} 모바일 선택`} checked={selected.has(item.transaction_id)} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.transaction_id)) next.delete(item.transaction_id); else next.add(item.transaction_id); return next })} />선택</label>
+        {item.link ? <div className="rounded-md border border-border p-3 text-caption">{item.date} · {item.merchant} · {formatSignedWon(item.amount)}<Badge variant="transfer">{item.link.display_name}</Badge></div> : <LoanCandidateCard item={item} accounts={accounts.data?.items ?? []} onLinked={setRuleTargets} />}
+      </div>)}</div>
       <Card title="대출 상환 거래 목록" meta={`${items.length} / ${mappings.data?.total ?? 0}건`} bodyClassName="p-0">
         {mappings.isLoading ? <div className="p-4"><ListSkeleton rows={6} /></div> :
          items.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full border-collapse text-label">
               <thead className="bg-bg-inset">
                 <tr>
@@ -295,17 +322,20 @@ function LinksTab() {
                     <td className="tnum px-3 py-2 text-text-faint">{item.date.slice(5)}</td>
                     <td className="max-w-[150px] truncate px-3 py-2 text-text-primary">{item.merchant}</td>
                     <td className="px-3 py-2 text-text-muted">{item.effective_category_major}</td>
-                    <td className="px-3 py-2">{item.link ? <Badge variant="transfer">{item.link.display_name}</Badge> : <Badge variant="warn">미연결</Badge>}</td>
+                    <td className="min-w-64 px-3 py-2">{item.link ? <Badge variant="transfer">{item.link.display_name}</Badge> : <>
+                      <LoanCandidateCard compact item={item} accounts={accounts.data?.items ?? []} onLinked={setRuleTargets} />
+                    </>}</td>
                     <td className="px-3 py-2 text-caption text-text-muted">{item.link ? REPAYMENT_LABEL[item.link.repayment_type] : EM_DASH}</td>
                     <td className={`tnum px-3 py-2 text-right font-semibold ${item.amount < 0 ? 'text-expense' : 'text-income'}`}>{formatSignedWon(item.amount)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <Pagination page={page} perPage={PAGE_SIZE} total={mappings.data?.total ?? 0} onPageChange={setPage} />
+
           </div>
         ) : <EmptyState className="py-10" message="조건에 맞는 대출 상환 후보가 없습니다" />}
       </Card>
+      <Pagination page={page} perPage={PAGE_SIZE} total={mappings.data?.total ?? 0} onPageChange={setPage} />
 
       <BulkBar count={selected.size} onClear={() => { setSelected(new Set()); setLinkAccount('') }}>
         <Select className="text-caption" aria-label="연결 대출 계좌" value={linkAccount} onChange={(e) => setLinkAccount(e.target.value)}><option value="">— 계좌 선택 —</option>{accounts.data?.items.map((a) => <option key={accountValue(a)} value={accountValue(a)}>{a.display_name}</option>)}</Select>

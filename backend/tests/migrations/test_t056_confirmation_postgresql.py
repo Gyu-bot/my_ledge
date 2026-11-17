@@ -311,7 +311,9 @@ async def test_confirmed_attributes_and_manual_mark_survive_reimport_rollback(
     from app.services.upload_apply_service import apply_transaction_upload_from_rows
     from app.services.upload_preview_service import preview_transaction_upload_from_rows
 
-    _, _, _, factory = migrated_db
+    url, schema, _, factory = migrated_db
+    # 실제 현재 rollback 서비스는 최신 모델 전체를 스냅샷으로 읽는다.
+    migrate(url, schema, "upgrade", "head")
     async with factory() as db:
         existing = tx("synthetic-old", legacy_classification_edited=True)
         bundle = RecurringCommitment(
@@ -391,7 +393,9 @@ async def test_old_rollback_snapshot_is_rejected_before_restore(migrated_db):
     from app.models.upload_rollback_point import UploadRollbackPoint
     from app.services import upload_rollback_service as rb
 
-    _, _, _, factory = migrated_db
+    url, schema, _, factory = migrated_db
+    # 실제 현재 rollback 서비스는 최신 모델 전체를 스냅샷으로 읽는다.
+    migrate(url, schema, "upgrade", "head")
     async with factory() as db:
         db.add(tx("synthetic", legacy_classification_edited=True))
         log = UploadLog(

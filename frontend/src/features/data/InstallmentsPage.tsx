@@ -12,6 +12,7 @@ import { toast } from '../../ds/toastStore'
 import { formatWon } from '../../ds/format'
 import { PageHeader } from '../../shell/PageHeader'
 import { InstallmentLinksTab } from './InstallmentLinksTab'
+import { InstallmentCandidatesCard } from './InstallmentCandidatesCard'
 import {
   useCreateInstallmentPlan,
   useInstallmentPlans,
@@ -84,6 +85,7 @@ function PlansTab() {
 
   return (
     <>
+      <InstallmentCandidatesCard />
       <Card title="새 할부 항목 등록" meta="예정 일정과 거래 연결의 기준 계획">
         <div className="grid gap-3 md:grid-cols-3">
           <Field label="할부명"><TextInput placeholder="예: 맥북 3개월 할부" disabled={!hasWrite} value={draft.display_name} onChange={(e) => setDraft((d) => ({ ...d, display_name: e.target.value }))} /></Field>
