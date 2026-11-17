@@ -9,6 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import upload_rollback_service as rollback_points
+from app.services.auto_classification_service import (
+    apply_enabled_auto_classification_after_upload,
+)
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.models.purchase_gate_review import PurchaseGateReview
@@ -145,6 +148,8 @@ async def apply_transaction_upload_from_rows(
                         for row in normalized_snapshots.loans
                     ],
                 )
+
+            await apply_enabled_auto_classification_after_upload(db_session)
 
             applied_changes = tuple(entry.change for entry in selected_entries)
             change_type_counts = preview_builder.build_change_counts(applied_changes)

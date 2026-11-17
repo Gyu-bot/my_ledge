@@ -215,7 +215,9 @@ REFUND_ALLOCATIONS_VIEW = view_table(
 
 
 def _metric_transactions_select(
-    transactions=_transactions, allocations=REFUND_ALLOCATIONS_VIEW
+    transactions=_transactions,
+    allocations=REFUND_ALLOCATIONS_VIEW,
+    loan_links=_loan_links,
 ) -> Select:
     received = (
         select(
@@ -252,7 +254,7 @@ def _metric_transactions_select(
             tx.c.merchant.label("merchant"),
             tx.c.description.label("description"),
             tx.c.payment_method.label("payment_method"),
-            _loan_links.c.loan_account_id.label("loan_account_id"),
+            loan_links.c.loan_account_id.label("loan_account_id"),
             _installment_links.c.installment_plan_id.label("installment_plan_id"),
             _installment_links.c.installment_number.label("installment_number"),
             func.coalesce(received.c.total, 0).label("settlement_refund_total"),
@@ -274,7 +276,7 @@ def _metric_transactions_select(
             ).label("purchase_net_amount"),
         )
         .select_from(
-            tx.outerjoin(_loan_links, _loan_links.c.transaction_id == tx.c.id)
+            tx.outerjoin(loan_links, loan_links.c.transaction_id == tx.c.id)
             .outerjoin(
                 _installment_links,
                 _installment_links.c.transaction_id == tx.c.id,
@@ -816,36 +818,34 @@ FLOW_LINES_DEFINITION = _flow_lines_select()
 FLOW_LINES_VIEW = view_table("vw_metric_flow_lines", FLOW_LINES_DEFINITION)
 
 
-def repayment_flow_lines(transaction_overrides: dict[int, dict] | None = None):
-    """Read persisted flow lines, or evaluate the SAME SQL over hypothetical rows.
+def repayment_flow_lines(
+    transaction_overrides: dict[int, dict] | None = None,
+    *,
+    transaction_additions=(),
+    apply_loan_rules=False,
+    include_links=False,
+):
+    """승인 미리보기에서도 실제 월 흐름표와 같은 SQL로 대출 관측값을 계산한다.
 
-    Import review updates only date/amount on existing transactions. Apply those
-    before lifecycle, refund validation, attribution and month/window selection;
-    even an unlinked refund or a purchase outside the window can affect a loan.
-    CTEs are read-only and do not change the installed views or persisted data.
-    Transfer-purpose metadata cannot affect loan lines, so its view is reused.
+    거래 추가/수정과 사람이 등록한 대출 규칙을 읽기 전용 CTE에 투영한다.
+    환불 배분과 날짜 창도 원거래 변경 이후에 계산하므로 실제 apply와 같다.
     """
-    if not transaction_overrides:
-        return FLOW_LINES_VIEW
-    expressions = []
-    for field in _transactions.c:
-        changes = {
-            transaction_id: values[field.name]
-            for transaction_id, values in transaction_overrides.items()
-            if field.name in {"date", "amount"} and field.name in values
-        }
-        expressions.append(
-            case(changes, value=_transactions.c.id, else_=field).label(field.name)
-            if changes
-            else field
-        )
-    transactions = select(*expressions).cte("preview_transactions")
+    if not transaction_overrides and not transaction_additions and not apply_loan_rules:
+        return (FLOW_LINES_VIEW, _loan_links) if include_links else FLOW_LINES_VIEW
+    from app.services.loan_rule_projection import repayment_preview_sources
+
+    transactions, loan_links = repayment_preview_sources(
+        transaction_overrides,
+        transaction_additions=transaction_additions,
+        apply_loan_rules=apply_loan_rules,
+    )
     allocations = _refund_allocations_select(transactions).cte("preview_allocations")
-    metrics = _metric_transactions_select(transactions, allocations).cte(
+    metrics = _metric_transactions_select(transactions, allocations, loan_links).cte(
         "preview_metrics"
     )
     nature = _transaction_nature_select(metrics).cte("preview_nature")
-    return _flow_lines_select(metrics, allocations, nature).cte("preview_flow_lines")
+    lines = _flow_lines_select(metrics, allocations, nature).cte("preview_flow_lines")
+    return (lines, loan_links) if include_links else lines
 
 
 def loan_repayment_total(lines=FLOW_LINES_VIEW) -> ColumnElement:

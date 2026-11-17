@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint, false
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint, false, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -91,8 +91,8 @@ class AutoClassificationSettings(Base):
     apply_loan_rules_on_upload: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
-        default=False,
-        server_default=false(),
+        default=True,
+        server_default=true(),
     )
     apply_recurring_rules_on_upload: Mapped[bool] = mapped_column(
         Boolean,

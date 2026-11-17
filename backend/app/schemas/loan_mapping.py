@@ -144,6 +144,8 @@ class LoanTransactionMappingItem(BaseModel):
     payment_method: str | None
     memo: str | None
     link: LoanTransactionLinkItem | None
+    suggested_loan_account_id: int | None = None
+    suggestion_basis: Literal["rule"] | None = None
 
 
 class LoanTransactionMappingListResponse(BaseModel):

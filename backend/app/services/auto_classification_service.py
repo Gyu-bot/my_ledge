@@ -37,7 +37,7 @@ async def get_auto_classification_settings(
         id=1,
         apply_loan_rules_on_upload=stored.apply_loan_rules_on_upload
         if stored
-        else False,
+        else True,
     )
 
 
@@ -195,6 +195,8 @@ async def delete_loan_merchant_rule(
 
 async def apply_loan_merchant_rules(
     db_session: AsyncSession,
+    *,
+    commit: bool = True,
 ) -> ApplyResult:
     result = await db_session.execute(
         select(LoanMerchantRule, LoanAccount).join(
@@ -268,7 +270,10 @@ async def apply_loan_merchant_rules(
         await apply_loan_repayment_estimates_for_accounts(
             db_session, account_ids=affected_account_ids
         )
-    await db_session.commit()
+    if commit:
+        await db_session.commit()
+    else:
+        await db_session.flush()
     return ApplyResult(updated=updated)
 
 
@@ -277,7 +282,7 @@ async def apply_enabled_auto_classification_after_upload(
 ) -> None:
     settings = await get_auto_classification_settings(db_session)
     if settings.apply_loan_rules_on_upload:
-        await apply_loan_merchant_rules(db_session)
+        await apply_loan_merchant_rules(db_session, commit=False)
 
 
 async def _valid_category_keys(db_session: AsyncSession) -> set[tuple[str, str | None]]:
