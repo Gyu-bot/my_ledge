@@ -89,7 +89,7 @@ REASON_CODES = (
     ("정기 수입을 식별할", "income_source_not_identified"),
     ("확인이 필요한 급여 출처", "income_source_needs_review"),
     ("처음 보는 입금처의 급여 입금", "income_source_possible_payer_rename"),
-    ("7일 이상 오래되어", "stale_observation"),
+    ("7일을 초과해 오래되어", "stale_observation"),
 )
 
 COMPONENT_LABELS = {
