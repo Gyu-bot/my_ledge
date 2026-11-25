@@ -597,3 +597,7 @@ T056 확인 보완: `/read/commitments` 상세 행은 `attributes_confirmed_at`�
   `one_off_amount`로 제공한다.
 - `review-items`의 구매 후보 및 구매 순액 기준 합계는 일회성 거래를
   제외한다. 카테고리 이상은 금액 귀속 기준으로 대상·기준에서 제외한다.
+- `month-projection` 관측 순지출에는 일회성이 포함된다. 일회성은 남은
+  기간의 지출 가정, 대출 규칙 매칭 및 미확인 할부 가정에서 제외된다.
+  전망 정확도의 `actuals[].variable_ongoing_actual`은 일회성을 차감한
+  마감월 변동 실적이다. 재생은 현재 묶음 소속을 기준으로 한다.

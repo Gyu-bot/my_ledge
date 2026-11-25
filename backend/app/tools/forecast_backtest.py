@@ -269,6 +269,7 @@ async def _flow_totals(
     aux = {
         "undecided": value["adjustability_undecided_total"],
         "committed": value["committed_total"],
+        "one_off": value["one_off_total"],
     }
     return components, aux
 
@@ -281,6 +282,7 @@ async def _unlinked_commitment_like(
     condition = and_(
         lines.c.type == EXPENSE,
         lines.c.commitment_kind.is_(None),
+        lines.c.one_off_event_id.is_(None),
         or_(
             lines.c.effective_category_major.like("%대출%"),
             lines.c.effective_category_minor.like("%대출%"),
@@ -327,6 +329,8 @@ async def collect_points(
         start = _month_start(period)
         end = _month_end(start)
         actual, actual_aux = await _flow_totals(session, start, end)
+        actual["one_off_actual"] = actual_aux["one_off"]
+        actual["variable_ongoing_actual"] = actual["variable"] - actual_aux["one_off"]
         unlinked = await _unlinked_commitment_like(session, start, end)
         shares = {
             "undecided_share": _share(actual_aux["undecided"], actual["expense"]),
@@ -412,6 +416,10 @@ async def collect_limitations(
         {
             "code": "classification_current_state",
             "detail": "카테고리 재지정, 지급 형태와 조정 가능성 근거은 이력이 없어 현재 값으로 재생했다. 과거 시점에는 아직 분류되지 않았을 수 있다.",
+        },
+        {
+            "code": "one_off_membership_current_state",
+            "detail": "일회성 지출 묶음은 현재 소속으로 과거를 재생한다. 관측 변동 실적에는 포함하고 미래 가정에서 제외한다.",
         },
         {
             "code": "transaction_availability",
@@ -711,6 +719,11 @@ def summarize(
         and sum(int(point.forecast[kind] or 0) for kind in EXPENSE_KINDS)
         != point.forecast["expense"]
     )
+    actual_component_sum_mismatch = sum(
+        1
+        for point in points
+        if sum(point.actual[kind] for kind in EXPENSE_KINDS) != point.actual["expense"]
+    )
     report: dict[str, Any] = {
         "tool": "forecast_backtest",
         "version": REPORT_VERSION,
@@ -727,7 +740,8 @@ def summarize(
         },
         "definitions": {
             "forecast": "get_monthly_projection(reference_date=as-of) 그대로. 구성요소별 월 전망 = as-of까지 흐름표 관측 + 전망의 남은 기간 가정.",
-            "actual": "마감월의 vw_metric_flow_lines 합계. loan/installment/recurring = committed_* 줄, variable = 총지급 - 약정 지급, net = 잔여.",
+            "actual": "마감월의 vw_metric_flow_lines 합계. loan/installment/recurring = committed_* 줄, variable = 총지급 - 약정 지급(일회성 포함), net = 잔여.",
+            "variable_ongoing_actual": "변동 지출 실적에서 관측된 일회성 순지출(one_off_actual)을 차감한 참고값. 금액 표시는 --show-amounts 옵션에서 제공한다.",
             "signed_pct_error": "(전망 - 실제) / |실제| x 100. 양수 = 과대 전망. 실제가 0인 점은 zero_actual로만 센다.",
             "signed_pct_of_actual_income": "(전망 - 실제) / 그 달 실제 수입 x 100. 순현금흐름처럼 실제가 0에 가까운 값을 위한 척도.",
             "withheld": "전망 값이 None(입력 부족·확인 필요로 전망 보류)인 점.",
@@ -771,7 +785,8 @@ def summarize(
         "consistency": {
             "observed_mismatch_points": consistency,
             "component_sum_mismatch_points": component_sum_mismatch,
-            "detail": "전망 응답의 관측 수입·지출과 흐름표 as-of 합계가 다른 점의 수, 구성요소 전망의 합이 총지급 전망과 다른 점의 수. 둘 다 0이어야 한다.",
+            "actual_component_sum_mismatch_points": actual_component_sum_mismatch,
+            "detail": "전망 응답의 관측 수입·지출과 흐름표 as-of 합계가 다른 점의 수, 구성요소 전망·실적의 합이 각각 총지급 전망·실적과 다른 점의 수. 각 값은 0이어야 한다.",
         },
         "limitations": limitations or [],
     }
@@ -943,7 +958,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## 정합성",
         "",
-        f"- 관측값 불일치 점: {report['consistency']['observed_mismatch_points']}, 구성요소 합 불일치 점: {report['consistency']['component_sum_mismatch_points']} ({report['consistency']['detail']})",
+        f"- 관측값 불일치 점: {report['consistency']['observed_mismatch_points']}, 전망 구성요소 합 불일치 점: {report['consistency']['component_sum_mismatch_points']}, 실적 구성요소 합 불일치 점: {report['consistency']['actual_component_sum_mismatch_points']} ({report['consistency']['detail']})",
         "",
         "## 재생의 한계",
         "",
@@ -962,15 +977,16 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## 시점별 금액 (--show-amounts)",
             "",
-            "| 월 | as-of | 보류 | 전망 순현금흐름 | 실제 순현금흐름 | 전망 수입 | 실제 수입 | 전망 지출 | 실제 지출 |",
-            "|---|---|---|---|---|---|---|---|---|",
+            "| 월 | as-of | 보류 | 전망 순현금흐름 | 실제 순현금흐름 | 전망 수입 | 실제 수입 | 전망 지출 | 실제 지출 | 경상 변동 실적 |",
+            "|---|---|---|---|---|---|---|---|---|---|",
         ]
         for point in report.get("points", []):
             lines.append(
                 f"| {point['period']} | {point['as_of']} | {point['withheld']} | "
                 f"{_fmt(point['forecast']['net'])} | {_fmt(point['actual']['net'])} | "
                 f"{_fmt(point['forecast']['income'])} | {_fmt(point['actual']['income'])} | "
-                f"{_fmt(point['forecast']['expense'])} | {_fmt(point['actual']['expense'])} |"
+                f"{_fmt(point['forecast']['expense'])} | {_fmt(point['actual']['expense'])} | "
+                f"{_fmt(point['actual']['variable_ongoing_actual'])} |"
             )
     return "\n".join(lines) + "\n"
 

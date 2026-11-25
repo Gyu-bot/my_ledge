@@ -825,3 +825,12 @@ Vocabulary mapping (names are kept; the meaning is the same):
 - 카테고리 보기와 조정 가능성 보기는 같은 지출의 다른 절단이다. 한도와 실적을 두 보기 사이에서 합산하지 않는다. 실제 값은 기존 SQL 지출 큐브와 월 흐름표에서 읽는다.
 - 새 경로의 모르는 조회 인자와 틀린 period·열거값·추가 body 필드는 422다. 읽기 조회 실패는 기존 `/read/*`와 같은 503 `query_failed` 봉투다.
 - migration `20261117_0040`은 `20261117_t054_t057` 위에 빈 `spending_limit_revisions` 표만 추가한다. 기존 행·뷰·가져오기 HTTP 계약은 바꾸지 않는다. 등록된 금융 표이므로 가져오기 검토 fingerprint·되돌리기 snapshot에 포함된다. 스키마 변경 전 준비한 검토/되돌리기 지점은 기존 스키마 검사에 의해 거절될 수 있으므로 운영 이행 시 구분한다. 이 작업은 배포하지 않는다.
+
+### One-off expense treatment in forecasts (T067)
+
+Observed expense includes one-off lines. Remaining expense assumptions
+exclude them before uncertain loan or installment matching. Forecast output
+keeps four expense components. One-off is included in variable actuals in
+the replay. The projection accuracy response exposes monthly
+`actuals[].variable_ongoing_actual` and states that replay uses current
+membership. The CLI exposes the corresponding amounts with `--show-amounts`.
