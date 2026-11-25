@@ -59,6 +59,10 @@ from app.services.read_surface_service import (
     read_as_of,
     resolve_status,
 )
+from app.services.recurring_commitment_counts import (
+    recurring_payment_count,
+    remaining_recurring_count,
+)
 
 MAX_IDS = 20
 _LOAN_ACTIVE = {"active"}
@@ -149,6 +153,7 @@ async def _history(
     stats = {
         (row.commitment_kind, int(row.source_id)): {
             "count": int(row.transaction_count or 0),
+            "payment_count": int(row.payment_count),
             "first_date": row.first_date,
             "last_date": row.last_date,
         }
@@ -159,6 +164,7 @@ async def _history(
                 func.count(lines.c.transaction_id.distinct()).label(
                     "transaction_count"
                 ),
+                recurring_payment_count().label("payment_count"),
                 func.min(lines.c.date).label("first_date"),
                 func.max(lines.c.date).label("last_date"),
             )
@@ -591,6 +597,7 @@ def _recurring_observation(
     key: KeyTuple,
     commitment: RecurringCommitment,
     member: dict[str, object],
+    remaining: int | None,
 ) -> CommitmentObservation:
     if ctx.period is None or (not ctx.imported and not ctx.has_observation(key)):
         return ctx.make(key, "not_determinable", ctx.missing_reason)
@@ -603,13 +610,7 @@ def _recurring_observation(
     if commitment.cycle is None:
         return ctx.make(key, "not_determinable", "cycle_not_recorded")
     if commitment.cycle == "n_times":
-        if (
-            commitment.total_count is not None
-            and int(
-                member.get("count", 0)  # type: ignore[call-overload]
-            )
-            >= commitment.total_count
-        ):
+        if remaining == 0:
             return ctx.make(key, "not_expected", "all_counts_observed")
         return ctx.make(key, "not_determinable", "cycle_interval_not_recorded")
     anchor = commitment.start_date or _as_date(member.get("first_date"))
@@ -647,6 +648,8 @@ async def _recurring_items(
         key: KeyTuple = ("recurring", commitment.id)
         member = stats.get(key, {})
         last = last_observed.get(key)
+        payment_count = int(member.get("payment_count", 0))  # type: ignore[call-overload]
+        remaining = remaining_recurring_count(commitment, payment_count)
         ended = (
             commitment.end_date is not None
             and as_of.transaction_as_of is not None
@@ -656,11 +659,6 @@ async def _recurring_items(
         monthly = last[1] if (commitment.cycle == "monthly" and last) else None
         basis = "last_observed_closed_month" if monthly is not None else "not_available"
         count = int(member.get("count", 0))  # type: ignore[call-overload]
-        remaining = (
-            max(commitment.total_count - count, 0)
-            if commitment.cycle == "n_times" and commitment.total_count is not None
-            else None
-        )
         adjustability = commitment.adjustability or "undecided"
         name = commitment.label or (
             f"{commitment.category_major}"
@@ -709,7 +707,9 @@ async def _recurring_items(
                 ),
                 last_observed_period=last[0] if last else None,
                 last_observed_amount=last[1] if last else None,
-                observation=_recurring_observation(ctx, key, commitment, member),
+                observation=_recurring_observation(
+                    ctx, key, commitment, member, remaining
+                ),
             )
         )
     return items

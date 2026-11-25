@@ -56,7 +56,10 @@ from app.schemas.income_projection import MonthlyProjection
 from app.services.income_expectations_service import get_income_expectations
 from app.services.metric_views import EXPENSE, FLOW_LINES_VIEW, flow_summary_columns
 from app.services.metrics_service import load_as_of
-from app.services.monthly_projection_service import get_monthly_projection
+from app.services.monthly_projection_service import (
+    covered_evaluation_periods,
+    get_monthly_projection,
+)
 
 DATABASE_URL_ENV = "FORECAST_BACKTEST_DATABASE_URL"
 DEFAULT_AS_OF_DAYS = (5, 10, 15, 20, 25)
@@ -314,7 +317,7 @@ async def evaluation_periods(
         ):
             periods.append(period)
         current = _add_months(current, 1)
-    return periods
+    return await covered_evaluation_periods(session, periods)
 
 
 def _share(numerator: int, denominator: int) -> float | None:

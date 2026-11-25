@@ -22,6 +22,7 @@ from app.schemas.auto_classification import (
     MerchantAliasRuleRequest,
     MerchantAliasRuleResponse,
 )
+from app.services.loan_rule_match import index_loan_rules, matching_loan_rule
 
 
 @dataclass(slots=True)
@@ -203,22 +204,14 @@ async def apply_loan_merchant_rules(
             LoanAccount, LoanMerchantRule.loan_account_id == LoanAccount.id
         )
     )
-    rules_by_merchant: dict[str, LoanMerchantRule] = {}
-    rules_by_description: dict[str, LoanMerchantRule] = {}
-    for rule, _account in result.all():
-        if rule.match_field == "description":
-            rules_by_description[rule.merchant] = rule
-        else:
-            rules_by_merchant[rule.merchant] = rule
-
-    if not rules_by_merchant and not rules_by_description:
+    rules = index_loan_rules(rule for rule, _account in result.all())
+    match_clauses = [
+        getattr(Transaction, field).in_(list(matches))
+        for field, matches in rules.items()
+        if matches
+    ]
+    if not match_clauses:
         return ApplyResult(updated=0)
-
-    match_clauses = []
-    if rules_by_merchant:
-        match_clauses.append(Transaction.merchant.in_(list(rules_by_merchant)))
-    if rules_by_description:
-        match_clauses.append(Transaction.description.in_(list(rules_by_description)))
 
     rows = await db_session.execute(
         select(Transaction, LoanTransactionLink)
@@ -237,9 +230,9 @@ async def apply_loan_merchant_rules(
     for transaction, link in rows.all():
         if link is not None and link.source == "manual":
             continue
-        rule = rules_by_merchant.get(transaction.merchant)
-        if rule is None:
-            rule = rules_by_description.get(transaction.description)
+        rule = matching_loan_rule(
+            rules, merchant=transaction.merchant, description=transaction.description
+        )
         if rule is None:
             continue
         if link is None:
