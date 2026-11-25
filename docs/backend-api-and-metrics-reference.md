@@ -205,6 +205,10 @@ Expense model (T064 round 2):
 
 Each flow line belongs to one model partition. Known portions survive a component's missing reason. Full expense/month-end projections are null if any component is unknown, there is no observed transaction, or the latest observation is more than seven days before reference. Confidence is unavailable when the full expense is unknown, otherwise low when reasons or component warnings remain and medium when none remain. Warning-only recurring sources, installment number mismatches, link-unconfirmed rule matches and loans left out as not in expense do not create missing-input reasons or null totals. The returned scenario does not guarantee future employment, contracts, new spending or available bank cash.
 
+At a covered month end the remaining interval is empty. Remaining income and all four remaining expense components then contribute zero. A fresh observed month closes at its observed totals. Late or partial receipts and unobserved payments retain their evidence in the source statuses and warnings. A snapshot date alone cannot override the seven-day transaction freshness check. For a finite recurring commitment, the full history of distinct outgoing payments through the reference day determines exhaustion. Posted refunds still reduce net spending. Registered loan rules use the same merchant-before-description precedence in the forecast and in the write path.
+
+Accuracy and backtest actuals require closed months starting on or after the first complete month, with adequate transaction coverage under the projection activity rule (at least eight observed dates, observations in the first and last seven days, no gap longer than ten days). A requested reference date limits the evidence available to the accuracy calculation.
+
 #### `GET /api/v1/canonical-views/month-projection/accuracy`
 
 - T064 R12. Requires `X-API-Key`; read-only (no writes, no cache). Optional `reference_date`; without it the same default as the focused forecast (transaction as-of date, R11).

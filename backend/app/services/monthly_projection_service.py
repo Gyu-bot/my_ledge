@@ -1827,17 +1827,12 @@ async def get_monthly_projection(
     if any(source.reason == RENAMED_PAYER_SOURCE_REASON for source in sources):
         reasons.append(RENAMED_PAYER_MISSING_REASON)
     last_observed = coverage.last_observed_date
-    # A successful same-month export can cover quiet days through month end.
-    # With no observation in that month, an upload alone cannot establish a close.
-    observed_close = (
-        month_covered and last_observed is not None and last_observed >= month_start
-    )
-    stale = last_observed is None or (
-        not observed_close and (reference_date - last_observed).days > 7
-    )
+    # Snapshot dates extend the covered-day window, but freshness always uses
+    # actual transactions, including when that window reaches month end.
+    stale = last_observed is None or (reference_date - last_observed).days > 7
     if stale:
         reasons.append(
-            "최신 관측 거래가 기준일보다 7일 이상 오래되어 월말 전망을 제공하지 않음"
+            "관측 거래가 없거나 최신 거래가 기준일보다 7일을 초과해 오래되어 월말 전망을 제공하지 않음"
         )
     remaining_expense = (
         sum(

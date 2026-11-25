@@ -749,6 +749,9 @@ async def test_month_end_reconciles_observed_with_unobserved_payments(
     )
     if quiet_export:
         db_session.add(
+            tx(end.replace(day=30), -100, merchant="Quiet close", category="식비")
+        )
+        db_session.add(
             UploadLog(snapshot_date=end, status="success", filename="close.xlsx")
         )
     else:
@@ -761,7 +764,7 @@ async def test_month_end_reconciles_observed_with_unobserved_payments(
     assert before.remaining_period_start == date(2031, 7, 21)
 
     result = await get_monthly_projection(db_session, reference_date=end)
-    assert result.observed_through == (REFERENCE if quiet_export else end)
+    assert result.observed_through == (end.replace(day=30) if quiet_export else end)
     assert result.remaining_period_start is None
     assert result.expected_remaining_income == result.expected_remaining_expense == 0
     assert (
@@ -835,6 +838,22 @@ async def test_empty_month_end_export_keeps_projection_unavailable(
     assert result.remaining_period_start is None
     assert result.known_expected_remaining_expense == 0
     assert result.expected_remaining_expense is None
+    assert result.projected_month_end_net is None
+    assert not result.completeness.full_projection_available
+
+
+async def test_late_snapshot_does_not_make_stale_transactions_fresh(db_session):
+    end = date(2031, 7, 31)
+    db_session.add_all(
+        [
+            tx(date(2031, 7, 20), -100),
+            UploadLog(snapshot_date=end, status="success", filename="snapshot.xlsx"),
+        ]
+    )
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=end)
+    assert result.remaining_period_start is None
+    assert result.observed_net_expense == 100
     assert result.projected_month_end_net is None
     assert not result.completeness.full_projection_available
 
