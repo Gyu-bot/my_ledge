@@ -9,7 +9,7 @@ import { useEmergencyFund } from '../../hooks/useNetWorth'
 import type { EmergencyFundStatus } from '../../types/netWorth'
 import { formatDateKo } from '../analysis/periods'
 import { loadErrorMessage, sharePct } from '../analysis/text'
-import { baselineText, emergencyFundReasons } from './netWorthText'
+import { baselineText, emergencyFundReasons, hasUndecidedExpenses } from './netWorthText'
 
 const STATUS_LABEL: Record<EmergencyFundStatus, string> = {
   complete: '분류 완료 기준',
@@ -49,7 +49,6 @@ export function EmergencyFundCard() {
                   {data.status === 'complete' ? '✓ ' : '! '}
                   {STATUS_LABEL[data.status]}
                 </Badge>
-                {data.status === 'incomplete_classification' ? <span className="text-micro text-text-muted">개월 수가 실제보다 클 수 있음</span> : null}
               </div>
             </div>
           </div>
@@ -72,7 +71,7 @@ export function EmergencyFundCard() {
               <dd className="tnum mt-0.5 font-semibold text-text-primary">{sharePct(data.adjustability_undecided_share)}</dd>
               <dd className="mt-0.5 text-micro text-text-muted">
                 미정 지출 월 중앙값 {data.monthly_adjustability_undecided_outflow != null ? formatNetWon(data.monthly_adjustability_undecided_outflow) : EM_DASH}
-                {(data.adjustability_undecided_share ?? 0) > 0 ? (
+                {hasUndecidedExpenses(data) ? (
                   <>
                     {' · '}
                     <Link to="/data/inbox" className="text-transfer hover:underline">분류하러 가기</Link>

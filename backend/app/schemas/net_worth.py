@@ -12,9 +12,20 @@ ReconciliationStatus = Literal[
     "incomplete_classification",
     "transactions_not_covered",
     "snapshot_dates_mismatched",
+    "incomplete_snapshot_values",
     "no_snapshot_pair",
 ]
-KindPairStatus = Literal["observed", "absent", "mismatched"]
+SnapshotKind = Literal["loans", "investments"]
+KindPairStatus = Literal["observed", "absent", "mismatched", "incomplete"]
+SnapshotValueWithheldReason = Literal[
+    "snapshot_value_missing", "snapshot_not_available"
+]
+KindChangeWithheldReason = Literal[
+    "snapshot_dates_mismatched", "snapshot_value_missing"
+]
+ReconciliationWithheldReason = Literal[
+    KindChangeWithheldReason, "transactions_not_covered"
+]
 EmergencyFundStatus = Literal[
     "complete", "incomplete_classification", "no_baseline", "no_asset_snapshot"
 ]
@@ -52,10 +63,11 @@ class NetWorthPoint(BaseModel):
 class SnapshotKindPair(BaseModel):
     """One snapshot kind over the interval. Kinds keep their own dates."""
 
-    kind: Literal["loans", "investments"]
+    kind: SnapshotKind
     pair_status: KindPairStatus = Field(
         description=(
-            "observed: rows on both interval dates. absent: no rows of this kind "
+            "observed: complete values on both interval dates. incomplete: both "
+            "dates exist and at least one value is missing. absent: no rows of this kind "
             "in any snapshot (0 at both ends). mismatched: the kind's latest "
             "snapshot on or before an interval date is a different date."
         )
@@ -68,9 +80,20 @@ class SnapshotKindPair(BaseModel):
     )
     start_value: int | None
     end_value: int | None
+    start_known_value_total: int | None = Field(
+        default=None,
+        description="Sum of known rows when the start total is incomplete, if any are known.",
+    )
+    end_known_value_total: int | None = Field(
+        default=None,
+        description="Sum of known rows when the end total is incomplete, if any are known.",
+    )
+    start_value_withheld_reason: SnapshotValueWithheldReason | None = None
+    end_value_withheld_reason: SnapshotValueWithheldReason | None = None
     change: int | None = Field(description="end_value − start_value when comparable.")
+    change_withheld_reason: KindChangeWithheldReason | None = None
     missing_value_row_count: int = Field(
-        description="Rows at the two interval dates whose balance/market value is empty (counted as 0)."
+        description="Empty values across the two reported as-of dates, counted once per row."
     )
     value_basis: str
 
@@ -136,7 +159,7 @@ class ReconciliationItems(BaseModel):
         description=(
             "net_worth_change − residual − loan_balance_decrease − "
             "investment_valuation_change, left as it is. Null only when an item "
-            "cannot be computed (mismatched snapshots or uncovered transactions)."
+            "cannot be computed (mismatched dates, missing values, or uncovered transactions)."
         )
     )
     investment_value_change: int | None = Field(
@@ -145,6 +168,15 @@ class ReconciliationItems(BaseModel):
     investment_net_transfer_in: int = Field(
         description="Money moved into investments by transfers = −investment_net."
     )
+    withheld_reasons: dict[
+        Literal[
+            "loan_balance_decrease",
+            "investment_value_change",
+            "investment_valuation_change",
+            "unexplained_difference",
+        ],
+        ReconciliationWithheldReason,
+    ] = Field(default_factory=dict)
     unexplained_share_of_change: float | None = Field(
         default=None,
         description=(
@@ -159,7 +191,7 @@ class ReconciliationItems(BaseModel):
     investment_valuation_change_provisional: bool = Field(
         default=False,
         description=(
-            "True when transfers of undecided purpose exist in the interval: some of "
+            "True when the valuation is available and transfers of undecided purpose exist: some of "
             "them may be investment deposits, so investment_valuation_change may move "
             "once a person sets their purpose."
         ),
@@ -193,6 +225,7 @@ class SnapshotIntervalItem(BaseModel):
     status: ReconciliationStatus
     net_worth_change: int
     unexplained_difference: int | None
+    unexplained_difference_withheld_reason: ReconciliationWithheldReason | None = None
     transfer_undecided_share: float | None
     unexplained_share_of_change: float | None = Field(
         default=None, description="Same as items.unexplained_share_of_change."
@@ -252,6 +285,10 @@ class EmergencyFundResponse(BaseModel):
     )
     adjustability_undecided_share: float | None = Field(
         description="Σ undecided ÷ Σ total_outflow over the baseline months."
+    )
+    adjustability_undecided_transaction_count: int = Field(
+        default=0,
+        description="Distinct transactions with undecided expense lines over the baseline months.",
     )
     emergency_fund_months: float | None
     baseline: EmergencyFundBaseline

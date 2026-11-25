@@ -8,9 +8,13 @@ export type ReconciliationStatus =
   | 'incomplete_classification'
   | 'transactions_not_covered'
   | 'snapshot_dates_mismatched'
+  | 'incomplete_snapshot_values'
   | 'no_snapshot_pair'
 
-export type KindPairStatus = 'observed' | 'absent' | 'mismatched'
+export type KindPairStatus = 'observed' | 'absent' | 'mismatched' | 'incomplete'
+type SnapshotValueWithheldReason = 'snapshot_value_missing' | 'snapshot_not_available'
+type KindChangeWithheldReason = 'snapshot_dates_mismatched' | 'snapshot_value_missing'
+type ReconciliationWithheldReason = KindChangeWithheldReason | 'transactions_not_covered'
 
 export interface ReconciliationInterval {
   start_snapshot_date: string
@@ -37,7 +41,12 @@ export interface SnapshotKindPair {
   end_as_of: string | null
   start_value: number | null
   end_value: number | null
+  start_known_value_total?: number | null
+  end_known_value_total?: number | null
+  start_value_withheld_reason?: SnapshotValueWithheldReason | null
+  end_value_withheld_reason?: SnapshotValueWithheldReason | null
   change: number | null
+  change_withheld_reason?: KindChangeWithheldReason | null
   missing_value_row_count: number
   value_basis: string
 }
@@ -92,6 +101,10 @@ export interface ReconciliationItems {
   investment_valuation_change_provisional: boolean
   investment_valuation_change_provisional_reason: string | null
   investment_net_transfer_in: number
+  withheld_reasons?: Partial<Record<
+    'loan_balance_decrease' | 'investment_value_change' | 'investment_valuation_change' | 'unexplained_difference',
+    ReconciliationWithheldReason
+  >>
 }
 
 export interface NetWorthReconciliationResponse {
@@ -117,6 +130,7 @@ export interface SnapshotIntervalItem {
   status: ReconciliationStatus
   net_worth_change: number
   unexplained_difference: number | null
+  unexplained_difference_withheld_reason?: ReconciliationWithheldReason | null
   transfer_undecided_share: number | null
 }
 
@@ -160,6 +174,7 @@ export interface EmergencyFundResponse {
   monthly_protected_outflow: number | null
   monthly_adjustability_undecided_outflow: number | null
   adjustability_undecided_share: number | null
+  adjustability_undecided_transaction_count?: number
   emergency_fund_months: number | null
   baseline: EmergencyFundBaseline
   legacy_surface: string

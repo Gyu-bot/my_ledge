@@ -90,6 +90,38 @@ export function reconciliationFixture(status: ReconciliationStatus = 'complete')
       items: { ...base.items!, loan_balance_decrease: null, unexplained_difference: null },
     }
   }
+  if (status === 'incomplete_snapshot_values') {
+    return {
+      ...base,
+      status,
+      kinds: [
+        base.kinds[0],
+        {
+          ...base.kinds[1],
+          pair_status: 'incomplete',
+          end_value: null,
+          end_known_value_total: 0,
+          end_value_withheld_reason: 'snapshot_value_missing',
+          change: null,
+          change_withheld_reason: 'snapshot_value_missing',
+          missing_value_row_count: 1,
+        },
+      ],
+      items: {
+        ...base.items!,
+        investment_value_change: null,
+        investment_valuation_change: null,
+        unexplained_difference: null,
+        unexplained_share_of_change: null,
+        unexplained_share_withheld_reason: 'unexplained_not_computable',
+        withheld_reasons: {
+          investment_value_change: 'snapshot_value_missing',
+          investment_valuation_change: 'snapshot_value_missing',
+          unexplained_difference: 'snapshot_value_missing',
+        },
+      },
+    }
+  }
   return {
     ...base,
     status: 'no_snapshot_pair',

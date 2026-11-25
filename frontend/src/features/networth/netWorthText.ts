@@ -34,6 +34,11 @@ export const STATUS_TEXT: Record<ReconciliationStatus, { label: string; descript
     description: '대출이나 투자 스냅샷 날짜가 자산 스냅샷 날짜와 달라 그 항목과 설명되지 않는 차이를 내지 않았습니다. 가까운 날짜로 맞추지 않습니다.',
     variant: 'warn',
   },
+  incomplete_snapshot_values: {
+    label: '스냅샷 값 누락',
+    description: '대출 잔액 또는 투자 평가액이 누락되어 해당 항목과 설명되지 않는 차이를 보류했습니다.',
+    variant: 'warn',
+  },
   no_snapshot_pair: {
     label: '스냅샷 쌍 없음',
     description: '자산 스냅샷이 두 날짜 이상 있어야 구간을 비교할 수 있습니다.',
@@ -50,6 +55,7 @@ export const PAIR_STATUS_TEXT: Record<KindPairStatus, string> = {
   observed: '두 날짜 모두 있음',
   absent: '이 종류의 스냅샷이 없음 (양 끝 0원)',
   mismatched: '날짜가 맞지 않음',
+  incomplete: '스냅샷 값 누락',
 }
 
 /** 상태의 이유 — 응답의 구조화된 값(종류별 날짜, 거래 범위, 이체 미정 금액)에서 만든다. */
@@ -73,7 +79,7 @@ export function reconciliationReasons(data: NetWorthReconciliationResponse, asse
       reasons.push(`${name} 스냅샷이 한 번도 없어 양 끝을 0원으로 두었습니다.`)
     }
     if (kind.missing_value_row_count > 0) {
-      reasons.push(`${name} 항목 ${kind.missing_value_row_count}개는 값이 비어 있어 0원으로 셌습니다.`)
+      reasons.push(`${name} 스냅샷에서 값이 비어 있는 항목이 ${kind.missing_value_row_count}개 있어 차이를 보류했습니다.`)
     }
   }
   const coverage = data.transactions
@@ -105,22 +111,33 @@ export function reconciliationReasons(data: NetWorthReconciliationResponse, asse
 /** 보류된 항목의 이유 */
 export function withheldKindReason(kind: SnapshotKindPair | undefined): string {
   if (!kind) return '이 종류의 스냅샷 정보가 응답에 없습니다.'
+  if (kind.pair_status === 'incomplete') {
+    return `${KIND_TEXT[kind.kind]} 스냅샷에 값이 비어 있는 항목이 있어 계산을 보류했습니다.`
+  }
   return `${KIND_TEXT[kind.kind]} 스냅샷 날짜가 구간과 맞지 않아 계산하지 않았습니다.`
 }
 
 export function withheldUnexplainedReason(status: ReconciliationStatus): string {
+  if (status === 'incomplete_snapshot_values') return '대출 잔액 또는 투자 평가액이 누락되어 계산을 보류했습니다.'
   if (status === 'snapshot_dates_mismatched') return '스냅샷 날짜가 종류마다 맞지 않아 계산하지 않았습니다.'
   if (status === 'transactions_not_covered') return '거래 기록이 구간을 덮지 않아 계산하지 않았습니다. 빈 곳을 추정으로 채우지 않습니다.'
   return '계산에 필요한 항목이 비어 있어 내지 않았습니다.'
+}
+
+export function hasUndecidedExpenses(data: EmergencyFundResponse): boolean {
+  return (data.adjustability_undecided_transaction_count ?? 0) > 0
+    || data.status === 'incomplete_classification'
+    || (data.adjustability_undecided_share ?? 0) !== 0
 }
 
 export function emergencyFundReasons(data: EmergencyFundResponse, transactionAsOf: string | null): string[] {
   const reasons: string[] = []
   if (data.status === 'no_asset_snapshot') reasons.push('자산 스냅샷이 없어 현금성 자산을 알 수 없습니다.')
   if (data.status === 'no_baseline') reasons.push('기준이 되는 마감월이 없거나 월 보호 지급이 0원 이하라 개월 수를 내지 않았습니다.')
-  if ((data.adjustability_undecided_share ?? 0) > 0) {
+  if (hasUndecidedExpenses(data)) {
+    const count = data.adjustability_undecided_transaction_count
     reasons.push(
-      `기준 기간 지출 중 조정 가능성이 정해지지 않은 지출이 ${sharePct(data.adjustability_undecided_share)}입니다. 미정 지출을 보호로 보지 않았으므로, 월 보호 지급이 실제보다 작고 개월 수는 실제보다 클 수 있습니다.`,
+      `기준 기간에 조정 가능성이 미정인 지출 거래가 ${count ? `${count}건 ` : ''}있습니다. 분류 결과에 따라 월 보호 지급과 비상금 개월 수가 달라질 수 있습니다.`,
     )
   }
   if ((data.cash_like_name_rule_total ?? 0) > 0) {
@@ -142,7 +159,7 @@ export function baselineText(data: EmergencyFundResponse): string {
   const range = first === last ? formatPeriodKo(first) : `${formatPeriodKo(first)} ~ ${formatPeriodKo(last)}`
   const parts = [`${range} 마감월 ${baseline.month_count}개의 중앙값`]
   if (baseline.month_count < baseline.months_requested) {
-    if (baseline.limited_by === 'data_start') parts.push(`자료가 시작된 달부터라 ${baseline.months_requested}개월을 채우지 못했습니다`)
+    if (baseline.limited_by === 'data_start') parts.push(`자료가 있는 완전한 마감월이 ${baseline.months_requested}개월보다 적습니다`)
     else if (baseline.limited_by === 'baseline_start_date') parts.push(`설정한 기준 구간 시작일(${formatDateKo(baseline.baseline_start_date)}) 이후만 썼습니다`)
   }
   if (baseline.skipped_periods.length > 0) parts.push(`자료 없는 달 제외: ${baseline.skipped_periods.map(formatPeriodKo).join(', ')}`)

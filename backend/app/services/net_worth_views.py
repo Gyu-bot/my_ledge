@@ -147,8 +147,9 @@ NET_WORTH_VIEW_DESCRIPTIONS = {
     ),
     "vw_snapshot_kind_totals": (
         "T061 per-kind snapshot totals: kind=loans (sum of balance) or "
-        "investments (sum of market_value) per snapshot_date with row_count and "
-        "missing_value_row_count. Kinds keep their own dates; never merged."
+        "investments (sum of market_value) per snapshot_date. value_total sums "
+        "known values (0 when all are missing). Use row_count and "
+        "missing_value_row_count to distinguish a partial sum from a complete total."
     ),
 }
 

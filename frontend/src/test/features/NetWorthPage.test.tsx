@@ -273,6 +273,22 @@ describe('NetWorthPage (재무상태)', () => {
     expect(within(table).getByText('2026-05-15')).toBeInTheDocument()
   })
 
+  it('날짜가 일치해도 투자 값이 빠지면 차이를 보류하고 확인된 합계와 대출 감소는 보여준다', () => {
+    state.reconciliation = reconciliationFixture('incomplete_snapshot_values')
+    renderPage()
+
+    const status = screen.getByRole('group', { name: '대조 상태' })
+    expect(within(status).getByText(/스냅샷 값 누락/)).toBeInTheDocument()
+    const eq = equation()
+    expect(within(eq).getAllByText('계산 보류')).toHaveLength(2)
+    expect(within(eq).getByText(/투자 스냅샷에 값이 비어 있는 항목/)).toBeInTheDocument()
+    expect(within(eq).getByText(/대출 잔액 또는 투자 평가액이 누락되어/)).toBeInTheDocument()
+    expect(within(eq).getByText('+₩600,000')).toBeInTheDocument()
+    const table = screen.getByRole('table')
+    expect(within(table).getByText(/확인된 값 합계 ₩0/)).toBeInTheDocument()
+    expect(within(table).getByText('₩20,000,000')).toBeInTheDocument()
+  })
+
   it('스냅샷 쌍이 없으면 그 상태와 이유만 보인다', () => {
     state.reconciliation = reconciliationFixture('no_snapshot_pair')
     renderPage()
@@ -341,8 +357,20 @@ describe('NetWorthPage (재무상태)', () => {
     expect(screen.getByText(/현금성 자산 ÷ 월 보호 지급. 기록된 값으로 계산한 비율이며, 얼마가 적당한지에 대한 조언이 아닙니다./)).toBeInTheDocument()
     expect(screen.getByText(/2026년 2월 ~ 2026년 6월 마감월 5개의 중앙값/)).toBeInTheDocument()
     expect(screen.getByText('8.0%')).toBeInTheDocument()
-    expect(screen.getByText(/개월 수는 실제보다 클 수 있습니다/)).toBeInTheDocument()
+    expect(screen.getByText(/분류 결과에 따라 월 보호 지급과 비상금 개월 수가 달라질 수 있습니다/)).toBeInTheDocument()
     expect(screen.queryByText(/비상금 확보/)).not.toBeInTheDocument() // 예전 값(liquidity-health)은 쓰지 않는다
+  })
+
+  it('비상금 미정 비중이 0이어도 미정 거래 건수와 분류 링크를 보여준다', () => {
+    state.emergency = emergencyFundFixture({
+      adjustability_undecided_share: 0,
+      adjustability_undecided_transaction_count: 2,
+      monthly_adjustability_undecided_outflow: 0,
+    })
+    renderPage()
+    expect(screen.getByText(/조정 가능성이 미정인 지출 거래가 2건 있습니다/)).toBeInTheDocument()
+    const card = screen.getByRole('heading', { name: '비상금 개월 수' }).closest('section')!
+    expect(within(card).getByRole('link', { name: '분류하러 가기' })).toHaveAttribute('href', '/data/inbox')
   })
 
   it('비상금 기준 기간이 없으면 계산 보류와 이유', () => {
