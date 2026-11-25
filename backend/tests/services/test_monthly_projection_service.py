@@ -818,7 +818,9 @@ async def test_installment_link_is_read_only_when_payment_date_is_covered(db_ses
     await classify(db_session)
     before = await get_monthly_projection(db_session, reference_date=REFERENCE)
     after = await get_monthly_projection(db_session, reference_date=payment.date)
-    assert before.expense_components[1].expected_remaining == 1_000
+    assert before.expense_components[1].expected_remaining is None
+    assert before.expense_components[1].known_expected_remaining == 0
+    assert before.expense_components[1].missing_reasons
     assert after.expense_components[1].expected_remaining == 0
     assert after.observed_net_expense - before.observed_net_expense == 1_000
 

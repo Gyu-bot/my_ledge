@@ -1408,7 +1408,7 @@ def _expense_components(
             installment_warnings.append(
                 f"{plan.display_name}: {due.isoformat()} 예정 결제가 월말까지 관측되지 않아 결제·연결 확인 필요"
             )
-        elif due < current_start + timedelta(days=max(covered_day - 1, 0)):
+        elif due < current_start + timedelta(days=covered_day):
             reasons["installment"].append(
                 "예정일이 지난 미연결 할부는 미래 지출로 더하지 않음; 실제 결제 여부 확인 필요"
             )
