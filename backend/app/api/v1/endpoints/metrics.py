@@ -8,6 +8,7 @@ from app.core.security import require_api_key
 from app.schemas.comparison import (
     ComparisonAdjustabilityView,
     ComparisonLevel,
+    OneOffMode,
     ComparisonMonthlyFlowResponse,
     ContributionResponse,
 )
@@ -139,6 +140,7 @@ async def get_metrics_change_contributions(
         description="대상 월. 생략하면 가장 최근 마감월(없으면 진행월).",
     ),
     adjustability: ComparisonAdjustabilityView = Query(default="all"),
+    one_off: OneOffMode = Query(default="exclude"),
     level: ComparisonLevel = Query(default="category"),
     category: str | None = Query(
         default=None,
@@ -155,4 +157,5 @@ async def get_metrics_change_contributions(
         level=level,
         category=category,
         limit=limit,
+        one_off=one_off,
     )

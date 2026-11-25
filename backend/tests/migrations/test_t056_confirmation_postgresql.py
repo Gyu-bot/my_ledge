@@ -13,6 +13,8 @@ from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from historical_one_off_compat import historical_read_factory
+
 from app.core.database import get_db_session
 from app.main import app
 from app.models.nature_axes import RecurringCommitment, TransactionNatureOverride
@@ -188,12 +190,14 @@ async def test_roundtrip_preserves_all_read_analytics_and_axes(migrated_db):
         await db.commit()
         ids = [manual.id, no_override.id, old.id, target.id]
     baseline_catalog = await catalog(engine)
-    baseline = await capture(factory)
+    async with historical_read_factory(engine) as read_factory:
+        baseline = await capture(read_factory)
     migrate(url, schema, "downgrade", BEFORE)
     assert await catalog(engine) == baseline_catalog
     migrate(url, schema, "upgrade", AFTER)
     assert await catalog(engine) == baseline_catalog
-    after = await capture(factory)
+    async with historical_read_factory(engine) as read_factory:
+        after = await capture(read_factory)
     assert len(after) >= 20
     for path, body in baseline.items():
         if path.startswith("/api/v1/transactions"):
@@ -258,7 +262,8 @@ async def test_roundtrip_preserves_all_read_analytics_and_axes(migrated_db):
     migrate(url, schema, "downgrade", BEFORE)
     assert await catalog(engine) == baseline_catalog
     migrate(url, schema, "upgrade", AFTER)
-    assert await capture(factory) == after
+    async with historical_read_factory(engine) as read_factory:
+        assert await capture(read_factory) == after
 
 
 @pytest.mark.parametrize("decision", [None, "yearly", "as_is"])

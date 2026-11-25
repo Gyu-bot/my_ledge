@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.income_projection import (
     MonthlyProjection,
     ProjectionAccuracy,
+    ProjectionAccuracyActual,
     ProjectionAccuracyBand,
 )
 from app.services.metric_views import (
@@ -50,6 +51,7 @@ DEFINITION = (
     "점 수로만 센다."
 )
 LIMITATIONS = [
+    "현재 일회성 묶음 소속으로 과거를 재생함. 일회성은 관측 변동 실적에 포함하고 남은 지출 가정에서 제외함",
     "분류·조정 가능성·대출·할부 연결·할부 계획 상태·수입 예상 설정은 이력이 없어 현재 값으로 재생함",
     "기준일 이전 날짜의 거래는 그때 이미 알려졌다고 가정함(업로드 지연 미반영)",
     "마감월이 적거나 이력이 짧으면 점이 적고, 점이 적은 중앙값은 대표성이 낮음",
@@ -83,6 +85,9 @@ async def _actual_month(
         "income": int(row["income_total"] or 0),
         "expense": int(row["total_outflow"] or 0),
         "net": int(row["residual"] or 0),
+        "variable_ongoing_actual": int(
+            row["total_outflow"] - row["committed_total"] - row["one_off_total"]
+        ),
     }
 
 
@@ -106,7 +111,7 @@ async def get_projection_accuracy(
         if isinstance(first, date)
         else date.fromisoformat(str(first)[:10])
     )
-    evaluated: list[str] = []
+    actuals: list[ProjectionAccuracyActual] = []
     points: list[tuple[int, MonthlyProjection, dict[str, int]]] = []
     for offset in range(months, 0, -1):
         start = _shift_month(month_start, -offset)
@@ -114,7 +119,12 @@ async def get_projection_accuracy(
             continue
         end = _month_end(start)
         actual = await _actual_month(db_session, start, end)
-        evaluated.append(_period(start))
+        actuals.append(
+            ProjectionAccuracyActual(
+                period=_period(start),
+                variable_ongoing_actual=actual["variable_ongoing_actual"],
+            )
+        )
         for day in days:
             if day > end.day:
                 continue
@@ -166,7 +176,8 @@ async def get_projection_accuracy(
     return ProjectionAccuracy(
         definition=DEFINITION,
         reference_period=_period(reference_date),
-        evaluated_periods=evaluated,
+        evaluated_periods=[item.period for item in actuals],
+        actuals=actuals,
         as_of_days=list(days),
         current_band=_band(reference_date.day),  # type: ignore[arg-type]
         bands=bands,

@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Badge } from '../../ds/Badge'
+import { oneOffEventLink } from '../one-off/oneOffLabels'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Card } from '../../ds/Card'
 import { SegmentedControl } from '../../ds/SegmentedControl'
@@ -12,7 +15,7 @@ import { BaselineControl, BasisNote } from '../analysis/ComparisonBasis'
 import { loadErrorMessage } from '../analysis/text'
 
 const VIEW_OPTIONS = [
-  { value: 'all', label: '전체 지출' },
+  { value: 'all', label: '경상 지출 전체' },
   { value: 'protected', label: '보호만' },
   { value: 'adjustable', label: '조정 가능만' },
 ] as const
@@ -74,7 +77,7 @@ export function ContributionsCard({ period }: { period: string }) {
   const data = query.data
 
   return (
-    <Card title="무엇이 변했나" meta="기준 기간 대비 금액 기여가 큰 순서입니다. 증감률이 아니라 원 단위 차이로 정렬합니다.">
+    <Card title="무엇이 변했나" meta="일회성 지급을 제외한 경상 지출이 기준 대비 얼마나 변했는지 봅니다.">
       <div className="mb-3"><BaselineControl value={baseline} onChange={(value) => { setBaseline(value); setExpanded(null) }} /></div>
       <SegmentedControl
         className="mb-3"
@@ -139,6 +142,34 @@ export function ContributionsCard({ period }: { period: string }) {
               </p>
             )}
           </div>
+          {data.one_off?.target_total != null ? (
+            <section aria-label="일회성 지출 참고" className="border-t border-border-subtle pt-3 text-caption">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-label font-semibold"><Badge variant="accent">일회성</Badge> 대상 기간 합계</h3>
+                <span className="tnum">{formatNetWon(data.one_off.target_total)}</span>
+              </div>
+              {data.one_off.target_events.length ? (
+                <ul className="mt-1 divide-y divide-border-subtle">
+                  {data.one_off.target_events.map(({ event_id, name, amount }) => (
+                    <li key={event_id} className="flex justify-between gap-2 py-1">
+                      <Link className="min-w-0 break-words text-transfer hover:underline" to={oneOffEventLink(event_id)}>{name}</Link>
+                      <span className="tnum shrink-0">{formatNetWon(amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {data.one_off.baseline_values.length ? (
+                <details className="mt-2 text-text-muted">
+                  <summary className="cursor-pointer">기준월 일회성</summary>
+                  <dl className="mt-1">
+                    {data.one_off.baseline_values.map(({ period: month, amount }) => (
+                      <div key={month} className="flex justify-between gap-2"><dt>{month}</dt><dd className="tnum">{formatNetWon(amount)}</dd></div>
+                    ))}
+                  </dl>
+                </details>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       )}
     </Card>

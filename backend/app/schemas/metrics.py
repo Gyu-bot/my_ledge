@@ -199,6 +199,9 @@ class MonthlyFlowMonth(BaseModel):
         description="transfer_undecided_activity_total ÷ transfer_activity_total."
     )
     transfer_rows: list[TransferFlowRow]
+    one_off_total: int
+    ongoing_outflow: int
+    ongoing_living_spend: int
 
 
 class MonthlyFlowResponse(BaseModel):

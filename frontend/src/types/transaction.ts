@@ -24,6 +24,8 @@ export interface TransactionResponse {
   source: string
   created_at: string
   updated_at: string
+  one_off_event_id?: number | null
+  one_off_event_name?: string | null
 }
 
 export interface TransactionListResponse {
@@ -57,6 +59,8 @@ export interface TransactionListParams {
   include_income?: boolean
   /** T059 월 흐름표 줄 필터 — vw_metric_flow_lines의 값 그대로 */
   flow_row?: FlowRowKey
+  one_off_event_id?: number
+  one_off?: boolean
   payment_form?: 'committed' | 'ad_hoc' | 'not_applicable'
   adjustability?: 'protected' | 'adjustable' | 'undecided' | 'not_applicable'
 }

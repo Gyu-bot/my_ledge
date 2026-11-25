@@ -87,7 +87,10 @@ class TransactionRecord(BaseModel):
 
 
 class TransactionResponse(TransactionAxes, TransactionRecord):
-    """Stored transaction fields first, then the resolved axes (T056)."""
+    """Stored transaction fields, resolved axes and direct one-off membership."""
+
+    one_off_event_id: int | None = None
+    one_off_event_name: str | None = None
 
 
 class TransactionListResponse(PaginatedResponse):

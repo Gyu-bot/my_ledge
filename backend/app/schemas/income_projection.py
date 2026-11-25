@@ -222,6 +222,11 @@ class ProjectionAccuracyBand(BaseModel):
     expense_median_signed_error: int | None = None
 
 
+class ProjectionAccuracyActual(BaseModel):
+    period: str
+    variable_ongoing_actual: int
+
+
 class ProjectionAccuracy(BaseModel):
     """Recent closed-month replay of this forecast (T064 R12)."""
 
@@ -231,6 +236,7 @@ class ProjectionAccuracy(BaseModel):
     as_of_days: list[int] = Field(default_factory=list)
     current_band: Literal["day_01_10", "day_11_20", "day_21_31"] | None = None
     bands: list[ProjectionAccuracyBand] = Field(default_factory=list)
+    actuals: list[ProjectionAccuracyActual] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
 

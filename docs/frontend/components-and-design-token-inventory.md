@@ -209,3 +209,14 @@ T056 확인 보완: `CommitmentsPage`와 `RecurringCommitmentsEditor`는 기존 
 
 
 T066 정기 지급 정리: `RecurringCommitmentsEditor`는 관측 건수·기간, 이행 출처·미확인·관측 ≤1 필터와 수, 선택 체크박스와 일치 방식(exact/prefix)을 표시한다. `RecurringCleanupControls`는 합치기 제안 카드, 대상·일치 방식·접두어 미리 채움, 같은 카테고리 선택 합치기와 원자적 일괄 삭제를 기존 Ledger DS `Button`·`Field`·`Select`·`TextInput`·`ConfirmDanger`로 구성한다. 확인 문구 전에는 실행하지 않는다. `ConfirmDanger.confirmDisabled`는 입력 오류와 처리 중 상태를 구분하며 작은 화면의 대화상자는 세로 스크롤을 허용한다. 새 토큰은 없다.
+
+
+### 일회성 지출 구성요소 (T067)
+
+- `OneOffBulkPanel`은 기존 `BulkBar`의 공용 선택을 사용한다.
+  `DetailPanel`, `Field`, `Button`으로 기존 묶음 추가와 생성·추가를 제공한다.
+- `OneOffEventsPage`는 `Card`와 텍스트 `Badge`로 직접 소속과 게시월별
+  귀속 금액을 표시한다. `useOneOffEventActions`는 묶음, 거래, 월 흐름,
+  비교, 전망, 사후 검토 및 한도 조회를 갱신한다.
+- `CashflowChart`의 경상 지급 모드는 지출 막대만 그린다. 음수 지출은
+  영점 아래에 두고 금액 텍스트에는 부호를 보존한다.

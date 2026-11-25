@@ -253,11 +253,12 @@ async def read_review_items(
                     "purchase_review_candidate: 기존 구매 단위 후보 검출기(큰 일회성 지출, "
                     "처음 등장한 거래처, 거래처·카테고리 급증). 구매 순액은 뷰에서 읽고, "
                     "기준은 comparison의 마감월 중앙값·같은 경과일을 쓴다. "
-                    "spending_anomaly: 기존 카테고리 지출 변화 검출기(비교 계약 기준값) 그대로."
+                    "spending_anomaly: 게시월 흐름 줄 기준으로 유효 일회성을 뺀 카테고리 지출 변화."
                 ),
                 "purchase_amounts": (
                     "vw_metric_transactions.purchase_net_amount의 양수 구매 순액(-purchase_net_amount). "
                     "수시·조정 가능 KRW 구매만 포함하며 확정 환불은 원구매에 차감한다. "
+                    "일회성 소속 구매는 후보와 거래처·카테고리의 대상·기준 합계에서 제외한다. "
                     "현금흐름의 게시월 지출과 다르다. 자료 있는 기준월의 구매 없음은 0원, "
                     "자료 없는 달·월중 시작 첫 달은 제외한다. 신규 거래처도 같은 기준월 창에서 판단한다. "
                     "연간성 지출의 12개월 비교는 /read/comparison/contributions의 twelve_month_items에서 읽는다. "

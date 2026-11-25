@@ -102,6 +102,9 @@ export interface MonthlyFlowMonth {
   transfer_undecided_activity_total: number
   transfer_undecided_share: number | null
   transfer_rows: TransferFlowRow[]
+  one_off_total: number
+  ongoing_outflow: number
+  ongoing_living_spend: number
 }
 
 export interface MonthlyFlowResponse {
@@ -256,9 +259,17 @@ export interface ContributionQuery {
   baseline?: BaselineMethod
   period?: string
   adjustability?: ContributionAdjustability
+  one_off?: 'exclude' | 'include'
   level?: 'category' | 'merchant'
   category?: string
   limit?: number
+}
+
+export interface OneOffContributionReference {
+  mode: 'exclude' | 'include'
+  target_total: number | null
+  target_events: { event_id: number; name: string; amount: number }[]
+  baseline_values: { period: string; amount: number }[]
 }
 
 export interface ContributionResponse {
@@ -271,6 +282,7 @@ export interface ContributionResponse {
   target_total: number | null
   baseline_total: number | null
   change_total: number | null
+  one_off: OneOffContributionReference
   items: ContributionItem[]
   twelve_month_window: TwelveMonthWindowBasis
   twelve_month_items: ContributionItem[]
@@ -348,6 +360,7 @@ export interface ProjectionAccuracy {
   as_of_days: number[]
   current_band: ProjectionAccuracyBandKey | null
   bands: ProjectionAccuracyBand[]
+  actuals: { period: string; variable_ongoing_actual: number }[]
   limitations: string[]
 }
 

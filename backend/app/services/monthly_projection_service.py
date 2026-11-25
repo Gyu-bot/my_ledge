@@ -838,7 +838,9 @@ def _partition_lines(
         row["_rule"] = False
         row["_loan_account"] = row.get("loan_account_id")
         kind: str
-        if commitment_kind == "loan":
+        if commitment_kind is None and row.get("one_off_event_id") is not None:
+            kind = "one_off"
+        elif commitment_kind == "loan":
             kind = "loan"
         elif commitment_kind == "installment":
             kind = "installment"
@@ -1233,7 +1235,7 @@ def _expense_components(
                 row.get("effective_category_major") or ""
             )
             if (
-                row["_part"] != "loan"
+                row["_part"] not in ("loan", "one_off")
                 and "대출" in category
                 and _period(row["date"]) == period
             ):
@@ -1434,7 +1436,7 @@ def _expense_components(
         "loan": f"대출 스냅샷 {', '.join(snapshot_dates) or '없음'}의 월상환액 - 이번 달 그 대출 계좌에 연결되거나 사람이 등록한 대출 거래처 규칙에 맞는 실제 상환. 최근 충분히 관측된 마감월과 이번 달 흐름표에 지출 줄이 없는 대출은 더하지 않고 따로 보임; 상환일 정보는 없음",
         "installment": "활성 할부 일정의 이번 달 예정액 - 실제 연결 또는 계획 규칙(금액·거래처·결제수단·일정) 일치 결제(연결 미확인); 지난 미연결 회차는 확인 필요",
         "recurring": "등록된 정기 지급 묶음(흐름표 committed_recurring 줄)별 과거 총결제액과 이미 결제한 금액, 동일 잔여 날짜 결제 패턴으로 추가 지출 추정. 끝난 묶음의 이력은 변동 기준선에 넣지 않음. 환급은 관측 순지출에만 반영; 이력 부족은 항목별 낮은 신뢰도로 표시",
-        "variable": "흐름표의 약정 아닌 지출 줄(보호·조정 가능·미정) 중 대출 거래처 규칙·할부 계획 규칙·할부 표시에 맞는 결제를 뺀 나머지의 동일 잔여 일자 구간 중앙값; 환급 포함. 12개월 창을 쓸 수 있으면 12개월 중 1–2개월에만 있는 카테고리는 중앙값에서 빼고 작년 같은 달의 남은 날짜 금액을 더함(annual_items)",
+        "variable": "흐름표의 약정 아닌 지출 줄(보호·조정 가능·미정) 중 일회성 및 대출 거래처 규칙·할부 계획 규칙·할부 표시에 맞는 결제를 뺀 나머지의 동일 잔여 일자 구간 중앙값; 환급 포함. 12개월 창을 쓸 수 있으면 12개월 중 1–2개월에만 있는 카테고리는 중앙값에서 빼고 작년 같은 달의 남은 날짜 금액을 더함(annual_items)",
     }
     recurring_warnings = sorted(
         {
@@ -1519,6 +1521,7 @@ async def _load_expense_lines(
             lines.c.adjustability,
             lines.c.recurring_commitment_id,
             lines.c.mapping_note,
+            lines.c.one_off_event_id,
         )
         .where(lines.c.type == EXPENSE, lines.c.date >= start)
         .where(lines.c.date <= reference)
@@ -1781,6 +1784,7 @@ async def get_monthly_projection(
             "과거 관측 패턴은 예정 계약을 보장하지 않음; 보너스·보험금·환급·중고판매·소액 급여정산은 자동 반복 수입에서 제외",
             "관측 공백·미연결 상환·새 지출·향후 금액 변경으로 전망이 달라질 수 있음",
             "잔여 지출은 대출, 할부, 반복결제, 나머지 변동·미분류의 순서로 중복 없이 배정",
+            "일회성 지출은 관측 총지급에 포함하며, 관측 분해에서는 변동·미분류 실적에 포함. 남은 지출 가정에서는 제외",
         ],
         income_sources=sources,
         expense_components=components,

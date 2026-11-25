@@ -22,6 +22,7 @@ from app.schemas.comparison import (
     BaselineMethod,
     ComparisonAdjustabilityView,
     ComparisonLevel,
+    OneOffMode,
 )
 from app.schemas.metrics import SpendCubeDimension
 from app.schemas.read_surface import (
@@ -34,6 +35,7 @@ from app.schemas.read_surface import (
     ReadDataStatusResponse,
     ReadErrorResponse,
     ReadMonthlyFlowResponse,
+    ReadOneOffEventsResponse,
     ReadMonthProjectionResponse,
     ReadReviewItemsResponse,
     ReadSpendCubeResponse,
@@ -51,6 +53,7 @@ from app.services.read_surface_service import (
     read_contributions,
     read_data_status,
     read_monthly_flow,
+    read_one_off_events,
     read_month_projection,
     read_spend_cube,
 )
@@ -226,6 +229,7 @@ async def get_read_contributions(
         default="median_of_recent_closed_months",
         description=BASELINE_DESCRIPTION,
     ),
+    one_off: OneOffMode = Query(default="exclude"),
     lists: ContributionLists = Query(
         default="both",
         description=(
@@ -247,7 +251,21 @@ async def get_read_contributions(
             limit=limit,
             baseline=baseline,
             lists=lists,
+            one_off=one_off,
         ),
+    )
+
+
+@router.get(
+    "/one-off-events",
+    response_model=ReadOneOffEventsResponse,
+    responses=_ERROR_RESPONSES,
+)
+async def get_read_one_off_events(
+    db_session: AsyncSession = Depends(get_db_session),
+) -> ReadOneOffEventsResponse | JSONResponse:
+    return await _guard(
+        "one_off_events", db_session, lambda: read_one_off_events(db_session)
     )
 
 

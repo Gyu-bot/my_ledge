@@ -28,7 +28,7 @@ beforeEach(() => {
     data: {
       period: '2030-12', total_outflow: 120, window_start_period: '2030-01', window_end_period: '2030-12', annual_missing_reason: null, annual_missing_reason_label: null,
       annual_items: [{ category: '합성 대분류', category_minor: '합성 연간 항목', source: 'observed_pattern', commitment_id: null, commitment_label: null, observed_periods: ['2030-03'], window_amount: 12000, monthly_equivalent: 1000, active_months_in_window: 1 }],
-      comparisons: [{ target_kind: 'category', target_value: '합성 항목', target_label: '합성 항목', actual_amount: 120, limit_amount: 100, limit_revision_id: 1, effective_from_period: '2030-01', difference_amount: 20, missing_reason: null, missing_reason_label: null }],
+      comparisons: [{ target_kind: 'category', target_value: '합성 항목', target_label: '합성 항목', actual_amount: 120, one_off_amount: 30, limit_amount: 100, limit_revision_id: 1, effective_from_period: '2030-01', difference_amount: 20, missing_reason: null, missing_reason_label: null }],
     },
   }
 })
@@ -42,6 +42,7 @@ describe('T062 참고 표시와 한도 대비', () => {
     expect(screen.getByRole('list', { name: '연간성 지출 월 환산' })).toHaveTextContent('12개월 ₩12,000 → 월 ₩1,000 (참고)')
     expect(screen.getByText(/총지급이나 한도 대비 실적에 다시 더하지/)).toBeInTheDocument()
     expect(screen.getByRole('list', { name: '월 한도 대비' })).toHaveTextContent('₩20 초과')
+    expect(screen.getByRole('list', { name: '월 한도 대비' })).toHaveTextContent('그중 일회성 ₩30')
     expect(periods).toContain('2030-12')
   })
   it('대분류·소분류, 등록 연간 약정 출처와 실제 관측월을 구분한다', () => {

@@ -234,3 +234,97 @@ def test_cli_writes_json_and_markdown(tmp_path, monkeypatch, capsys):
     assert "2031-09 ~ 2031-10" in markdown
     for private in PRIVATE_STRINGS:
         assert private not in markdown
+
+
+async def test_one_off_observed_once_and_excluded_from_matching_and_replay(db_session):
+    from app.models import LoanAccount, LoanMerchantRule
+    from app.models.nature_axes import TransactionNatureOverride
+    from app.schemas.one_off_event import OneOffEventCreate
+    from app.services.one_off_event_service import create_event
+    from app.services.projection_accuracy_service import get_projection_accuracy
+    from forecast_backtest_ledger import DEVICE, INSTALLMENT, LENDER
+
+    await build_backtest_ledger(db_session)
+    reference = date(2031, 7, 20)
+    before = await get_monthly_projection(db_session, reference_date=reference)
+    account = await db_session.scalar(select(LoanAccount))
+    db_session.add(
+        LoanMerchantRule(
+            merchant=LENDER,
+            match_field="merchant",
+            loan_account_id=account.id,
+            repayment_type="unknown",
+        )
+    )
+
+    def expense(on, merchant, category, amount):
+        return Transaction(
+            date=on,
+            time=time(12),
+            type="지출",
+            amount=-amount,
+            merchant=merchant,
+            description=merchant,
+            category_major=category,
+        )
+
+    loan_like = expense(reference, LENDER, "대출", 15_019)
+    unlinked = expense(reference, "Synthetic contract", "대출", 6_329)
+    installment_like = expense(reference, DEVICE, "쇼핑", INSTALLMENT)
+    historical = [
+        expense(date(2031, month, 25), "Synthetic contract", "식비", 25_011)
+        for month in range(1, 7)
+    ]
+    db_session.add_all([loan_like, unlinked, installment_like, *historical])
+    await db_session.flush()
+    db_session.add(
+        TransactionNatureOverride(
+            transaction_id=installment_like.id,
+            installment_link_unconfirmed=True,
+            source="user",
+        )
+    )
+    await db_session.commit()
+    await create_event(
+        db_session,
+        OneOffEventCreate(
+            name="합성 계약금",
+            transaction_ids=[
+                row.id for row in [loan_like, unlinked, installment_like, *historical]
+            ],
+        ),
+    )
+    amount = 15_019 + 6_329 + INSTALLMENT
+    after = await get_monthly_projection(db_session, reference_date=reference)
+    assert after.observed_net_expense == before.observed_net_expense + amount
+    assert after.expected_remaining_expense == before.expected_remaining_expense
+    assert after.projected_month_expense == before.projected_month_expense + amount
+    assert after.expense_components == before.expense_components
+    assert (
+        after.remaining_expense_adjustability == before.remaining_expense_adjustability
+    )
+    assert after.missing_reasons == before.missing_reasons
+
+    config = BacktestConfig(
+        from_period="2031-07", to_period="2031-07", as_of_days=(20,), show_amounts=True
+    )
+    report = await run_backtest(db_session, config)
+    (point,) = report["points"]
+    assert point["actual"]["one_off_actual"] == amount
+    assert (
+        point["actual"]["variable_ongoing_actual"]
+        == point["actual"]["variable"] - amount
+    )
+    assert point["observed"]["variable"] >= amount
+    assert report["consistency"]["observed_mismatch_points"] == 0
+    assert report["consistency"]["component_sum_mismatch_points"] == 0
+    assert report["consistency"]["actual_component_sum_mismatch_points"] == 0
+    assert "one_off_membership_current_state" in render_markdown(report)
+    accuracy = await get_projection_accuracy(
+        db_session, reference_date=date(2031, 8, 20), months=1, days=(20,)
+    )
+    assert (
+        accuracy.actuals[0].variable_ongoing_actual
+        == point["actual"]["variable_ongoing_actual"]
+    )
+    assert any("현재 일회성 묶음 소속" in item for item in accuracy.limitations)

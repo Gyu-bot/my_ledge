@@ -1,9 +1,11 @@
+import { useState } from 'react'
+import { Toggle } from '../../ds/Field'
 import type { ReadPeriodState } from '../../types/readSurface'
 import { MonthCoverageLabel } from '../analysis/MonthCoverageLabel'
 import { Badge } from '../../ds/Badge'
 import { Card } from '../../ds/Card'
 import { CashflowChart } from '../../ds/charts/CashflowChart'
-import { formatSignedWon, formatWon } from '../../ds/format'
+import { formatNetWon, formatSignedWon, formatWon } from '../../ds/format'
 import { cn } from '../../lib/utils'
 import type { MonthlyFlowMonth } from '../../types/metrics'
 import { lastMonths } from '../analysis/periods'
@@ -23,6 +25,7 @@ interface TrendCardProps {
 
 /** 최근 12개월 흐름 — 자료 없는 달은 0원이 아니라 "자료 없음"으로 둔다. */
 export function TrendCard({ items, coveragePeriods, coverageError, endPeriod, firstPeriod, selectedPeriod, onSelect }: TrendCardProps) {
+  const [includeOneOff, setIncludeOneOff] = useState(false)
   const coverageByPeriod = new Map(coveragePeriods?.map((item) => [item.period, item]))
   const periods = lastMonths(endPeriod, 12)
   const byPeriod = new Map(items.map((item) => [item.period, item]))
@@ -32,14 +35,19 @@ export function TrendCard({ items, coveragePeriods, coverageError, endPeriod, fi
   const inProgress = new Set(withData.filter((item) => item.month_status === 'in_progress').map((item) => item.period))
 
   return (
-    <Card title="최근 12개월" meta="관측 기록만. 진행월은 흐리게, 자료 없는 달은 따로 표시합니다.">
+    <Card
+      title="최근 12개월"
+      meta="관측 기록만. 진행월은 흐리게, 자료 없는 달은 따로 표시합니다."
+      action={<Toggle label="일회성 포함" checked={includeOneOff} onChange={setIncludeOneOff} />}
+    >
       {coverageError ? <p role="note" className="text-caption text-warn">달별 자료 범위를 불러오지 못했습니다.</p> : null}
       <p className="text-micro text-text-muted">달 전체 범위도 수집 완전성을 뜻하지 않습니다. 거래 기록 없는 달은 추정이며 확인되지 않았습니다.</p>
       {withData.length > 0 ? (
         <CashflowChart
-          items={withData.map((item) => ({ period: item.period, income: item.income_total, expense: item.total_outflow, net: item.residual }))}
+          items={withData.map((item) => ({ period: item.period, income: item.income_total, expense: includeOneOff ? item.total_outflow : item.ongoing_outflow, net: item.residual }))}
           incompletePeriods={inProgress}
-          labels={{ income: '수입', expense: '총지급', net: '잔여' }}
+          outflowOnly={!includeOneOff}
+          labels={{ income: '수입', expense: includeOneOff ? '총지급' : '경상 지급', net: '잔여' }}
         />
       ) : null}
       {noData.length > 0 ? (
@@ -51,8 +59,9 @@ export function TrendCard({ items, coveragePeriods, coverageError, endPeriod, fi
             <tr>
               <th className="py-1.5 pr-2 font-medium">달</th>
               <th className="py-1.5 pr-2 text-right font-medium">수입</th>
-              <th className="py-1.5 pr-2 text-right font-medium">총지급</th>
-              <th className="py-1.5 pr-2 text-right font-medium">잔여</th>
+              <th className="py-1.5 pr-2 text-right font-medium">{includeOneOff ? '총지급' : '경상 지급'}</th>
+              <th className="py-1.5 pr-2 text-right font-medium">일회성</th>
+              <th className="py-1.5 pr-2 text-right font-medium">총지급 기준 잔여</th>
               <th className="py-1.5 text-right font-medium">미정 비중</th>
             </tr>
           </thead>
@@ -81,12 +90,13 @@ export function TrendCard({ items, coveragePeriods, coverageError, endPeriod, fi
                   {item ? (
                     <>
                       <td className="py-1.5 pr-2 text-right">{formatWon(item.income_total)}</td>
-                      <td className="py-1.5 pr-2 text-right">{formatWon(item.total_outflow)}</td>
+                      <td className="py-1.5 pr-2 text-right">{formatNetWon(includeOneOff ? item.total_outflow : item.ongoing_outflow)}</td>
+                      <td className="py-1.5 pr-2 text-right">{formatNetWon(item.one_off_total)}</td>
                       <td className="py-1.5 pr-2 text-right">{formatSignedWon(item.residual)}</td>
                       <td className="py-1.5 text-right">{sharePct(item.adjustability_undecided_share)}</td>
                     </>
                   ) : (
-                    <td colSpan={4} className="py-1.5 text-right text-text-muted">{beforeData(period) ? '가져오기 전' : '자료 없음'}</td>
+                    <td colSpan={5} className="py-1.5 text-right text-text-muted">{beforeData(period) ? '가져오기 전' : '자료 없음'}</td>
                   )}
                 </tr>
               )

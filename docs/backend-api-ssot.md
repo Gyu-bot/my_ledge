@@ -211,6 +211,28 @@ GET `analytics/fixed-cost-summary`, `analytics/fixed-cost-trend`, `analytics/rec
 | `PUT` | `/api/v1/transactions/installment-links/bulk` | live | API key required, sequentially map selected transactions to one installment plan |
 | `POST` | `/api/v1/transactions/merge` | stub | `501 Not Implemented` |
 
+### One-off expense events (T067)
+
+| Method | Path | Result |
+|---|---|---|
+| GET | `/api/v1/one-off-events` | Event summaries with direct member count and date bounds, attributed monthly amounts and total |
+| GET | `/api/v1/one-off-events/{id}` | Summary plus direct members and their current status |
+| POST | `/api/v1/one-off-events` | Create with `name`, optional `note` and optional `transaction_ids`; 201 with detail |
+| PATCH | `/api/v1/one-off-events/{id}` | Update `name` or `note`; null clears the note |
+| DELETE | `/api/v1/one-off-events/{id}` | Remove the event and its memberships; 204 |
+| POST / DELETE | `/api/v1/one-off-events/{id}/members` | Add or remove direct members using `{transaction_ids}`; return detail |
+
+Writes require `X-API-Key`. Additions are atomic and repeatable in the same
+event. Other-event membership is a 409. Ineligible or missing transactions
+are 422. The response `detail` lists `transaction_id` and `reason` for
+each rejected transaction. Valid members are effective KRW expense rows
+without a resolved commitment. An event name is 1–100 characters after trimming.
+
+Transaction responses expose direct `one_off_event_id` and `one_off_event_name`.
+The list filters `one_off_event_id` and `one_off=true|false` match monetary
+attribution on the same flow line as the category and flow-axis filters. A
+posted refund can therefore match a different event than its direct membership.
+
 ### Assets / Snapshots
 
 | Method | Path | Status | Notes |
@@ -337,6 +359,22 @@ Every route requires `X-API-Key` (reads included). Transfer purposes are written
 - No data vs zero: a month with no effective KRW transactions is skipped (listed in `skipped_periods`) and the search continues further back; a month with data but no amount for an item counts as 0. A target month with no data returns null target amounts.
 - 12-month window: an item whose net spend is positive in only 1–2 of the 12 months ending at the target (all 12 months with data) is `cadence=annual_like` and compared as the 12-month total vs the preceding 12-month total (`twelve_month_items`). The baseline window must be fully covered and on/after the baseline start date, otherwise its baseline is null with `baseline_window_unavailable_reason`.
 - Historical analytics migration (the category/anomaly GETs and dashboard are now removed): `spending-anomalies` uses the contract baseline (field `baseline_avg` now holds the median; anomaly score formula unchanged; `baseline_months` default 6); `category-mom` adds per-item `baseline_amount`/`baseline_change_amount` and `comparison`, and its `previous_*` fields compare the same elapsed days whenever the target month is in progress; `monthly-cashflow.savings_rate`, `fixed-cost-trend.fixed_ratio` and dashboard `monthly_cashflow.savings_rate` are null for in-progress months. Details and what is not yet migrated: [backend-api-and-metrics-reference.md](backend-api-and-metrics-reference.md#comparison-contract-t057).
+
+### Ongoing outflow and comparisons (T067)
+
+- `/metrics/monthly-flow` and `/read/monthly-flow` append `one_off_total`,
+  `ongoing_outflow` and `ongoing_living_spend`. Comparison appends the same
+  measures and takes the median of the monthly values after subtraction.
+- `/read/comparison/contributions` and `/metrics/comparison/contributions`
+  accept `one_off=exclude|include` (default `exclude`). The `one_off` block
+  carries target event net amounts and baseline-month amounts at the same
+  scope, including the same elapsed days for an in-progress month.
+- `/read/one-off-events` shares the event list in the authenticated read
+  envelope and is listed in `/read/index`.
+- `/read/spending-reference` removes one-off lines before annual pattern
+  aggregation. Spending-limit actuals include one-off with the subset in
+  `one_off_amount`. `/read/review-items` removes one-off from both detectors'
+  input and aggregate amounts.
 
 ### Net Worth Reconciliation (T061)
 
@@ -787,3 +825,12 @@ Vocabulary mapping (names are kept; the meaning is the same):
 - 카테고리 보기와 조정 가능성 보기는 같은 지출의 다른 절단이다. 한도와 실적을 두 보기 사이에서 합산하지 않는다. 실제 값은 기존 SQL 지출 큐브와 월 흐름표에서 읽는다.
 - 새 경로의 모르는 조회 인자와 틀린 period·열거값·추가 body 필드는 422다. 읽기 조회 실패는 기존 `/read/*`와 같은 503 `query_failed` 봉투다.
 - migration `20261117_0040`은 `20261117_t054_t057` 위에 빈 `spending_limit_revisions` 표만 추가한다. 기존 행·뷰·가져오기 HTTP 계약은 바꾸지 않는다. 등록된 금융 표이므로 가져오기 검토 fingerprint·되돌리기 snapshot에 포함된다. 스키마 변경 전 준비한 검토/되돌리기 지점은 기존 스키마 검사에 의해 거절될 수 있으므로 운영 이행 시 구분한다. 이 작업은 배포하지 않는다.
+
+### One-off expense treatment in forecasts (T067)
+
+Observed expense includes one-off lines. Remaining expense assumptions
+exclude them before uncertain loan or installment matching. Forecast output
+keeps four expense components. One-off is included in variable actuals in
+the replay. The projection accuracy response exposes monthly
+`actuals[].variable_ongoing_actual` and states that replay uses current
+membership. The CLI exposes the corresponding amounts with `--show-amounts`.

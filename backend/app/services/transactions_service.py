@@ -7,6 +7,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.nature_axes import TransactionNatureOverride
+from app.models.one_off_event import OneOffEvent, OneOffEventMember
 from app.models.transaction import Transaction
 from app.models.loan_transaction_link import LoanTransactionLink
 from app.services.canonical_views import build_transactions_effective_select
@@ -56,13 +57,16 @@ async def list_transactions(
     flow_row: str | None = None,
     payment_form: str | None = None,
     adjustability: str | None = None,
+    one_off_event_id: int | None = None,
+    one_off: bool | None = None,
 ) -> TransactionListResponse:
+    one_off_filter = one_off_event_id is not None or one_off is not None
     base_query, canonical = _build_transaction_query(
         start_date=start_date,
         end_date=end_date,
         tx_type=tx_type,
         source=source,
-        category_major=category_major,
+        category_major=None if one_off_filter else category_major,
         payment_method=payment_method,
         is_edited=is_edited,
         include_deleted=include_deleted,
@@ -75,6 +79,9 @@ async def list_transactions(
         flow_row=flow_row,
         payment_form=payment_form,
         adjustability=adjustability,
+        one_off_event_id=one_off_event_id,
+        one_off=one_off,
+        category_major=category_major if one_off_filter else None,
     )
     total = (
         await db_session.scalar(select(func.count()).select_from(base_query.subquery()))
@@ -106,6 +113,14 @@ async def _with_axes(
         return []
     ids = [item.id for item in items]
     axes = await load_transaction_axes(db_session, ids)
+    membership = {
+        tx_id: {"one_off_event_id": event_id, "one_off_event_name": name}
+        for tx_id, event_id, name in await db_session.execute(
+            select(OneOffEventMember.transaction_id, OneOffEvent.id, OneOffEvent.name)
+            .join(OneOffEvent, OneOffEvent.id == OneOffEventMember.event_id)
+            .where(OneOffEventMember.transaction_id.in_(ids))
+        )
+    }
     edited_ids = set(
         (
             await db_session.scalars(
@@ -121,6 +136,7 @@ async def _with_axes(
             update={
                 **(axes[item.id].model_dump() if item.id in axes else {}),
                 "is_edited": item.is_edited or item.id in edited_ids,
+                **membership.get(item.id, {}),
             }
         )
         for item in items
@@ -645,6 +661,9 @@ def _apply_flow_line_filters(
     flow_row: str | None,
     payment_form: str | None,
     adjustability: str | None,
+    one_off_event_id: int | None,
+    one_off: bool | None,
+    category_major: str | None,
 ) -> Select:
     """Keep transactions that have a monthly-flow line with every given value.
 
@@ -662,6 +681,13 @@ def _apply_flow_line_filters(
         conditions.append(FLOW_LINES_VIEW.c.payment_form == payment_form)
     if adjustability is not None:
         conditions.append(FLOW_LINES_VIEW.c.adjustability == adjustability)
+    if one_off_event_id is not None:
+        conditions.append(FLOW_LINES_VIEW.c.one_off_event_id == one_off_event_id)
+    if one_off is not None:
+        column = FLOW_LINES_VIEW.c.one_off_event_id
+        conditions.append(column.is_not(None) if one_off else column.is_(None))
+    if category_major is not None:
+        conditions.append(FLOW_LINES_VIEW.c.effective_category_major == category_major)
     if not conditions:
         return query
     matching_line = (

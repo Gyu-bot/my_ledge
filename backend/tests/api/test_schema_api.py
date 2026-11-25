@@ -18,6 +18,8 @@ def test_expected_tables_exist() -> None:
         "transfer_purpose_overrides",
         "transfer_purpose_rules",
         "spending_limit_revisions",
+        "one_off_events",
+        "one_off_event_members",
         "merchant_alias_rules",
         "recurring_category_rules",
         "transactions",

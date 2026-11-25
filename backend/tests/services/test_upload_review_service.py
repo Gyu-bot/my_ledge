@@ -277,7 +277,9 @@ async def test_revise_invalidates_old_digest_and_prepare_preserves_revision(
     assert await db_session.scalar(select(func.count()).select_from(Transaction)) == 0
 
 
-@pytest.mark.parametrize("mutation", ["source", "metadata", "snapshot"])
+@pytest.mark.parametrize(
+    "mutation", ["source", "metadata", "snapshot", "one_off_event"]
+)
 async def test_full_state_staleness_is_durable(db_session, tmp_path, mutation):
     existing = tx()
     db_session.add(existing)
@@ -288,6 +290,10 @@ async def test_full_state_staleness_is_durable(db_session, tmp_path, mutation):
         existing.description = "changed"
     if mutation == "metadata":
         existing.memo = "human-private-note"
+    if mutation == "one_off_event":
+        from app.models.one_off_event import OneOffEvent
+
+        db_session.add(OneOffEvent(name="합성 묶음"))
     if mutation == "snapshot":
         db_session.add(
             AssetSnapshot(

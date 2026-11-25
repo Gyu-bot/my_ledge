@@ -14,6 +14,7 @@ from app.services.auto_classification_service import (
 )
 from app.models.installment_transaction_link import InstallmentTransactionLink
 from app.models.loan_transaction_link import LoanTransactionLink
+from app.models.one_off_event import OneOffEventMember
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.transaction import Transaction
 from app.models.transaction import TransactionSourceLifecycleStatus
@@ -367,7 +368,11 @@ async def _move_transaction_relationships(
     old_transaction_id: int,
     new_transaction_id: int,
 ) -> None:
-    for link_model in (InstallmentTransactionLink, LoanTransactionLink):
+    for link_model in (
+        InstallmentTransactionLink,
+        LoanTransactionLink,
+        OneOffEventMember,
+    ):
         link = await db_session.scalar(
             select(link_model).where(link_model.transaction_id == old_transaction_id)
         )

@@ -36,6 +36,11 @@ RAW_TABLE_DESCRIPTIONS = {
         "Raw transaction rows from imports and manual edits. Read directly for audit, "
         "debugging, or low-level data correction."
     ),
+    "one_off_events": "Human-entered one-off expense groups. Write via /api/v1/one-off-events.",
+    "one_off_event_members": (
+        "Direct transaction membership. For monetary attribution by posting month "
+        "read vw_metric_flow_lines.one_off_event_id."
+    ),
     "asset_snapshots": "Raw asset snapshot rows keyed by snapshot_date.",
     "investments": "Raw investment snapshot rows keyed by snapshot_date.",
     "loans": "Raw loan snapshot rows keyed by snapshot_date.",

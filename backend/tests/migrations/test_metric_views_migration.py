@@ -22,9 +22,11 @@ from app.services.metric_views import METRIC_VIEWS, compile_view_sql
 VERSIONS = Path(__file__).resolve().parents[2] / "alembic" / "versions"
 T054_MIGRATION = VERSIONS / "20261115_0035_metric_contract_views.py"
 T056_MIGRATION = VERSIONS / "20261115_0038_nature_axes_metric_views.py"
-LATEST_METRIC_MIGRATION = (
+LEGACY_RETIREMENT_MIGRATION = (
     VERSIONS / "20261117_0041_retire_legacy_classification_views.py"
 )
+LATEST_METRIC_MIGRATION = VERSIONS / "20261125_0046_one_off_events.py"
+
 # sha256 of 0035's frozen METRIC_VIEW_SQL + LEGACY_VIEW_SQL, recorded when 0038
 # was written. 0038's downgrade recreates exactly this SQL.
 T054_FROZEN_SHA256 = "dafcddca15255c1aaaa4e8435f5e3bdb0dcf18c795d578b52b4c35d84b99d668"
@@ -47,7 +49,8 @@ def _normalize(sql: str) -> str:
 
 def test_frozen_metric_view_sql_matches_runtime_definitions() -> None:
     migration = _load(LATEST_METRIC_MIGRATION)
-    frozen = dict(migration.METRIC_VIEW_SQL)
+    frozen = dict(_load(LEGACY_RETIREMENT_MIGRATION).METRIC_VIEW_SQL)
+    frozen.update(migration.AFTER_VIEWS)
     frozen["vw_transaction_nature"] = _load(
         VERSIONS / "20261117_0045_recurring_merchant_prefix.py"
     ).AFTER
@@ -88,7 +91,7 @@ def test_legacy_aggregate_views_read_the_flow_lines_only() -> None:
 
 
 def test_metric_views_read_the_two_axis_tables() -> None:
-    frozen = dict(_load(LATEST_METRIC_MIGRATION).METRIC_VIEW_SQL)
+    frozen = _load(LATEST_METRIC_MIGRATION).AFTER_VIEWS
     nature = _load(VERSIONS / "20261117_0045_recurring_merchant_prefix.py").AFTER
     for table in (
         "transaction_nature_overrides",
@@ -114,3 +117,10 @@ def test_work_queue_no_longer_asks_recurring_kind() -> None:
     # links fix both axes, so there is nothing to classify.
     assert "JOIN vw_transaction_nature n" in queue
     assert "n.installment_plan_id IS NULL" in queue
+
+
+def test_t067_downgrade_uses_0045_flow_dependents():
+    migration = _load(LATEST_METRIC_MIGRATION)
+    prior = dict(_load(LEGACY_RETIREMENT_MIGRATION).UPGRADE_VIEWS)
+    for name, sql in migration.BEFORE_VIEWS:
+        assert sql == prior[name]

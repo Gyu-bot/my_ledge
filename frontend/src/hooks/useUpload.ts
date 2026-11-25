@@ -34,6 +34,7 @@ export function useUploadFile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['upload'] })
       qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['one-off-events'] })
       qc.invalidateQueries({ queryKey: ['assets'] })
       qc.invalidateQueries({ queryKey: ['analytics'] })
       qc.invalidateQueries({ queryKey: ['profile'] })
@@ -63,6 +64,7 @@ export function useApplyUploadPreview() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['upload'] })
       qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['one-off-events'] })
       qc.invalidateQueries({ queryKey: ['assets'] })
       qc.invalidateQueries({ queryKey: ['analytics'] })
       qc.invalidateQueries({ queryKey: ['profile'] })
@@ -76,6 +78,7 @@ export function useResetData() {
     mutationFn: (scope: DataResetScope) => uploadApi.reset(scope),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['one-off-events'] })
       qc.invalidateQueries({ queryKey: ['assets'] })
       qc.invalidateQueries({ queryKey: ['analytics'] })
       qc.invalidateQueries({ queryKey: ['profile'] })

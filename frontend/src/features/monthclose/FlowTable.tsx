@@ -1,4 +1,7 @@
 import { Fragment, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { formatNetWon } from '../../ds/format'
+import { monthToDateRange } from '../../lib/dateRange'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { MonthlyFlowMonth } from '../../types/metrics'
@@ -8,6 +11,12 @@ import { sharePct } from '../analysis/text'
 type FlowLine =
   | { type: 'measure'; key: FlowMeasureKey; indent?: boolean; strong?: boolean; sign?: string; label?: string }
   | { type: 'heading'; label: string; sign?: string }
+  | { type: 'reference'; key: 'one_off_total' | 'ongoing_outflow'; label: string }
+
+const OUTLAY_REFERENCES: FlowLine[] = [
+  { type: 'reference', key: 'one_off_total', label: '총지급 중 일회성' },
+  { type: 'reference', key: 'ongoing_outflow', label: '경상 지급' },
+]
 
 /** 월 흐름표의 줄 순서 (Implentation-plan.md 2.3) */
 const FULL_LINES: FlowLine[] = [
@@ -21,6 +30,7 @@ const FULL_LINES: FlowLine[] = [
   { type: 'measure', key: 'ad_hoc_adjustable_total', indent: true, label: '조정 가능', sign: '' },
   { type: 'measure', key: 'undecided_total', strong: true, sign: '−', label: '미정 (조정 가능성 미정인 수시 지출)' },
   { type: 'measure', key: 'total_outflow', strong: true, sign: '=', label: '총지급 (약정 + 수시 + 미정)' },
+  ...OUTLAY_REFERENCES,
   { type: 'measure', key: 'residual', strong: true, sign: '=', label: '잔여 (수입 − 총지급)' },
   { type: 'heading', label: '잔여의 행방 (이체)' },
   { type: 'measure', key: 'transfer_investment_savings', indent: true },
@@ -41,6 +51,7 @@ const COMPACT_LINES: FlowLine[] = [
   { type: 'measure', key: 'ad_hoc_adjustable_total', sign: '−' },
   { type: 'measure', key: 'undecided_total', sign: '−' },
   { type: 'measure', key: 'total_outflow', strong: true, sign: '=' },
+  ...OUTLAY_REFERENCES,
   { type: 'measure', key: 'residual', strong: true, sign: '=', label: '잔여 (지금까지)' },
 ]
 
@@ -65,6 +76,22 @@ export function FlowTable({ month, variant = 'full', openMeasure, onToggle, dril
               <li key={`h-${line.label}`} className="flex items-center gap-2 px-1 pb-1 pt-3 text-caption font-semibold text-text-muted">
                 <span className="w-3 text-center" aria-hidden>{line.sign}</span>
                 {line.label}
+              </li>
+            )
+          }
+          if (line.type === 'reference') {
+            const range = monthToDateRange(month.period)
+            const params = new URLSearchParams({
+              start_date: range.start_date,
+              end_date: range.end_date,
+              type: '지출',
+              one_off: String(line.key === 'one_off_total'),
+            })
+            return (
+              <li key={line.key}>
+                <Link to={`/data/transactions?${params}`} className="flex items-center justify-between gap-2 py-2 pl-6 pr-1 text-caption text-text-secondary hover:bg-bg-inset">
+                  <span>{line.label}</span><span className="tnum">{formatNetWon(month[line.key])}</span>
+                </Link>
               </li>
             )
           }

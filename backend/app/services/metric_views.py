@@ -8,7 +8,7 @@ to exactly one monthly-flow row; 이체 lines also carry exactly one transfer
 purpose) -> vw_monthly_flow, vw_monthly_flow_summary, vw_spend_cube.
 
 The PostgreSQL views are created by the newest metric-view Alembic migration
-(20261117_0041, superseding 0039, 0038 and 0035) from a frozen copy of the SQL
+(20261125_0046, following 0045 and 0041) from a frozen copy of the SQL
 compiled here;
 ``tests/migrations`` guards that the frozen SQL and these definitions never
 drift. Services read the views by name
@@ -51,6 +51,7 @@ from app.models.nature_axes import (
     RecurringCommitment,
     TransactionNatureOverride,
 )
+from app.models.one_off_event import OneOffEventMember
 from app.models.settlement_group import SettlementMatch
 from app.models.transaction import Transaction
 from app.models.transfer_purpose import TransferPurposeOverride, TransferPurposeRule
@@ -831,6 +832,11 @@ def _flow_lines_select(
         (axes.c.commitment_kind.is_not(None), literal("committed")),
         else_=literal("ad_hoc"),
     )
+    members = OneOffEventMember.__table__
+    one_off_event_id = case(
+        (and_(is_expense, axes.c.commitment_kind.is_(None)), members.c.event_id),
+        else_=null(),
+    )
     return select(
         axes.c.transaction_id,
         axes.c.attributed_transaction_id,
@@ -852,6 +858,11 @@ def _flow_lines_select(
         axes.c.adjustability_source,
         axes.c.transfer_purpose,
         axes.c.transfer_purpose_source,
+        one_off_event_id.label("one_off_event_id"),
+    ).select_from(
+        axes.outerjoin(
+            members, members.c.transaction_id == axes.c.attributed_transaction_id
+        )
     )
 
 
@@ -943,8 +954,11 @@ AS_OF_DEFINITION = _as_of_select()
 AS_OF_VIEW = view_table("vw_metric_as_of", AS_OF_DEFINITION)
 
 
-def _expense_sum(condition: ColumnElement[bool] | None = None) -> ColumnElement:
-    lines = FLOW_LINES_VIEW
+def _expense_sum(
+    condition: ColumnElement[bool] | None = None,
+    *,
+    lines: TableClause = FLOW_LINES_VIEW,
+) -> ColumnElement:
     predicate = lines.c.type == EXPENSE
     if condition is not None:
         predicate = and_(predicate, condition)
@@ -986,7 +1000,8 @@ def flow_summary_columns(lines: TableClause = FLOW_LINES_VIEW) -> list[ColumnEle
     is_expense = lines.c.type == EXPENSE
     income = _signed_sum(lines.c.type == INCOME)
     committed_loan = loan_repayment_total(lines)
-    total_outflow = _expense_sum()
+    total_outflow = _expense_sum(lines=lines)
+    one_off_total = _expense_sum(lines.c.one_off_event_id.is_not(None), lines=lines)
     return [
         income.label("income_total"),
         committed_loan.label("committed_loan_total"),
@@ -1050,7 +1065,13 @@ def flow_summary_columns(lines: TableClause = FLOW_LINES_VIEW) -> list[ColumnEle
             ),
             0,
         ).label("transfer_undecided_activity_total"),
+        one_off_total.label("one_off_total"),
+        (total_outflow - one_off_total).label("ongoing_outflow"),
+        (total_outflow - committed_loan - one_off_total).label("ongoing_living_spend"),
     ]
+
+
+ONE_OFF_SUMMARY_COLUMNS = ("one_off_total", "ongoing_outflow", "ongoing_living_spend")
 
 
 def _monthly_flow_summary_select() -> Select:
@@ -1062,11 +1083,12 @@ def _monthly_flow_summary_select() -> Select:
     )
     as_of = AS_OF_VIEW
     return select(
-        *monthly.c,
+        *(column for column in monthly.c if column.name not in ONE_OFF_SUMMARY_COLUMNS),
         case(
             (monthly.c.period <= as_of.c.last_closed_period, literal("closed")),
             else_=literal("in_progress"),
         ).label("month_status"),
+        *(monthly.c[name] for name in ONE_OFF_SUMMARY_COLUMNS),
     ).select_from(monthly.join(as_of, true()))
 
 

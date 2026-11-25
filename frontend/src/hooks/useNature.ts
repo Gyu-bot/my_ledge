@@ -15,7 +15,7 @@ import type {
 /** 분류가 바뀌면 흐름표·큐브·약정·자료 현황·거래 목록이 모두 다시 읽어야 한다. */
 export function invalidateClassificationDependents(queryClient: QueryClient) {
   return Promise.all(
-    ['nature', 'metrics', 'read', 'transactions', 'canonical-views', 'analytics', 'transfer-purposes'].map((key) =>
+    ['nature', 'metrics', 'read', 'transactions', 'canonical-views', 'analytics', 'transfer-purposes', 'one-off-events', 'spending-reference'].map((key) =>
       queryClient.invalidateQueries({ queryKey: [key] }),
     ),
   )

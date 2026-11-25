@@ -82,6 +82,9 @@ export function monthFixture(period: string, status: 'closed' | 'in_progress', s
     undecided_total: s(60_000),
     total_outflow: s(550_000),
     living_spend: s(350_000),
+    one_off_total: 0,
+    ongoing_outflow: s(550_000),
+    ongoing_living_spend: s(350_000),
     adjustable_spend: s(95_000),
     protected_spend: s(390_000),
     adjustability_undecided_total: s(65_000),
@@ -184,6 +187,7 @@ export function contributionsFixture(adjustability: 'all' | 'protected' | 'adjus
     target_total: 550_000,
     baseline_total: 500_000,
     change_total: 50_000,
+    one_off: { mode: 'exclude', target_total: 0, target_events: [], baseline_values: [] },
     items: [
       { category: '샘플 식비', merchant: null, cadence: 'monthly', window: 'monthly', target_amount: 200_000, target_period_amount: 200_000, baseline_amount: 140_000, change_amount: 60_000, baseline_observed_month_count: 5, baseline_zero_month_count: 0, active_months_in_window: 6, baseline_note: null },
       { category: '샘플 교통', merchant: null, cadence: 'monthly', window: 'monthly', target_amount: 40_000, target_period_amount: 40_000, baseline_amount: 50_000, change_amount: -10_000, baseline_observed_month_count: 5, baseline_zero_month_count: 0, active_months_in_window: 6, baseline_note: null },
@@ -242,6 +246,7 @@ export function accuracyFixture(): ProjectionAccuracy {
     evaluated_periods: ['2026-05', '2026-06', '2026-07'],
     as_of_days: [5, 10, 15, 20, 25],
     current_band: 'day_11_20',
+    actuals: [],
     bands: [
       { band: 'day_01_10', as_of_days: [5, 10], points: 6, withheld_points: 0, evaluated_points: 6, net_median_signed_error: -120_000, net_median_absolute_error: 120_000, net_median_signed_error_pct_of_income: -12, expense_median_signed_error: -20_000 },
       { band: 'day_11_20', as_of_days: [15, 20], points: 6, withheld_points: 2, evaluated_points: 4, net_median_signed_error: 40_000, net_median_absolute_error: 50_000, net_median_signed_error_pct_of_income: 4, expense_median_signed_error: -5_000 },

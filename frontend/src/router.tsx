@@ -9,6 +9,7 @@ import { ClassificationPage } from './features/workbench/ClassificationPage'
 import { DataStatusPage } from './features/workbench/DataStatusPage'
 import { NatureSettingsPage } from './features/workbench/NatureSettingsPage'
 import { TransferPurposePage } from './features/workbench/TransferPurposePage'
+import { OneOffEventsPage } from './features/one-off/OneOffEventsPage'
 import { TransactionsPage } from './features/data/TransactionsPage'
 import { LoansPage } from './features/data/LoansPage'
 import { InstallmentsPage } from './features/data/InstallmentsPage'
@@ -52,6 +53,7 @@ export const routes = [
       { path: 'data/transfers', element: <TransferPurposePage /> },
       { path: 'data/status', element: <DataStatusPage /> },
       { path: 'data/transactions', element: <TransactionsPage /> },
+      { path: 'data/one-off', element: <OneOffEventsPage /> },
       { path: 'data/loans', element: <LoansPage /> },
       { path: 'data/installments', element: <InstallmentsPage /> },
       { path: 'data/assets', element: <AssetMetaPage /> },

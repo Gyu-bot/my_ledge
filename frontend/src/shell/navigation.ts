@@ -6,6 +6,7 @@ import {
   BookOpen,
   CalendarCheck,
   CreditCard,
+  FolderOpen,
   Inbox,
   Landmark,
   Repeat,
@@ -40,6 +41,7 @@ export const MAIN_NAV: NavItem[] = [
 export const DATA_NAV: NavItem[] = [
   { path: '/data/inbox', label: '분류', Icon: Inbox },
   { path: '/data/transactions', label: '거래', Icon: Table2 },
+  { path: '/data/one-off', label: '일회성 지출', Icon: FolderOpen },
   { path: '/data/nature', label: '기본값·정기 지급', Icon: Tags },
   { path: '/data/transfers', label: '이체 목적', Icon: ArrowLeftRight },
   { path: '/data/loans', label: '대출', Icon: Landmark },

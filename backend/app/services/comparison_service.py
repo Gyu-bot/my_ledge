@@ -31,6 +31,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.models.one_off_event import OneOffEvent
 from app.schemas.comparison import (
     BaselineMethod,
     ComparisonAdjustabilityView,
@@ -43,6 +44,9 @@ from app.schemas.comparison import (
     ComparisonValue,
     ContributionItem,
     ContributionResponse,
+    OneOffContributionItem,
+    OneOffContributionReference,
+    OneOffMode,
     TwelveMonthWindowBasis,
 )
 from app.schemas.metrics import MetricAsOf
@@ -498,6 +502,9 @@ FLOW_MEASURES: tuple[tuple[str, str], ...] = (
     ("adjustability_undecided_total", "조정 가능성 미정 지출"),
     ("residual", "잔여"),
     ("transfer_net", "이체 순액"),
+    ("one_off_total", "총지급 중 일회성"),
+    ("ongoing_outflow", "경상 지급"),
+    ("ongoing_living_spend", "경상 생활 지출"),
 )
 
 
@@ -573,6 +580,8 @@ async def get_monthly_flow_comparison(
         field_scopes={
             "measures[].target_amount": "대상 월(진행월이면 거래 기준일까지) 금액",
             "measures[].baseline_amount": "기준 기간 월별 금액의 중앙값(같은 경과일 규칙 적용)",
+            "ongoing_outflow": "월별 총지급에서 일회성 순지출을 차감한 뒤 기준월 중앙값 계산",
+            "ongoing_living_spend": "월별 생활 지출에서 일회성 순지출을 차감한 뒤 기준월 중앙값 계산",
             "measures[].change_amount": "target_amount − baseline_amount (원)",
             "residual_rate": "현금 잔여율 = residual ÷ income_total. 마감월 대상에만",
         },
@@ -615,6 +624,52 @@ def _sort_items(items: list[ContributionItem]) -> list[ContributionItem]:
     return with_change + without
 
 
+async def _one_off_reference(
+    db_session: AsyncSession,
+    window: ComparisonWindow,
+    filters: list[ColumnElement[bool]],
+    mode: OneOffMode,
+) -> OneOffContributionReference:
+    event_id = _LINES.c.one_off_event_id
+    grouped = await grouped_period_amounts(
+        db_session,
+        window,
+        keys=[event_id],
+        amount=-_LINES.c.amount,
+        filters=[*filters, event_id.is_not(None)],
+    )
+    totals: dict[str, int] = {}
+    target: dict[int, int] = {}
+    for (period, key), amount in grouped.items():
+        totals[period] = totals.get(period, 0) + amount
+        if period == window.target_period:
+            target[key] = amount
+    events = (
+        await db_session.execute(
+            select(OneOffEvent.id, OneOffEvent.name).where(OneOffEvent.id.in_(target))
+        )
+        if target
+        else ()
+    )
+    items = [
+        OneOffContributionItem(event_id=key, name=name, amount=target[key])
+        for key, name in events
+    ]
+    return OneOffContributionReference(
+        mode=mode,
+        target_total=totals.get(window.target_period or "", 0)
+        if window.target_has_data
+        else None,
+        target_events=sorted(
+            items, key=lambda item: (-abs(item.amount), item.event_id)
+        ),
+        baseline_values=[
+            ComparisonValue(period=period, amount=totals.get(period, 0))
+            for period in window.baseline_periods
+        ],
+    )
+
+
 async def get_change_contributions(
     db_session: AsyncSession,
     *,
@@ -624,6 +679,7 @@ async def get_change_contributions(
     category: str | None,
     limit: int | None,
     baseline: BaselineMethod = "median_of_recent_closed_months",
+    one_off: OneOffMode = "exclude",
 ) -> ContributionResponse:
     """``limit=None`` returns every item (the read surface counts and cuts)."""
     window = await resolve_window_for_baseline(
@@ -638,6 +694,9 @@ async def get_change_contributions(
     ]
     if category is not None:
         base_filters.append(category_key() == category)
+    reference = await _one_off_reference(db_session, window, base_filters, one_off)
+    if one_off == "exclude":
+        base_filters.append(_LINES.c.one_off_event_id.is_(None))
     keys = [category_key()] if level == "category" else [category_key(), merchant_key()]
     spend = -_LINES.c.amount
 
@@ -729,7 +788,12 @@ async def get_change_contributions(
             "지출 변화의 금액 기여. 유효 KRW 지출 순액(환불 차감, 대출 포함)을 "
             "카테고리(또는 카테고리 안의 거래처)별로 vw_metric_flow_lines에서 집계하고 "
             "기준 기간 중앙값과 비교. 조정 가능성 보기: all = 전체(미정 포함), "
-            "protected = 보호, adjustable = 조정 가능"
+            "protected = 보호, adjustable = 조정 가능. "
+            + (
+                "유효 일회성을 뺀 경상 지출 비교."
+                if one_off == "exclude"
+                else "유효 일회성을 포함한 지출 비교."
+            )
         ),
         start_date=window.target_start,
         end_date=window.target_end,
@@ -738,6 +802,7 @@ async def get_change_contributions(
             "twelve_month_items[].target_amount": "대상 월로 끝나는 12개월 합계",
             "twelve_month_items[].baseline_amount": "그 직전 12개월 합계",
             "baseline_total": "이 보기의 월 합계 중앙값. 항목 중앙값의 합과 다를 수 있음",
+            "one_off": "같은 범위·카테고리·조정 가능성·경과일의 게시월 일회성 순지출",
         },
     )
     return ContributionResponse(
@@ -749,6 +814,7 @@ async def get_change_contributions(
         target_total=target_total,
         baseline_total=baseline_total,
         change_total=_difference(target_total, baseline_total),
+        one_off=reference,
         items=_sort_items(monthly_items)[:limit],
         twelve_month_window=twelve_basis,
         twelve_month_items=_sort_items(twelve_items)[:limit],

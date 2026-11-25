@@ -28,8 +28,10 @@ from app.schemas.comparison import (
     ComparisonMeasure,
     ComparisonRatio,
     ContributionItem,
+    OneOffContributionReference,
     TwelveMonthWindowBasis,
 )
+from app.schemas.one_off_event import OneOffEventSummary
 from app.schemas.transaction import TransactionAxes
 from app.schemas.metrics import (
     MONTH_DATA_COVERAGE_LABELS,
@@ -312,6 +314,14 @@ class ReadErrorResponse(BaseModel):
 # --------------------------------------------------------------------------
 
 
+class ReadOneOffEventsData(BaseModel):
+    items: list[OneOffEventSummary]
+
+
+class ReadOneOffEventsResponse(ReadEnvelope):
+    data: ReadOneOffEventsData
+
+
 class ReadMonthlyFlowData(BaseModel):
     items: list[MonthlyFlowMonth]
 
@@ -377,6 +387,7 @@ class ContributionListSummary(BaseModel):
 
 
 class ReadContributionsData(BaseModel):
+    one_off: OneOffContributionReference
     comparison: ComparisonBasis
     adjustability: str
     level: str

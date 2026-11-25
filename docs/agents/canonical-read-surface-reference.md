@@ -578,3 +578,26 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 ### T056 이행 약정 확인
 
 T056 확인 보완: `/read/commitments` 상세 행은 `attributes_confirmed_at`과 `needs_attribute_confirmation`, 요약 행은 대기 여부, data는 필터 전 전체 `pending_confirmation_count`를 추가한다. 이행 출처이고 확인 시각이 없는 정기 지급만 대기이며 끝난 것도 센다. 대출·할부는 false다. 빈 주기를 확인해도 계산 근거가 채워지는 것은 아니다. 기존 값·계산·상태는 유지한다. 사람의 결정을 전달할 때만 인증된 기존 PATCH에서 주기·금액을 저장하거나 `confirm_attributes=true`를 보낸다. 직접 DB 쓰기는 금지한다. 이전 수동 분류 이력은 별도 거래 표시로 HTTP `is_edited`에 보존한다.
+
+## 일회성 지출과 경상 지급 (T067)
+
+- `GET /api/v1/read/one-off-events`는 `X-API-Key`가 필요한 읽기 표면이다.
+  `data.items`의 날짜 범위와 개수는 직접 소속 거래 기준이다. `periods`와
+  `counted_total`은 유효 비약정 KRW 흐름 줄의 게시월 순지출이다. 확정 배분
+  환불의 귀속은 원구매 묶음을 따른다.
+- 월 흐름표와 비교에 `one_off_total`(총지급 중 일회성), `ongoing_outflow`
+  (경상 지급), `ongoing_living_spend`(경상 생활 지출)를 추가한다. 경상 비교
+  기준값은 월별 차감 뒤 중앙값이다. 자료 없는 달은 null이고 일회성만 있는
+  달의 경상 값은 0이다. 총지급·잔여·조정 가능성 미정 비중은 기존 정의다.
+- 변화 기여의 `one_off=exclude`가 기본이다. `include`는 일회성을 포함한다.
+  `data.one_off`는 동일 범위의 대상 묶음별 순액과 전체 합계, 기준월별 순액이다.
+  `change_total`은 선택한 범위의 대상 합계와 기준값의 차이다.
+- `spending-reference`의 연간성 월 환산은 일회성을 제외한다. 한도의
+  `actual_amount`는 일회성을 포함하고 같은 실적의 일회성 몫은
+  `one_off_amount`로 제공한다.
+- `review-items`의 구매 후보 및 구매 순액 기준 합계는 일회성 거래를
+  제외한다. 카테고리 이상은 금액 귀속 기준으로 대상·기준에서 제외한다.
+- `month-projection` 관측 순지출에는 일회성이 포함된다. 일회성은 남은
+  기간의 지출 가정, 대출 규칙 매칭 및 미확인 할부 가정에서 제외된다.
+  전망 정확도의 `actuals[].variable_ongoing_actual`은 일회성을 차감한
+  마감월 변동 실적이다. 재생은 현재 묶음 소속을 기준으로 한다.
