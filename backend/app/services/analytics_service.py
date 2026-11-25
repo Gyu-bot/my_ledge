@@ -2,6 +2,7 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, date, datetime, time, timedelta
+from statistics import mean, pstdev
 from typing import NotRequired, TypedDict
 
 from fastapi import HTTPException, status
@@ -46,6 +47,7 @@ from app.services.comparison_service import (
     build_comparison_basis,
     grouped_period_amounts,
     median_won,
+    period_end,
     period_start,
     resolve_comparison_window,
 )
@@ -54,6 +56,7 @@ from app.services.metrics_service import (
     build_flow_contract,
     build_purchase_net_contract,
     load_as_of,
+    load_metric_context,
     month_status,
 )
 
@@ -316,39 +319,40 @@ async def get_income_stability(
     start_date: date | None,
     end_date: date | None,
 ) -> IncomeStabilityResponse:
-    used_last_closed_month = end_date is None
-    ref_date = (
-        _last_closed_month_end(date.today()) if used_last_closed_month else end_date
+    context = await load_metric_context(db_session)
+    closed = context.as_of.last_closed_period
+    first_date = context.as_of.first_transaction_date
+    ref_date = end_date
+    if ref_date is None and closed and first_date and closed >= _month_key(first_date):
+        ref_date = period_end(closed)
+    partial_cutoff_day = (
+        ref_date.day if ref_date is not None and not _is_month_end(ref_date) else None
     )
-    assert ref_date is not None
-    partial_cutoff_day = ref_date.day if not _is_month_end(ref_date) else None
-
-    filters: list[ColumnElement[bool]] = [
-        _LINES.c.type == INCOME,
-        *_date_filters(start_date, ref_date),
-    ]
-    if partial_cutoff_day is not None:
-        filters.append(
-            not_(
-                and_(
-                    _LINES.c.date < date(ref_date.year, ref_date.month, 1),
-                    day_of_month(_LINES.c.date) > partial_cutoff_day,
+    items: list[IncomeMonthlyItem] = []
+    if ref_date is not None:
+        filters = [_LINES.c.type == INCOME, *_date_filters(start_date, ref_date)]
+        if partial_cutoff_day is not None:
+            filters.append(
+                not_(
+                    and_(
+                        _LINES.c.date < ref_date.replace(day=1),
+                        day_of_month(_LINES.c.date) > partial_cutoff_day,
+                    )
                 )
             )
+        result = await db_session.execute(
+            select(
+                _LINES.c.period,
+                func.coalesce(func.sum(_LINES.c.amount), 0).label("income"),
+            )
+            .where(*filters)
+            .group_by(_LINES.c.period)
+            .order_by(_LINES.c.period.asc())
         )
-    result = await db_session.execute(
-        select(
-            _LINES.c.period,
-            func.coalesce(func.sum(_LINES.c.amount), 0).label("income"),
-        )
-        .where(*filters)
-        .group_by(_LINES.c.period)
-        .order_by(_LINES.c.period.asc())
-    )
-    items = [
-        IncomeMonthlyItem(period=row["period"], income=int(row["income"]))
-        for row in result.mappings()
-    ]
+        items = [
+            IncomeMonthlyItem(period=row["period"], income=int(row["income"]))
+            for row in result.mappings()
+        ]
     values = [item.income for item in items]
     contract = await build_flow_contract(
         db_session,
@@ -357,39 +361,21 @@ async def get_income_stability(
         start_date=start_date,
         end_date=ref_date,
         include_undecided=False,
+        context=context,
     )
-
-    if not values:
-        return IncomeStabilityResponse(
-            items=[],
-            avg=0,
-            stdev=None,
-            coefficient_of_variation=None,
-            comparison_mode="partial" if partial_cutoff_day is not None else "closed",
-            reference_date=ref_date,
-            is_partial_period=partial_cutoff_day is not None,
-            assumptions=_build_income_stability_assumptions(
-                used_last_closed_month=used_last_closed_month,
-                partial_cutoff_day=partial_cutoff_day,
-                ref_date=ref_date,
-            ),
-            contract=contract,
-        )
-
-    avg = round(sum(values) / len(values))
-    variance = sum((v - avg) ** 2 for v in values) / len(values)
-    stdev = round(math.sqrt(variance), 2) if len(values) > 1 else None
-    cv = round(stdev / avg, 4) if (stdev is not None and avg > 0) else None
+    average = mean(values) if values else 0
+    stdev = pstdev(values) if len(values) > 1 else None
+    cv = round(stdev / average, 4) if stdev is not None and average > 0 else None
     return IncomeStabilityResponse(
         items=items,
-        avg=avg,
-        stdev=stdev,
+        avg=round(average),
+        stdev=round(stdev, 2) if stdev is not None else None,
         coefficient_of_variation=cv,
         comparison_mode="partial" if partial_cutoff_day is not None else "closed",
         reference_date=ref_date,
         is_partial_period=partial_cutoff_day is not None,
         assumptions=_build_income_stability_assumptions(
-            used_last_closed_month=used_last_closed_month,
+            used_last_closed_month=end_date is None,
             partial_cutoff_day=partial_cutoff_day,
             ref_date=ref_date,
         ),
@@ -1181,15 +1167,17 @@ def _build_income_stability_assumptions(
     *,
     used_last_closed_month: bool,
     partial_cutoff_day: int | None,
-    ref_date: date,
+    ref_date: date | None,
 ) -> str:
     parts = [
         "월별 수입 기준, 이체 제외",
         "수입이 관측된 월만 평균과 변동성에 포함하며 수입 미관측 월을 0원으로 추정하지 않습니다",
         "조회 시작월 및 원본 업로드의 월별 수집 완전성은 검증하지 않은 관측값입니다",
     ]
-    if used_last_closed_month:
-        parts.append(f"직전 마감월 기준(as_of={ref_date.isoformat()})")
+    if ref_date is None:
+        parts.append("거래 자료에 마감월이 없어 기준일과 수입 관측값이 없습니다")
+    elif used_last_closed_month:
+        parts.append(f"거래 자료의 직전 마감월 기준(as_of={ref_date.isoformat()})")
     elif partial_cutoff_day is not None:
         parts.append(
             f"부분 기간 비교(기준일={ref_date.isoformat()}, 이전 월도 매월 {partial_cutoff_day}일까지만 집계)"

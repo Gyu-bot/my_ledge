@@ -572,7 +572,7 @@ async def test_income_stability_endpoint_defaults_to_last_closed_month(
     class FrozenDate(date):
         @classmethod
         def today(cls) -> "FrozenDate":
-            return cls(2026, 4, 8)
+            return cls(2026, 11, 8)
 
     monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
 

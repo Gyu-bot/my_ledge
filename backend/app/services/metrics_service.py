@@ -6,10 +6,11 @@ SQL totals; it never re-sums transaction amounts.
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, case, func, select, true
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -38,7 +39,6 @@ from app.services.metric_views import (
     ONE_OFF_SUMMARY_COLUMNS,
     SPEND_CUBE_DEFINITION,
     SPEND_CUBE_DIMENSIONS,
-    SPEND_CUBE_VIEW,
 )
 
 FLOW_LINES_BASIS = "vw_metric_flow_lines"
@@ -100,11 +100,17 @@ def purchase_net_inclusion() -> MetricInclusion:
     )
 
 
-async def load_as_of(db_session: AsyncSession) -> MetricAsOf:
+@dataclass(frozen=True)
+class MetricContext:
+    as_of: MetricAsOf
+    non_krw_count: int
+
+
+async def load_metric_context(db_session: AsyncSession) -> MetricContext:
     row = (await db_session.execute(select(AS_OF_VIEW))).mappings().one_or_none()
     if row is None:
-        return MetricAsOf()
-    return MetricAsOf(
+        return MetricContext(MetricAsOf(), 0)
+    as_of = MetricAsOf(
         transaction_as_of=_as_date(row["transaction_as_of"]),
         first_transaction_date=_as_date(row["first_transaction_date"]),
         last_closed_period=row["last_closed_period"],
@@ -117,6 +123,11 @@ async def load_as_of(db_session: AsyncSession) -> MetricAsOf:
             profile=_as_date(row["profile_snapshot_as_of"]),
         ),
     )
+    return MetricContext(as_of, int(row["non_krw_transaction_count"] or 0))
+
+
+async def load_as_of(db_session: AsyncSession) -> MetricAsOf:
+    return (await load_metric_context(db_session)).as_of
 
 
 async def load_non_krw_count(db_session: AsyncSession) -> int:
@@ -172,6 +183,17 @@ def line_date_filters(
     return filters
 
 
+def period_filters(
+    period: ColumnElement, start: str | None, end: str | None
+) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if start is not None:
+        conditions.append(period >= start)
+    if end is not None:
+        conditions.append(period <= end)
+    return conditions
+
+
 async def load_undecided_totals(
     db_session: AsyncSession,
     *,
@@ -214,8 +236,10 @@ async def build_flow_contract(
     end_date: date | None,
     field_scopes: dict[str, str] | None = None,
     include_undecided: bool = True,
+    context: MetricContext | None = None,
 ) -> MetricContract:
-    as_of = await load_as_of(db_session)
+    if context is None:
+        context = await load_metric_context(db_session)
     undecided_total: int | None = None
     share: float | None = None
     if include_undecided:
@@ -227,10 +251,10 @@ async def build_flow_contract(
         definition=definition,
         scope=scope,
         inclusion=flow_inclusion(),
-        as_of=as_of,
+        as_of=context.as_of,
         adjustability_undecided_total=undecided_total,
         adjustability_undecided_share=share,
-        non_krw_transaction_count=await load_non_krw_count(db_session),
+        non_krw_transaction_count=context.non_krw_count,
         field_scopes=field_scopes or {},
     )
 
@@ -238,12 +262,13 @@ async def build_flow_contract(
 async def build_purchase_net_contract(
     db_session: AsyncSession, *, definition: str, scope: str
 ) -> MetricContract:
+    context = await load_metric_context(db_session)
     return MetricContract(
         definition=definition,
         scope=scope,
         inclusion=purchase_net_inclusion(),
-        as_of=await load_as_of(db_session),
-        non_krw_transaction_count=await load_non_krw_count(db_session),
+        as_of=context.as_of,
+        non_krw_transaction_count=context.non_krw_count,
     )
 
 
@@ -393,6 +418,22 @@ _MONTH_INT_FIELDS = (
 )
 
 
+def _spend_cube_dimension(name: str) -> ColumnElement:
+    column = FLOW_LINES_VIEW.c[name]
+    if name in {"effective_category_major", "effective_category_minor"}:
+        return func.coalesce(column, "").label(name)
+    return column
+
+
+def spend_cube_line_conditions(
+    *, start_period: str | None, end_period: str | None, filters: dict[str, str]
+) -> list[ColumnElement[bool]]:
+    return [
+        *period_filters(FLOW_LINES_VIEW.c.period, start_period, end_period),
+        *(_spend_cube_dimension(name) == value for name, value in filters.items()),
+    ]
+
+
 async def get_spend_cube(
     db_session: AsyncSession,
     *,
@@ -402,33 +443,33 @@ async def get_spend_cube(
     filters: dict[str, str],
     limit: int | None,
 ) -> SpendCubeResponse:
-    cube = SPEND_CUBE_VIEW
+    lines = FLOW_LINES_VIEW
     unknown = [name for name in group_by if name not in SPEND_CUBE_DIMENSIONS]
     if unknown:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Unknown spend cube dimension: {', '.join(unknown)}",
         )
-    dimensions = [cube.c[name] for name in dict.fromkeys(group_by)]
-    conditions: list[ColumnElement[bool]] = []
-    if start_period is not None:
-        conditions.append(cube.c.period >= start_period)
-    if end_period is not None:
-        conditions.append(cube.c.period <= end_period)
-    for name, value in filters.items():
-        conditions.append(cube.c[name] == value)
-    amount = func.coalesce(func.sum(cube.c.amount), 0)
+    dimensions = [_spend_cube_dimension(name) for name in dict.fromkeys(group_by)]
+    conditions = spend_cube_line_conditions(
+        start_period=start_period, end_period=end_period, filters=filters
+    )
+    amount = func.coalesce(func.sum(-lines.c.amount), 0)
+    # A refund can be split across several buckets. Count its transaction ID
+    # only after filtering and applying the requested group dimensions.
     query = (
         select(
             *dimensions,
             amount.label("amount"),
-            func.coalesce(func.sum(cube.c.charge_total), 0).label("charge_total"),
-            func.coalesce(func.sum(cube.c.refund_total), 0).label("refund_total"),
-            func.coalesce(func.sum(cube.c.transaction_count), 0).label(
-                "transaction_count"
-            ),
+            func.coalesce(
+                func.sum(case((lines.c.amount < 0, -lines.c.amount), else_=0)), 0
+            ).label("charge_total"),
+            func.coalesce(
+                func.sum(case((lines.c.amount > 0, lines.c.amount), else_=0)), 0
+            ).label("refund_total"),
+            func.count(lines.c.transaction_id.distinct()).label("transaction_count"),
         )
-        .where(and_(true(), *conditions))
+        .where(lines.c.type == EXPENSE, *conditions)
         .group_by(*dimensions)
         .order_by(amount.desc(), *dimensions)
         .limit(limit)
@@ -443,17 +484,10 @@ async def get_spend_cube(
         )
         for row in (await db_session.execute(query)).mappings()
     ]
-    total_amount = await db_session.scalar(
-        select(func.coalesce(func.sum(cube.c.amount), 0)).where(
-            and_(true(), *conditions)
-        )
+    undecided_total, total_amount = await load_undecided_totals(
+        db_session, start_date=None, end_date=None, extra_filters=conditions
     )
-    as_of = await load_as_of(db_session)
-    undecided_total = await db_session.scalar(
-        select(func.coalesce(func.sum(cube.c.amount), 0)).where(
-            and_(*conditions, cube.c.adjustability == "undecided")
-        )
-    )
+    context = await load_metric_context(db_session)
     return SpendCubeResponse(
         contract=MetricContract(
             definition=SPEND_CUBE_DEFINITION,
@@ -462,17 +496,19 @@ async def get_spend_cube(
                 "조정 가능성으로 나눈 순지출(환불 차감, 대출 포함)"
             ),
             inclusion=flow_inclusion(),
-            as_of=as_of,
-            adjustability_undecided_total=int(undecided_total or 0),
-            adjustability_undecided_share=ratio(
-                int(undecided_total or 0), int(total_amount or 0)
-            ),
-            non_krw_transaction_count=await load_non_krw_count(db_session),
+            as_of=context.as_of,
+            adjustability_undecided_total=undecided_total,
+            adjustability_undecided_share=ratio(undecided_total, total_amount),
+            non_krw_transaction_count=context.non_krw_count,
+            field_scopes={
+                "rows[].transaction_count": "필터와 그룹을 적용한 뒤 각 그룹의 고유 거래 ID 수",
+                "rows[].effective_category_minor": "소분류가 null이거나 비어 있으면 빈 문자열로 함께 집계",
+            },
         ),
         group_by=[
             dimension for dimension in dict.fromkeys(group_by)
         ],  # validated against SpendCubeDimension by the response model
-        total_amount=int(total_amount or 0),
+        total_amount=total_amount,
         rows=rows,
     )
 
@@ -486,18 +522,14 @@ async def count_spend_cube_groups(
     filters: dict[str, str],
 ) -> int:
     """Number of spend-cube groups before any limit (same scope as the cube)."""
-    cube = SPEND_CUBE_VIEW
-    dimensions = [cube.c[name] for name in dict.fromkeys(group_by)]
-    conditions: list[ColumnElement[bool]] = []
-    if start_period is not None:
-        conditions.append(cube.c.period >= start_period)
-    if end_period is not None:
-        conditions.append(cube.c.period <= end_period)
-    for name, value in filters.items():
-        conditions.append(cube.c[name] == value)
+    lines = FLOW_LINES_VIEW
+    dimensions = [_spend_cube_dimension(name) for name in dict.fromkeys(group_by)]
+    conditions = spend_cube_line_conditions(
+        start_period=start_period, end_period=end_period, filters=filters
+    )
     groups = (
         select(*dimensions)
-        .where(and_(true(), *conditions))
+        .where(lines.c.type == EXPENSE, *conditions)
         .group_by(*dimensions)
         .subquery("cube_groups")
     )

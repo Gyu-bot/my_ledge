@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.nature_axes import RecurringCommitment
 from app.models.spending_limit import SpendingLimitRevision
-from app.schemas.read_surface import ADJUSTABILITY_LABELS, ReadBasis
+from app.schemas.read_surface import ADJUSTABILITY_LABELS, STATUS_LABELS, ReadBasis
 from app.schemas.spending_limits import (
     ADJUSTABILITY_VALUES,
     AnnualEquivalent,
@@ -21,13 +21,21 @@ from app.schemas.spending_limits import (
     SpendingReferenceData,
 )
 from app.services.comparison_service import (
+    load_periods_with_data,
+    period_of,
     period_range,
-    resolve_comparison_window,
     shift_period,
 )
 from app.services.metric_views import EXPENSE, FLOW_LINES_VIEW
-from app.services.metrics_service import get_spend_cube, load_as_of
-from app.services.read_surface_service import read_monthly_flow
+from app.services.metrics_service import flow_inclusion, load_as_of, load_metric_context
+from app.services.read_surface_service import (
+    basis_rules,
+    flow_labels,
+    load_single_period_scope,
+    read_as_of,
+    resolve_status,
+    scope_classification,
+)
 from app.services.upload_rollback_service import LOCK_KEY
 
 HISTORY_RULE = (
@@ -232,33 +240,74 @@ async def _annual_equivalents(
     )
 
 
+async def _spending_actuals(
+    db: AsyncSession, *, period: str
+) -> dict[tuple[str, str], tuple[int, int]]:
+    lines = FLOW_LINES_VIEW
+    expenses = (
+        select(
+            lines.c.effective_category_major,
+            lines.c.adjustability,
+            (-lines.c.amount).label("amount"),
+            lines.c.one_off_event_id,
+        )
+        .where(lines.c.period == period, lines.c.type == EXPENSE)
+        .cte("spending_reference_expenses")
+    )
+    groups = []
+    for kind, column in (
+        ("category", expenses.c.effective_category_major),
+        ("adjustability", expenses.c.adjustability),
+    ):
+        key = func.coalesce(column, "")
+        groups.append(
+            select(
+                literal(kind).label("kind"),
+                key.label("value"),
+                func.sum(expenses.c.amount).label("actual"),
+                func.sum(
+                    case(
+                        (expenses.c.one_off_event_id.is_not(None), expenses.c.amount),
+                        else_=0,
+                    )
+                ).label("one_off"),
+            ).group_by(key)
+        )
+    return {
+        (row.kind, row.value): (int(row.actual), int(row.one_off))
+        for row in await db.execute(union_all(*groups))
+    }
+
+
 async def read_spending_reference(
     db: AsyncSession, *, period: str | None
 ) -> ReadSpendingReferenceResponse:
-    # The flow envelope carries the same dates, coverage and completeness as the
-    # screen's actuals. No amount is recomputed from transactions in Python.
+    context = await load_metric_context(db)
+    as_of = context.as_of
+    first_date = as_of.first_transaction_date
+    first_period = period_of(first_date) if first_date else None
     if period is None:
-        as_of = await load_as_of(db)
-        first_period = (
-            as_of.first_transaction_date.strftime("%Y-%m")
-            if as_of.first_transaction_date
-            else None
-        )
         closed = as_of.last_closed_period
         period = (
             closed
             if closed and first_period and closed >= first_period
             else as_of.in_progress_period
         )
-    flow = await read_monthly_flow(db, start_period=period, end_period=period)
-    state = next(
-        (
-            item
-            for item in (flow.period_scope.periods if flow.period_scope else [])
-            if item.period == period
-        ),
-        None,
+    elif as_of.transaction_as_of and period > period_of(as_of.transaction_as_of):
+        raise HTTPException(
+            422,
+            f"대상 월 {period}은 거래 기준일 "
+            f"{as_of.transaction_as_of.isoformat()} 이후라 비교할 수 없습니다.",
+        )
+    scope = await load_single_period_scope(db, as_of=as_of, period=period)
+    classification = scope_classification(scope)
+    status, status_reasons = resolve_status(
+        as_of=as_of,
+        scope=scope,
+        classification=classification,
+        non_krw_count=context.non_krw_count,
     )
+    state = scope.periods[0] if scope.periods else None
     reason: MissingReason | None = None
     if state is None or state.coverage == "not_imported":
         reason = "not_imported"
@@ -282,33 +331,11 @@ async def read_spending_reference(
         ).all()
         for revision in revisions:
             latest[(revision.target_kind, revision.target_value)] = revision
-    actuals: dict[tuple[str, str], int] = {}
-    one_off_amounts: dict[tuple[str, str], int] = {}
-    if has_actual:
-        for kind, dimension in (
-            ("category", "effective_category_major"),
-            ("adjustability", "adjustability"),
-        ):
-            cube = await get_spend_cube(
-                db,
-                start_period=period,
-                end_period=period,
-                group_by=[dimension],
-                filters={},
-                limit=None,
-            )
-            for row in cube.rows:
-                actuals[(kind, getattr(row, dimension) or "")] = row.amount
-            lines = FLOW_LINES_VIEW
-            key = lines.c[dimension]
-            amounts = await db.execute(
-                select(key, func.sum(-lines.c.amount))
-                .where(lines.c.period == period, lines.c.one_off_event_id.is_not(None))
-                .group_by(key)
-            )
-            for value, amount in amounts:
-                target = (kind, value or "")
-                one_off_amounts[target] = one_off_amounts.get(target, 0) + int(amount)
+    actuals = (
+        await _spending_actuals(db, period=period)
+        if has_actual and period is not None
+        else {}
+    )
     targets = (
         set(actuals)
         | set(latest)
@@ -318,7 +345,7 @@ async def read_spending_reference(
     for kind, value in sorted(targets):
         revision = latest.get((kind, value))
         limit_amount = revision.amount if revision else None
-        actual = actuals.get((kind, value), 0) if has_actual else None
+        actual, one_off_amount = actuals.get((kind, value), (0, 0))
         missing = reason or ("no_limit_set" if limit_amount is None else None)
         comparisons.append(
             LimitComparison(
@@ -329,48 +356,46 @@ async def read_spending_reference(
                     if kind == "adjustability"
                     else value or "미분류"
                 ),
-                actual_amount=actual,
-                one_off_amount=one_off_amounts.get((kind, value), 0)
-                if has_actual
-                else None,
+                actual_amount=actual if has_actual else None,
+                one_off_amount=one_off_amount if has_actual else None,
                 limit_amount=limit_amount,
                 limit_revision_id=revision.id if revision else None,
                 effective_from_period=revision.effective_from_period
                 if revision
                 else None,
                 difference_amount=actual - limit_amount
-                if missing is None and actual is not None and limit_amount is not None
+                if missing is None and limit_amount is not None
                 else None,
                 missing_reason=missing,
                 missing_reason_label=MISSING_LABELS.get(missing),
             )
         )
     annual_items = []
-    annual_reason = None
+    annual_reason = "incomplete_twelve_month_window"
     start = end = None
     if period is not None:
-        window = await resolve_comparison_window(db, target_period=period)
         start, end = shift_period(period, -11), period
-        complete = (
-            window.first_full_period is not None
-            and start >= window.first_full_period
-            and all(
-                month in window.periods_with_data for month in period_range(start, end)
-            )
-        )
         if state and state.month_status == "in_progress":
             annual_reason = "month_in_progress"
-        elif not complete:
-            annual_reason = "incomplete_twelve_month_window"
-        else:
-            annual_items = await _annual_equivalents(db, start=start, end=end)
-    else:
-        annual_reason = "incomplete_twelve_month_window"
+        elif (
+            first_date is not None
+            and first_period is not None
+            and has_actual
+            and (
+                first_period < start or (first_period == start and first_date.day == 1)
+            )
+        ):
+            observed = await load_periods_with_data(
+                db, start_period=start, end_period=end
+            )
+            if all(month in observed for month in period_range(start, end)):
+                annual_reason = None
+                annual_items = await _annual_equivalents(db, start=start, end=end)
     basis = ReadBasis(
         definition="spending_reference.v1",
         scope="과거 유효 KRW 지출(환불 차감, 대출 포함). 대분류와 조정 가능성은 겹치는 두 보기이며 합산하지 않습니다.",
         rules={
-            **flow.basis.rules,
+            **basis_rules(flow_inclusion()),
             "annual_like": "대상 마감월로 끝나는 완전한 12개월 창에서 일회성을 먼저 제외한 월 순지출이 양수인 달이 정확히 1~2개인 유효 대분류·소분류 쌍(observed_pattern). null·빈 소분류는 소분류 없음 쌍으로 묶음. 월중 시작 첫 달·자료 없는 달을 포함한 창은 판정하지 않음. T057 기여 목록은 변경하지 않음.",
             "registered_yearly_commitment": "사람이 cycle=yearly로 지정한 약정(기존 이행 묶음을 편집한 경우 포함)에 흐름표가 귀속한 지출 줄을 약정 ID·유효 대분류·소분류별로 별도 표시. 주기·분류를 자동 지정하지 않으며 관측된 12개월 순액을 제공(0·음수도 환불 순액 그대로).",
             "annual_deduplication": "전체 쌍의 양수 순지출 월 수로 패턴을 판정한 뒤, 등록 연간 약정에 귀속된 구매·환불 줄을 패턴 금액에서 제외. 남은 지출 줄이 없으면 쌍을 생략. 줄이 남으면 0·음수 순액도 그대로 표시. 약정 항목은 같은 줄을 한 번만 포함.",
@@ -381,7 +406,7 @@ async def read_spending_reference(
         },
         field_scopes={
             "data.total_outflow": "선택 월의 기존 월 흐름표 총지급(진행월은 관측 누적).",
-            "data.comparisons[].actual_amount": "선택 월의 SQL 지출 큐브 순액(일회성 포함). 자료 있는 달의 거래 없는 대상은 0원.",
+            "data.comparisons[].actual_amount": "선택 월의 유효 KRW 지출 줄 순액(일회성 포함). 자료 있는 달의 거래 없는 대상은 0원.",
             "data.comparisons[].one_off_amount": "같은 대상·월의 실적 중 일회성 순액.",
             "data.annual_items": "window_start_period~window_end_period의 관측 패턴 쌍과 사람이 등록한 연간 약정별 관측 순액. 한도 비교와 별도.",
         },
@@ -390,21 +415,24 @@ async def read_spending_reference(
         ],
     )
     return ReadSpendingReferenceResponse(
-        **flow.model_dump(
-            exclude={"data", "surface", "surface_label", "questions", "basis", "labels"}
-        ),
         surface="spending_reference",
         surface_label="연간성 지출 참고와 한도 대비",
         questions=["Q1", "Q3"],
+        status=status,
+        status_label=STATUS_LABELS[status],
+        status_reasons=status_reasons,
+        as_of=read_as_of(as_of),
+        period_scope=scope,
+        classification=classification,
         basis=basis,
         labels={
-            **flow.labels,
+            **flow_labels(),
             "target_kind.category": "카테고리 (대분류)",
             "target_kind.adjustability": "조정 가능성",
         },
         data=SpendingReferenceData(
             period=period,
-            total_outflow=state.total_outflow if has_actual else None,
+            total_outflow=state.total_outflow if state and has_actual else None,
             window_start_period=start,
             window_end_period=end,
             annual_missing_reason=annual_reason,

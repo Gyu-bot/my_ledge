@@ -29,7 +29,7 @@ export interface IncomeStabilityResponse {
   stdev: number | null
   coefficient_of_variation: number | null
   comparison_mode: 'closed' | 'partial'
-  reference_date: string
+  reference_date: string | null
   is_partial_period: boolean
   assumptions: string
 }

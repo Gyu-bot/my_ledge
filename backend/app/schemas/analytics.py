@@ -61,7 +61,9 @@ class IncomeStabilityResponse(BaseModel):
     stdev: float | None
     coefficient_of_variation: float | None
     comparison_mode: str
-    reference_date: date
+    reference_date: date | None = Field(
+        description="요청한 종료일 또는 거래 자료의 마지막 마감월 말일. 둘 다 없으면 null."
+    )
     is_partial_period: bool
     assumptions: str
     contract: MetricContract | None = None

@@ -1,6 +1,9 @@
 """T062 synthetic scenarios shared by SQLite and migrated PostgreSQL."""
 
 from datetime import date
+
+from sqlalchemy import event
+
 from comparison_scenarios import HEADERS, add, get, tx
 
 READ = "/read/spending-reference"
@@ -112,6 +115,53 @@ async def scenario_annual_reference_and_outflow(session, client):
     assert payload["basis"]["definition"] == "spending_reference.v1"
     assert "대분류·소분류" in payload["basis"]["rules"]["annual_like"]
     assert payload["period_scope"]["start_period"] == "2030-12"
+
+
+async def scenario_reference_query_count(session, client):
+    await seed(session)
+    await add(session, [tx(date(2031, 1, 5), -990, category="outside")])
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append((statement.lower(), parameters))
+
+    engine = session.bind.sync_engine
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        default = await reference(client, period=None)
+        assert len(statements) <= 6
+        assert sum("from vw_metric_as_of" in sql for sql, _ in statements) == 1
+        assert sum("spending_reference_expenses" in sql for sql, _ in statements) == 1
+        summary_queries = [
+            (sql, params)
+            for sql, params in statements
+            if "from vw_metric_flow_lines" in sql and "expense_gross_total" in sql
+        ]
+        ((sql, params),) = summary_queries
+        assert "where vw_metric_flow_lines.period" in sql
+        assert tuple(params)[-2:] == ("2030-12", "2030-12")
+
+        statements.clear()
+        explicit = await reference(client)
+        assert explicit == default
+        assert len(statements) <= 6
+        assert sum("from vw_metric_as_of" in sql for sql, _ in statements) == 1
+
+        statements.clear()
+        short_window = await reference(client, "2030-03")
+        assert len(statements) <= 4
+        assert short_window["data"]["annual_items"] == []
+        assert short_window["data"]["annual_missing_reason"] == (
+            "incomplete_twelve_month_window"
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    status = await get(client, "/read/data-status")
+    assert [p["period"] for p in status["period_scope"]["periods"]] == [
+        *(f"2030-{month:02d}" for month in range(1, 13)),
+        "2031-01",
+    ]
 
 
 async def scenario_limit_history(session, client):

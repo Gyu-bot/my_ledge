@@ -9,7 +9,7 @@ It never re-sums transaction amounts in Python.
 
 from datetime import date
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -21,6 +21,7 @@ from app.schemas.metrics import (
     MONTH_DATA_COVERAGE_RULE,
     MetricAsOf,
     MetricContract,
+    MetricInclusion,
 )
 from app.schemas.comparison import ContributionItem, OneOffMode
 from app.schemas.read_surface import (
@@ -66,11 +67,7 @@ from app.services.comparison_service import (
     get_monthly_flow_comparison,
 )
 from app.services.one_off_event_service import list_events
-from app.services.metric_views import (
-    EXPENSE,
-    FLOW_LINES_VIEW,
-    MONTHLY_FLOW_SUMMARY_VIEW,
-)
+from app.services.metric_views import EXPENSE, FLOW_LINES_VIEW, flow_summary_columns
 from app.services.metrics_service import (
     count_spend_cube_groups,
     get_metric_data_status,
@@ -79,7 +76,9 @@ from app.services.metrics_service import (
     load_as_of,
     month_data_coverage,
     build_flow_contract,
+    period_filters,
     ratio,
+    spend_cube_line_conditions,
 )
 
 MONTH_END_FORECAST_LOCATION = {
@@ -164,7 +163,8 @@ def _completeness_columns() -> list[ColumnElement]:
     undecided payment and an undecided refund never net to "complete".
     """
     lines = FLOW_LINES_VIEW
-    undecided = lines.c.adjustability == "undecided"
+    expense = lines.c.type == EXPENSE
+    undecided = and_(expense, lines.c.adjustability == "undecided")
     return [
         func.count(func.distinct(case((undecided, lines.c.transaction_id)))).label(
             "adjustability_undecided_transaction_count"
@@ -172,9 +172,9 @@ def _completeness_columns() -> list[ColumnElement]:
         func.coalesce(
             func.sum(case((undecided, func.abs(lines.c.amount)), else_=0)), 0
         ).label("adjustability_undecided_gross_total"),
-        func.coalesce(func.sum(func.abs(lines.c.amount)), 0).label(
-            "expense_gross_total"
-        ),
+        func.coalesce(
+            func.sum(case((expense, func.abs(lines.c.amount)), else_=0)), 0
+        ).label("expense_gross_total"),
     ]
 
 
@@ -199,42 +199,27 @@ async def load_completeness(
 
 async def load_period_summaries(
     db_session: AsyncSession,
+    *,
+    start_period: str | None = None,
+    end_period: str | None = None,
 ) -> dict[str, dict[str, int]]:
-    """Per-period totals from ``vw_monthly_flow_summary`` (one row per month)
-    plus the completeness measures of the same month's expense lines."""
-    summary = MONTHLY_FLOW_SUMMARY_VIEW
-    rows = await db_session.execute(
-        select(
-            summary.c.period,
-            summary.c.transaction_count,
-            summary.c.total_outflow,
-            summary.c.adjustability_undecided_total,
-        )
-    )
-    result = {
-        row.period: {
-            "transaction_count": int(row.transaction_count or 0),
-            "total_outflow": int(row.total_outflow or 0),
-            "adjustability_undecided_total": int(
-                row.adjustability_undecided_total or 0
-            ),
-            **dict.fromkeys(COMPLETENESS_KEYS, 0),
-        }
-        for row in rows
-    }
+    """Monthly flow totals and expense completeness in one scoped aggregate."""
     lines = FLOW_LINES_VIEW
-    for row in (
-        await db_session.execute(
-            select(lines.c.period, *_completeness_columns())
-            .where(lines.c.type == EXPENSE)
-            .group_by(lines.c.period)
+    flow_columns = {column.key: column for column in flow_summary_columns(lines)}
+    fields = ("transaction_count", "total_outflow", "adjustability_undecided_total")
+    query = (
+        select(
+            lines.c.period,
+            *(flow_columns[name] for name in fields),
+            *_completeness_columns(),
         )
-    ).mappings():
-        if row["period"] in result:
-            result[row["period"]].update(
-                {key: int(row[key] or 0) for key in COMPLETENESS_KEYS}
-            )
-    return result
+        .where(*period_filters(lines.c.period, start_period, end_period))
+        .group_by(lines.c.period)
+    )
+    return {
+        row["period"]: {name: int(row[name]) for name in (*fields, *COMPLETENESS_KEYS)}
+        for row in (await db_session.execute(query)).mappings()
+    }
 
 
 def imported_bounds(as_of: MetricAsOf) -> tuple[str, str] | None:
@@ -448,25 +433,28 @@ CLASSIFICATION_COMPLETENESS_RULE = (
 )
 
 
+def basis_rules(inclusion: MetricInclusion) -> dict[str, str]:
+    return {
+        "basis_view": inclusion.basis_view,
+        "currency": inclusion.currency,
+        "excluded": ", ".join(inclusion.excluded),
+        "sign_convention": inclusion.sign_convention,
+        "refunds": inclusion.refunds,
+        "transfers": inclusion.transfers,
+        "loans": inclusion.loans,
+        "period_attribution": inclusion.period_attribution,
+        "classification_completeness": CLASSIFICATION_COMPLETENESS_RULE,
+        "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
+    }
+
+
 def basis_from_contract(
     contract: MetricContract, assumptions: list[str] | None = None
 ) -> ReadBasis:
-    inclusion = contract.inclusion
     return ReadBasis(
         definition=contract.definition,
         scope=contract.scope,
-        rules={
-            "basis_view": inclusion.basis_view,
-            "currency": inclusion.currency,
-            "excluded": ", ".join(inclusion.excluded),
-            "sign_convention": inclusion.sign_convention,
-            "refunds": inclusion.refunds,
-            "transfers": inclusion.transfers,
-            "loans": inclusion.loans,
-            "period_attribution": inclusion.period_attribution,
-            "classification_completeness": CLASSIFICATION_COMPLETENESS_RULE,
-            "month_data_coverage": MONTH_DATA_COVERAGE_RULE,
-        },
+        rules=basis_rules(contract.inclusion),
         field_scopes=dict(contract.field_scopes),
         assumptions=assumptions or [],
     )
@@ -566,7 +554,9 @@ async def read_monthly_flow(
     as_of = flow.contract.as_of
     scope = build_period_scope(
         as_of=as_of,
-        summaries=await load_period_summaries(db_session),
+        summaries=await load_period_summaries(
+            db_session, start_period=start_period, end_period=end_period
+        ),
         start_period=start_period,
         end_period=end_period,
     )
@@ -608,13 +598,22 @@ async def read_spend_cube(
         end_period=end_period,
         group_by=group_by,
         filters=filters,
-        limit=limit + 1,
+        limit=limit,
     )
-    rows = cube.rows[:limit]
+    rows = cube.rows
+    total_group_count = await count_spend_cube_groups(
+        db_session,
+        start_period=start_period,
+        end_period=end_period,
+        group_by=group_by,
+        filters=filters,
+    )
     as_of = cube.contract.as_of
     scope = build_period_scope(
         as_of=as_of,
-        summaries=await load_period_summaries(db_session),
+        summaries=await load_period_summaries(
+            db_session, start_period=start_period, end_period=end_period
+        ),
         start_period=start_period,
         end_period=end_period,
     )
@@ -658,49 +657,29 @@ async def read_spend_cube(
             filters=filters,
             total_amount=cube.total_amount,
             row_count=len(rows),
-            truncated=len(cube.rows) > limit,
+            truncated=total_group_count > len(rows),
             rows=rows,
-            total_group_count=await count_spend_cube_groups(
-                db_session,
-                start_period=start_period,
-                end_period=end_period,
-                group_by=group_by,
-                filters=filters,
-            ),
+            total_group_count=total_group_count,
             returned_count=len(rows),
         ),
     )
 
 
-def spend_cube_line_conditions(
-    *, start_period: str | None, end_period: str | None, filters: dict[str, str]
-) -> list[ColumnElement[bool]]:
-    """The spend cube's scope as conditions on ``vw_metric_flow_lines``.
-
-    Every cube dimension is a column of the flow lines, so the same filters
-    select the same expense lines the cube aggregated.
-    """
-    lines = FLOW_LINES_VIEW
-    conditions: list[ColumnElement[bool]] = []
-    if start_period is not None:
-        conditions.append(lines.c.period >= start_period)
-    if end_period is not None:
-        conditions.append(lines.c.period <= end_period)
-    for name, value in filters.items():
-        conditions.append(lines.c[name] == value)
-    return conditions
-
-
-def _single_period_scope(
+async def load_single_period_scope(
+    db_session: AsyncSession,
     *,
     as_of: MetricAsOf,
-    summaries: dict[str, dict[str, int]],
     period: str | None,
 ) -> ReadPeriodScope:
     if period is None:
         return ReadPeriodScope(start_period=None, end_period=None, periods=[])
     return build_period_scope(
-        as_of=as_of, summaries=summaries, start_period=period, end_period=period
+        as_of=as_of,
+        summaries=await load_period_summaries(
+            db_session, start_period=period, end_period=period
+        ),
+        start_period=period,
+        end_period=period,
     )
 
 
@@ -770,9 +749,9 @@ async def read_comparison(
     )
     as_of = result.contract.as_of
     target = result.comparison.target_period or period
-    scope = _single_period_scope(
+    scope = await load_single_period_scope(
+        db_session,
         as_of=as_of,
-        summaries=await load_period_summaries(db_session),
         period=target,
     )
     classification = (
@@ -868,9 +847,9 @@ async def read_contributions(
     )
     as_of = result.contract.as_of
     target = result.comparison.target_period or period
-    scope = _single_period_scope(
+    scope = await load_single_period_scope(
+        db_session,
         as_of=as_of,
-        summaries=await load_period_summaries(db_session),
         period=target,
     )
     classification = (
@@ -1164,11 +1143,10 @@ async def read_month_projection(
     )
     as_of = contract.as_of
     period = period_of(reference_date)
-    scope = build_period_scope(
+    scope = await load_single_period_scope(
+        db_session,
         as_of=as_of,
-        summaries=await load_period_summaries(db_session),
-        start_period=period,
-        end_period=period,
+        period=period,
     )
     classification = scope_classification(scope)
     state, reasons = resolve_status(
