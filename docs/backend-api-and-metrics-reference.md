@@ -2299,3 +2299,23 @@ T056 확인 보완: 이행 약정은 `attributes_confirmed_at`으로 사용자�
 관측은 `vw_transaction_nature`의 유효 거래 행(모든 통화)을 약정 id별 count/min(date)/max(date)로 집계한다. 삭제·병합·superseded 거래를 제외하고 기존 정기 지급 편집 화면의 member 집계와 같다. 월 흐름표의 KRW 금액·환불 귀속 line 수와는 구분한다. low_observation은 이행 출처·미확인·관측 ≤1 조건이며 반복성 판정이 아니다.
 
 합치기 제안은 merchant 범위의 거래처 끝 ASCII 숫자를 제거하고 공백 제거·소문자화한 줄기를 카테고리 major/minor와 묶는다. 제안 대상 id는 최소 id이며 사용자가 다른 대상을 고를 수 있다. 생성/수정/합치기에서 prefix는 정규화 후 최소 2글자다. 합치기·일괄 삭제는 인증된 한 트랜잭션과 공통 설정 lock 안에서 실행한다. 합치기의 대상 속성 유지·충돌 시 확인 해제·source 명시 연결 이전, 삭제 시 override 보존/제거 규칙은 SSOT와 같다. 자동 삭제·합치기·확인은 없다.
+
+
+## 일회성 지출 묶음 (T067)
+
+`one_off_event_members.transaction_id`는 직접 소속의 키이며 거래마다 한
+묶음만 지정한다. 금액은 `vw_metric_flow_lines.one_off_event_id`로 읽는다.
+유효 KRW 지출 줄 중 약정이 없는 줄에만 `attributed_transaction_id`의
+직접 소속을 적용한다. 확정 배분 환불은 원구매 묶음에 게시월 지출 차감으로
+반영하고 환불 잔액은 환불 자체의 묶음에 반영한다.
+
+직접 소속 상세의 상태는 `counted`, `fully_allocated`, `committed_now`,
+`inactive`다. 약정 전환 및 비활성은 소속을 보존하며 자격을 되찾으면 다시
+집계한다. 교체 재가져오기는 소속을 새 거래로 이동한다. 기존 정산 배분은
+교체 결과에 따라 유효 줄에서 제외된다. 업로드 되돌리기와 검토 업로드
+상태 해시는 두 표를 포함한다.
+
+0046은 `vw_metric_flow_lines`에 `one_off_event_id`를 추가한다.
+`vw_monthly_flow_summary`의 `month_status` 뒤에 일회성 순지출 합계
+`one_off_total`, `total_outflow - one_off_total`인 `ongoing_outflow`,
+`living_spend - one_off_total`인 `ongoing_living_spend`를 붙인다.

@@ -505,7 +505,9 @@ METRIC_VIEW_DESCRIPTIONS = {
         "purchase's classification. Prefer this over "
         "re-aggregating vw_transactions_effective. T061: 이체 lines carry "
         "transfer_purpose (investment/savings/internal_move/undecided) and "
-        "transfer_purpose_source from vw_transfer_purpose; null otherwise."
+        "transfer_purpose_source from vw_transfer_purpose; null otherwise. "
+        "T067: one_off_event_id is the attributed transaction's direct event "
+        "on uncommitted expense lines only."
     ),
     "vw_metric_as_of": (
         "Single-row data status: transaction as-of date, last closed and "
@@ -519,7 +521,8 @@ METRIC_VIEW_DESCRIPTIONS = {
         "T061: transfer_net split by human-set purpose (transfer_investment_net, "
         "transfer_savings_net, transfer_investment_savings_net, "
         "transfer_internal_move_net, transfer_undecided_net) plus "
-        "transfer_undecided_activity_total."
+        "transfer_undecided_activity_total. T067 appends one_off_total (net "
+        "attributed expense), ongoing_outflow and ongoing_living_spend."
     ),
     "vw_spend_cube": (
         "Spend cube: month x category x merchant x payment form x adjustability "

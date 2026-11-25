@@ -211,6 +211,28 @@ GET `analytics/fixed-cost-summary`, `analytics/fixed-cost-trend`, `analytics/rec
 | `PUT` | `/api/v1/transactions/installment-links/bulk` | live | API key required, sequentially map selected transactions to one installment plan |
 | `POST` | `/api/v1/transactions/merge` | stub | `501 Not Implemented` |
 
+### One-off expense events (T067)
+
+| Method | Path | Result |
+|---|---|---|
+| GET | `/api/v1/one-off-events` | Event summaries with direct member count and date bounds, attributed monthly amounts and total |
+| GET | `/api/v1/one-off-events/{id}` | Summary plus direct members and their current status |
+| POST | `/api/v1/one-off-events` | Create with `name`, optional `note` and optional `transaction_ids`; 201 with detail |
+| PATCH | `/api/v1/one-off-events/{id}` | Update `name` or `note`; null clears the note |
+| DELETE | `/api/v1/one-off-events/{id}` | Remove the event and its memberships; 204 |
+| POST / DELETE | `/api/v1/one-off-events/{id}/members` | Add or remove direct members using `{transaction_ids}`; return detail |
+
+Writes require `X-API-Key`. Additions are atomic and repeatable in the same
+event. Other-event membership is a 409. Ineligible or missing transactions
+are 422. The response `detail` lists `transaction_id` and `reason` for
+each rejected transaction. Valid members are effective KRW expense rows
+without a resolved commitment. An event name is 1–100 characters after trimming.
+
+Transaction responses expose direct `one_off_event_id` and `one_off_event_name`.
+The list filters `one_off_event_id` and `one_off=true|false` match monetary
+attribution on the same flow line as the category and flow-axis filters. A
+posted refund can therefore match a different event than its direct membership.
+
 ### Assets / Snapshots
 
 | Method | Path | Status | Notes |

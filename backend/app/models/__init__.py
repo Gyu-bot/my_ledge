@@ -28,6 +28,7 @@ from app.models.nature_axes import (
     RecurringCommitment,
     TransactionNatureOverride,
 )
+from app.models.one_off_event import OneOffEvent, OneOffEventMember
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.models.spending_limit import SpendingLimitRevision
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
@@ -60,6 +61,8 @@ __all__ = [
     "LoanMerchantRule",
     "LoanTransactionLink",
     "MerchantAliasRule",
+    "OneOffEvent",
+    "OneOffEventMember",
     "PurchaseGateReview",
     "RecurringCategoryRule",
     "RecurringCommitment",

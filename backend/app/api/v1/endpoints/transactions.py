@@ -84,6 +84,12 @@ async def get_transactions(
             "Combined filters must match on the same line."
         ),
     ),
+    one_off_event_id: int | None = Query(
+        default=None, gt=0, description="Event attributed to a flow line."
+    ),
+    one_off: bool | None = Query(
+        default=None, description="Whether a flow line carries one-off attribution."
+    ),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> TransactionListResponse:
     retired = [
@@ -115,6 +121,8 @@ async def get_transactions(
         flow_row=flow_row,
         payment_form=payment_form,
         adjustability=adjustability,
+        one_off_event_id=one_off_event_id,
+        one_off=one_off,
     )
 
 
