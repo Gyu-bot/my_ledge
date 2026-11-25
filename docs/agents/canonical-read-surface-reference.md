@@ -504,6 +504,8 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `/api/v1/metrics/net-worth/intervals`, `/reconciliation`, `/emergency-fund` (`T061`, 색인에 실려 있음) |
 | Q6 언제까지의 자료이고 분류는 얼마나 되었나 | `/read/data-status`, 그리고 모든 응답의 `as_of`·`classification` |
 
+Hermes 상담에서 월 총지급은 `total_outflow`, 그중 게시월에 귀속된 일회성 지출은 `one_off_total`, 이를 뺀 경상 지급은 `ongoing_outflow`로 읽는다. 기여 분석의 `data.one_off.mode`와 금액은 비교에 적용된 범위를 알려 준다. 기본 경상 기여와 월 총지급을 대조할 때 이 차이를 함께 표시한다. 대상월에 거래 관측이 없으면 절감액을 산출할 수 없다. 지출 큐브의 건수는 각 그룹의 고유 거래 수여서, 하나의 환불이 여러 세부 그룹에 걸친 경우 하위 건수의 합이 상위 건수보다 클 수 있다.
+
 값의 뜻:
 
 | 항목 | 의미 |
