@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql.asyncpg import dialect as asyncpg_dialect
 
 from app.services.metric_views import (
     MONTHLY_FLOW_SUMMARY_DEFINITION,
+    ONE_OFF_SUMMARY_COLUMNS,
     compile_view_sql,
 )
 from app.services.net_worth_views import NET_WORTH_VIEWS
@@ -87,7 +88,7 @@ def test_existing_view_columns_keep_their_position() -> None:
         "transfer_purpose_source",
     ]
     summary = [c.name for c in MONTHLY_FLOW_SUMMARY_DEFINITION.selected_columns]
-    assert summary[-7:] == [
+    assert summary[-(7 + len(ONE_OFF_SUMMARY_COLUMNS)) :] == [
         "transfer_investment_net",
         "transfer_savings_net",
         "transfer_investment_savings_net",
@@ -95,4 +96,5 @@ def test_existing_view_columns_keep_their_position() -> None:
         "transfer_undecided_net",
         "transfer_undecided_activity_total",
         "month_status",
+        *ONE_OFF_SUMMARY_COLUMNS,
     ]

@@ -1,4 +1,4 @@
-import { formatMonthAxis, formatSignedWon, formatWon, formatWonCompact } from '../format'
+import { formatMonthAxis, formatNetWon, formatSignedWon, formatWon } from '../format'
 
 export interface CashflowChartItem {
   period: string
@@ -10,6 +10,7 @@ export interface CashflowChartItem {
 interface CashflowChartProps {
   items: CashflowChartItem[]
   height?: number
+  outflowOnly?: boolean
   /** is_complete_month=false인 월 — 반투명 처리 + 진행중 표기 */
   incompletePeriods?: ReadonlySet<string>
   /** 범례 이름 (기본: 수입 / 지출 / 순현금흐름) */
@@ -28,15 +29,14 @@ const PAD_BOTTOM = 22
  * 수입/지출 dual bar + 순현금흐름 라인 — 04-design-system.md §3.
  * 경량 커스텀 SVG (프로토타입 단계, recharts 미사용).
  */
-export function CashflowChart({ items, height = 200, incompletePeriods, labels = DEFAULT_LABELS }: CashflowChartProps) {
+export function CashflowChart({ items, height = 200, incompletePeriods, labels = DEFAULT_LABELS, outflowOnly = false }: CashflowChartProps) {
   if (items.length === 0) return null
 
   const plotWidth = VIRTUAL_WIDTH - PAD_LEFT - PAD_RIGHT
   const plotHeight = height - PAD_TOP - PAD_BOTTOM
-  const maxBar = Math.max(...items.map((item) => Math.max(item.income, Math.abs(item.expense))), 1)
-  const minNet = Math.min(0, ...items.map((item) => item.net))
-  const domainMax = maxBar
-  const domainMin = minNet
+  const values = items.flatMap(({ income, expense, net }) => outflowOnly ? [expense] : [income, expense, net])
+  const domainMax = Math.max(1, ...values)
+  const domainMin = Math.min(0, ...values)
   const domainSpan = domainMax - domainMin || 1
 
   const yOf = (value: number) => PAD_TOP + plotHeight * (1 - (value - domainMin) / domainSpan)
@@ -52,7 +52,11 @@ export function CashflowChart({ items, height = 200, incompletePeriods, labels =
     })
     .join(' ')
 
-  const gridValues = [domainMax, domainMax / 2]
+  const gridValues = [
+    ...domainMax > 1 || domainMin === 0 ? [domainMax, domainMax / 2] : [],
+    ...domainMin < 0 ? [domainMin] : [],
+  ]
+  const chartLabel = outflowOnly ? labels.expense : `${labels.income}·${labels.expense}·${labels.net}`
 
   return (
     <figure className="m-0">
@@ -60,7 +64,7 @@ export function CashflowChart({ items, height = 200, incompletePeriods, labels =
         width="100%"
         viewBox={`0 0 ${VIRTUAL_WIDTH} ${height}`}
         role="img"
-        aria-label={`최근 ${items.length}개월 ${labels.income}·${labels.expense}·${labels.net} 차트`}
+        aria-label={`최근 ${items.length}개월 ${chartLabel} 차트`}
       >
         {gridValues.map((value) => (
           <g key={value}>
@@ -73,7 +77,7 @@ export function CashflowChart({ items, height = 200, incompletePeriods, labels =
               strokeWidth={1}
             />
             <text x={PAD_LEFT - 6} y={yOf(value) + 3} textAnchor="end" fontSize={10} fill="var(--ds-chart-axis)">
-              {formatWonCompact(value)}
+              {formatNetWon(value, { compact: true })}
             </text>
           </g>
         ))}
@@ -90,26 +94,27 @@ export function CashflowChart({ items, height = 200, incompletePeriods, labels =
           const groupX = PAD_LEFT + groupWidth * index
           const center = groupX + groupWidth / 2
           const incomeHeight = zeroY - yOf(item.income)
-          const expenseHeight = zeroY - yOf(Math.abs(item.expense))
+          const expenseY = yOf(item.expense)
           const incomplete = incompletePeriods?.has(item.period) ?? false
           return (
             <g key={item.period} opacity={incomplete ? 0.45 : 1}>
               <title>
-                {`${item.period}${incomplete ? ' (진행중)' : ''} · ${labels.income} ${formatWon(item.income)} · ${labels.expense} ${formatWon(Math.abs(item.expense))} · ${labels.net} ${formatSignedWon(item.net)}`}
+                {`${item.period}${incomplete ? ' (진행중)' : ''} · ${labels.expense} ${formatNetWon(item.expense)}`}
+                {outflowOnly ? '' : ` · ${labels.income} ${formatWon(item.income)} · ${labels.net} ${formatSignedWon(item.net)}`}
               </title>
-              <rect
+              {outflowOnly ? null : <rect
                 x={center - barWidth - 1.5}
                 y={yOf(item.income)}
                 width={barWidth}
                 height={Math.max(0, incomeHeight)}
                 rx={2}
                 fill="var(--ds-chart-income)"
-              />
+              />}
               <rect
-                x={center + 1.5}
-                y={yOf(Math.abs(item.expense))}
+                x={outflowOnly ? center - barWidth / 2 : center + 1.5}
+                y={Math.min(zeroY, expenseY)}
                 width={barWidth}
-                height={Math.max(0, expenseHeight)}
+                height={Math.abs(zeroY - expenseY)}
                 rx={2}
                 fill="var(--ds-chart-expense)"
               />
@@ -122,7 +127,7 @@ export function CashflowChart({ items, height = 200, incompletePeriods, labels =
           )
         })}
 
-        <polyline points={netPoints} fill="none" stroke="var(--ds-chart-net)" strokeWidth={1.5} strokeDasharray="3 3" />
+        {outflowOnly ? null : <><polyline points={netPoints} fill="none" stroke="var(--ds-chart-net)" strokeWidth={1.5} strokeDasharray="3 3" />
         {items.map((item, index) => (
           <circle
             key={item.period}
@@ -131,21 +136,21 @@ export function CashflowChart({ items, height = 200, incompletePeriods, labels =
             r={2.5}
             fill="var(--ds-chart-net)"
           />
-        ))}
+        ))}</>}
       </svg>
       <figcaption className="mt-2 flex gap-4 text-micro text-text-muted">
-        <span className="flex items-center gap-1.5">
+        {outflowOnly ? null : <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-[2px] bg-[var(--ds-chart-income)]" aria-hidden />
           {labels.income}
-        </span>
+        </span>}
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-[2px] bg-[var(--ds-chart-expense)]" aria-hidden />
           {labels.expense}
         </span>
-        <span className="flex items-center gap-1.5">
+        {outflowOnly ? null : <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-3 bg-[var(--ds-chart-net)]" aria-hidden />
           {labels.net}
-        </span>
+        </span>}
       </figcaption>
     </figure>
   )

@@ -51,7 +51,7 @@ export const txKeys = {
 }
 
 function invalidateTransactionDependents(queryClient: QueryClient) {
-  return Promise.all(['transactions', 'canonical-views', 'analytics', 'assets', 'metrics', 'read', 'nature', 'transfer-purposes'].map((key) =>
+  return Promise.all(['transactions', 'canonical-views', 'analytics', 'assets', 'metrics', 'read', 'nature', 'transfer-purposes', 'one-off-events', 'spending-reference'].map((key) =>
     queryClient.invalidateQueries({ queryKey: [key] }),
   ))
 }

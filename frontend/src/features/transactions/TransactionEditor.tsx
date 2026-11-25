@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge } from '../../ds/Badge'
 import { Button } from '../../ds/Button'
 import { DetailPanel } from '../../ds/DetailPanel'
@@ -20,6 +21,8 @@ import {
   useTransactionFilterOptions,
   useUpdateTransaction,
 } from '../../hooks/useTransactions'
+import { useOneOffEventActions } from '../../hooks/useOneOffEvents'
+import { oneOffEventLink } from '../one-off/oneOffLabels'
 import { useWriteAccess } from '../../hooks/useWriteAccess'
 import type { AdjustabilityValue, TransactionNature, TransferPurposeValue } from '../../types/nature'
 import type { TransactionResponse, TransactionUpdateRequest } from '../../types/transaction'
@@ -305,6 +308,9 @@ function LoadedEditor({ tx, onClose, allowDelete }: { tx: TransactionResponse; o
         setDraft={setDraft}
         hasWrite={hasWrite}
       />
+      {tx.one_off_event_id != null ? (
+        <OneOffMembership id={tx.one_off_event_id} name={tx.one_off_event_name ?? '일회성 묶음'} transactionId={tx.id} hasWrite={hasWrite} />
+      ) : null}
       {!hasWrite ? <p className="mt-3 text-caption text-warn"><Badge variant="warn">읽기 전용</Badge> API 키가 없어 고칠 수 없습니다.</p> : null}
       <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-border-subtle pt-3">
         {allowDelete ? (
@@ -320,5 +326,28 @@ function LoadedEditor({ tx, onClose, allowDelete }: { tx: TransactionResponse; o
         </div>
       </div>
     </form>
+  )
+}
+
+function OneOffMembership({ id, name, transactionId, hasWrite }: { id: number; name: string; transactionId: number; hasWrite: boolean }) {
+  const { editMembers } = useOneOffEventActions()
+
+  async function detach() {
+    try {
+      await editMembers.mutateAsync({ eventId: id, method: 'DELETE', transactionIds: [transactionId] })
+      toast.success('묶음에서 거래를 뺐습니다')
+    } catch (error) {
+      toast.error('소속 해제 실패', { description: writeErrorMessage(error) })
+    }
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-subtle p-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <Badge variant="accent">일회성</Badge>
+        <Link to={oneOffEventLink(id)} className="break-words text-caption text-transfer hover:underline">{name}</Link>
+      </div>
+      <Button size="sm" variant="ghost" disabled={!hasWrite || editMembers.isPending} onClick={() => void detach()}>묶음에서 빼기</Button>
+    </div>
   )
 }

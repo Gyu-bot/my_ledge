@@ -29,6 +29,8 @@ import type { TransactionBulkMutationPreview, TransactionListParams, Transaction
 import { FLOW_ROW_LABELS } from '../analysis/flowMeasures'
 import { loadErrorMessage, writeErrorMessage } from '../analysis/text'
 import { ADJUSTABILITY_TEXT } from '../classification/labels'
+import { OneOffBulkPanel } from '../one-off/OneOffBulkPanel'
+import { oneOffEventLink } from '../one-off/oneOffLabels'
 import { TransactionEditor } from '../transactions/TransactionEditor'
 
 const PAGE_SIZE = 40
@@ -43,6 +45,8 @@ const FILTER_KEYS = [
   'flow_row',
   'payment_form',
   'adjustability',
+  'one_off_event_id',
+  'one_off',
   'start_date',
   'end_date',
   'include_deleted',
@@ -68,6 +72,7 @@ function filterFrom(params: URLSearchParams): FilterState {
 }
 
 function listParams(filter: FilterState, page: number): TransactionListParams {
+  const eventId = Number(filter.one_off_event_id)
   return {
     page,
     per_page: PAGE_SIZE,
@@ -79,6 +84,8 @@ function listParams(filter: FilterState, page: number): TransactionListParams {
     flow_row: (filter.flow_row as FlowRowKey) || undefined,
     payment_form: (filter.payment_form as TransactionListParams['payment_form']) || undefined,
     adjustability: (filter.adjustability as TransactionListParams['adjustability']) || undefined,
+    one_off_event_id: Number.isSafeInteger(eventId) && eventId > 0 ? eventId : undefined,
+    one_off: filter.one_off === 'true' ? true : filter.one_off === 'false' ? false : undefined,
     start_date: filter.start_date || undefined,
     end_date: filter.end_date || undefined,
     include_deleted: filter.include_deleted === '1' || undefined,
@@ -104,6 +111,7 @@ function RowsView() {
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
   const [filterDraft, setFilterDraft] = useState<FilterState>(applied)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [showOneOffPanel, setShowOneOffPanel] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [bulkDraft, setBulkDraft] = useState<BulkDraft>(DEFAULT_BULK_DRAFT)
   const [bulkProgress, setBulkProgress] = useState<string | null>(null)
@@ -267,7 +275,7 @@ function RowsView() {
 
   const inputCls = 'rounded-md border border-border bg-bg-inset px-2.5 py-1.5 text-caption text-text-secondary'
   const setDraft = (key: FilterKey, value: string) => setFilterDraft((current) => ({ ...current, [key]: value }))
-  const lineFilterActive = Boolean(applied.flow_row || applied.payment_form || applied.adjustability)
+  const lineFilterActive = Boolean(applied.flow_row || applied.payment_form || applied.adjustability || applied.one_off_event_id || applied.one_off)
 
   return (
     <>
@@ -285,12 +293,23 @@ function RowsView() {
           <Select className={inputCls} value={filterDraft.payment_form} onChange={(e) => setDraft('payment_form', e.target.value)} aria-label="지급 형태"><option value="">지급 형태 전체</option><option value="committed">약정</option><option value="ad_hoc">수시</option></Select>
           <Select className={inputCls} value={filterDraft.adjustability} onChange={(e) => setDraft('adjustability', e.target.value)} aria-label="조정 가능성"><option value="">조정 가능성 전체</option><option value="protected">보호</option><option value="adjustable">조정 가능</option><option value="undecided">미정</option></Select>
           <Select className={inputCls} value={filterDraft.flow_row} onChange={(e) => setDraft('flow_row', e.target.value)} aria-label="월 흐름표 줄"><option value="">흐름표 줄 전체</option>{FLOW_ROWS.map((row) => <option key={row} value={row}>{FLOW_ROW_LABELS[row]}</option>)}</Select>
+          <Select className={inputCls} value={filterDraft.one_off} onChange={(e) => setDraft('one_off', e.target.value)} aria-label="일회성 귀속"><option value="">일회성 귀속 전체</option><option value="true">일회성 줄 있음</option><option value="false">일회성 귀속 없음</option></Select>
           <input type="date" className={inputCls} value={filterDraft.start_date} onChange={(e) => setDraft('start_date', e.target.value)} aria-label="시작일" />
           <input type="date" className={inputCls} value={filterDraft.end_date} onChange={(e) => setDraft('end_date', e.target.value)} aria-label="종료일" />
           <Toggle label="삭제 포함" checked={filterDraft.include_deleted === '1'} onChange={(v) => setDraft('include_deleted', v ? '1' : '')} />
           <Toggle label="고친 것만" checked={filterDraft.is_edited === '1'} onChange={(v) => setDraft('is_edited', v ? '1' : '')} />
         </div>
-        {lineFilterActive ? <p className="mt-2 text-micro text-text-muted">지급 형태·조정 가능성·흐름표 줄로 거르면 분석에 들어가는 원화 거래만 나옵니다(삭제·대체된 거래 제외).</p> : null}
+        {filterDraft.one_off_event_id ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Link to={oneOffEventLink(Number(filterDraft.one_off_event_id))} className="text-caption text-transfer hover:underline">귀속 묶음 보기</Link>
+            <Button size="sm" variant="ghost" onClick={() => {
+              setDraft('one_off_event_id', '')
+              writeParams((next) => { next.delete('one_off_event_id'); next.delete('page') })
+              setSelected(new Set())
+            }}>묶음 필터 해제</Button>
+          </div>
+        ) : null}
+        {lineFilterActive ? <p className="mt-2 text-micro text-text-muted">흐름 줄로 거르면 분석에 들어가는 원화 거래만 나옵니다(삭제·대체된 거래 제외).</p> : null}
       </Card>
 
       <Card title="거래 목록" meta={`${rows.length} / ${list.data?.total ?? 0}건 · 거래처를 누르거나 Enter로 고치기 패널이 열립니다`} bodyClassName="p-0">
@@ -332,7 +351,7 @@ function RowsView() {
                     </td>
                     <td className="px-3 py-2 text-text-muted">{tx.effective_category_major}{tx.effective_category_minor ? ` / ${tx.effective_category_minor}` : ''}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-caption text-text-muted">{tx.type}</td>
-                    <td className="whitespace-nowrap px-3 py-2"><Badge variant={tx.is_deleted ? 'expense' : tx.is_edited ? 'accent' : 'neutral'}>{tx.is_deleted ? '삭제됨' : tx.is_edited ? '고침' : '원본'}</Badge></td>
+                    <td className="whitespace-nowrap px-3 py-2"><Badge variant={tx.is_deleted ? 'expense' : tx.is_edited ? 'accent' : 'neutral'}>{tx.is_deleted ? '삭제됨' : tx.is_edited ? '고침' : '원본'}</Badge>{tx.one_off_event_id != null ? <Badge variant="accent" className="ml-1">일회성</Badge> : null}</td>
                     <td className={`tnum px-3 py-2 text-right font-semibold ${tx.amount < 0 ? 'text-expense' : 'text-income'}`}>{formatSignedWon(tx.amount)}</td>
                   </tr>
                 ))}
@@ -363,10 +382,19 @@ function RowsView() {
           <option value="clear">거래 단위 값 지우기</option>
         </Select>
         <Button variant="primary" disabled={!hasWrite || bulkUpdate.isPending || bulkAdjustability.isPending} onClick={() => void applyBulk()}>일괄 적용</Button>
+        <Button disabled={!hasWrite} onClick={() => setShowOneOffPanel(true)}>일회성 묶음에 추가</Button>
         <Button variant="danger" disabled={!hasWrite} onClick={() => void bulkDeleteFlow()}>삭제</Button>
         <Button variant="secondary" disabled={!hasWrite} onClick={() => void bulkRestoreFlow()}>복원</Button>
       </BulkBar>
 
+      {showOneOffPanel ? (
+        <OneOffBulkPanel
+          transactionIds={[...selected]}
+          rows={rows}
+          onClose={() => setShowOneOffPanel(false)}
+          onSaved={() => { setShowOneOffPanel(false); setSelected(new Set()) }}
+        />
+      ) : null}
       {openId !== null ? <TransactionEditor transactionId={openId} onClose={closeEditor} allowDelete /> : null}
     </>
   )

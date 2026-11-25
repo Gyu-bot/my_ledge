@@ -19,6 +19,7 @@ export interface LimitComparison {
   target_value: string
   target_label: string
   actual_amount: number | null
+  one_off_amount: number | null
   limit_amount: number | null
   limit_revision_id: number | null
   effective_from_period: string | null

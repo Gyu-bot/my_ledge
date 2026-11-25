@@ -37,7 +37,7 @@ export function SpendingReferenceCard({ period }: { period: string }) {
             <ul aria-label="월 한도 대비" className="mt-2 space-y-2">
               {data.comparisons.map((item) => <li key={`${item.target_kind}:${item.target_value}`} className="rounded-md border border-border-subtle p-2">
                 <p className="font-medium text-text-primary">{item.target_kind === 'category' ? '대분류' : '조정 가능성'} · {item.target_label}</p>
-                <p className="tnum text-text-secondary">실적 {item.actual_amount == null ? '자료 없음' : formatNetWon(item.actual_amount)} · 한도 {item.limit_amount == null ? '미설정' : formatNetWon(item.limit_amount)}</p>
+                <p className="tnum text-text-secondary">실적 {item.actual_amount == null ? '자료 없음' : formatNetWon(item.actual_amount)}{item.one_off_amount != null ? <> · 그중 일회성 {formatNetWon(item.one_off_amount)}</> : null} · 한도 {item.limit_amount == null ? '미설정' : formatNetWon(item.limit_amount)}</p>
                 <p className="text-text-muted">{item.missing_reason_label ?? (item.difference_amount === 0 ? '한도와 같음' : `${formatNetWon(Math.abs(item.difference_amount ?? 0))} ${item.difference_amount != null && item.difference_amount > 0 ? '초과' : '한도 미만'}`)}</p>
                 {item.effective_from_period ? <p className="text-micro text-text-muted">적용 시작 {item.effective_from_period} · 이력 #{item.limit_revision_id}</p> : null}
               </li>)}

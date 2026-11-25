@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   bulkAdjustability: vi.fn(),
   setAdjustability: vi.fn(),
   listCalls: [] as unknown[],
+  rows: [] as TransactionResponse[],
+  createEvent: vi.fn(),
+  editMembers: vi.fn(),
 }))
 
 function tx(overrides: Partial<TransactionResponse> = {}): TransactionResponse {
@@ -41,7 +44,7 @@ vi.mock('../../hooks/useTransactions', () => {
   return {
     useTransactionList: (params: TransactionListParams) => {
       mocks.listCalls.push(params)
-      return wrap({ total: 1, page: 1, per_page: 40, items: [tx()] })
+      return wrap({ total: 1, page: 1, per_page: 40, items: mocks.rows })
     },
     useTransactionFilterOptions: () => wrap({ category_options: ['식비', '구독'], category_minor_options: ['배달'], category_minor_options_by_major: { 식비: ['배달'] }, payment_method_options: ['카드 A'] }),
     useTransactionDetail: (id: number | null) =>
@@ -66,6 +69,14 @@ vi.mock('../../hooks/useNature', () => ({
   useSetTransactionAdjustability: () => ({ mutateAsync: mocks.setAdjustability.mockResolvedValue({}), isPending: false }),
   useSetTransferPurpose: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBulkTransactionAdjustability: () => ({ mutateAsync: mocks.bulkAdjustability.mockResolvedValue({ applied: [1], failed: [] }), isPending: false }),
+}))
+
+vi.mock('../../hooks/useOneOffEvents', () => ({
+  useOneOffEvents: () => ({ data: [{ id: 7, name: '기존 합성 묶음' }], error: null }),
+  useOneOffEventActions: () => ({
+    create: { mutateAsync: mocks.createEvent, isPending: false },
+    editMembers: { mutateAsync: mocks.editMembers, isPending: false },
+  }),
 }))
 
 vi.mock('../../hooks/useSettings', () => ({
@@ -93,6 +104,9 @@ describe('TransactionsPage', () => {
   beforeEach(() => {
     for (const mock of [mocks.bulkUpdate, mocks.update, mocks.bulkRestorePreview, mocks.bulkRestore, mocks.bulkAdjustability, mocks.setAdjustability]) mock.mockClear()
     mocks.listCalls.length = 0
+    mocks.rows = [tx()]
+    mocks.createEvent.mockReset()
+    mocks.editMembers.mockReset()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
@@ -186,5 +200,46 @@ describe('TransactionsPage', () => {
   it('예전 그룹 보기 주소는 정기 지급 묶음으로 보낸다', () => {
     renderPage('/data/transactions?view=groups')
     expect(screen.getByText('정기 지급 화면')).toBeInTheDocument()
+  })
+})
+
+
+describe('일회성 지출 거래 일괄 동작', () => {
+  beforeEach(() => {
+    mocks.rows = [tx(), tx({ id: 2, merchant: '합성 수입', type: '수입' })]
+    mocks.createEvent.mockReset().mockResolvedValue({ name: '새 합성 묶음' })
+    mocks.editMembers.mockReset()
+  })
+
+  it('공용 선택을 유지하고 일회성 동작에서 거래별 거절 사유를 표시한다', async () => {
+    mocks.editMembers.mockRejectedValue(new Error('422: {"detail":[{"transaction_id":2,"reason":"not_expense"}]}'))
+    renderPage()
+    const expense = screen.getByRole('checkbox', { name: '샘플배달 선택' })
+    const income = screen.getByRole('checkbox', { name: '합성 수입 선택' })
+    expect(income).toBeEnabled()
+    fireEvent.click(expense)
+    fireEvent.click(income)
+    fireEvent.click(screen.getByRole('button', { name: '일회성 묶음에 추가' }))
+    const panel = within(screen.getByRole('dialog', { name: '일회성 묶음에 추가' }))
+    fireEvent.change(panel.getByLabelText('일회성 묶음'), { target: { value: '7' } })
+    fireEvent.click(panel.getByRole('button', { name: '선택 거래 추가' }))
+    expect(await panel.findByRole('alert')).toHaveTextContent('합성 수입 · 지출 아님')
+    expect(mocks.editMembers).toHaveBeenCalledWith({ eventId: 7, method: 'POST', transactionIds: [1, 2] })
+    fireEvent.click(panel.getByRole('button', { name: '닫기' }))
+    expect(income).toBeChecked()
+    expect(expense).toBeChecked()
+    fireEvent.click(income)
+    fireEvent.click(screen.getByRole('button', { name: '일회성 묶음에 추가' }))
+    fireEvent.change(screen.getByLabelText('새 묶음 이름'), { target: { value: '새 합성 묶음' } })
+    fireEvent.click(screen.getByRole('button', { name: '묶음 만들고 추가' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mocks.createEvent).toHaveBeenCalledWith({ name: '새 합성 묶음', transaction_ids: [1] })
+    expect(expense).not.toBeChecked()
+  })
+
+  it('일회성 묶음과 경상 줄 필터를 URL에서 읽는다', () => {
+    renderPage('/data/transactions?one_off_event_id=7&one_off=false')
+    expect(mocks.listCalls[mocks.listCalls.length - 1]).toMatchObject({ one_off_event_id: 7, one_off: false })
+    expect(screen.getByRole('link', { name: '귀속 묶음 보기' })).toHaveAttribute('href', '/data/one-off?event=7')
   })
 })

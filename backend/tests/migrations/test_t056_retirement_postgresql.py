@@ -9,6 +9,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from historical_one_off_compat import historical_read_factory
+
 from app.core.database import get_db_session
 from app.main import app
 
@@ -30,30 +32,32 @@ def normalize(value):
 
 async def capture(url):
     engine = create_async_engine(url)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def override():
-        async with factory() as db:
-            yield db
-
-    app.dependency_overrides[get_db_session] = override
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://testserver"
-        ) as client:
-            paths = sorted(
-                r.path
-                for r in app.routes
-                if hasattr(r, "methods")
-                and "GET" in r.methods
-                and r.path.startswith(("/api/v1/read/", "/api/v1/metrics/"))
-                and "{" not in r.path
-            )
-            bodies = {}
-            for path in paths:
-                response = await client.get(path, headers={"X-API-Key": "test-api-key"})
-                assert response.status_code == 200, (path, response.text)
-                bodies[path] = normalize(response.json())
+        async with historical_read_factory(engine) as factory:
+
+            async def override():
+                async with factory() as db:
+                    yield db
+
+            app.dependency_overrides[get_db_session] = override
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://testserver"
+            ) as client:
+                paths = sorted(
+                    r.path
+                    for r in app.routes
+                    if hasattr(r, "methods")
+                    and "GET" in r.methods
+                    and r.path.startswith(("/api/v1/read/", "/api/v1/metrics/"))
+                    and "{" not in r.path
+                )
+                bodies = {}
+                for path in paths:
+                    response = await client.get(
+                        path, headers={"X-API-Key": "test-api-key"}
+                    )
+                    assert response.status_code == 200, (path, response.text)
+                    bodies[path] = normalize(response.json())
         async with engine.connect() as db:
             definitions = dict(
                 (
