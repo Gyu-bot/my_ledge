@@ -197,8 +197,9 @@ def test_replacement_moves_direct_membership_and_rollback_restores_it(
                 assert await db.get(OneOffEventMember, old.id) is None
                 changed = await events.get_event(db, event_id)
                 assert changed.members[0].transaction_id != old.id
-                assert (await events.get_event(db, a.id)).counted_total == 200
-                assert (await events.get_event(db, b.id)).counted_total == -100
+                # The confirmed allocation survives replacement of either posting.
+                assert (await events.get_event(db, a.id)).counted_total == 140
+                assert (await events.get_event(db, b.id)).counted_total == -40
                 if not replace_purchase:
                     await events.update_event(db, a.id, OneOffEventPatch(name="편집"))
                     with pytest.raises(rollback.RollbackError) as error:

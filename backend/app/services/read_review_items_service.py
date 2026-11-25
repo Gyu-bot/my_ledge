@@ -21,7 +21,6 @@ from app.schemas.read_surface import (
     REVIEW_SUBJECT_LABELS,
     STATUS_LABELS,
     ReadBasis,
-    ReadPeriodScope,
     ReadReviewItemsData,
     ReadReviewItemsResponse,
     ReviewItem,
@@ -38,9 +37,8 @@ from app.services.comparison_service import (
 )
 from app.services.read_commitments_service import default_period
 from app.services.read_surface_service import (
-    build_period_scope,
     common_labels,
-    load_period_summaries,
+    load_single_period_scope,
     read_as_of,
     resolve_status,
     scope_classification,
@@ -148,14 +146,7 @@ async def read_review_items(
 ) -> ReadReviewItemsResponse:
     as_of = await load_as_of(db_session)
     target = period or default_period(as_of)
-    summaries = await load_period_summaries(db_session)
-    scope = (
-        build_period_scope(
-            as_of=as_of, summaries=summaries, start_period=target, end_period=target
-        )
-        if target is not None
-        else ReadPeriodScope(start_period=None, end_period=None, periods=[])
-    )
+    scope = await load_single_period_scope(db_session, as_of=as_of, period=target)
     period_state = scope.periods[0] if scope.periods else None
     items: list[ReviewItem] = []
     window = None

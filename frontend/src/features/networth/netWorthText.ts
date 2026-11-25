@@ -133,7 +133,11 @@ export function hasUndecidedExpenses(data: EmergencyFundResponse): boolean {
 export function emergencyFundReasons(data: EmergencyFundResponse, transactionAsOf: string | null): string[] {
   const reasons: string[] = []
   if (data.status === 'no_asset_snapshot') reasons.push('자산 스냅샷이 없어 현금성 자산을 알 수 없습니다.')
-  if (data.status === 'no_baseline') reasons.push('기준이 되는 마감월이 없거나 월 보호 지급이 0원 이하라 개월 수를 내지 않았습니다.')
+  if (data.status === 'no_baseline') {
+    reasons.push(data.monthly_protected_outflow == null
+      ? '기준으로 사용할 마감월이 없어 비상금 개월 수를 계산할 수 없습니다.'
+      : `월 보호 지급 중앙값이 ${formatNetWon(data.monthly_protected_outflow)}으로 0원 이하라 비상금 개월 수를 계산할 수 없습니다.`)
+  }
   if (hasUndecidedExpenses(data)) {
     const count = data.adjustability_undecided_transaction_count
     reasons.push(

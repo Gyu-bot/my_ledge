@@ -377,7 +377,7 @@ describe('NetWorthPage (재무상태)', () => {
     state.emergency = emergencyFundFixture({ status: 'no_baseline', emergency_fund_months: null, monthly_protected_outflow: null, adjustability_undecided_share: null, cash_like_name_rule_total: 0, baseline: { ...emergencyFundFixture().baseline, periods: [], month_count: 0, status: 'none' } })
     renderPage()
     expect(screen.getAllByText('계산 보류').length).toBeGreaterThan(0)
-    expect(screen.getByText(/기준이 되는 마감월이 없거나/)).toBeInTheDocument()
+    expect(screen.getByText(/기준으로 사용할 마감월이 없어/)).toBeInTheDocument()
     expect(screen.getByText('비상금 개월 수 계산 보류')).toBeInTheDocument()
   })
 })

@@ -826,7 +826,9 @@ async def get_emergency_fund(db_session: AsyncSession) -> EmergencyFundResponse:
     elif protected is None or protected <= 0:
         state = "no_baseline"
         reasons.append(
-            "기준 마감월이 없거나 월 보호 지급이 0 이하라 개월 수를 내지 않았다."
+            "기준으로 사용할 마감월이 없어 비상금 개월 수를 계산할 수 없다."
+            if protected is None
+            else f"기준 기간의 월 보호 지급 중앙값이 {protected:,}원으로 0 이하라 비상금 개월 수를 계산할 수 없다."
         )
     elif undecided_count:
         state = "incomplete_classification"

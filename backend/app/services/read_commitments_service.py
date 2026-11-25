@@ -39,7 +39,6 @@ from app.schemas.read_surface import (
     ReadBasis,
     ReadCommitmentsData,
     ReadCommitmentsResponse,
-    ReadPeriodScope,
 )
 from app.services.installment_service import _add_months as add_months
 from app.services.loan_mapping_service import list_loan_accounts
@@ -52,9 +51,8 @@ from app.services.metric_views import (
 from app.services.metrics_service import load_as_of
 from app.services.read_surface_service import (
     _reason,
-    build_period_scope,
     common_labels,
-    load_period_summaries,
+    load_single_period_scope,
     period_of,
     read_as_of,
     resolve_status,
@@ -744,14 +742,7 @@ async def read_commitments(
 ) -> ReadCommitmentsResponse:
     as_of = await load_as_of(db_session)
     target = period or default_period(as_of)
-    summaries = await load_period_summaries(db_session)
-    scope = (
-        build_period_scope(
-            as_of=as_of, summaries=summaries, start_period=target, end_period=target
-        )
-        if target is not None
-        else ReadPeriodScope(start_period=None, end_period=None, periods=[])
-    )
+    scope = await load_single_period_scope(db_session, as_of=as_of, period=target)
     period_state = scope.periods[0] if scope.periods else None
     totals: dict[KeyTuple, tuple[int, int]] = {}
     ids: dict[KeyTuple, list[int]] = {}
