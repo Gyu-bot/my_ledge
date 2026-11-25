@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -25,6 +25,7 @@ from app.core.database import get_db_session
 from app.main import app
 from app.models import Base
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.investment import Investment
 from net_worth_scenarios import D0, D1, D2, build_net_worth_scenario
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -186,6 +187,46 @@ async def test_pg_reconciliation_api_equals_the_views(
             items["unexplained_difference"],
             payload["status"],
         ) == hand
+
+    response = await pg_client.get(
+        "/api/v1/metrics/net-worth/intervals", headers=HEADERS
+    )
+    assert response.status_code == 200, response.text
+    assert [
+        (
+            item["start_snapshot_date"],
+            item["end_snapshot_date"],
+            item["net_worth_change"],
+            item["unexplained_difference"],
+            item["status"],
+        )
+        for item in response.json()["intervals"]
+    ] == [
+        (str(start), str(end), hand[0], hand[4], hand[5])
+        for (start, end), hand in reversed(expected_items.items())
+    ]
+
+    # The migration-created view retains its zero fallback for an all-null
+    # total. The service reads the counts and withholds that snapshot value.
+    await pg_session.execute(
+        update(Investment)
+        .where(Investment.snapshot_date == D1)
+        .values(market_value=None)
+    )
+    await pg_session.commit()
+    response = await pg_client.get(
+        "/api/v1/metrics/net-worth/reconciliation",
+        params={"start_date": str(D0), "end_date": str(D1)},
+        headers=HEADERS,
+    )
+    assert response.status_code == 200, response.text
+    partial = response.json()
+    assert partial["status"] == "incomplete_snapshot_values"
+    assert partial["kinds"][1]["end_value"] is None
+    assert partial["kinds"][1]["end_known_value_total"] is None
+    assert partial["items"]["loan_balance_decrease"] == 500_000
+    assert partial["items"]["investment_valuation_change"] is None
+    assert partial["items"]["unexplained_difference"] is None
 
 
 async def test_pg_transfer_rules_and_monthly_split(

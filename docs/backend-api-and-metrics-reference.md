@@ -205,6 +205,10 @@ Expense model (T064 round 2):
 
 Each flow line belongs to one model partition. Known portions survive a component's missing reason. Full expense/month-end projections are null if any component is unknown, there is no observed transaction, or the latest observation is more than seven days before reference. Confidence is unavailable when the full expense is unknown, otherwise low when reasons or component warnings remain and medium when none remain. Warning-only recurring sources, installment number mismatches, link-unconfirmed rule matches and loans left out as not in expense do not create missing-input reasons or null totals. The returned scenario does not guarantee future employment, contracts, new spending or available bank cash.
 
+At a covered month end the remaining interval is empty. Remaining income and all four remaining expense components then contribute zero. A fresh observed month closes at its observed totals. Late or partial receipts and unobserved payments retain their evidence in the source statuses and warnings. A snapshot date alone cannot override the seven-day transaction freshness check. For a finite recurring commitment, the full history of distinct outgoing payments through the reference day determines exhaustion. Posted refunds still reduce net spending. Registered loan rules use the same merchant-before-description precedence in the forecast and in the write path.
+
+Accuracy and backtest actuals require closed months starting on or after the first complete month, with adequate transaction coverage under the projection activity rule (at least eight observed dates, observations in the first and last seven days, no gap longer than ten days). A requested reference date limits the evidence available to the accuracy calculation.
+
 #### `GET /api/v1/canonical-views/month-projection/accuracy`
 
 - T064 R12. Requires `X-API-Key`; read-only (no writes, no cache). Optional `reference_date`; without it the same default as the focused forecast (transaction as-of date, R11).
@@ -1307,7 +1311,7 @@ Returns 404 since the owner-approved T060 removal (2026-11-17). See [the final m
   - `is_partial_period`
   - `assumptions`
 - Behavior:
-  - if `end_date` omitted, service uses last closed month end as reference
+  - if `end_date` is omitted, the last closed ledger month supplies the reference date; when none exists the date is null and the item list is empty. The coefficient uses the unrounded population standard deviation and mean.
   - if `end_date` is not month-end, previous months are also truncated at same day cutoff
   - calculations use observed income months only; absent months are not zero-income months and observation coverage is not proven complete
 
@@ -1616,10 +1620,11 @@ Source: `app.services.canonical_views`
 Source: `app.services.source_verification`
 
 - `verify_import_parity()` and `backend/scripts/verify_import_parity.py` import or inspect a prepared workbook and compare DB state against workbook evidence.
+- Legacy imports hold the ledger transaction lock until the outcome is committed or rolled back. Savepoints isolate failing stages. The 60-second candidate window includes time drift at the file edges; missing-row detection uses the original bounds.
 - Transaction parity samples raw imported rows and accepts the upload fallback match for one-minute timestamp drift.
 - Snapshot parity compares parsed `3.재무현황`, `5.투자현황`, and `6.대출현황` rows against stored snapshot tables.
 - Cashflow benchmark parity reads `2.현금흐름현황` as validation evidence only. It does not persist those values.
-- Cashflow benchmark rows are compared by `period`, transaction type, and category. Mismatches are reported as warnings in `cashflow_benchmarks.mismatches`; they do not block upload success.
+- Cashflow benchmarks use the posting month, transaction type, raw source category and effective imported KRW rows. Refunds offset charges in their posting month. When BankSalad displays a refund surplus as a positive magnitude, original workbook postings supply its expense sign. The benchmark magnitude and signed DB sum are checked independently. For these rows a mismatch includes `source_amount`; `delta` remains the DB sum minus the signed benchmark. Both import CLIs require `--snapshot-date` and return nonzero after partial or failed imports. The parity CLI reuses the opened workbook, reports differences in `cashflow_benchmarks.mismatches`, and exits nonzero when parity fails. Its report keeps the recorded import outcome.
 
 ### Search
 
@@ -2023,7 +2028,7 @@ Not migrated in T057 (each keeps its own baseline, stated here so consumers do n
 - `discretionary-velocity`: removed with its unused calculation.
 - `purchase-gate-candidates`/`spending-review-candidates` `merchant_spike`/`discretionary_spike`: monthly mean of prior months on the `purchase_net.v1` basis; HTTP paths removed; the detector remains inside `/read/review-items`.
 - `fixed-cost-summary.fixed_ratio` and `payment-method-patterns.pct_of_total`: composition shares of the requested range, not month comparisons; unchanged.
-- `income-stability`: variability of observed months, not a baseline comparison; unchanged (its default reference date still uses today's date).
+- `income-stability`: variability of observed income months. The default reference date is the ledger’s last closed month-end, or null when none exists. An explicit end date uses the requested cutoff.
 - Monthly projection baselines (`T064`) and snapshot comparisons (`T061`).
 
 ## Net Worth Reconciliation (T061)
@@ -2041,7 +2046,7 @@ investment_valuation_change = (I(end) − I(start)) − investment_net_transfer_
 unexplained_difference      = net_worth_change − residual − loan_balance_decrease − investment_valuation_change
 ```
 
-- `NW(d)` = Σ non-negative `asset` rows − Σ `liability` rows at `d` (negative asset rows excluded and shown as `negative_asset_excluded_total`), the same definition as `/assets/snapshots`, `/assets/net-worth-history`, `vw_asset_snapshot_canonical`. `L(d)` = Σ `loans.balance` (every row; `is_hidden` loan accounts are not excluded, because the liability side of the asset snapshot is not filtered either). `I(d)` = Σ `investments.market_value`. Empty values count as 0 and are reported as `missing_value_row_count`.
+- `NW(d)` = Σ non-negative `asset` rows − Σ `liability` rows at `d` (negative asset rows excluded and shown as `negative_asset_excluded_total`), the same definition as `/assets/snapshots`, `/assets/net-worth-history`, `vw_asset_snapshot_canonical`. `L(d)` = Σ `loans.balance` (every row; `is_hidden` loan accounts are not excluded, because the liability side of the asset snapshot is not filtered either). `I(d)` = Σ `investments.market_value`. A missing balance or market value increments `missing_value_row_count`. The read service withholds the affected total and change. When the same date also has known rows, `start_known_value_total` or `end_known_value_total` holds their subtotal. The subtotal is null when every value is missing.
 - Every snapshot total is rounded half-up to the won before differencing, so the identity is exact on the returned integers.
 - Why this explains net worth: transfers are not in the residual. A savings or investment transfer moves money out of a ledger account (−X) into a holding (+X); both sides are in net worth, so it cancels there. For investments the snapshot change is the transfer plus the valuation, hence `valuation = ΔI − net transfer in`. A loan payment is in `total_outflow` as the full 원리금; the balance decrease adds the principal back, leaving the interest. Whatever the records cannot explain (unrecorded fees, transfers to untracked accounts, a new loan disbursed as a transfer, valuation of savings, timing of the export) stays in `unexplained_difference`.
 
@@ -2052,9 +2057,9 @@ A snapshot is the balance at the end of its date (it includes that day's transac
 ### Comparable snapshot pairs and states
 
 - The interval is chosen by two asset (net worth) snapshot dates. Defaults: the latest two.
-- Per kind (loans, investments): `observed` when rows exist on both dates; `absent` when the kind has no rows in any snapshot (both ends 0, stated in `status_reasons`); otherwise `mismatched`, with `start_as_of`/`end_as_of` = the kind's latest snapshot on or before each date. A mismatched kind's item and the unexplained difference are `null`. Kinds are never aligned to a nearby date. Insurance and profile are not used; their as-of dates are reported in `other_kinds`.
+- Per kind (loans, investments): `observed` when rows and their values exist on both dates; `incomplete` when the dates match but at least one value is missing; `absent` when the kind has no rows in any snapshot (both ends 0, stated in `status_reasons`); otherwise `mismatched`, with `start_as_of`/`end_as_of` = the kind's latest snapshot on or before each date. A mismatched or incomplete pair withholds its change and the unexplained difference. `items.withheld_reasons` identifies the affected fields. The asset snapshot change and the ledger residual each retain their independent basis. Kinds are never aligned to a nearby date. Insurance and profile are not used; their as-of dates are reported in `other_kinds`.
 - Transactions cover the interval when `first_transaction_date ≤ start + 1`, `transaction_as_of ≥ end`, and every month intersecting the interval has at least one effective KRW line (`periods_without_data` otherwise).
-- `status`: `no_snapshot_pair` (fewer than two asset snapshot dates) > `snapshot_dates_mismatched` > `transactions_not_covered` > `incomplete_classification` (an undecided transfer leg in the interval; the valuation may be wrong by its amount) > `complete`. `items` other than the unexplained difference are still returned for `transactions_not_covered` so the partial evidence is visible.
+- `status`: `no_snapshot_pair` (fewer than two asset snapshot dates) > `snapshot_dates_mismatched` > `incomplete_snapshot_values` > `transactions_not_covered` > `incomplete_classification` (an undecided transfer leg in the interval; the valuation may be wrong by its amount) > `complete`. `items` other than the unexplained difference are still returned for `transactions_not_covered` so the partial evidence is visible.
 
 ### Transfer purpose
 
@@ -2081,8 +2086,8 @@ emergency_fund_months = cash_like_total ÷ monthly_protected_outflow   (2 decima
 ```
 
 - `cash_like_total`: latest asset snapshot, rule of `vw_asset_snapshot_canonical.cash_equivalent_total` (non-negative asset rows with `is_cash_equivalent IS TRUE` or `liquidity_tier IN ('immediate','cash','cash_equivalent')`, or with neither set and the existing name rule). `cash_like_name_rule_total` is the part decided by the name rule only. Equality with the canonical view is tested on PostgreSQL. Note: the canonical rule counts a cash `liquidity_tier` even when `is_cash_equivalent` is false; the legacy Python rule of `liquidity-health` checks the flag first. This existing difference is kept, not resolved here.
-- `monthly_protected_outflow`: median (`median_won`) of `vw_monthly_flow_summary.protected_spend` over the baseline months: walk back from `last_closed_period` (inclusive), skip months without data, stop before the first data month (`limited_by=data_start`) or before the comparison baseline start month (`baseline_start_date`), up to 6 months. Same rules as the comparison contract, except that the last closed month itself is included (nothing is compared against it).
-- `adjustability_undecided_share` = Σ `adjustability_undecided_total` ÷ Σ `total_outflow` over those months; `monthly_adjustability_undecided_outflow` = their median. Undecided spend is not assumed protected, so with a positive share the months are an upper bound; `status=incomplete_classification` says so.
+- `monthly_protected_outflow`: median (`median_won`) of `vw_monthly_flow_summary.protected_spend` over the baseline months: walk back from `last_closed_period` (inclusive), skip months without data, exclude a first data month that starts mid-month (`limited_by=data_start`) or before the comparison baseline start month (`baseline_start_date`), up to 6 months. Same rules as the comparison contract, except that the last closed month itself is included (nothing is compared against it).
+- `adjustability_undecided_share` = Σ `adjustability_undecided_total` ÷ Σ `total_outflow` over those months; `monthly_adjustability_undecided_outflow` = their median. The denominator uses only protected spend. `adjustability_undecided_transaction_count` counts distinct undecided expense postings per month, including refunds. A nonzero count signals incomplete classification even when the net share rounds to zero. An absent baseline or nonpositive denominator withholds the months value.
 - The asset snapshot date and the transaction as-of date are reported separately.
 
 ### Import contract and rollback impact
@@ -2139,7 +2144,7 @@ Comparison `target_data_coverage` applies it to the target month. The projection
 
 ### Spend cube counts
 
-`total_group_count` = `COUNT(*)` of `SELECT <group_by> FROM vw_spend_cube WHERE <filters> GROUP BY <group_by>`; `returned_count` = rows returned.
+Both group counts and values group the same filtered expense rows of `vw_metric_flow_lines`. Each group counts distinct posting transaction IDs. A split refund can appear in two groups while contributing only one transaction to their common parent. The API groups null and blank minor categories together and accepts an empty `effective_category_minor=` filter for that group. `total_group_count` counts every matching group and `returned_count` counts the rows returned.
 
 ### Commitments
 
@@ -2253,10 +2258,10 @@ On `/read/review-items`, both detectors use the same `ComparisonWindow` rules (d
 
 계산 경로:
 
-1. `read_monthly_flow`에서 선택 월 봉투와 총지급을 읽는다.
+1. 기준일과 통화 범위를 한 번 읽고 선택한 달의 흐름 요약으로 기간 상태와 총지급을 계산한다.
 2. 연간성 패턴은 대상 마감월로 끝나는 완전한 12개월 창에서 월 순지출이 양수인 달이 정확히 1~2개인 유효 대분류·소분류 쌍이다. 한 SQL 문에서 `vw_metric_flow_lines`의 `type=지출` 줄을 유효 대분류·소분류·연간 약정 ID·월로 집계하고, 쌍별 전체 월 순액/약정 제외 월 순액과 12개월 합계를 산출한다. T057에서는 창 해석 도우미만 읽고 기여 응답의 값·인자·집계는 변경하지 않는다. 월중 시작 첫 달·자료 없는 달을 포함하면 완전한 창이 아니다. 환불은 게시월 차감, 유효 KRW·대출 포함 등 기존 흐름표 규칙 그대로다. 전체 쌍의 양수 순지출 월 수로 패턴 자격을 먼저 판정하고, 사람이 `cycle=yearly`로 지정한 약정에 귀속된 구매·환불 줄은 그 쌍의 표시 금액에서 제외한다. 남은 지출 줄이 없으면 패턴 항목을 생략한다. 줄이 남으면 0·음수 순액도 환불을 반영한 값 그대로 표시한다. 등록 약정은 관측 빈도와 관계없이 관측된 12개월 순액을 별도 출처로 표시한다(0·음수 포함). 약정 귀속은 흐름표의 `recurring_commitment_id`를 따르며 거래 제외·명시적 연결·기간·배분 환불을 다시 판정하지 않는다. 기존 이행 묶음의 주기를 사람이 편집한 경우도 포함한다. 여러 쌍에 걸친 약정은 ID·쌍별 항목이다. `category`는 유효 대분류(기존 필드 유지), `category_minor`는 유효 소분류(null·빈 문자열은 null로 묶고 화면에 `소분류 없음`), `source=observed_pattern|registered_yearly_commitment`, `commitment_id`·`commitment_label`(패턴이면 null), `observed_periods`(차감 후 월 순지출이 양수인 YYYY-MM 목록, 오름차순), `active_months_in_window`(그 목록 길이), `window_amount`(환불을 포함한 12개월 순액), `monthly_equivalent`를 반환한다. 12개월 순액 내림차순, 대분류·소분류·source·약정 ID 오름차순으로 동률을 해소한다. 목록 전체를 반환하며 제한·잘림은 없다.
 3. `monthly_equivalent = ROUND_HALF_UP(12개월 순액 / 12)` (원). 진행월에는 환산하지 않는다. 이 값은 기존 실적 계산에 들어가지 않는다. 창이 불완전하면 `annual_missing_reason=incomplete_twelve_month_window`; 진행월은 `month_in_progress`다.
-4. 월 실적은 `get_spend_cube`의 대분류·조정 가능성 묶음에서 읽는다(한도 없이 SQL 집계 결과 전체). Python에서는 거래·큐브 금액을 다시 합산하지 않는다. 카테고리는 대분류의 정확한 값이며 빈 문자열은 미분류다.
+4. 선택 월의 지출 줄을 한 SQL 문에서 대분류별·조정 가능성별로 각각 집계한다. 각 실적에 포함된 일회성 몫도 같은 줄에서 합산한다. 카테고리는 대분류의 정확한 값이며 빈 문자열은 미분류다.
 5. 선택 월 이하의 최신 `spending_limit_revisions`를 대상별로 선택한다. `difference_amount = actual_amount − limit_amount`. 금액은 원 단위 정수이며, 양수=초과, 음수=한도 미만, 0=같음이다. 비율·건강/위험 판정·한도 추천·잔여 예산 전망은 없다.
 
 한도 표: `id`, `target_kind(category|adjustability)`, `target_value`(대분류 최대 50자 또는 protected/adjustable/undecided), `effective_from_period`(YYYY-MM), `amount`(BigInteger nullable), 생성·수정 타임스탬프. `(target_kind, target_value, effective_from_period)` 유일, 금액 음수 금지, 조정 가능성 값 제약. 초기 표는 비어 있으며 데이터 이행이나 기존 행 수정은 없다. `amount=null`인 버전은 해당 월부터 해제, 0은 0원 한도다.

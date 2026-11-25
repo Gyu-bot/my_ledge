@@ -343,6 +343,14 @@ async def test_pg_f04_non_krw_amounts_are_not_summed_with_krw(pg_session) -> Non
     await t055.test_f04_non_krw_amounts_are_not_summed_with_krw(pg_session)
 
 
+async def test_pg_spend_cube_drills_into_missing_minor_category(
+    pg_session: AsyncSession, pg_client: AsyncClient
+) -> None:
+    await invariants.test_spend_cube_drills_into_missing_minor_category(
+        pg_client, HEADERS, pg_session
+    )
+
+
 async def test_pg_transaction_flow_filters_match_the_flow_lines(
     pg_session: AsyncSession, pg_client: AsyncClient
 ) -> None:

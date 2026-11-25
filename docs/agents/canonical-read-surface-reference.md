@@ -140,6 +140,7 @@ My Ledge는 재현 가능한 계산, 후보 추출, 근거 필드, 데이터 품
 - 잔여 지출은 월 흐름표와 같은 줄(`vw_metric_flow_lines`)과 약정 구분에서 읽는다(`T064` R6). 대출 연결 → 할부 연결 → 사람이 등록한 대출 거래처 규칙 → 할부 계획 규칙 일치 → 등록된 정기 지급 묶음 → 사람이 할부로 표시한 미연결 결제 → 나머지 변동 순서로 한 줄을 한 곳에만 넣는다. 대출은 최근 충분히 관측된 마감월이나 이번 달 흐름표에 그 대출의 지출 줄(연결 또는 규칙)이 있을 때만 더하고, 없으면 `not_in_expense_commitments`에 따로 보인다(R1: 이체 기록·장부 밖 계좌·미연결이면 이미 변동 기준선에 있거나 지출이 아니다). 끝난 정기 지급 묶음의 이력은 변동 기준선으로 옮기지 않고, 묶음의 종료일 뒤 결제는 가정하지 않는다(R5). 연 주기로 등록된 묶음은 작년 같은 달에 낸 금액을 그 달에만 더한다. 12개월 창(직전 12개 마감월이 모두 자료가 있고 자료 시작·기준 구간 시작일 뒤)을 쓸 수 있으면 12개월 중 1–2개월에만 지출이 있는 카테고리를 6개월 중앙값에서 빼고 작년 같은 달의 남은 날짜 금액을 더한다(R4, `annual_items`). 변동 지출의 대표값은 여전히 중앙값이다.
 - 이미 관측된 납부액을 차감하고, 지난 미연결 할부를 미래 채무로 더하지 않는다. 할부의 이번 달 회차는 그 계획에 연결된 거래 중 날짜가 이번 달인 것으로 찾으며, 연결 회차 번호가 계산과 다르면 할부 구성요소 `warnings`만 남기고 예정액을 다시 더하지 않는다. 반복 근거가 없는 정기 지급 묶음은 더하지 않으며 변동 잔여일 패턴으로도 옮기지 않는다. 이번 달 관측이 있고 매월 주기로 등록된 묶음은 짧거나 불연속적인 이력도 낮은 신뢰도로 추정하고 근거를 표시한다. 직전 달 전체 관측이 부족하면 마지막 충분 관측월까지의 안정 이력을 낮은 신뢰도로 유지하며 결제 중단으로 단정하지 않는다. 환급만 있고 결제 근거가 전혀 없으면 미확정으로 남긴다.
 - 반복 지출은 환급을 빼기 전 총결제액으로 기준을 학습한다. 잔여액은 과거 동일 잔여 날짜 총결제액 중앙값과 `월 기준액 - 이번 달 총결제액` 중 작은 값이며 0 미만이 되지 않는다. 과거 31일은 현재 월말로 보정한다. 환급은 실제 순지출에만 반영하고 재청구를 가정하지 않는다. 기준초과 결제는 실제 지출에만 포함하며 일회성이라고 단정하지 않는다. 과거 근거 없이 이번 달 결제만 있으면 추가 예상 0인 낮은 신뢰도 시나리오임을 밝힌다.
+- 월말까지 관측했고 잔여 수입·지출이 0이며 월말 순현금흐름이 관측값과 같으면 해당 달의 관측 실적으로 읽는다. 미입금이나 부분 입금은 별도로 확인할 수 있다. 거래 관측이 없어 월말 합계가 null이면 계산을 보류한다.
 - 잔여일 추정은 오늘이 아니라 `remaining_period_start`(이번 달 마지막 관측 거래일과 기준일 이하 최신 업로드 날짜 중 늦은 날의 다음 날)부터의 과거 동일 일자 구간을 사용한다. 업로드가 덮은 거래 없는 날은 관측된 날로 본다. 최종 거래가 기준일보다 7일 초과 오래됐거나 일부 지출에 실제로 추정 근거가 없으면 완전한 월말 전망은 null이다. 반복 지출의 경고만 있는 경우 숫자를 유지하고 신뢰도를 낮춘다. 알려진 부분합이 있어도 누락 비용과 새 지출은 보장되지 않는다.
 - `GET/PATCH /settings/income-expectations`는 인증이 필요하다. `{items: [...]}` 전체 목록을 교체하며, source key는 `income:` + casefold/공백 정규화 merchant다. 각 항목은 예상액·1–31일 입금일·중단 여부를 저장한다. `items:[]`는 모든 수동 기대값을 해제한다. GET/전망 계산은 학습 결과를 저장하지 않는다.
 
@@ -420,14 +421,14 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `items.investment_valuation_change` | 투자 평가액 변화 − 순투자 유입. 순투자 유입(`investment_net_transfer_in`)은 사람이 `investment`로 표시한 이체의 부호 반대 합이다. |
 | `items.unexplained_difference` | 나머지. 추정 항목으로 채우지 않는다. 기록되지 않은 수수료, 추적하지 않는 계좌로 보낸 돈, 이체로 들어온 새 대출, 저축 이자, 스냅샷 시각 차이 등이 여기에 남는다. 계산할 수 없는 상태에서는 `null`. |
 | `transfers.*` | 잔여의 행방. `investment_savings_net`(투자·저축 이체), `internal_move_net`(그 밖의 계좌 간 이동), `undecided_net`, `undecided_share`(미정 이체 금액 ÷ 전체 이체 금액, 절댓값 기준). 이체는 부호대로 더하므로 장부 안의 두 계좌 사이 이동은 두 다리가 0으로 상쇄되어 두 번 세지 않는다. |
-| `kinds[]` | 대출·투자 스냅샷. `observed`(두 날짜 모두 있음), `absent`(그 종류 스냅샷이 한 번도 없음, 양 끝 0), `mismatched`(그 종류의 날짜가 구간과 다름, 값 `null`, 가까운 날짜로 맞추지 않음). |
-| `status` | `complete`, `incomplete_classification`(목적 미정 이체가 있어 투자 평가 변동이 불완전), `transactions_not_covered`(거래 기록이 구간을 덮지 않음), `snapshot_dates_mismatched`, `no_snapshot_pair`. `status_reasons`가 이유를 모두 적는다. |
+| `kinds[]` | 대출·투자 스냅샷. `observed`(두 날짜의 값이 모두 있음), `incomplete`(날짜는 맞지만 값이 누락되어 해당 변화량 보류), `absent`(그 종류의 기록이 전혀 없어 계산에서 양 끝을 0으로 둠, 실제 잔액 확인 불가), `mismatched`(그 종류의 날짜가 구간과 다름, 값 `null`, 가까운 날짜로 맞추지 않음). |
+| `status` | `complete`, `incomplete_classification`(목적 미정 이체가 있어 투자 평가 변동이 불완전), `transactions_not_covered`(거래 기록이 구간을 덮지 않음), `snapshot_dates_mismatched`, `incomplete_snapshot_values`(종류별 값 누락), `no_snapshot_pair`. 항목별 보류 사유는 `items.withheld_reasons`에 있고, 일부 행만 확인된 날짜의 `*_known_value_total`은 확인된 금액의 부분합이다. `status_reasons`가 이유를 모두 적는다. |
 
 이체 목적(`investment`, `savings`, `internal_move`)은 사람이 작업대에서 거래 단위로, 또는 거래처·카테고리 규칙으로 정한다. 시스템은 이름이나 금액으로 목적을 추정하거나 제안하지 않는다. 정해지지 않은 이체는 `undecided`이며 그대로 보인다. 에이전트는 미정 이체를 투자로 가정해 평가 변동을 다시 계산해서 결과로 말하지 않는다. 필요하면 "미정 이체가 투자였다면"처럼 가정을 밝히고 별도로 말한다.
 
 월 흐름표(`/metrics/monthly-flow`)는 기존 값을 그대로 두고 `transfer_rows`(투자·저축 이체 / 그 밖의 계좌 간 이동 / 목적 미정 이체, 합 = `transfer_net`)와 목적별 순액 필드를 더했다. `rows`의 `transfer_undetermined` 줄은 이름이 그대로지만 "이체 전체"를 뜻한다.
 
-비상금 개월 수(`/metrics/net-worth/emergency-fund`)는 최신 자산 스냅샷의 현금성 자산(`vw_asset_snapshot_canonical`과 같은 규칙, 이름 규칙으로만 판단한 금액은 `cash_like_name_rule_total`로 따로)을 최근 마감월(최대 6개, 비교 계약과 같은 기준 구간 규칙) 보호 지급 중앙값으로 나눈 값이다. 조정 가능성 미정 지출은 보호로 가정하지 않으므로 미정 비중이 있으면 개월 수가 실제보다 클 수 있다. 자산 스냅샷 기준일과 거래 기준일은 따로 표시한다. `/analytics/liquidity-health`의 `emergency_fund_months`는 legacy이며 다른 분모를 쓴다.
+비상금 개월 수(`/metrics/net-worth/emergency-fund`)는 최신 자산 스냅샷의 현금성 자산(`vw_asset_snapshot_canonical`과 같은 규칙, 이름 규칙으로만 판단한 금액은 `cash_like_name_rule_total`로 따로)을 최근 마감월(최대 6개, 비교 계약과 같은 기준 구간 규칙) 보호 지급 중앙값으로 나눈 값이다. 월중에 시작한 첫 달, 거래 없는 달, 진행월은 분모에서 제외한다. 미정 지출은 보호 지급에서 빠진다. 환불이나 반올림으로 미정 비중이 0이어도 `adjustability_undecided_transaction_count`가 남으면 분류 결과에 따라 개월 수가 달라질 수 있다. 자산 스냅샷 기준일과 거래 기준일은 따로 표시한다. `/analytics/liquidity-health`의 `emergency_fund_months`는 legacy이며 다른 분모를 쓴다.
 
 ## Analytics API 값 사전
 
@@ -441,7 +442,7 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | `/analytics/fixed-cost-trend` | monthly fixed/variable/essential/discretionary/unclassified fields | 월별 고정비 구조 추이. |
 | `/analytics/merchant-spend` | `merchant`, `amount`, `count`, `avg_amount`, `last_seen_at` | 거래처별 총액, 빈도, 평균 금액, 마지막 거래일. |
 | `/analytics/payment-method-patterns` | `payment_method`, `total_amount`, `transaction_count`, `avg_amount`, `pct_of_total` | 결제수단별 소비 비중. |
-| `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 관측된 수입월의 변동성. 누락 월을 0으로 채우거나 완전한 수집으로 가정하지 않는다. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
+| `/analytics/income-stability` | `avg`, `stdev`, `coefficient_of_variation`, `is_partial_period`, `assumptions` | 관측된 수입월의 변동성. 기본 기준일은 원장의 마지막 마감월 말일이며 마감월이 없으면 null이다. 누락 월을 0으로 채우거나 완전한 수집으로 가정하지 않는다. backend는 숫자만 제공한다. 안정/불안정 label과 생활 안정성 평가는 에이전트 해석이다. |
 | `/analytics/discretionary-velocity` | `period`, `discretionary_spend`, `baseline_monthly_spend`, `velocity_ratio`, `risk_level`, `classification_coverage_ratio`, `assumptions`, `reasons` | 환급을 반영한 순액 지출 속도이며 coverage는 양의 결제 기준이다. 재량 = 조정 가능성 `adjustable`, 분류됨 = `protected` 또는 `adjustable`(`vw_transaction_nature`). `undecided`는 미분류 지출로 남는다. nonpositive baseline이면 ratio는 null이다. `risk_level`은 최종 구매 허용 판단이 아니라 후보 강도와 분류 신뢰도 안내용이다. |
 | `/analytics/spending-review-candidates` | `items[]`, `candidate_key`, `candidate_type`, `candidate_types[]`, `risk_level`, `review_status`, `review_memo`, `reviewed_at`, `cooldown_until`, `review_timing`, `candidate_purpose`, `future_friction_suggestion`, `assumptions`, `reasons` | preferred name for post-transaction discretionary review queue. 후보는 지급 형태 수시(대출·할부 연결이나 정기 지급 묶음이 아님)이고 조정 가능성이 `adjustable`인 지출뿐이다(`vw_transaction_nature`). 두 GET 경로는 제거됐고 `/read/review-items`에서 검출기를 재사용한다. Confirmed refunds use net spend. `possible_cancellation`/`cancellation_evidence_transaction_ids`는 미확정 취소 검토 힌트이며 조회로 settlement를 만들지 않는다. |
 | `/analytics/recurring-payments` | `interval_type`, `avg_interval_days`, `confidence`, `recurring_payment_kind`, kind counts, `transaction_ids` | 거래처별 순지출/반복분류와 `activity_status`. `activity=active`는 active candidate만 반환하고 historical/irregular/non_positive/not_recurring과 구분한다. `confidence`는 반복 패턴 신호이며 구독 해지/낭비 판단이 아니다. |
@@ -503,6 +504,8 @@ snapshot 단위 자산/부채/유동성/월상환액 표준 surface다. My Ledge
 | Q4 매달 묶여 있는 지급은 얼마이고 언제 끝나나 | `/read/commitments` |
 | Q5 남은 돈은 어디로 갔고 순자산은 왜 변했나 | `/api/v1/metrics/net-worth/intervals`, `/reconciliation`, `/emergency-fund` (`T061`, 색인에 실려 있음) |
 | Q6 언제까지의 자료이고 분류는 얼마나 되었나 | `/read/data-status`, 그리고 모든 응답의 `as_of`·`classification` |
+
+Hermes 상담에서 월 총지급은 `total_outflow`, 그중 게시월에 귀속된 일회성 지출은 `one_off_total`, 이를 뺀 경상 지급은 `ongoing_outflow`로 읽는다. 기여 분석의 `data.one_off.mode`와 금액은 비교에 적용된 범위를 알려 준다. 기본 경상 기여와 월 총지급을 대조할 때 이 차이를 함께 표시한다. 대상월에 거래 관측이 없으면 절감액을 산출할 수 없다. 지출 큐브의 건수는 각 그룹의 고유 거래 수여서, 하나의 환불이 여러 세부 그룹에 걸친 경우 하위 건수의 합이 상위 건수보다 클 수 있다.
 
 값의 뜻:
 

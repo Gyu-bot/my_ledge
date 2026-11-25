@@ -26,8 +26,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
-from sqlalchemy import and_, func, not_, select
+from sqlalchemy import Date, and_, case, column, func, select, values
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.validation import query_error
@@ -39,16 +40,23 @@ from app.schemas.net_worth import (
     UNEXPLAINED_SHARE_ZERO_CHANGE,
     EmergencyFundBaseline,
     EmergencyFundResponse,
+    EmergencyFundStatus,
+    KindChangeWithheldReason,
+    KindPairStatus,
     NetWorthPoint,
     NetWorthReconciliationResponse,
     OtherKindAsOf,
     ReconciliationFlow,
     ReconciliationInterval,
     ReconciliationItems,
+    ReconciliationStatus,
+    ReconciliationWithheldReason,
     SnapshotDatesByKind,
     SnapshotIntervalItem,
     SnapshotIntervalsResponse,
+    SnapshotKind,
     SnapshotKindPair,
+    SnapshotValueWithheldReason,
     TransactionCoverage,
     TransferBreakdown,
 )
@@ -62,10 +70,10 @@ from app.services.comparison_service import (
     shift_period,
 )
 from app.services.metric_views import (
+    EXPENSE,
     FLOW_LINES_VIEW,
     METRIC_CURRENCY,
     METRIC_TRANSACTIONS_VIEW,
-    MONTHLY_FLOW_SUMMARY_VIEW,
     flow_summary_columns,
 )
 from app.services.metrics_service import build_flow_contract, load_as_of, ratio
@@ -101,8 +109,9 @@ NETTING_RULE = (
 )
 INTERVAL_RULE = (
     "구간은 자산(순자산) 스냅샷 날짜 두 개로 정한다. 대출·투자 스냅샷이 두 날짜 모두에 "
-    "있으면 observed, 그 종류의 스냅샷이 한 번도 없으면 absent(양 끝 0), 그 밖에는 "
-    "mismatched로 두고 맞추지 않는다."
+    "있고 값이 모두 있으면 observed, 날짜는 맞지만 값이 비면 incomplete로 두고 차이를 "
+    "보류한다. 그 종류의 스냅샷이 한 번도 없으면 absent(양 끝 0), 날짜가 맞지 않으면 "
+    "mismatched다."
 )
 KIND_VALUE_BASIS = {
     "loans": "loans.balance 합계 (스냅샷 종류 loans, 숨김 여부와 무관한 전체 행)",
@@ -187,13 +196,35 @@ def _net_worth_point(row: dict, snapshot_date: date) -> NetWorthPoint:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _KindValue:
+    total: int | None
+    known_value_total: int | None = None
+    withheld_reason: SnapshotValueWithheldReason | None = None
+
+
+def _kind_value(row: dict | None) -> _KindValue:
+    if row is None:
+        return _KindValue(total=None, withheld_reason="snapshot_not_available")
+    missing = int(row["missing_value_row_count"])
+    if missing == 0:
+        return _KindValue(total=_won(row["value_total"]))
+    return _KindValue(
+        total=None,
+        known_value_total=_won(row["value_total"])
+        if missing < row["row_count"]
+        else None,
+        withheld_reason="snapshot_value_missing",
+    )
+
+
 def _kind_pair(
-    context: _SnapshotContext, kind: str, start: date, end: date
+    context: _SnapshotContext, kind: SnapshotKind, start: date, end: date
 ) -> SnapshotKindPair:
     totals = context.kind_totals[kind]
     if not totals:
         return SnapshotKindPair(
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
             pair_status="absent",
             start_as_of=None,
             end_as_of=None,
@@ -205,64 +236,109 @@ def _kind_pair(
         )
     start_as_of = _latest_on_or_before(totals, start)
     end_as_of = _latest_on_or_before(totals, end)
-    start_value = _won(totals[start_as_of]["value_total"]) if start_as_of else None
-    end_value = _won(totals[end_as_of]["value_total"]) if end_as_of else None
-    observed = start_as_of == start and end_as_of == end
+    start_value = _kind_value(totals[start_as_of] if start_as_of else None)
+    end_value = _kind_value(totals[end_as_of] if end_as_of else None)
     missing = sum(
         int(totals[value]["missing_value_row_count"])
         for value in {start_as_of, end_as_of}
         if value is not None
     )
+    change_reason: KindChangeWithheldReason | None = None
+    pair_status: KindPairStatus
+    if start_as_of != start or end_as_of != end:
+        pair_status = "mismatched"
+        change_reason = "snapshot_dates_mismatched"
+    elif missing:
+        pair_status = "incomplete"
+        change_reason = "snapshot_value_missing"
+    else:
+        pair_status = "observed"
     return SnapshotKindPair(
-        kind=kind,  # type: ignore[arg-type]
-        pair_status="observed" if observed else "mismatched",
+        kind=kind,
+        pair_status=pair_status,
         start_as_of=start_as_of,
         end_as_of=end_as_of,
-        start_value=start_value,
-        end_value=end_value,
-        change=(end_value - start_value)  # type: ignore[operator]
-        if observed
+        start_value=start_value.total,
+        end_value=end_value.total,
+        start_known_value_total=start_value.known_value_total,
+        end_known_value_total=end_value.known_value_total,
+        start_value_withheld_reason=start_value.withheld_reason,
+        end_value_withheld_reason=end_value.withheld_reason,
+        change=end_value.total - start_value.total
+        if change_reason is None
+        and start_value.total is not None
+        and end_value.total is not None
         else None,
+        change_withheld_reason=change_reason,
         missing_value_row_count=missing,
         value_basis=KIND_VALUE_BASIS[kind],
     )
 
 
-async def _interval_flow(
-    db_session: AsyncSession, start: date, end: date
-) -> dict[str, int]:
+async def _load_interval_totals(
+    db_session: AsyncSession, pairs: list[tuple[date, date]]
+) -> tuple[dict[date, dict[str, int]], dict[date, int]]:
+    """Aggregate only the requested intervals. The end date identifies each pair."""
+    if not pairs:
+        return {}, {}
+    intervals = (
+        values(column("start_date", Date), column("end_date", Date))
+        .data(pairs)
+        .cte("requested_intervals")
+    )
+    start = min(start for start, _ in pairs)
+    end = max(end for _, end in pairs)
     lines = FLOW_LINES_VIEW
-    row = (
-        (
-            await db_session.execute(
-                select(*flow_summary_columns(lines)).where(
-                    lines.c.date > start, lines.c.date <= end
+    flow_rows = (
+        await db_session.execute(
+            select(intervals.c.end_date, *flow_summary_columns())
+            .select_from(
+                intervals.outerjoin(
+                    lines,
+                    and_(
+                        lines.c.date > start,
+                        lines.c.date <= end,
+                        lines.c.date > intervals.c.start_date,
+                        lines.c.date <= intervals.c.end_date,
+                    ),
                 )
             )
+            .group_by(intervals.c.end_date)
         )
-        .mappings()
-        .one()
-    )
-    return {key: int(value or 0) for key, value in row.items()}
-
-
-async def _non_krw_count(db_session: AsyncSession, start: date, end: date) -> int:
+    ).mappings()
     tx = METRIC_TRANSACTIONS_VIEW
-    value = await db_session.scalar(
-        select(func.count()).where(
-            and_(
-                tx.c.date > start,
-                tx.c.date <= end,
-                not_(func.upper(tx.c.currency) == METRIC_CURRENCY),
+    non_krw_rows = await db_session.execute(
+        select(intervals.c.end_date, func.count())
+        .select_from(
+            intervals.join(
+                tx,
+                and_(
+                    tx.c.date > intervals.c.start_date,
+                    tx.c.date <= intervals.c.end_date,
+                ),
             )
         )
+        .where(
+            tx.c.date > start,
+            tx.c.date <= end,
+            func.upper(tx.c.currency) != METRIC_CURRENCY,
+        )
+        .group_by(intervals.c.end_date)
     )
-    return int(value or 0)
+    return (
+        {
+            _as_date(row["end_date"]): {
+                key: int(value or 0) for key, value in row.items() if key != "end_date"
+            }
+            for row in flow_rows
+        },
+        {_as_date(end_date): count for end_date, count in non_krw_rows},
+    )
 
 
 @dataclass(slots=True)
 class _Reconciliation:
-    status: str
+    status: ReconciliationStatus
     reasons: list[str]
     interval: ReconciliationInterval
     start: NetWorthPoint
@@ -275,13 +351,19 @@ class _Reconciliation:
     items: ReconciliationItems
 
 
-async def _reconcile(
-    db_session: AsyncSession, context: _SnapshotContext, start: date, end: date
+def _reconcile(
+    context: _SnapshotContext,
+    start: date,
+    end: date,
+    totals: dict[str, int],
+    non_krw_count: int,
 ) -> _Reconciliation:
     first_day = start + timedelta(days=1)
     start_point = _net_worth_point(context.net_worth[start], start)
     end_point = _net_worth_point(context.net_worth[end], end)
-    kinds = [_kind_pair(context, kind, start, end) for kind in ("loans", "investments")]
+    loans = _kind_pair(context, "loans", start, end)
+    investments = _kind_pair(context, "investments", start, end)
+    kinds = [loans, investments]
     other = OtherKindAsOf(
         insurance_start_as_of=_latest_on_or_before(context.insurance_dates, start),
         insurance_end_as_of=_latest_on_or_before(context.insurance_dates, end),
@@ -307,11 +389,10 @@ async def _reconcile(
         first_transaction_date=as_of.first_transaction_date,
         transaction_as_of=as_of.transaction_as_of,
         periods_without_data=gaps,
-        non_krw_transaction_count=await _non_krw_count(db_session, start, end),
+        non_krw_transaction_count=non_krw_count,
         rule=COVERAGE_RULE,
     )
 
-    totals = await _interval_flow(db_session, start, end)
     flow = ReconciliationFlow(
         income_total=totals["income_total"],
         total_outflow=totals["total_outflow"],
@@ -336,12 +417,7 @@ async def _reconcile(
         netting_rule=NETTING_RULE,
     )
 
-    loans, investments = kinds
-    loan_decrease = (
-        loans.start_value - loans.end_value  # type: ignore[operator]
-        if loans.change is not None
-        else None
-    )
+    loan_decrease = -loans.change if loans.change is not None else None
     net_transfer_in = -transfers.investment_net
     valuation = (
         investments.change - net_transfer_in if investments.change is not None else None
@@ -349,7 +425,6 @@ async def _reconcile(
     net_worth_change = end_point.net_worth - start_point.net_worth
 
     reasons: list[str] = []
-    mismatched = [kind.kind for kind in kinds if kind.pair_status == "mismatched"]
     for kind in kinds:
         if kind.pair_status == "mismatched":
             reasons.append(
@@ -360,7 +435,7 @@ async def _reconcile(
             reasons.append(f"{kind.kind} 스냅샷이 한 번도 없어 양 끝을 0으로 두었다.")
         if kind.missing_value_row_count:
             reasons.append(
-                f"{kind.kind} 행 {kind.missing_value_row_count}개는 값이 비어 0으로 셌다."
+                f"{kind.kind} 행 {kind.missing_value_row_count}개의 값이 비어 차이를 보류했다."
             )
     if not covered:
         reasons.append(
@@ -370,7 +445,7 @@ async def _reconcile(
         )
     if transfers.undecided_activity_total:
         reasons.append(
-            "목적이 정해지지 않은 이체가 있어 투자 평가 변동이 불완전하다 "
+            "목적이 정해지지 않은 이체가 있다 "
             f"(이체 금액 기준 미정 비중 {transfers.undecided_share})."
         )
     if coverage.non_krw_transaction_count:
@@ -378,18 +453,26 @@ async def _reconcile(
             f"원화 외 거래 {coverage.non_krw_transaction_count}건은 합산하지 않았다."
         )
 
-    if mismatched:
+    state: ReconciliationStatus
+    unexplained_reason: ReconciliationWithheldReason | None
+    if any(kind.pair_status == "mismatched" for kind in kinds):
         state = "snapshot_dates_mismatched"
+        unexplained_reason = "snapshot_dates_mismatched"
+    elif any(kind.pair_status == "incomplete" for kind in kinds):
+        state = "incomplete_snapshot_values"
+        unexplained_reason = "snapshot_value_missing"
     elif not covered:
         state = "transactions_not_covered"
+        unexplained_reason = "transactions_not_covered"
     elif transfers.undecided_activity_total:
         state = "incomplete_classification"
+        unexplained_reason = None
     else:
         state = "complete"
-    computable = state in ("complete", "incomplete_classification")
+        unexplained_reason = None
     unexplained = (
-        net_worth_change - flow.residual - loan_decrease - valuation  # type: ignore[operator]
-        if computable
+        net_worth_change - flow.residual - loan_decrease - valuation
+        if covered and loan_decrease is not None and valuation is not None
         else None
     )
     if unexplained is None:
@@ -399,7 +482,7 @@ async def _reconcile(
     else:
         unexplained_share = round(unexplained / abs(net_worth_change), 4)
         withheld = None
-    provisional = bool(transfers.undecided_activity_total)
+    provisional = valuation is not None and bool(transfers.undecided_activity_total)
     items = ReconciliationItems(
         net_worth_change=net_worth_change,
         residual=flow.residual,
@@ -408,6 +491,16 @@ async def _reconcile(
         unexplained_difference=unexplained,
         investment_value_change=investments.change,
         investment_net_transfer_in=net_transfer_in,
+        withheld_reasons={
+            field: reason
+            for field, reason in {
+                "loan_balance_decrease": loans.change_withheld_reason,
+                "investment_value_change": investments.change_withheld_reason,
+                "investment_valuation_change": investments.change_withheld_reason,
+                "unexplained_difference": unexplained_reason,
+            }.items()
+            if reason is not None
+        },
         unexplained_share_of_change=unexplained_share,
         unexplained_share_withheld_reason=withheld,  # type: ignore[arg-type]
         investment_valuation_change_provisional=provisional,
@@ -451,8 +544,9 @@ RECONCILIATION_FIELD_SCOPES = {
         "변화가 0이거나 차이를 계산할 수 없으면 null"
     ),
     "items.investment_valuation_change_provisional": (
-        "목적 미정 이체가 있으면 true: 투자 입금일 수 있어 투자 평가 변동이 잠정값"
+        "투자 평가 변동을 계산했고 목적 미정 이체가 있으면 true: 이체 분류에 따라 값이 달라질 수 있다"
     ),
+    "items.withheld_reasons": "대출·투자 차이와 설명되지 않은 차이의 필드별 보류 사유",
     "status": (
         "complete는 대조 항목을 모두 계산할 수 있었다는 뜻이지 변화가 설명되었다는 "
         "뜻이 아니다"
@@ -521,7 +615,16 @@ async def get_net_worth_reconciliation(
             contract=contract,
         )
 
-    result = await _reconcile(db_session, context, start_date, end_date)
+    flow_totals, non_krw_counts = await _load_interval_totals(
+        db_session, [(start_date, end_date)]
+    )
+    result = _reconcile(
+        context,
+        start_date,
+        end_date,
+        flow_totals[end_date],
+        non_krw_counts.get(end_date, 0),
+    )
     contract = await build_flow_contract(
         db_session,
         definition=RECONCILIATION_DEFINITION,
@@ -534,7 +637,7 @@ async def get_net_worth_reconciliation(
         field_scopes=RECONCILIATION_FIELD_SCOPES,
     )
     return NetWorthReconciliationResponse(
-        status=result.status,  # type: ignore[arg-type]
+        status=result.status,
         status_reasons=result.reasons,
         interval=result.interval,
         net_worth_start=result.start,
@@ -555,16 +658,22 @@ async def list_snapshot_intervals(
     context = await _load_context(db_session)
     asset_dates = context.asset_dates
     pairs = list(zip(asset_dates, asset_dates[1:], strict=False))[::-1][:limit]
+    flow_totals, non_krw_counts = await _load_interval_totals(db_session, pairs)
     intervals = []
     for start, end in pairs:
-        result = await _reconcile(db_session, context, start, end)
+        result = _reconcile(
+            context, start, end, flow_totals[end], non_krw_counts.get(end, 0)
+        )
         intervals.append(
             SnapshotIntervalItem(
                 start_snapshot_date=start,
                 end_snapshot_date=end,
-                status=result.status,  # type: ignore[arg-type]
+                status=result.status,
                 net_worth_change=result.items.net_worth_change,
                 unexplained_difference=result.items.unexplained_difference,
+                unexplained_difference_withheld_reason=result.items.withheld_reasons.get(
+                    "unexplained_difference"
+                ),
                 transfer_undecided_share=result.transfers.undecided_share,
                 unexplained_share_of_change=result.items.unexplained_share_of_change,
                 investment_valuation_change_provisional=(
@@ -600,8 +709,8 @@ async def _recent_closed_baseline(
     """The comparison contract's baseline months, ending at the last closed month.
 
     Same walk as ``resolve_comparison_window`` (skip months without data, stop
-    at the data start or before the baseline start date), but the last closed
-    month itself is included: here nothing is compared against it.
+    before the first full month or before the configured baseline start
+    month), including the last closed month itself.
     """
     settings = await get_comparison_settings(db_session)
     start_period = baseline_start_period(settings.baseline_start_date)
@@ -609,13 +718,15 @@ async def _recent_closed_baseline(
     last_closed = as_of.last_closed_period
     periods: list[str] = []
     skipped: list[str] = []
-    limited_by: str | None = None
+    limited_by: Literal["data_start", "baseline_start_date"] | None = None
     if as_of.first_transaction_date is not None and last_closed is not None:
-        first_period = period_of(as_of.first_transaction_date)
+        first_full_period = period_of(as_of.first_transaction_date)
+        if as_of.first_transaction_date.day != 1:
+            first_full_period = shift_period(first_full_period, 1)
         with_data = await load_periods_with_data(db_session)
         candidate = last_closed
         while len(periods) < requested:
-            if candidate < first_period:
+            if candidate < first_full_period:
                 limited_by = "data_start"
                 break
             if start_period is not None and candidate < start_period:
@@ -635,7 +746,7 @@ async def _recent_closed_baseline(
         else "full"
         if count >= requested
         else "fewer_than_requested",
-        limited_by=limited_by if count < requested else None,  # type: ignore[arg-type]
+        limited_by=limited_by,
         baseline_start_date=settings.baseline_start_date,
         skipped_periods=sorted(skipped),
         last_closed_period=last_closed,
@@ -655,19 +766,36 @@ async def get_emergency_fund(db_session: AsyncSession) -> EmergencyFundResponse:
         .one_or_none()
     )
     baseline = await _recent_closed_baseline(db_session, as_of)
-    summary = MONTHLY_FLOW_SUMMARY_VIEW
+    lines = FLOW_LINES_VIEW
     months = []
     if baseline.periods:
+        summary_columns = {expr.key: expr for expr in flow_summary_columns()}
         months = [
             dict(row)
             for row in (
                 await db_session.execute(
                     select(
-                        summary.c.period,
-                        summary.c.protected_spend,
-                        summary.c.adjustability_undecided_total,
-                        summary.c.total_outflow,
-                    ).where(summary.c.period.in_(baseline.periods))
+                        summary_columns["protected_spend"],
+                        summary_columns["adjustability_undecided_total"],
+                        summary_columns["total_outflow"],
+                        func.count(
+                            case(
+                                (
+                                    and_(
+                                        lines.c.type == EXPENSE,
+                                        lines.c.adjustability == "undecided",
+                                    ),
+                                    lines.c.transaction_id,
+                                )
+                            ).distinct()
+                        ).label("undecided_count"),
+                    )
+                    .where(
+                        lines.c.date >= period_start(baseline.periods[0]),
+                        lines.c.date <= period_end(baseline.periods[-1]),
+                        lines.c.period.in_(baseline.periods),
+                    )
+                    .group_by(lines.c.period)
                 )
             ).mappings()
         ]
@@ -675,9 +803,10 @@ async def get_emergency_fund(db_session: AsyncSession) -> EmergencyFundResponse:
     undecided = median_won(
         [int(row["adjustability_undecided_total"]) for row in months]
     )
+    undecided_total = sum(int(row["adjustability_undecided_total"]) for row in months)
+    undecided_count = sum(int(row["undecided_count"]) for row in months)
     undecided_share = ratio(
-        sum(int(row["adjustability_undecided_total"]) for row in months),
-        sum(int(row["total_outflow"]) for row in months),
+        undecided_total, sum(int(row["total_outflow"]) for row in months)
     )
     cash = _won(latest["cash_like_total"]) if latest is not None else None
     name_rule = (
@@ -690,22 +819,26 @@ async def get_emergency_fund(db_session: AsyncSession) -> EmergencyFundResponse:
     )
 
     reasons: list[str] = []
+    state: EmergencyFundStatus
     if latest is None:
         state = "no_asset_snapshot"
         reasons.append("자산 스냅샷이 없다.")
     elif protected is None or protected <= 0:
         state = "no_baseline"
         reasons.append(
-            "기준 마감월이 없거나 월 보호 지급이 0 이하라 개월 수를 내지 않았다."
+            "기준으로 사용할 마감월이 없어 비상금 개월 수를 계산할 수 없다."
+            if protected is None
+            else f"기준 기간의 월 보호 지급 중앙값이 {protected:,}원으로 0 이하라 비상금 개월 수를 계산할 수 없다."
         )
-    elif undecided_share:
+    elif undecided_count:
         state = "incomplete_classification"
-        reasons.append(
-            "조정 가능성 미정 지출이 있어 월 보호 지급이 실제보다 작을 수 있다 "
-            f"(기준 기간 미정 비중 {undecided_share}). 미정을 보호로 추정하지 않았다."
-        )
     else:
         state = "complete"
+    if undecided_count:
+        reasons.append(
+            f"기준 기간에 조정 가능성이 미정인 지출 거래가 {undecided_count}건 있다. "
+            "분류 결과에 따라 월 보호 지급이 달라질 수 있다."
+        )
     if name_rule:
         reasons.append(
             "현금성 자산 일부는 사람이 지정한 유동성 정보 없이 기존 이름 규칙으로 판단했다."
@@ -720,20 +853,24 @@ async def get_emergency_fund(db_session: AsyncSession) -> EmergencyFundResponse:
         db_session,
         definition=EMERGENCY_FUND_DEFINITION,
         scope=(
-            "비상금 개월 수 = 최신 자산 스냅샷의 현금성 자산 ÷ 최근 마감월(최대 6개) 보호 "
+            "비상금 개월 수 = 최신 자산 스냅샷의 현금성 자산 ÷ 자료가 있는 최근 완전한 마감월(최대 6개) 보호 "
             "지급의 중앙값. 보호 지급 = 조정 가능성 protected 지출(대출·할부 포함)"
         ),
         start_date=period_start(baseline.periods[0]) if baseline.periods else None,
         end_date=period_end(baseline.periods[-1]) if baseline.periods else None,
-        include_undecided=bool(baseline.periods),
+        include_undecided=False,
         field_scopes={
             "monthly_protected_outflow": "기준 마감월 protected_spend의 중앙값 (vw_monthly_flow_summary)",
             "cash_like_total": "최신 자산 스냅샷 현금성 자산 (vw_net_worth_snapshots)",
+            "adjustability_undecided_transaction_count": "기준 마감월의 조정 가능성 미정 지출 거래 건수 (환불·상쇄 포함)",
             "emergency_fund_months": "cash_like_total ÷ monthly_protected_outflow, 소수 둘째 자리",
         },
     )
+    if baseline.periods:
+        contract.adjustability_undecided_total = undecided_total
+        contract.adjustability_undecided_share = undecided_share
     return EmergencyFundResponse(
-        status=state,  # type: ignore[arg-type]
+        status=state,
         status_reasons=reasons,
         asset_snapshot_date=_as_date(latest["snapshot_date"])
         if latest is not None
@@ -744,6 +881,7 @@ async def get_emergency_fund(db_session: AsyncSession) -> EmergencyFundResponse:
         monthly_protected_outflow=protected,
         monthly_adjustability_undecided_outflow=undecided,
         adjustability_undecided_share=undecided_share,
+        adjustability_undecided_transaction_count=undecided_count,
         emergency_fund_months=fund_months,
         baseline=baseline,
         legacy_surface=LEGACY_EMERGENCY_FUND,

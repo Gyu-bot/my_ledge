@@ -59,7 +59,8 @@ async def test_verify_import_parity_matches_transaction_samples_and_all_snapshot
     assert report.snapshots.loans.missing_rows == []
     assert report.snapshots.loans.extra_rows == []
     assert report.cashflow_benchmarks.expected_rows == 351
-    assert len(report.cashflow_benchmarks.mismatches) == 57
+    assert report.cashflow_benchmarks.compared_rows == 351
+    assert not report.has_mismatches
 
 
 async def test_verify_import_parity_reports_snapshot_mismatch_after_db_tamper(
@@ -95,7 +96,7 @@ async def test_verify_import_parity_reports_snapshot_mismatch_after_db_tamper(
     assert len(report.snapshots.asset_snapshots.extra_rows) == 1
 
 
-async def test_verify_import_parity_compares_cashflow_income_categories(
+async def test_verify_import_parity_compares_cashflow_without_transaction_sampling(
     db_session: AsyncSession,
     sample_workbook_bytes: bytes,
 ) -> None:
@@ -113,18 +114,9 @@ async def test_verify_import_parity_compares_cashflow_income_categories(
         transaction_sample_size=0,
         transaction_sample_seed=20260324,
     )
-    mismatches_by_key = {
-        (row.period, row.transaction_type, row.category_major): row
-        for row in report.cashflow_benchmarks.mismatches
-    }
-
-    assert ("2026-02", "수입", "급여") not in mismatches_by_key
-    assert ("2026-02", "수입", "보험금") not in mismatches_by_key
-    assert ("2026-02", "수입", "기타") not in mismatches_by_key
-    assert mismatches_by_key[("2026-02", "지출", "보험")].expected_amount == Decimal(
-        "127662"
-    )
-    assert mismatches_by_key[("2026-02", "지출", "보험")].db_amount == Decimal("329466")
+    assert report.transaction.sampled_indices == []
+    assert report.cashflow_benchmarks.compared_rows == 351
+    assert report.cashflow_benchmarks.mismatches == []
 
 
 async def test_verify_import_parity_accepts_rolling_window_fallback_matches(

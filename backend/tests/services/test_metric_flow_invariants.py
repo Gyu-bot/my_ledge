@@ -10,6 +10,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.nature_axes import CategoryAdjustabilityDefault
+from comparison_scenarios import tx
 from app.services.metric_views import AS_OF_VIEW, MONTHLY_FLOW_SUMMARY_VIEW
 from metric_synthetic_ledger import (
     AS_OF,
@@ -183,6 +185,64 @@ async def test_spend_cube_endpoint_groups_the_cube(
         headers=api_headers,
     )
     assert bad.status_code == 422
+
+
+async def test_spend_cube_drills_into_missing_minor_category(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+):
+    missing = tx(date(2026, 3, 1), -400, category="cat-undecided", merchant="a")
+    empty = tx(date(2026, 3, 2), -300, category="cat-undecided", merchant="b")
+    empty.category_minor = ""
+    refund = tx(date(2026, 3, 3), 100, category="cat-undecided", merchant="b")
+    named = tx(date(2026, 3, 4), -1000, category="cat-protected", merchant="c")
+    named.category_minor = "named"
+    db_session.add_all(
+        [
+            CategoryAdjustabilityDefault(
+                category_major="cat-protected", adjustability="protected"
+            ),
+            missing,
+            empty,
+            refund,
+            named,
+            tx(date(2026, 4, 1), -9000, category="outside"),
+        ]
+    )
+    await db_session.commit()
+
+    async def cube(surface: str, **params: str | int) -> dict:
+        response = await async_client.get(
+            f"/api/v1/{surface}/spend-cube",
+            headers=api_headers,
+            params={"start_period": "2026-03", "end_period": "2026-03", **params},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    for surface in ("read", "metrics"):
+        payload = await cube(surface, group_by="effective_category_minor")
+        data = payload["data"] if surface == "read" else payload
+        assert [
+            (row["effective_category_minor"], row["amount"], row["transaction_count"])
+            for row in data["rows"]
+        ] == [("named", 1000, 1), ("", 600, 3)]
+        assert data["total_amount"] == 1600
+
+        payload = await cube(
+            surface, group_by="merchant", effective_category_minor="", limit=1
+        )
+        data = payload["data"] if surface == "read" else payload
+        (first,) = data["rows"]
+        assert (first["merchant"], first["amount"]) == ("a", 400)
+        assert data["total_amount"] == 600
+        if surface == "read":
+            assert (data["total_group_count"], data["returned_count"]) == (2, 1)
+            assert data["truncated"] is True
+            state = payload["classification"]
+            assert state["adjustability_undecided_total"] == 600
+            assert state["adjustability_undecided_transaction_count"] == 3
+            assert state["adjustability_undecided_gross_total"] == 800
+            assert state["expense_gross_total"] == 800
 
 
 async def test_data_status_lists_excluded_currency(

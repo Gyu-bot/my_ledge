@@ -16,6 +16,7 @@ from app.services.monthly_projection_service import (
     RENAMED_PAYER_MISSING_REASON,
     get_monthly_projection,
 )
+from app.services.projection_accuracy_service import get_projection_accuracy
 from app.tools.forecast_backtest import (
     DATABASE_URL_ENV,
     BacktestConfig,
@@ -23,6 +24,7 @@ from app.tools.forecast_backtest import (
     _reason_codes,
     collect_points,
     database_url,
+    evaluation_periods,
     main,
     read_only_session,
     render_markdown,
@@ -99,6 +101,52 @@ async def test_transactions_after_the_as_of_day_never_reach_the_forecast(db_sess
         assert after[day].actual["expense"] == before[day].actual["expense"] + 50_000
     # Once dated on or before the as-of day the purchase is observed.
     assert after[25].observed["expense"] == before[25].observed["expense"] + 50_000
+
+
+async def test_accuracy_and_backtest_exclude_partial_and_uncovered_months(db_session):
+    regular_days = (1, 5, 9, 13, 17, 21, 25, 28)
+    days_by_month = {
+        1: (2, *regular_days[1:]),  # First month starts after day one.
+        2: regular_days,
+        4: (1, 2, 3, 4, 5, 6, 25, 28),  # Internal coverage gap.
+        5: regular_days,
+        6: regular_days,  # The last month with transactions as of July 1 is partial.
+        9: (2,),  # Future data must not close June in the accuracy request.
+    }
+    db_session.add_all(
+        [
+            Transaction(
+                date=date(2031, month, day),
+                time=time(12),
+                type="지출",
+                merchant="Synthetic Expense",
+                description="Synthetic Expense",
+                category_major="식비",
+                amount=-100,
+            )
+            for month, days in days_by_month.items()
+            for day in days
+        ]
+    )
+    await db_session.commit()
+
+    accuracy = await get_projection_accuracy(
+        db_session, reference_date=date(2031, 7, 1), months=6, days=(5, 25)
+    )
+    assert accuracy.evaluated_periods == ["2031-02", "2031-05"]
+    assert [entry.variable_ongoing_actual for entry in accuracy.actuals] == [800, 800]
+    assert [(band.as_of_days, band.points) for band in accuracy.bands] == [
+        ([5], 2),
+        ([25], 2),
+    ]
+
+    assert await evaluation_periods(
+        db_session, BacktestConfig(min_history_months=0)
+    ) == ["2031-02", "2031-05", "2031-06"]
+    later = await get_projection_accuracy(
+        db_session, reference_date=date(2031, 11, 1), months=4, days=(5,)
+    )
+    assert later.evaluated_periods == later.actuals == later.bands == []
 
 
 async def test_default_report_prints_no_amounts_or_names(db_session):
@@ -241,7 +289,6 @@ async def test_one_off_observed_once_and_excluded_from_matching_and_replay(db_se
     from app.models.nature_axes import TransactionNatureOverride
     from app.schemas.one_off_event import OneOffEventCreate
     from app.services.one_off_event_service import create_event
-    from app.services.projection_accuracy_service import get_projection_accuracy
     from forecast_backtest_ledger import DEVICE, INSTALLMENT, LENDER
 
     await build_backtest_ledger(db_session)

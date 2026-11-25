@@ -1,15 +1,19 @@
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction
 from app.schemas.settlement import SettlementMatchResponse, SettlementMatchUpsertRequest
-from app.services.settlement_group_service import reconcile_settlement_matches
+from app.services.metric_views import METRIC_TRANSACTIONS_VIEW, REFUND_ALLOCATIONS_VIEW
+from app.services.settlement_group_service import (
+    is_canonical_settlement_participant,
+    reconcile_settlement_matches,
+)
+from app.services.upload_rollback_service import lock as lock_ledger_import
 
 
 CANONICAL_CONFIRM_DETAIL = (
@@ -18,12 +22,88 @@ CANONICAL_CONFIRM_DETAIL = (
 SETTLEMENT_CONFLICT_DETAIL = "Settlement match conflicts with an existing mapping."
 
 
+class SettlementReplacementConflict(ValueError):
+    pass
+
+
+async def rebind_settlement_matches(
+    db_session: AsyncSession, *, old_transaction_id: int, new_transaction_id: int
+) -> None:
+    """Move live allocations and explicit rejections before superseding the old row."""
+    allocations = REFUND_ALLOCATIONS_VIEW.c
+    confirmed_match_ids = select(allocations.settlement_match_id)
+    matches = (
+        await db_session.scalars(
+            select(SettlementMatch).where(
+                or_(
+                    SettlementMatch.original_transaction_id == old_transaction_id,
+                    SettlementMatch.settlement_transaction_id == old_transaction_id,
+                ),
+                or_(
+                    SettlementMatch.id.in_(confirmed_match_ids),
+                    SettlementMatch.status == SettlementMatchStatus.REJECTED.value,
+                ),
+            )
+        )
+    ).all()
+    if not matches:
+        return
+
+    moved_confirmed_ids: set[int] = set()
+    affected_transaction_ids: set[int] = set()
+    for match in matches:
+        if match.original_transaction_id == old_transaction_id:
+            match.original_transaction_id = new_transaction_id
+        if match.settlement_transaction_id == old_transaction_id:
+            match.settlement_transaction_id = new_transaction_id
+        if match.status != SettlementMatchStatus.REJECTED.value:
+            moved_confirmed_ids.add(match.id)
+            affected_transaction_ids.update(
+                (match.original_transaction_id, match.settlement_transaction_id)
+            )
+
+    try:
+        await db_session.flush()
+    except IntegrityError as exc:
+        raise SettlementReplacementConflict(
+            "Replacement conflicts with a stored settlement decision. Review the pair before retrying."
+        ) from exc
+
+    if not moved_confirmed_ids:
+        return
+    eligible_ids = await db_session.scalars(
+        confirmed_match_ids.where(
+            allocations.settlement_match_id.in_(moved_confirmed_ids)
+        )
+    )
+    if set(eligible_ids) != moved_confirmed_ids:
+        raise SettlementReplacementConflict(
+            "Replacement would make a confirmed settlement ineligible. Review the pair before retrying."
+        )
+
+    metric_tx = METRIC_TRANSACTIONS_VIEW.c
+    over_allocated = await db_session.scalar(
+        select(metric_tx.id)
+        .where(
+            metric_tx.id.in_(affected_transaction_ids),
+            metric_tx.settlement_refund_total + metric_tx.settlement_allocated_total
+            > func.abs(metric_tx.amount),
+        )
+        .limit(1)
+    )
+    if over_allocated is not None:
+        raise SettlementReplacementConflict(
+            "Confirmed settlement allocations exceed the transaction amount. Review the allocations before retrying."
+        )
+
+
 async def upsert_manual_settlement_match(
     db_session: AsyncSession,
     *,
     settlement_transaction_id: int,
     payload: SettlementMatchUpsertRequest,
 ) -> SettlementMatchResponse:
+    await lock_ledger_import(db_session)
     original_transaction = await _get_transaction_or_404(
         db_session,
         payload.original_transaction_id,
@@ -33,6 +113,12 @@ async def upsert_manual_settlement_match(
         settlement_transaction_id,
     )
     _validate_pair_shape(original_transaction, settlement_transaction)
+    matched_amount = await _resolve_matched_amount(
+        db_session,
+        original_transaction=original_transaction,
+        settlement_transaction=settlement_transaction,
+        payload=payload,
+    )
 
     match = await db_session.scalar(
         select(SettlementMatch).where(
@@ -45,19 +131,12 @@ async def upsert_manual_settlement_match(
             original_transaction_id=payload.original_transaction_id,
             settlement_transaction_id=settlement_transaction_id,
             status=payload.status,
-            matched_amount=0,
-            matched_at=datetime.now(UTC),
+            matched_amount=matched_amount,
         )
         db_session.add(match)
 
     match.status = payload.status
-    match.matched_amount = await _resolve_matched_amount(
-        db_session,
-        match=match,
-        original_transaction=original_transaction,
-        settlement_transaction=settlement_transaction,
-        payload=payload,
-    )
+    match.matched_amount = matched_amount
     match.matched_at = datetime.now(UTC)
 
     try:
@@ -79,6 +158,7 @@ async def delete_manual_settlement_match(
     settlement_transaction_id: int,
     original_transaction_id: int,
 ) -> None:
+    await lock_ledger_import(db_session)
     match = await db_session.scalar(
         select(SettlementMatch).where(
             SettlementMatch.original_transaction_id == original_transaction_id,
@@ -148,7 +228,6 @@ def _validate_pair_shape(
 async def _resolve_matched_amount(
     db_session: AsyncSession,
     *,
-    match: SettlementMatch,
     original_transaction: Transaction,
     settlement_transaction: Transaction,
     payload: SettlementMatchUpsertRequest,
@@ -159,7 +238,6 @@ async def _resolve_matched_amount(
     _validate_confirm_participants(original_transaction, settlement_transaction)
     original_allocated, settlement_allocated = await _load_other_manual_allocations(
         db_session,
-        match=match,
         original_transaction_id=original_transaction.id,
         settlement_transaction_id=settlement_transaction.id,
     )
@@ -194,11 +272,11 @@ def _validate_confirm_participants(
     original_transaction: Transaction,
     settlement_transaction: Transaction,
 ) -> None:
-    if (
-        original_transaction.is_deleted
-        or original_transaction.merged_into_id is not None
-        or settlement_transaction.is_deleted
-        or settlement_transaction.merged_into_id is not None
+    if not all(
+        map(
+            is_canonical_settlement_participant,
+            (original_transaction, settlement_transaction),
+        )
     ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -209,47 +287,25 @@ def _validate_confirm_participants(
 async def _load_other_manual_allocations(
     db_session: AsyncSession,
     *,
-    match: SettlementMatch,
     original_transaction_id: int,
     settlement_transaction_id: int,
 ) -> tuple[int, int]:
-    original_transaction = aliased(Transaction)
-    settlement_transaction = aliased(Transaction)
-    canonical_confirmed_matches = (
-        select(func.coalesce(func.sum(SettlementMatch.matched_amount), 0))
-        .join(
-            original_transaction,
-            SettlementMatch.original_transaction_id == original_transaction.id,
-        )
-        .join(
-            settlement_transaction,
-            SettlementMatch.settlement_transaction_id == settlement_transaction.id,
-        )
-        .where(SettlementMatch.status == SettlementMatchStatus.USER_CONFIRMED.value)
-        .where(original_transaction.type == "지출")
-        .where(original_transaction.is_deleted.is_(False))
-        .where(original_transaction.merged_into_id.is_(None))
-        .where(original_transaction.amount < 0)
-        .where(settlement_transaction.type == "지출")
-        .where(settlement_transaction.is_deleted.is_(False))
-        .where(settlement_transaction.merged_into_id.is_(None))
-        .where(settlement_transaction.amount > 0)
-    )
+    allocations = REFUND_ALLOCATIONS_VIEW.c
+    canonical_confirmed_matches = select(
+        func.coalesce(func.sum(allocations.matched_amount), 0)
+    ).where(allocations.status == SettlementMatchStatus.USER_CONFIRMED.value)
     original_allocated = await db_session.scalar(
         canonical_confirmed_matches.where(
-            SettlementMatch.original_transaction_id == original_transaction_id,
-            SettlementMatch.settlement_transaction_id != settlement_transaction_id,
+            allocations.original_transaction_id == original_transaction_id,
+            allocations.refund_transaction_id != settlement_transaction_id,
         )
     )
     settlement_allocated = await db_session.scalar(
         canonical_confirmed_matches.where(
-            SettlementMatch.settlement_transaction_id == settlement_transaction_id,
-            SettlementMatch.original_transaction_id != original_transaction_id,
+            allocations.refund_transaction_id == settlement_transaction_id,
+            allocations.original_transaction_id != original_transaction_id,
         )
     )
-    if match.status == SettlementMatchStatus.USER_CONFIRMED.value:
-        original_allocated = max(0, int(original_allocated or 0))
-        settlement_allocated = max(0, int(settlement_allocated or 0))
     return int(original_allocated or 0), int(settlement_allocated or 0)
 
 

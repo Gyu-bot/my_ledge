@@ -274,6 +274,19 @@ async def scenario_no_data_vs_zero(session: AsyncSession, client: AsyncClient) -
     assert measure(gap, "total_outflow")["change_amount"] is None
     assert measure(gap, "total_outflow")["baseline_amount"] == 60_000
 
+    for surface in ("metrics", "read"):
+        gap = await get(
+            client, f"/{surface}/comparison/contributions", period="2026-03"
+        )
+        if surface == "read":
+            assert gap["status"] == "no_transactions"
+            gap = gap["data"]
+            assert gap["items_summary"]["total_count"] == 0
+        assert gap["comparison"]["target_coverage"] == "no_data"
+        assert gap["target_total"] is gap["change_total"] is None
+        assert gap["baseline_total"] == 60_000
+        assert gap["items"] == gap["twelve_month_items"] == []
+
     zero_month = await get(
         client, "/metrics/comparison/contributions", period="2026-05"
     )

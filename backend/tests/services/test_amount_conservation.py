@@ -176,6 +176,13 @@ async def test_f02_multiple_refund_allocation_preserves_signed_net(
         limit=200,
     )
     assert categories.total_amount == 3_000
+    (category,) = categories.rows
+    assert (category.charge_total, category.refund_total, category.amount) == (
+        15_000,
+        12_000,
+        3_000,
+    )
+    assert category.transaction_count == 3
 
 
 async def test_f03_month_boundary_refund_stays_in_posting_month(

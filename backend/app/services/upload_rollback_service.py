@@ -54,23 +54,6 @@ async def lock(db: AsyncSession) -> None:
         await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": LOCK_KEY})
 
 
-async def lock_session(db: AsyncSession) -> None:
-    """For the legacy multi-commit upload: hold the lock across its commits."""
-    if _enabled(db):
-        await db.execute(text("SELECT pg_advisory_lock(:k)"), {"k": LOCK_KEY})
-
-
-async def unlock_session(db: AsyncSession) -> None:
-    # A session lock outlives transactions and pooled connections: always release.
-    if _enabled(db):
-        try:
-            await db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": LOCK_KEY})
-        except Exception:
-            await db.rollback()
-            await db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": LOCK_KEY})
-        await db.commit()
-
-
 def _fingerprint_sql(db, sources):
     # Row text via to_jsonb: identical for live rows and rows rebuilt from JSON.
     parts = [

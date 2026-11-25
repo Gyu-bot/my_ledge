@@ -732,7 +732,7 @@ async def test_get_income_stability_defaults_to_last_closed_month(
     class FrozenDate(date):
         @classmethod
         def today(cls) -> "FrozenDate":
-            return cls(2026, 4, 8)
+            return cls(2026, 11, 8)
 
     monkeypatch.setattr(analytics_service_module, "date", FrozenDate)
 
@@ -799,6 +799,58 @@ async def test_get_income_stability_defaults_to_last_closed_month(
     assert response.reference_date == date(2026, 3, 31)
     assert response.is_partial_period is False
     assert "직전 마감월 기준" in response.assumptions
+
+
+@pytest.mark.parametrize("first_month_in_progress", [False, True])
+async def test_get_income_stability_without_closed_period(
+    db_session: AsyncSession, first_month_in_progress: bool
+) -> None:
+    if first_month_in_progress:
+        db_session.add(
+            _transaction(
+                tx_date=date(2026, 4, 5),
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=100,
+                payment_method=None,
+            )
+        )
+        await db_session.commit()
+    response = await get_income_stability(db_session, start_date=None, end_date=None)
+    assert response.reference_date is None
+    assert response.items == []
+    assert response.stdev is response.coefficient_of_variation is None
+    assert "마감월이 없어" in response.assumptions
+
+
+async def test_get_income_stability_uses_unrounded_mean_and_skips_gaps(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            _transaction(
+                tx_date=day,
+                tx_time=time(9, 0),
+                tx_type="수입",
+                category_major="급여",
+                category_minor=None,
+                description="월급",
+                amount=amount,
+                payment_method=None,
+            )
+            for day, amount in [(date(2026, 1, 1), 1), (date(2026, 3, 31), 2)]
+        ]
+    )
+    await db_session.commit()
+    response = await get_income_stability(db_session, start_date=None, end_date=None)
+    assert response.reference_date == date(2026, 3, 31)
+    assert [item.period for item in response.items] == ["2026-01", "2026-03"]
+    assert response.avg == 2
+    assert response.stdev == 0.5
+    assert response.coefficient_of_variation == 0.3333
 
 
 async def test_get_income_stability_partial_period_uses_same_day_baseline_cutoff(

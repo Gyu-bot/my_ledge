@@ -53,15 +53,16 @@ from app.schemas.metrics import MetricAsOf
 from app.services.metric_views import (
     EXPENSE,
     FLOW_LINES_VIEW,
-    MONTHLY_FLOW_SUMMARY_VIEW,
     day_of_month,
     flow_summary_columns,
 )
 from app.services.metrics_service import (
+    MetricContext,
     build_flow_contract,
-    load_as_of,
+    load_metric_context,
     month_data_coverage,
     month_status,
+    period_filters,
     ratio,
 )
 from app.services.settings_service import (
@@ -81,7 +82,7 @@ _LINES = FLOW_LINES_VIEW
 class ComparisonWindow:
     """Resolved target and baseline months for one comparison."""
 
-    as_of: MetricAsOf
+    context: MetricContext
     target_period: str | None
     target_status: str | None
     target_has_data: bool
@@ -98,6 +99,10 @@ class ComparisonWindow:
     first_data_mid_month: bool
     first_full_period: str | None = None
     periods_with_data: frozenset[str] = field(default_factory=frozenset)
+
+    @property
+    def as_of(self) -> MetricAsOf:
+        return self.context.as_of
 
     @property
     def is_partial(self) -> bool:
@@ -163,12 +168,19 @@ def _difference(target: int | None, baseline: int | None) -> int | None:
 # --------------------------------------------------------------------------
 
 
-async def load_periods_with_data(db_session: AsyncSession) -> frozenset[str]:
+async def load_periods_with_data(
+    db_session: AsyncSession,
+    *,
+    start_period: str | None = None,
+    end_period: str | None = None,
+) -> frozenset[str]:
     """Months with at least one effective KRW line (anything else is no data)."""
-    summary = MONTHLY_FLOW_SUMMARY_VIEW
-    return frozenset(
-        str(period) for period in await db_session.scalars(select(summary.c.period))
+    query = (
+        select(_LINES.c.period)
+        .where(*period_filters(_LINES.c.period, start_period, end_period))
+        .distinct()
     )
+    return frozenset(await db_session.scalars(query))
 
 
 async def resolve_comparison_window(
@@ -183,14 +195,15 @@ async def resolve_comparison_window(
     ``through_date`` lets a legacy endpoint keep an explicit end date inside
     the target month; it never extends past the transaction as-of date.
     """
-    as_of = await load_as_of(db_session)
+    context = await load_metric_context(db_session)
+    as_of = context.as_of
     settings = await get_comparison_settings(db_session)
     start_date = settings.baseline_start_date
     start_period = baseline_start_period(start_date)
     requested = max(1, baseline_months)
     if as_of.transaction_as_of is None or as_of.first_transaction_date is None:
         return ComparisonWindow(
-            as_of=as_of,
+            context=context,
             target_period=target_period,
             target_status=None,
             target_has_data=False,
@@ -207,7 +220,6 @@ async def resolve_comparison_window(
             first_data_mid_month=False,
         )
 
-    periods_with_data = await load_periods_with_data(db_session)
     first_period = period_of(as_of.first_transaction_date)
     first_mid_month = as_of.first_transaction_date.day != 1
     # A first month whose data starts mid-month is not a full month, so it is
@@ -229,6 +241,9 @@ async def resolve_comparison_window(
                 f"{as_of.transaction_as_of.isoformat()} 이후라 비교할 수 없습니다."
             ),
         )
+    periods_with_data = await load_periods_with_data(
+        db_session, end_period=target_period
+    )
 
     target_status = month_status(target_period, as_of)
     target_start = period_start(target_period)
@@ -258,7 +273,7 @@ async def resolve_comparison_window(
         candidate = shift_period(candidate, -1)
 
     return ComparisonWindow(
-        as_of=as_of,
+        context=context,
         target_period=target_period,
         target_status=target_status,
         target_has_data=target_period in periods_with_data,
@@ -346,8 +361,8 @@ def build_comparison_basis(
     else:
         baseline_status = "full"
     in_progress = window.is_in_progress
-    if window.target_period is None:
-        note = "거래 자료가 없어 비교하지 않았습니다."
+    if not window.target_has_data:
+        note = "대상 월에 관측된 거래가 없어 증감을 계산하지 않았습니다."
     elif window.is_partial:
         reason = "진행월이라" if in_progress else "요청한 종료일이 말일이 아니어서"
         note = (
@@ -577,6 +592,7 @@ async def get_monthly_flow_comparison(
         ),
         start_date=window.target_start,
         end_date=window.target_end,
+        context=window.context,
         field_scopes={
             "measures[].target_amount": "대상 월(진행월이면 거래 기준일까지) 금액",
             "measures[].baseline_amount": "기준 기간 월별 금액의 중앙값(같은 경과일 규칙 적용)",
@@ -700,8 +716,12 @@ async def get_change_contributions(
     keys = [category_key()] if level == "category" else [category_key(), merchant_key()]
     spend = -_LINES.c.amount
 
-    monthly = await grouped_period_amounts(
-        db_session, window, keys=keys, amount=spend, filters=base_filters
+    monthly = (
+        await grouped_period_amounts(
+            db_session, window, keys=keys, amount=spend, filters=base_filters
+        )
+        if window.target_has_data
+        else {}
     )
     period_totals = await grouped_period_amounts(
         db_session, window, keys=[], amount=spend, filters=base_filters
@@ -797,7 +817,9 @@ async def get_change_contributions(
         ),
         start_date=window.target_start,
         end_date=window.target_end,
+        context=window.context,
         field_scopes={
+            "items[].target_amount": "거래가 관측된 대상 월의 항목별 금액. 대상 월 자체에 자료가 없으면 목록을 비움",
             "items[].change_amount": "target_amount − baseline_amount (원), 정렬은 절댓값 내림차순",
             "twelve_month_items[].target_amount": "대상 월로 끝나는 12개월 합계",
             "twelve_month_items[].baseline_amount": "그 직전 12개월 합계",
@@ -870,6 +892,9 @@ async def _twelve_month_amounts(
         baseline_window_available=reason is None,
         baseline_window_unavailable_reason=reason,  # type: ignore[arg-type]
     )
+
+    if not window.target_has_data:
+        return basis, {}
 
     labelled = [key.label(f"key_{index}") for index, key in enumerate(keys)]
     line_filters: list[ColumnElement[bool]] = [

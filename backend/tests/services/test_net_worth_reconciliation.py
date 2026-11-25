@@ -9,13 +9,15 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import event, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
+from app.models.investment import Investment
+from app.models.loan import Loan
 from app.models.transfer_purpose import TransferPurposeOverride, TransferPurposeRule
 from app.services.metric_views import MONTHLY_FLOW_SUMMARY_VIEW
-from app.services.net_worth_service import _interval_flow
+from app.services.net_worth_service import _load_interval_totals
 from net_worth_scenarios import (
     D0,
     D1,
@@ -28,6 +30,7 @@ from net_worth_scenarios import (
 )
 
 PATH = "/api/v1/metrics/net-worth/reconciliation"
+INTERVALS_PATH = "/api/v1/metrics/net-worth/intervals"
 
 
 def _identity_holds(items: dict) -> bool:
@@ -144,9 +147,15 @@ async def test_consecutive_intervals_never_count_a_day_twice(
     db_session: AsyncSession,
 ) -> None:
     await build_net_worth_scenario(db_session)
-    first = await _interval_flow(db_session, D0, D1)
-    second = await _interval_flow(db_session, D1, D2)
-    whole = await _interval_flow(db_session, D0, D2)
+    db_session.add_all(
+        [tx(day, -1, currency="usd", merchant="foreign") for day in (D0, D1, D2)]
+    )
+    await db_session.commit()
+    split, non_krw = await _load_interval_totals(db_session, [(D0, D1), (D1, D2)])
+    combined, combined_non_krw = await _load_interval_totals(db_session, [(D0, D2)])
+    first, second, whole = split[D1], split[D2], combined[D2]
+    assert non_krw == {D1: 1, D2: 1}
+    assert combined_non_krw == {D2: 2}
     for key in ("residual", "transfer_net", "income_total", "total_outflow"):
         assert first[key] + second[key] == whole[key], key
     # With month-end snapshots the interval equals the calendar months.
@@ -236,8 +245,13 @@ async def test_mismatched_kind_dates_are_reported_not_aligned(
     assert investments["start_as_of"] == D2.isoformat()
     assert investments["end_as_of"] == D2.isoformat()
     assert investments["change"] is None
+    assert investments["change_withheld_reason"] == "snapshot_dates_mismatched"
     assert payload["items"]["investment_valuation_change"] is None
     assert payload["items"]["unexplained_difference"] is None
+    assert (
+        payload["items"]["withheld_reasons"]["unexplained_difference"]
+        == "snapshot_dates_mismatched"
+    )
     assert payload["items"]["loan_balance_decrease"] == 500_000
     assert any("investments" in reason for reason in payload["status_reasons"])
 
@@ -269,6 +283,10 @@ async def test_interval_the_transactions_do_not_cover(
     assert coverage["first_transaction_date"] == "2026-01-01"
     assert coverage["periods_without_data"] == ["2025-12"]
     assert payload["items"]["unexplained_difference"] is None
+    assert (
+        payload["items"]["withheld_reasons"]["unexplained_difference"]
+        == "transactions_not_covered"
+    )
     assert payload["items"]["net_worth_change"] == -2_000_000 - (-3_500_000)
 
 
@@ -343,6 +361,103 @@ async def test_absent_kinds_count_as_zero(
     assert payload["transfers"]["undecided_share"] is None
 
 
+async def test_aligned_investment_values_are_withheld_when_rows_are_missing(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+) -> None:
+    await build_net_worth_scenario(db_session)
+    db_session.add(investment_row(D0, None, name="fund-missing"))
+    await db_session.execute(
+        update(Investment)
+        .where(Investment.snapshot_date == D1)
+        .values(market_value=None)
+    )
+    await db_session.commit()
+
+    payload = await _reconcile(async_client, api_headers, D0, D1)
+
+    assert payload["status"] == "incomplete_snapshot_values"
+    assert payload["transactions"]["covered"] is True
+    assert not any("0으로" in reason for reason in payload["status_reasons"])
+    investment = next(
+        kind for kind in payload["kinds"] if kind["kind"] == "investments"
+    )
+    assert investment["pair_status"] == "incomplete"
+    assert (investment["start_as_of"], investment["end_as_of"]) == (str(D0), str(D1))
+    assert (
+        investment["start_value"],
+        investment["end_value"],
+        investment["change"],
+    ) == (None, None, None)
+    assert investment["start_known_value_total"] == 2_000_000
+    assert investment["end_known_value_total"] is None
+    for field in ("start_value", "end_value", "change"):
+        assert investment[f"{field}_withheld_reason"] == "snapshot_value_missing"
+    assert investment["missing_value_row_count"] == 2
+    items = payload["items"]
+    assert items["investment_value_change"] is None
+    assert items["investment_valuation_change"] is None
+    assert items["investment_net_transfer_in"] == 1_000_000
+    assert items["net_worth_change"] == 2_500_000
+    assert items["loan_balance_decrease"] == 500_000
+    assert items["residual"] == 1_880_000
+    assert items["unexplained_difference"] is None
+    assert items["unexplained_share_of_change"] is None
+    assert items["withheld_reasons"] == {
+        "investment_value_change": "snapshot_value_missing",
+        "investment_valuation_change": "snapshot_value_missing",
+        "unexplained_difference": "snapshot_value_missing",
+    }
+
+    latest = await _reconcile(async_client, api_headers, D1, D2)
+    assert latest["transfers"]["undecided_activity_total"] > 0
+    assert latest["items"]["investment_valuation_change_provisional"] is False
+    assert latest["items"]["investment_valuation_change_provisional_reason"] is None
+    response = await async_client.get(INTERVALS_PATH, headers=api_headers)
+    assert response.status_code == 200
+    assert [
+        (
+            item["status"],
+            item["unexplained_difference"],
+            item["unexplained_difference_withheld_reason"],
+        )
+        for item in response.json()["intervals"]
+    ] == [("incomplete_snapshot_values", None, "snapshot_value_missing")] * 2
+
+
+async def test_aligned_loan_with_missing_value_differs_from_observed_zero(
+    async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
+) -> None:
+    await build_net_worth_scenario(db_session)
+    await db_session.execute(
+        update(Loan).where(Loan.snapshot_date == D1).values(balance=0)
+    )
+    closed = await _reconcile(async_client, api_headers, D0, D1)
+    assert closed["status"] == "complete"
+    assert closed["items"]["loan_balance_decrease"] == 10_000_000
+    assert closed["kinds"][0]["end_value"] == 0
+
+    missing = loan_row(D1, None)
+    missing.product_name = "loan-missing"
+    db_session.add(missing)
+    await db_session.commit()
+
+    payload = await _reconcile(async_client, api_headers, D0, D1)
+    assert payload["status"] == "incomplete_snapshot_values"
+    loan = payload["kinds"][0]
+    assert loan["pair_status"] == "incomplete"
+    assert loan["start_value"] == 10_000_000
+    assert loan["end_value"] is None
+    assert loan["end_known_value_total"] == 0
+    assert loan["end_value_withheld_reason"] == "snapshot_value_missing"
+    assert payload["items"]["loan_balance_decrease"] is None
+    assert payload["items"]["investment_valuation_change"] == 150_000
+    assert payload["items"]["unexplained_difference"] is None
+    assert payload["items"]["withheld_reasons"] == {
+        "loan_balance_decrease": "snapshot_value_missing",
+        "unexplained_difference": "snapshot_value_missing",
+    }
+
+
 async def test_identity_holds_for_random_snapshot_pairs(
     async_client: AsyncClient, api_headers: dict[str, str], db_session: AsyncSession
 ) -> None:
@@ -367,7 +482,6 @@ async def test_identity_holds_for_random_snapshot_pairs(
                 ),
                 loan_row(snapshot_date, rng.randint(0, 20_000_000)),
                 investment_row(snapshot_date, rng.randint(0, 5_000_000)),
-                investment_row(snapshot_date, None, name="fund-missing"),
             ]
         )
     purposes = ["investment", "savings", "internal_move", None]
@@ -388,27 +502,55 @@ async def test_identity_holds_for_random_snapshot_pairs(
         day += timedelta(days=rng.randint(0, 2))
     await db_session.commit()
 
-    checked = 0
+    expected = []
     for start, end in zip(dates, dates[1:], strict=False):
         payload = await _reconcile(async_client, api_headers, start, end)
         assert payload["status"] in ("complete", "incomplete_classification")
         assert _identity_holds(payload["items"])
         kinds = {kind["kind"]: kind for kind in payload["kinds"]}
-        assert kinds["investments"]["missing_value_row_count"] == 2
-        checked += 1
-    assert checked == 4
-
-    intervals = (
-        await async_client.get(
-            "/api/v1/metrics/net-worth/intervals", headers=api_headers
+        assert kinds["investments"]["missing_value_row_count"] == 0
+        expected.append(
+            {
+                "start_snapshot_date": str(start),
+                "end_snapshot_date": str(end),
+                "status": payload["status"],
+                "net_worth_change": payload["items"]["net_worth_change"],
+                "unexplained_difference": payload["items"]["unexplained_difference"],
+                "unexplained_difference_withheld_reason": None,
+                "unexplained_share_of_change": payload["items"][
+                    "unexplained_share_of_change"
+                ],
+                "transfer_undecided_share": payload["transfers"]["undecided_share"],
+                "investment_valuation_change_provisional": payload["items"][
+                    "investment_valuation_change_provisional"
+                ],
+            }
         )
-    ).json()
-    assert [item["end_snapshot_date"] for item in intervals["intervals"]] == [
-        value.isoformat() for value in reversed(dates[1:])
-    ]
-    assert intervals["snapshot_dates"]["assets"] == [
-        value.isoformat() for value in reversed(dates)
-    ]
+
+    bind = db_session.get_bind()
+    query_counts = []
+    for limit in (1, len(expected)):
+        query_count = 0
+
+        def count_statement(conn, cursor, statement, parameters, context, executemany):
+            nonlocal query_count
+            query_count += 1
+
+        event.listen(bind, "before_cursor_execute", count_statement)
+        try:
+            response = await async_client.get(
+                INTERVALS_PATH, params={"limit": limit}, headers=api_headers
+            )
+        finally:
+            event.remove(bind, "before_cursor_execute", count_statement)
+        assert response.status_code == 200
+        intervals = response.json()
+        assert intervals["intervals"] == expected[::-1][:limit]
+        assert intervals["snapshot_dates"]["assets"] == [
+            value.isoformat() for value in reversed(dates)
+        ]
+        query_counts.append(query_count)
+    assert query_counts == [8, 8]
 
 
 async def test_intervals_list_states_per_pair(

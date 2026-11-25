@@ -20,6 +20,7 @@ from app.models.upload_log import UploadLog
 from app.models.upload_rollback_point import UploadRollbackPoint
 from app.schemas.upload import UploadApplyRequest, UploadApplySelection
 from app.services import upload_rollback_service as rb
+from app.services import upload_service
 from app.services.upload_apply_service import apply_transaction_upload_workbook
 from app.services.upload_preview_service import preview_transaction_upload_workbook
 from app.services.upload_service import import_transactions_from_workbook
@@ -316,6 +317,70 @@ async def test_legacy_upload_creates_point_and_releases_lock(pg, tmp_path):
         await rb.rollback_upload(db, result.upload_id, accept_changes=False)
     async with pg() as db:
         assert await state(db) == before
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_legacy_upload_releases_postgresql_lock_after_completion(
+    pg, monkeypatch, cancel
+):
+    ready_to_finish = asyncio.Event()
+    allow_finish = asyncio.Event()
+    backend_pids = []
+    reconcile = upload_service.reconcile_transaction_source_lifecycle
+    finish = rb.finish_point
+
+    async def capture_reconcile(db, *args):
+        backend_pids.append(await db.scalar(text("SELECT pg_backend_pid()")))
+        return await reconcile(db, *args)
+
+    async def pause_at_finish(db, *args):
+        backend_pids.append(await db.scalar(text("SELECT pg_backend_pid()")))
+        ready_to_finish.set()
+        await allow_finish.wait()
+        return await finish(db, *args)
+
+    monkeypatch.setattr(
+        upload_service, "reconcile_transaction_source_lifecycle", capture_reconcile
+    )
+    monkeypatch.setattr(rb, "finish_point", pause_at_finish)
+
+    async def run_import():
+        async with pg() as db:
+            return await import_transactions_from_workbook(
+                db, workbook([row("synthetic lock probe")]), "legacy.xlsx", DAY
+            )
+
+    async def try_import_lock(db):
+        return await db.scalar(
+            text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": rb.LOCK_KEY}
+        )
+
+    task = asyncio.create_task(run_import())
+    try:
+        await asyncio.wait_for(ready_to_finish.wait(), timeout=5)
+        assert len(backend_pids) == 2 and backend_pids[0] == backend_pids[1]
+        async with pg() as other:
+            assert not await try_import_lock(other)
+            assert (
+                await other.scalar(select(func.count()).select_from(Transaction)) == 0
+            )
+
+        if cancel:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            allow_finish.set()
+            assert (await asyncio.wait_for(task, timeout=5)).status == "success"
+        async with pg() as other:
+            assert await try_import_lock(other)
+            assert await other.scalar(
+                select(func.count()).select_from(Transaction)
+            ) == int(not cancel)
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.parametrize("mode", ["explicit", "reviewed"])

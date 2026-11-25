@@ -10,11 +10,12 @@ from app.models import (
     InstallmentTransactionLink,
     Loan,
     LoanAccount,
+    LoanMerchantRule,
     LoanTransactionLink,
     Transaction,
     UploadLog,
 )
-from app.models.nature_axes import TransactionNatureOverride
+from app.models.nature_axes import RecurringCommitment, TransactionNatureOverride
 from app.schemas.income_projection import (
     IncomeExpectation,
     IncomeExpectationsSettings,
@@ -22,6 +23,8 @@ from app.schemas.income_projection import (
 )
 from app.services.income_expectations_service import save_income_expectations
 from app.services.monthly_projection_service import get_monthly_projection
+from app.services.auto_classification_service import apply_loan_merchant_rules
+from app.services.read_commitments_service import read_commitments
 from legacy_nature_seed import write_through_legacy_classification
 
 
@@ -673,6 +676,263 @@ async def test_short_month_end_has_no_imaginary_day_31_variable_expenses(db_sess
     assert result.projected_month_end_net == result.observed_net_cashflow
 
 
+@pytest.mark.parametrize("quiet_export", [False, True])
+async def test_month_end_reconciles_observed_with_unobserved_payments(
+    db_session, quiet_export
+):
+    end = date(2031, 7, 31)
+    await seed_history(db_session, salary=False)
+    await save_income_expectations(
+        db_session,
+        IncomeExpectationsSettings(
+            items=[
+                IncomeExpectation(
+                    source_key="income:late employer",
+                    merchant="Late employer",
+                    expected_amount=10_000,
+                    expected_day=10,
+                ),
+                IncomeExpectation(
+                    source_key="income:split employer",
+                    merchant="Split employer",
+                    expected_amount=20_000,
+                    expected_day=31,
+                ),
+            ]
+        ),
+    )
+    partial = tx(REFERENCE, -600, merchant="Partial installment", category="쇼핑")
+    db_session.add_all([partial, tx(REFERENCE, 5_000, merchant="Split employer")])
+    plans = [
+        InstallmentPlan(
+            display_name=name,
+            merchant=name,
+            monthly_amount=1_000,
+            first_payment_date=date(2031, 7, day),
+            total_installments=3,
+            status="active",
+        )
+        for name, day in [
+            ("Due at close", 31),
+            ("Past due", 15),
+            (partial.merchant, 20),
+        ]
+    ]
+    account = LoanAccount(lender="Synthetic Loan Bank", product_name="Synthetic Loan")
+    repayment = tx(REFERENCE, -500, merchant=account.lender, category="대출")
+    db_session.add_all(
+        [
+            *plans,
+            account,
+            repayment,
+            Loan(
+                snapshot_date=REFERENCE,
+                lender=account.lender,
+                product_name=account.product_name,
+                balance=Decimal(20_000),
+                monthly_payment=Decimal(1_000),
+            ),
+        ]
+    )
+    await db_session.flush()
+    db_session.add_all(
+        [
+            InstallmentTransactionLink(
+                transaction_id=partial.id,
+                installment_plan_id=plans[2].id,
+                installment_number=1,
+            ),
+            LoanTransactionLink(
+                transaction_id=repayment.id, loan_account_id=account.id
+            ),
+        ]
+    )
+    if quiet_export:
+        db_session.add(
+            tx(end.replace(day=30), -100, merchant="Quiet close", category="식비")
+        )
+        db_session.add(
+            UploadLog(snapshot_date=end, status="success", filename="close.xlsx")
+        )
+    else:
+        db_session.add(tx(end, -100, merchant="End transaction", category="식비"))
+    await classify(db_session)
+
+    before = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    assert before.expected_remaining_income == 25_000
+    assert before.known_expected_remaining_expense > 0
+    assert before.remaining_period_start == date(2031, 7, 21)
+
+    result = await get_monthly_projection(db_session, reference_date=end)
+    assert result.observed_through == (end.replace(day=30) if quiet_export else end)
+    assert result.remaining_period_start is None
+    assert result.expected_remaining_income == result.expected_remaining_expense == 0
+    assert (
+        result.known_expected_remaining_expense
+        == result.remaining_expense_adjustability.total_amount
+        == 0
+    )
+    assert result.projected_month_income == result.observed_income == 5_000
+    assert result.projected_month_expense == result.observed_net_expense
+    assert (
+        result.projected_month_end_net
+        == result.net_after_known_remaining_expense
+        == result.observed_net_cashflow
+    )
+    assert result.completeness.full_projection_available
+    assert all(
+        item.expected_remaining == item.known_expected_remaining == 0
+        for item in result.expense_components
+    )
+    assert all(
+        source.expected_remaining == 0
+        for item in result.expense_components
+        for source in item.sources
+    )
+    assert [
+        (source.status, source.remaining_amount) for source in result.income_sources
+    ] == [("late", 0), ("partial", 0)]
+    for plan in plans:
+        assert any(plan.display_name in warning for warning in result.warnings)
+    assert any(account.lender in warning for warning in result.warnings)
+
+
+async def test_installment_link_is_read_only_when_payment_date_is_covered(db_session):
+    await seed_history(db_session)
+    plan = InstallmentPlan(
+        display_name="Future installment",
+        merchant="Future installment",
+        monthly_amount=1_000,
+        first_payment_date=REFERENCE,
+        total_installments=3,
+        status="active",
+    )
+    payment = tx(date(2031, 7, 21), -1_000, merchant=plan.merchant, category="쇼핑")
+    db_session.add_all([plan, payment])
+    await db_session.flush()
+    db_session.add(
+        InstallmentTransactionLink(
+            transaction_id=payment.id, installment_plan_id=plan.id, installment_number=1
+        )
+    )
+    await classify(db_session)
+    before = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    after = await get_monthly_projection(db_session, reference_date=payment.date)
+    assert before.expense_components[1].expected_remaining is None
+    assert before.expense_components[1].known_expected_remaining == 0
+    assert before.expense_components[1].missing_reasons
+    assert after.expense_components[1].expected_remaining == 0
+    assert after.observed_net_expense - before.observed_net_expense == 1_000
+
+
+@pytest.mark.parametrize("has_old_observation", [False, True])
+async def test_empty_month_end_export_keeps_projection_unavailable(
+    db_session, has_old_observation
+):
+    end = date(2031, 7, 31)
+    db_session.add(
+        UploadLog(snapshot_date=end, status="success", filename="empty.xlsx")
+    )
+    if has_old_observation:
+        db_session.add(tx(date(2031, 6, 30), 1_000))
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=end)
+    assert result.remaining_period_start is None
+    assert result.known_expected_remaining_expense == 0
+    assert result.expected_remaining_expense is None
+    assert result.projected_month_end_net is None
+    assert not result.completeness.full_projection_available
+
+
+async def test_late_snapshot_does_not_make_stale_transactions_fresh(db_session):
+    end = date(2031, 7, 31)
+    db_session.add_all(
+        [
+            tx(date(2031, 7, 20), -100),
+            UploadLog(snapshot_date=end, status="success", filename="snapshot.xlsx"),
+        ]
+    )
+    await db_session.commit()
+    result = await get_monthly_projection(db_session, reference_date=end)
+    assert result.remaining_period_start is None
+    assert result.observed_net_expense == 100
+    assert result.projected_month_end_net is None
+    assert not result.completeness.full_projection_available
+
+
+async def test_forecast_and_auto_apply_choose_merchant_before_description(db_session):
+    await seed_history(db_session)
+    merchant = LoanAccount(lender="Merchant bank", product_name="Loan")
+    description = LoanAccount(lender="Description bank", product_name="Loan")
+    db_session.add_all([merchant, description])
+    await db_session.flush()
+    # The description rule is inserted first and has the lower ID.
+    db_session.add_all(
+        [
+            LoanMerchantRule(
+                match_field="description",
+                merchant="raw payment",
+                loan_account_id=description.id,
+                repayment_type="unknown",
+            ),
+            LoanMerchantRule(
+                match_field="merchant",
+                merchant="normalized payment",
+                loan_account_id=merchant.id,
+                repayment_type="unknown",
+            ),
+        ]
+    )
+    for account in (merchant, description):
+        db_session.add(
+            Loan(
+                snapshot_date=REFERENCE,
+                lender=account.lender,
+                product_name=account.product_name,
+                balance=Decimal(10_000),
+                monthly_payment=Decimal(500),
+                monthly_payment_source="manual",
+            )
+        )
+    overlapping = tx(
+        REFERENCE,
+        -200,
+        merchant="normalized payment",
+        description="raw payment",
+        category="대출",
+    )
+    fallback = tx(
+        REFERENCE,
+        -300,
+        merchant="different merchant",
+        description="raw payment",
+        category="대출",
+    )
+    db_session.add_all([overlapping, fallback])
+
+    before = await project(db_session, reference_date=REFERENCE)
+    await apply_loan_merchant_rules(db_session)
+    linked_accounts = dict(
+        (
+            await db_session.execute(
+                select(
+                    LoanTransactionLink.transaction_id,
+                    LoanTransactionLink.loan_account_id,
+                )
+            )
+        ).all()
+    )
+    assert linked_accounts == {overlapping.id: merchant.id, fallback.id: description.id}
+    after = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    for projection in (before, after):
+        loan = projection.expense_components[0]
+        assert {
+            source.loan_account_id: source.observed_payment_amount
+            for source in loan.sources
+        } == {merchant.id: 200, description.id: 300}
+        assert loan.expected_remaining == 500
+
+
 def recurring_source(result, merchant="Example Recurring"):
     return next(
         source
@@ -692,6 +952,84 @@ def recurring_payment(on, amount, merchant="Example Recurring", **values):
         recurring_payment_kind="monthly_recurring",
         **values,
     )
+
+
+async def test_finite_recurring_expiry_uses_all_payments_as_of_reference(db_session):
+    await seed_history(db_session)
+    db_session.add_all(
+        [
+            recurring_payment(date(2029, 1, 25), -5_000),
+            recurring_payment(date(2031, 7, 19), 800),
+        ]
+    )
+    await classify(db_session)
+    commitment = await db_session.scalar(
+        select(RecurringCommitment).where(
+            RecurringCommitment.merchant == "Example Recurring"
+        )
+    )
+    commitment.cycle = "n_times"
+    commitment.total_count = 8
+    await db_session.commit()
+
+    commitments = await read_commitments(db_session, period="2031-07")
+    item = next(item for item in commitments.data.items if item.kind == "recurring")
+    assert item.remaining_count == 1
+    assert item.linked_count == 8
+    before = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    source = recurring_source(before)
+    assert source.expected_remaining == 5_000
+    assert "회차 간격은 기록되어 있지 않아" in source.basis
+    assert source.observed_refund_amount == 800
+
+    db_session.add_all(
+        [
+            recurring_payment(date(2031, 7, 25), -5_000),
+            tx(date(2031, 8, 20), -100, merchant="Grocer", category="식비"),
+        ]
+    )
+    await db_session.commit()
+    assert before == await get_monthly_projection(db_session, reference_date=REFERENCE)
+    finished = await get_monthly_projection(
+        db_session, reference_date=date(2031, 7, 25)
+    )
+    assert recurring_source(finished).observed_payment_amount == 5_000
+    assert recurring_source(finished).expected_remaining == 0
+    next_month = await get_monthly_projection(
+        db_session, reference_date=date(2031, 8, 20)
+    )
+    assert next_month.expense_components[2].expected_remaining == 0
+    assert next_month.expense_components[2].sources == []
+    commitments = await read_commitments(db_session, period="2031-08")
+    item = next(item for item in commitments.data.items if item.kind == "recurring")
+    assert item.remaining_count == 0
+    assert item.observation.reason == "all_counts_observed"
+
+
+async def test_unobserved_finite_interval_does_not_create_a_monthly_payment(db_session):
+    commitment = RecurringCommitment(
+        match_scope="merchant",
+        merchant="Rare payment",
+        category_major="생활",
+        cycle="n_times",
+        total_count=3,
+        origin="user",
+    )
+    db_session.add_all(
+        [
+            commitment,
+            recurring_payment(date(2031, 6, 25), -5_000, commitment.merchant),
+            tx(REFERENCE, -100, merchant="Grocer", category="식비"),
+        ]
+    )
+    await db_session.commit()
+    projection = await get_monthly_projection(db_session, reference_date=REFERENCE)
+    assert projection.expense_components[2].expected_remaining == 0
+    assert projection.expense_components[2].sources == []
+    commitments = await read_commitments(db_session, period="2031-07")
+    (item,) = commitments.data.items
+    assert item.remaining_count == 2
+    assert item.observation.reason == "cycle_interval_not_recorded"
 
 
 @pytest.mark.parametrize("history_months", [(6,), (5, 6)])
@@ -1082,8 +1420,6 @@ async def test_ambiguous_installment_matches_still_block_month_end(db_session):
 
 async def test_t066_prefix_next_month_and_exact_projection_conservation(db_session):
     """다음 달 다른 끝 숫자도 같은 약정이며 exact 기준 전망 숫자를 보존한다."""
-    from app.models.nature_axes import RecurringCommitment
-
     await seed_history(db_session)
     await classify(db_session)
     commitment = await db_session.scalar(

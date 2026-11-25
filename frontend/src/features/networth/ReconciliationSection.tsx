@@ -96,10 +96,24 @@ function KindTable({ data }: { data: NetWorthReconciliationResponse }) {
           {data.kinds.map((kind) => (
             <tr key={kind.kind}>
               <th scope="row" className="px-2 py-1.5 text-left font-medium text-text-primary">{KIND_TEXT[kind.kind]}</th>
-              <td className="tnum px-2 py-1.5 break-words">{kind.start_as_of ?? '없음'}<br /><span className="text-text-muted">{kind.start_value != null ? formatNetWon(kind.start_value) : EM_DASH}</span></td>
-              <td className="tnum px-2 py-1.5 break-words">{kind.end_as_of ?? '없음'}<br /><span className="text-text-muted">{kind.end_value != null ? formatNetWon(kind.end_value) : EM_DASH}</span></td>
+              {(['start', 'end'] as const).map((side) => {
+                const value = kind[`${side}_value`]
+                const knownTotal = kind[`${side}_known_value_total`]
+                const missing = kind[`${side}_value_withheld_reason`] === 'snapshot_value_missing'
+                return (
+                  <td key={side} className="tnum px-2 py-1.5 break-words">
+                    {kind[`${side}_as_of`] ?? '없음'}<br />
+                    <span className="text-text-muted">
+                      {value != null ? formatNetWon(value) : missing ? '값 누락' : EM_DASH}
+                      {knownTotal != null ? <><br />확인된 값 합계 {formatNetWon(knownTotal)}</> : null}
+                    </span>
+                  </td>
+                )
+              })}
               <td className="px-2 py-1.5">
-                {kind.pair_status === 'mismatched' ? <Badge variant="warn">{PAIR_STATUS_TEXT.mismatched}</Badge> : PAIR_STATUS_TEXT[kind.pair_status]}
+                {kind.pair_status === 'mismatched' || kind.pair_status === 'incomplete'
+                  ? <Badge variant="warn">{PAIR_STATUS_TEXT[kind.pair_status]}</Badge>
+                  : PAIR_STATUS_TEXT[kind.pair_status]}
               </td>
             </tr>
           ))}

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,15 +48,17 @@ async def reconcile_transaction_source_lifecycle(
         return TransactionLifecycleReconciliationResult(tx_new=0, tx_skipped=0)
 
     window_start, window_end = transaction_window_bounds(parsed_rows)
+    tolerance = timedelta(seconds=SOURCE_CHANGED_MATCH_SECONDS)
     existing_rows = await get_imported_transactions_in_window(
         db_session,
-        window_start,
-        window_end,
+        window_start - tolerance,
+        window_end + tolerance,
     )
     new_transactions, result = _build_reconciliation_plan(
         parsed_rows,
         existing_rows,
         upload_log,
+        missing_window=(window_start, window_end),
     )
     db_session.add_all(new_transactions)
     return result
@@ -109,6 +111,8 @@ def _build_reconciliation_plan(
     parsed_rows: list[TransactionRow],
     existing_rows: list[Transaction],
     upload_log: UploadLog,
+    *,
+    missing_window: tuple[datetime, datetime],
 ) -> tuple[list[Transaction], TransactionLifecycleReconciliationResult]:
     exact_hash_buckets = _build_source_hash_buckets(existing_rows)
 
@@ -151,7 +155,12 @@ def _build_reconciliation_plan(
         new_transactions.append(build_imported_transaction(row, touch))
 
     for missing_row in _remaining_fallback_rows(fallback_buckets):
-        mark_missing_from_latest_export(missing_row)
+        if (
+            missing_window[0]
+            <= datetime.combine(missing_row.date, missing_row.time)
+            <= missing_window[1]
+        ):
+            mark_missing_from_latest_export(missing_row)
 
     result = TransactionLifecycleReconciliationResult(
         tx_new=len(new_transactions),

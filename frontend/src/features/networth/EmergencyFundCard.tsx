@@ -9,12 +9,12 @@ import { useEmergencyFund } from '../../hooks/useNetWorth'
 import type { EmergencyFundStatus } from '../../types/netWorth'
 import { formatDateKo } from '../analysis/periods'
 import { loadErrorMessage, sharePct } from '../analysis/text'
-import { baselineText, emergencyFundReasons } from './netWorthText'
+import { baselineText, emergencyFundReasons, hasUndecidedExpenses } from './netWorthText'
 
 const STATUS_LABEL: Record<EmergencyFundStatus, string> = {
   complete: '분류 완료 기준',
   incomplete_classification: '미정 지출 있음',
-  no_baseline: '기준 기간 없음',
+  no_baseline: '개월 수 산정 보류',
   no_asset_snapshot: '자산 스냅샷 없음',
 }
 
@@ -49,13 +49,12 @@ export function EmergencyFundCard() {
                   {data.status === 'complete' ? '✓ ' : '! '}
                   {STATUS_LABEL[data.status]}
                 </Badge>
-                {data.status === 'incomplete_classification' ? <span className="text-micro text-text-muted">개월 수가 실제보다 클 수 있음</span> : null}
               </div>
             </div>
           </div>
           <dl className="grid gap-2 text-caption sm:grid-cols-2">
             <div className="rounded-md border border-border bg-bg-inset p-2.5">
-              <dt className="text-micro text-text-muted">현금성 자산 (나누는 수)</dt>
+              <dt className="text-micro text-text-muted">현금성 자산 (분자)</dt>
               <dd className="tnum mt-0.5 font-semibold text-text-primary">{data.cash_like_total != null ? formatNetWon(data.cash_like_total) : EM_DASH}</dd>
               <dd className="mt-0.5 text-micro text-text-muted">
                 자산 스냅샷 {formatDateKo(data.asset_snapshot_date)} 기준
@@ -63,7 +62,7 @@ export function EmergencyFundCard() {
               </dd>
             </div>
             <div className="rounded-md border border-border bg-bg-inset p-2.5">
-              <dt className="text-micro text-text-muted">월 보호 지급 (나누는 값)</dt>
+              <dt className="text-micro text-text-muted">월 보호 지급 (분모)</dt>
               <dd className="tnum mt-0.5 font-semibold text-text-primary">{data.monthly_protected_outflow != null ? formatNetWon(data.monthly_protected_outflow) : EM_DASH}</dd>
               <dd className="mt-0.5 text-micro text-text-muted">{baselineText(data)}</dd>
             </div>
@@ -72,7 +71,7 @@ export function EmergencyFundCard() {
               <dd className="tnum mt-0.5 font-semibold text-text-primary">{sharePct(data.adjustability_undecided_share)}</dd>
               <dd className="mt-0.5 text-micro text-text-muted">
                 미정 지출 월 중앙값 {data.monthly_adjustability_undecided_outflow != null ? formatNetWon(data.monthly_adjustability_undecided_outflow) : EM_DASH}
-                {(data.adjustability_undecided_share ?? 0) > 0 ? (
+                {hasUndecidedExpenses(data) ? (
                   <>
                     {' · '}
                     <Link to="/data/inbox" className="text-transfer hover:underline">분류하러 가기</Link>

@@ -16,7 +16,7 @@ every transaction dated on or before an as-of day is assumed known then.
 from datetime import date
 from statistics import median
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.income_projection import (
@@ -27,13 +27,13 @@ from app.schemas.income_projection import (
 )
 from app.services.metric_views import (
     FLOW_LINES_VIEW,
-    METRIC_TRANSACTIONS_VIEW,
     flow_summary_columns,
 )
 from app.services.monthly_projection_service import (
     _month_end,
     _period,
     _shift_month,
+    covered_evaluation_periods,
     get_monthly_projection,
 )
 
@@ -47,6 +47,7 @@ BANDS = (
 DEFINITION = (
     "최근 마감월(전망 월 직전 최대 3개월)마다 5·10·15·20·25일을 기준일로 같은 전망 코드를 "
     "다시 돌려, 월말 순현금흐름 전망과 그 달 흐름표 잔여(residual)를 비교한 오차. "
+    "첫 부분월과 거래 관측 공백이 있는 달, 자료가 월말에 닿지 않은 최근 월은 제외한다. "
     "부호 오차 = 전망 - 실제(양수 = 과대 전망), 원 단위 중앙값. 보류된 점은 오차에서 빼고 "
     "점 수로만 센다."
 )
@@ -99,29 +100,23 @@ async def get_projection_accuracy(
     days: tuple[int, ...] = ACCURACY_DAYS,
 ) -> ProjectionAccuracy:
     month_start = reference_date.replace(day=1)
-    first = await db_session.scalar(
-        select(func.min(METRIC_TRANSACTIONS_VIEW.c.date)).where(
-            METRIC_TRANSACTIONS_VIEW.c.date <= reference_date
-        )
-    )
-    first_date = (
-        None
-        if first is None
-        else first
-        if isinstance(first, date)
-        else date.fromisoformat(str(first)[:10])
+    periods = await covered_evaluation_periods(
+        db_session,
+        [
+            _period(_shift_month(month_start, -offset))
+            for offset in range(months, 0, -1)
+        ],
+        reference_date=reference_date,
     )
     actuals: list[ProjectionAccuracyActual] = []
     points: list[tuple[int, MonthlyProjection, dict[str, int]]] = []
-    for offset in range(months, 0, -1):
-        start = _shift_month(month_start, -offset)
-        if first_date is None or start < first_date.replace(day=1):
-            continue
+    for period in periods:
+        start = date.fromisoformat(f"{period}-01")
         end = _month_end(start)
         actual = await _actual_month(db_session, start, end)
         actuals.append(
             ProjectionAccuracyActual(
-                period=_period(start),
+                period=period,
                 variable_ongoing_actual=actual["variable_ongoing_actual"],
             )
         )
