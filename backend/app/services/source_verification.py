@@ -8,15 +8,20 @@ from io import BytesIO
 import random
 
 from openpyxl import load_workbook
+from openpyxl.workbook import Workbook
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset_snapshot import AssetSnapshot
 from app.models.investment import Investment
 from app.models.loan import Loan
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
 from app.parsers.snapshots import parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
+from app.services.metric_views import METRIC_CURRENCY
+from app.services.transaction_source_lifecycle_service import (
+    SOURCE_CHANGED_MATCH_SECONDS,
+)
 from app.services.transaction_source_identity import fallback_signature_from_row
 from app.services.transaction_source_identity import seconds_since_midnight_from_row
 from app.services.transaction_source_identity import (
@@ -73,6 +78,30 @@ class ImportParityReport:
     snapshots: SnapshotParityReport
     cashflow_benchmarks: CashflowBenchmarkParityReport
 
+    @property
+    def has_mismatches(self) -> bool:
+        return bool(
+            self.transaction.missing_sample_indices
+            or self.cashflow_benchmarks.mismatches
+            or any(
+                section.missing_rows or section.extra_rows
+                for section in (
+                    self.snapshots.asset_snapshots,
+                    self.snapshots.investments,
+                    self.snapshots.loans,
+                )
+            )
+        )
+
+
+SOURCE_TRANSACTIONS = (
+    Transaction.source == "import",
+    Transaction.superseded_by_transaction_id.is_(None),
+    Transaction.source_lifecycle_status.is_distinct_from(
+        TransactionSourceLifecycleStatus.SUPERSEDED
+    ),
+)
+
 
 async def verify_import_parity(
     db_session: AsyncSession,
@@ -82,6 +111,25 @@ async def verify_import_parity(
     transaction_sample_seed: int = 20260324,
 ) -> ImportParityReport:
     workbook = load_workbook(BytesIO(workbook_bytes), data_only=True)
+    try:
+        return await verify_open_workbook_parity(
+            db_session,
+            workbook,
+            snapshot_date,
+            transaction_sample_size,
+            transaction_sample_seed,
+        )
+    finally:
+        workbook.close()
+
+
+async def verify_open_workbook_parity(
+    db_session: AsyncSession,
+    workbook: Workbook,
+    snapshot_date: date,
+    transaction_sample_size: int = 10,
+    transaction_sample_seed: int = 20260324,
+) -> ImportParityReport:
     parsed_transactions = parse_transactions(workbook)
     parsed_snapshots = normalize_snapshots_for_storage(parse_snapshots(workbook))
 
@@ -123,7 +171,10 @@ async def _verify_transaction_parity(
     sample_seed: int,
 ) -> TransactionParityReport:
     db_rows = (
-        await db_session.scalar(select(func.count()).select_from(Transaction)) or 0
+        await db_session.scalar(
+            select(func.count()).select_from(Transaction).where(*SOURCE_TRANSACTIONS)
+        )
+        or 0
     )
     sampled_indices = sorted(
         random.Random(sample_seed).sample(
@@ -156,6 +207,7 @@ async def _row_exists_exactly(
     exists = await db_session.scalar(
         select(func.count())
         .select_from(Transaction)
+        .where(*SOURCE_TRANSACTIONS)
         .where(Transaction.date == row["date"])
         .where(Transaction.time == row["time"])
         .where(Transaction.type == row["type"])
@@ -189,6 +241,7 @@ async def _row_exists_by_import_fallback(
     fallback_signature = fallback_signature_from_row(row)
     result = await db_session.execute(
         select(Transaction)
+        .where(*SOURCE_TRANSACTIONS)
         .where(Transaction.date == fallback_signature[0])
         .where(Transaction.type == fallback_signature[1])
         .where(Transaction.description == fallback_signature[2])
@@ -202,7 +255,10 @@ async def _row_exists_by_import_fallback(
     )
     row_seconds = seconds_since_midnight_from_row(row)
     for candidate in result.scalars().all():
-        if abs(seconds_since_midnight_from_transaction(candidate) - row_seconds) <= 60:
+        if (
+            abs(seconds_since_midnight_from_transaction(candidate) - row_seconds)
+            <= SOURCE_CHANGED_MATCH_SECONDS
+        ):
             return True
     return False
 
@@ -264,20 +320,24 @@ async def _verify_cashflow_benchmark_parity(
     end_date = _period_end(periods[-1])
     result = await db_session.execute(
         select(Transaction)
+        .where(*SOURCE_TRANSACTIONS)
         .where(Transaction.date >= start_date)
         .where(Transaction.date <= end_date)
         .where(Transaction.type.in_(["수입", "지출"]))
         .where(Transaction.is_deleted.is_(False))
         .where(Transaction.merged_into_id.is_(None))
+        .where(func.upper(Transaction.currency) == METRIC_CURRENCY)
     )
     actual_by_key: dict[tuple[str, str, str], Decimal] = {}
     for row in result.scalars().all():
         period = f"{row.date:%Y-%m}"
-        category_major = row.category_major_user or row.category_major or "미분류"
+        # Match workbook posting month and raw category, independent of user overrides
+        # and the canonical allocation of a refund to its original purchase.
+        category_major = row.category_major or "미분류"
         key = (period, row.type, category_major)
         amount = Decimal(row.amount)
         if row.type == "지출":
-            amount = abs(amount)
+            amount = -amount
         actual_by_key[key] = actual_by_key.get(key, Decimal("0")) + amount
 
     mismatches: list[CashflowBenchmarkMismatch] = []

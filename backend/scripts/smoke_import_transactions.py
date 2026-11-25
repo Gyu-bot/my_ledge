@@ -32,7 +32,9 @@ def _sample_workbook_path(explicit_path: str | None) -> Path:
     return default_path
 
 
-async def _run(snapshot_date: date | None, workbook_path: Path) -> dict[str, object]:
+async def _run(
+    snapshot_date: date, workbook_path: Path
+) -> tuple[str, dict[str, object]]:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(
@@ -56,12 +58,13 @@ async def _run(snapshot_date: date | None, workbook_path: Path) -> dict[str, obj
                 select(func.count()).select_from(UploadLog)
             )
 
-            return {
+            return result.status, {
                 "result": {
                     "tx_total": result.tx_total,
                     "tx_new": result.tx_new,
                     "tx_skipped": result.tx_skipped,
                     "status": result.status,
+                    "error_message": result.error_message,
                 },
                 "db": {
                     "transactions": transaction_count,
@@ -73,18 +76,22 @@ async def _run(snapshot_date: date | None, workbook_path: Path) -> dict[str, obj
         await engine.dispose()
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run a PostgreSQL smoke import using the sample workbook.",
     )
-    parser.add_argument("--snapshot-date", type=date.fromisoformat, default=None)
+    parser.add_argument("--snapshot-date", type=date.fromisoformat, required=True)
     parser.add_argument("--workbook", default=None)
     args = parser.parse_args()
 
-    workbook_path = _sample_workbook_path(args.workbook)
-    payload = asyncio.run(_run(args.snapshot_date, workbook_path))
+    try:
+        workbook_path = _sample_workbook_path(args.workbook)
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
+    status, payload = asyncio.run(_run(args.snapshot_date, workbook_path))
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if status == "success" else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

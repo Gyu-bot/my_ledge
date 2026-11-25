@@ -8,13 +8,15 @@ from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
+from openpyxl import load_workbook
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import get_settings
-from app.services.source_verification import verify_import_parity
-from app.services.upload_service import import_transactions_from_workbook
+from app.parsers.decrypt import open_excel_bytes
+from app.services.source_verification import verify_open_workbook_parity
+from app.services.upload_service import import_transactions_from_open_workbook
 
 
 def _sample_workbook_path(explicit_path: str | None) -> Path:
@@ -37,38 +39,51 @@ async def _run(
     sample_size: int,
     sample_seed: int,
 ) -> dict[str, object]:
-    settings = get_settings()
-    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    session_factory = async_sessionmaker(
-        bind=engine, class_=AsyncSession, expire_on_commit=False
-    )
-
+    payload: dict[str, object] = {
+        "workbook": str(workbook_path),
+        "snapshot_date": snapshot_date.isoformat(),
+        "import_result": None,
+        "report": None,
+    }
+    stage = "open_workbook"
     try:
-        async with session_factory() as session:
-            await import_transactions_from_workbook(
-                db_session=session,
-                file_bytes=workbook_path.read_bytes(),
-                filename=workbook_path.name,
-                snapshot_date=snapshot_date,
-                excel_password=settings.excel_password,
+        settings = get_settings()
+        with open_excel_bytes(
+            workbook_path.read_bytes(), settings.excel_password
+        ) as buffer:
+            workbook = load_workbook(buffer, data_only=True)
+        try:
+            stage = "import"
+            engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+            factory = async_sessionmaker(
+                bind=engine, class_=AsyncSession, expire_on_commit=False
             )
-            report = await verify_import_parity(
-                db_session=session,
-                workbook_bytes=workbook_path.read_bytes(),
-                snapshot_date=snapshot_date,
-                transaction_sample_size=sample_size,
-                transaction_sample_seed=sample_seed,
-            )
-            return {
-                "workbook": str(workbook_path),
-                "snapshot_date": snapshot_date.isoformat(),
-                "report": asdict(report),
-            }
-    finally:
-        await engine.dispose()
+            try:
+                async with factory() as session:
+                    result = await import_transactions_from_open_workbook(
+                        session, workbook, workbook_path.name, snapshot_date
+                    )
+                    payload.update(status=result.status, import_result=asdict(result))
+                    if result.status != "success":
+                        return payload
+                    stage = "verify"
+                    report = await verify_open_workbook_parity(
+                        session, workbook, snapshot_date, sample_size, sample_seed
+                    )
+                payload.update(
+                    status="mismatch" if report.has_mismatches else "success",
+                    report=asdict(report),
+                )
+            finally:
+                await engine.dispose()
+        finally:
+            workbook.close()
+    except Exception as exc:
+        payload.update(status="failed", failed_stage=stage, error_message=str(exc))
+    return payload
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Import a workbook and verify transaction/sample + snapshot parity.",
     )
@@ -77,13 +92,19 @@ def main() -> None:
     parser.add_argument("--sample-size", type=int, default=12)
     parser.add_argument("--sample-seed", type=int, default=20260324)
     args = parser.parse_args()
+    if args.sample_size < 0:
+        parser.error("--sample-size must be non-negative")
 
-    workbook_path = _sample_workbook_path(args.workbook)
+    try:
+        workbook_path = _sample_workbook_path(args.workbook)
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
     payload = asyncio.run(
         _run(args.snapshot_date, workbook_path, args.sample_size, args.sample_seed)
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    return 0 if payload["status"] == "success" else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

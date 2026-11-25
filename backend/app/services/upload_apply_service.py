@@ -49,6 +49,10 @@ from app.services.loan_mapping_service import (
 from app.services.upload_service import persist_original_upload, replace_snapshots
 from app.services.nature_axes_service import move_nature_override
 from app.services.transfer_purpose_service import move_transfer_purpose_override
+from app.services.settlement_match_service import (
+    SettlementReplacementConflict,
+    rebind_settlement_matches,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,12 +134,19 @@ async def apply_transaction_upload_from_rows(
             point_id = await rollback_points.begin_point(db_session, upload_log.id)
 
             created_transaction_count = 0
-            for entry in selected_entries:
-                created_transaction_count += await _apply_selected_plan_entry(
-                    db_session=db_session,
-                    upload_log=upload_log,
-                    entry=entry,
-                )
+            for index, entry in enumerate(selected_entries):
+                try:
+                    created_transaction_count += await _apply_selected_plan_entry(
+                        db_session=db_session,
+                        upload_log=upload_log,
+                        entry=entry,
+                    )
+                except SettlementReplacementConflict as exc:
+                    raise UploadApplySelectionError(
+                        code="settlement_replacement_conflict",
+                        message=str(exc),
+                        selection_index=index,
+                    ) from exc
 
             if parsed_snapshots is not None:
                 normalized_snapshots = await replace_snapshots(
@@ -313,6 +324,11 @@ async def _apply_selected_plan_entry(
             _copy_user_managed_fields(transaction, replacement)
             db_session.add(replacement)
             await db_session.flush()
+            await rebind_settlement_matches(
+                db_session,
+                old_transaction_id=transaction.id,
+                new_transaction_id=replacement.id,
+            )
             transaction.source_lifecycle_status = (
                 TransactionSourceLifecycleStatus.SUPERSEDED.value
             )

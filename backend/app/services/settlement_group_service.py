@@ -3,10 +3,10 @@ from dataclasses import dataclass
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.models.settlement_group import SettlementMatch, SettlementMatchStatus
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
+from app.services.metric_views import METRIC_CURRENCY, REFUND_ALLOCATIONS_VIEW
 from app.services.settlement_group_matching import (
     SettlementGroupSnapshot,
     build_snapshots,
@@ -24,31 +24,30 @@ async def reconcile_settlement_matches(
     db_session: AsyncSession,
 ) -> list[SettlementGroupSnapshot]:
     transactions = await _load_transactions(db_session)
-    transaction_ids = {transaction.id for transaction in transactions}
     matchable_transactions = [
         transaction
         for transaction in transactions
         if _is_auto_match_lifecycle_safe(transaction)
     ]
-    manual_matches = _filter_manual_matches_to_transaction_basis(
-        await _load_manual_matches(db_session),
-        transaction_ids=transaction_ids,
-    )
+    manual_matches = await _load_manual_matches(db_session)
+    confirmed_matches = [
+        match
+        for match in await _load_confirmed_matches(db_session)
+        if match.status == SettlementMatchStatus.USER_CONFIRMED.value
+    ]
     await _delete_computed_matches(db_session)
 
     purchases = [tx for tx in matchable_transactions if tx.amount < 0]
     refunds = [tx for tx in matchable_transactions if tx.amount > 0]
     purchase_amounts = {tx.id: abs(tx.amount) for tx in purchases}
-    allocated_by_purchase = _manual_allocations(manual_matches)
+    allocated_by_purchase = _manual_allocations(confirmed_matches)
+    # Even an invalid historical decision still owns its pair's unique key.
     rejected_pairs = {
         (match.original_transaction_id, match.settlement_transaction_id)
         for match in manual_matches
-        if match.status == SettlementMatchStatus.REJECTED.value
     }
     manually_confirmed_refunds = {
-        match.settlement_transaction_id
-        for match in manual_matches
-        if match.status == SettlementMatchStatus.USER_CONFIRMED.value
+        match.settlement_transaction_id for match in confirmed_matches
     }
 
     computed_matches: list[SettlementMatch] = []
@@ -93,7 +92,7 @@ async def reconcile_settlement_matches(
         db_session.add_all(computed_matches)
     await db_session.commit()
 
-    all_matches = manual_matches + computed_matches
+    all_matches = confirmed_matches + computed_matches
     return build_snapshots(transactions=transactions, matches=all_matches)
 
 
@@ -152,34 +151,11 @@ async def _load_manual_matches(db_session: AsyncSession) -> list[SettlementMatch
 
 
 async def _load_confirmed_matches(db_session: AsyncSession) -> list[SettlementMatch]:
-    original_transaction = aliased(Transaction)
-    settlement_transaction = aliased(Transaction)
     result = await db_session.execute(
-        select(SettlementMatch)
-        .join(
-            original_transaction,
-            SettlementMatch.original_transaction_id == original_transaction.id,
+        select(SettlementMatch).join(
+            REFUND_ALLOCATIONS_VIEW,
+            SettlementMatch.id == REFUND_ALLOCATIONS_VIEW.c.settlement_match_id,
         )
-        .join(
-            settlement_transaction,
-            SettlementMatch.settlement_transaction_id == settlement_transaction.id,
-        )
-        .where(
-            SettlementMatch.status.in_(
-                [
-                    SettlementMatchStatus.AUTO_CONFIRMED.value,
-                    SettlementMatchStatus.USER_CONFIRMED.value,
-                ]
-            )
-        )
-        .where(original_transaction.type == "지출")
-        .where(original_transaction.is_deleted.is_(False))
-        .where(original_transaction.merged_into_id.is_(None))
-        .where(original_transaction.amount < 0)
-        .where(settlement_transaction.type == "지출")
-        .where(settlement_transaction.is_deleted.is_(False))
-        .where(settlement_transaction.merged_into_id.is_(None))
-        .where(settlement_transaction.amount > 0)
     )
     return result.scalars().all()
 
@@ -201,29 +177,27 @@ async def _delete_computed_matches(db_session: AsyncSession) -> None:
 def _manual_allocations(matches: list[SettlementMatch]) -> dict[int, int]:
     allocations: dict[int, int] = {}
     for match in matches:
-        if match.status != SettlementMatchStatus.USER_CONFIRMED.value:
-            continue
         allocations[match.original_transaction_id] = (
             allocations.get(match.original_transaction_id, 0) + match.matched_amount
         )
     return allocations
 
 
-def _filter_manual_matches_to_transaction_basis(
-    matches: list[SettlementMatch],
-    *,
-    transaction_ids: set[int],
-) -> list[SettlementMatch]:
-    return [
-        match
-        for match in matches
-        if match.original_transaction_id in transaction_ids
-        and match.settlement_transaction_id in transaction_ids
-    ]
+def is_canonical_settlement_participant(transaction: Transaction) -> bool:
+    return (
+        not transaction.is_deleted
+        and transaction.merged_into_id is None
+        and transaction.superseded_by_transaction_id is None
+        and transaction.source_lifecycle_status
+        != TransactionSourceLifecycleStatus.SUPERSEDED
+        and transaction.currency.upper() == METRIC_CURRENCY
+    )
 
 
 def _is_auto_match_lifecycle_safe(transaction: Transaction) -> bool:
-    return transaction.source_lifecycle_status in {
+    return is_canonical_settlement_participant(
+        transaction
+    ) and transaction.source_lifecycle_status in {
         TransactionSourceLifecycleStatus.ACTIVE.value,
         None,
     }

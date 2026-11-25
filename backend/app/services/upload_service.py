@@ -2,11 +2,11 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from io import BytesIO
 from pathlib import Path
 import re
 
 from openpyxl import load_workbook
+from openpyxl.workbook import Workbook
 from sqlalchemy import Numeric, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,45 +93,58 @@ async def import_transactions_from_workbook(
     persist_upload_file: bool = False,
     upload_dir: Path | None = None,
 ) -> TransactionImportResult:
-    # The legacy path commits in stages; hold the import/rollback lock across them.
-    await rollback_points.lock_session(db_session)
-    try:
-        return await _import_transactions_from_workbook(
-            db_session,
-            file_bytes,
-            filename,
-            snapshot_date,
-            excel_password=excel_password,
-            persist_upload_file=persist_upload_file,
+    if persist_upload_file and upload_dir is None:
+        raise ValueError("upload_dir is required when persist_upload_file=True")
+    with open_excel_bytes(file_bytes, password=excel_password) as workbook_buffer:
+        workbook = load_workbook(workbook_buffer, data_only=True)
+        try:
+            result = await import_transactions_from_open_workbook(
+                db_session, workbook, filename, snapshot_date
+            )
+        finally:
+            workbook.close()
+    if persist_upload_file:
+        assert upload_dir is not None
+        persist_original_upload(
             upload_dir=upload_dir,
+            upload_id=result.upload_id,
+            filename=filename,
+            file_bytes=file_bytes,
         )
-    finally:
-        await rollback_points.unlock_session(db_session)
+    return result
 
 
-async def _import_transactions_from_workbook(
+async def import_transactions_from_open_workbook(
     db_session: AsyncSession,
-    file_bytes: bytes,
+    workbook: Workbook,
     filename: str,
     snapshot_date: date,
-    excel_password: str | None = None,
-    persist_upload_file: bool = False,
-    upload_dir: Path | None = None,
 ) -> TransactionImportResult:
-    workbook_buffer = open_excel_bytes(file_bytes, password=excel_password)
-    workbook = load_workbook(BytesIO(workbook_buffer.read()), data_only=True)
+    try:
+        return await _write_legacy_import(db_session, workbook, filename, snapshot_date)
+    except BaseException:
+        await db_session.rollback()
+        raise
+
+
+async def _write_legacy_import(
+    db_session: AsyncSession,
+    workbook: Workbook,
+    filename: str,
+    snapshot_date: date,
+) -> TransactionImportResult:
+    # The outer transaction holds the same lock across both independently fallible stages.
+    await rollback_points.lock(db_session)
     upload_log = UploadLog(
         filename=filename,
         snapshot_date=snapshot_date,
         status="processing",
     )
     db_session.add(upload_log)
-    await db_session.commit()
+    await db_session.flush()
     await db_session.refresh(upload_log)
     upload_id = upload_log.id
-    # Legacy path commits in stages: capture before its first ledger write.
     point_id = await rollback_points.begin_point(db_session, upload_id)
-    await db_session.commit()
 
     tx_total = 0
     tx_new = 0
@@ -147,36 +160,33 @@ async def _import_transactions_from_workbook(
     try:
         parsed_rows = parse_transactions(workbook)
         tx_total = len(parsed_rows)
-        lifecycle_result = await reconcile_transaction_source_lifecycle(
-            db_session,
-            parsed_rows,
-            upload_log,
-        )
+        async with db_session.begin_nested():
+            lifecycle_result = await reconcile_transaction_source_lifecycle(
+                db_session, parsed_rows, upload_log
+            )
         tx_new = lifecycle_result.tx_new
         tx_skipped = lifecycle_result.tx_skipped
-        await db_session.commit()
-        await apply_enabled_auto_classification_after_upload(db_session)
-        await db_session.commit()
+        async with db_session.begin_nested():
+            await apply_enabled_auto_classification_after_upload(db_session)
 
         tx_success = True
     except Exception as exc:
-        await db_session.rollback()
         errors.append(f"transactions: {exc}")
 
     try:
         parsed_snapshots = parse_snapshots(workbook)
-        normalized_snapshots = await replace_snapshots(
-            db_session, snapshot_date, parsed_snapshots
-        )
-        await db_session.flush()
-        await apply_loan_repayment_estimates_for_latest_snapshots(
-            db_session,
-            loan_keys=[
-                (str(row["lender"]), str(row["product_name"]))
-                for row in normalized_snapshots.loans
-            ],
-        )
-        await db_session.commit()
+        async with db_session.begin_nested():
+            normalized_snapshots = await replace_snapshots(
+                db_session, snapshot_date, parsed_snapshots
+            )
+            await db_session.flush()
+            await apply_loan_repayment_estimates_for_latest_snapshots(
+                db_session,
+                loan_keys=[
+                    (str(row["lender"]), str(row["product_name"]))
+                    for row in normalized_snapshots.loans
+                ],
+            )
 
         asset_snapshot_count = len(parsed_snapshots.asset_snapshots)
         insurance_contract_count = len(parsed_snapshots.insurance_contracts)
@@ -184,7 +194,6 @@ async def _import_transactions_from_workbook(
         loan_count = len(parsed_snapshots.loans)
         snapshot_success = True
     except Exception as exc:
-        await db_session.rollback()
         errors.append(f"snapshots: {exc}")
 
     status = _resolve_status(tx_success=tx_success, snapshot_success=snapshot_success)
@@ -200,16 +209,6 @@ async def _import_transactions_from_workbook(
     await db_session.flush()
     await rollback_points.finish_point(db_session, point_id, upload_id)
     await db_session.commit()
-
-    if persist_upload_file:
-        if upload_dir is None:
-            raise ValueError("upload_dir is required when persist_upload_file=True")
-        persist_original_upload(
-            upload_dir=upload_dir,
-            upload_id=upload_id,
-            filename=filename,
-            file_bytes=file_bytes,
-        )
 
     return TransactionImportResult(
         upload_id=upload_id,
@@ -252,7 +251,7 @@ def _prune_original_uploads(*, upload_dir: Path, keep: int) -> None:
         return
     saved_files = sorted(path for path in upload_dir.iterdir() if path.is_file())
     for path in saved_files[:-keep]:
-        path.unlink()
+        path.unlink(missing_ok=True)
 
 
 async def snapshot_replacement_rows(
