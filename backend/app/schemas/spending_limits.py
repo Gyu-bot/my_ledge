@@ -69,6 +69,7 @@ class LimitComparison(BaseModel):
     target_value: str
     target_label: str
     actual_amount: int | None
+    one_off_amount: int | None
     limit_amount: int | None
     limit_revision_id: int | None
     effective_from_period: str | None

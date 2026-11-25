@@ -22,7 +22,7 @@ from app.schemas.metrics import (
     MetricAsOf,
     MetricContract,
 )
-from app.schemas.comparison import ContributionItem
+from app.schemas.comparison import ContributionItem, OneOffMode
 from app.schemas.read_surface import (
     ADJUSTABILITY_LABELS,
     COMMITMENT_KIND_LABELS,
@@ -49,6 +49,8 @@ from app.schemas.read_surface import (
     ReadDataStatusResponse,
     ReadMonthlyFlowData,
     ReadMonthlyFlowResponse,
+    ReadOneOffEventsData,
+    ReadOneOffEventsResponse,
     ReadMonthProjectionResponse,
     ReadProjectionAsOf,
     ReadPeriodScope,
@@ -63,6 +65,7 @@ from app.services.comparison_service import (
     get_change_contributions,
     get_monthly_flow_comparison,
 )
+from app.services.one_off_event_service import list_events
 from app.services.metric_views import (
     EXPENSE,
     FLOW_LINES_VIEW,
@@ -73,6 +76,7 @@ from app.services.metrics_service import (
     get_metric_data_status,
     get_monthly_flow,
     get_spend_cube,
+    load_as_of,
     month_data_coverage,
     build_flow_contract,
     ratio,
@@ -519,6 +523,40 @@ FLOW_ASSUMPTIONS = [
 # --------------------------------------------------------------------------
 
 
+async def read_one_off_events(db_session: AsyncSession) -> ReadOneOffEventsResponse:
+    as_of = await load_as_of(db_session)
+    state, reasons = resolve_status(as_of=as_of, scope=None, classification=None)
+    return ReadOneOffEventsResponse(
+        surface="one_off_events",
+        surface_label="일회성 지출",
+        questions=["Q1", "Q3"],
+        status=state,
+        status_label=STATUS_LABELS[state],
+        status_reasons=reasons,
+        as_of=read_as_of(as_of),
+        basis=ReadBasis(
+            definition="one_off_events.v1",
+            scope="사람이 지정한 일회성 지출 묶음의 직접 소속 개수와 게시월 귀속 금액.",
+            rules={
+                "direct_membership": "one_off_event_members의 현재 직접 소속. 비활성·약정 전환 소속도 개수에 포함.",
+                "amount_attribution": "vw_metric_flow_lines의 유효 KRW 비약정 지출 순액. 확정 배분 환불은 원구매 묶음, 환불 잔액은 환불 자체의 묶음을 따름.",
+            },
+            field_scopes={
+                "items[].counted_total": "게시월 귀속 금액 전체의 합",
+                "items[].periods": "게시월별 일회성 순지출",
+                "items[].first_date": "직접 소속 거래의 최초 날짜",
+                "items[].last_date": "직접 소속 거래의 마지막 날짜",
+            },
+        ),
+        labels={
+            **common_labels(),
+            "field.counted_total": "일회성 합계",
+            "field.direct_member_count": "직접 소속 거래 수",
+        },
+        data=ReadOneOffEventsData(items=await list_events(db_session)),
+    )
+
+
 async def read_monthly_flow(
     db_session: AsyncSession, *, start_period: str | None, end_period: str | None
 ) -> ReadMonthlyFlowResponse:
@@ -803,6 +841,7 @@ async def read_contributions(
     limit: int,
     baseline: str = "median_of_recent_closed_months",
     lists: str = "both",
+    one_off: OneOffMode = "exclude",
 ) -> ReadContributionsResponse:
     result = await get_change_contributions(
         db_session,
@@ -812,6 +851,7 @@ async def read_contributions(
         category=category,
         limit=None,
         baseline=baseline,  # type: ignore[arg-type]
+        one_off=one_off,
     )
     items, items_summary = contribution_list_summary(
         result.items, limit=limit, requested=lists in ("both", "monthly")
@@ -856,6 +896,7 @@ async def read_contributions(
         labels={**flow_labels(), **axis_labels()},
         data=ReadContributionsData(
             comparison=result.comparison,
+            one_off=result.one_off,
             adjustability=result.adjustability,
             level=result.level,
             category=result.category,

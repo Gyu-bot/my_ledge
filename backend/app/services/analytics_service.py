@@ -10,6 +10,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.models.one_off_event import OneOffEventMember
 from app.models.purchase_gate_review import PurchaseGateReview
 from app.schemas.analytics import (
     IncomeMonthlyItem,
@@ -459,7 +460,7 @@ async def get_spending_anomalies(
             window,
             keys=[category_expr],
             amount=-_LINES.c.amount,
-            filters=[_LINES.c.type == EXPENSE],
+            filters=[_LINES.c.type == EXPENSE, _LINES.c.one_off_event_id.is_(None)],
         )
 
     all_categories = {category for (_, category) in grouped}
@@ -584,6 +585,16 @@ async def get_spending_anomalies(
     )
 
 
+def _has_direct_one_off_membership(
+    transaction_id: ColumnElement,
+) -> ColumnElement[bool]:
+    return (
+        select(OneOffEventMember.transaction_id)
+        .where(OneOffEventMember.transaction_id == transaction_id)
+        .exists()
+    )
+
+
 async def _purchase_review_totals(
     db_session: AsyncSession,
     *,
@@ -604,6 +615,7 @@ async def _purchase_review_totals(
         func.upper(tx.c.currency) == METRIC_CURRENCY,
         tx.c.date.between(start_date, end_date),
         tx.c.purchase_net_amount < 0,
+        ~_has_direct_one_off_membership(tx.c.id),
         nature.c.loan_account_id.is_(None),
         nature.c.commitment_kind.is_(None),
         nature.c.adjustability == "adjustable",
@@ -1026,6 +1038,12 @@ async def _load_purchase_net_rows(
         )
         .where(func.upper(tx.c.currency) == METRIC_CURRENCY)
         .where(tx.c.purchase_net_amount != 0)
+        .where(
+            ~and_(
+                nature.c.commitment_kind.is_(None),
+                _has_direct_one_off_membership(tx.c.id),
+            )
+        )
     )
     if start_date is not None:
         query = query.where(tx.c.date >= start_date)

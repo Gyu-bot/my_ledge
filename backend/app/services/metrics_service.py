@@ -35,6 +35,7 @@ from app.services.metric_views import (
     FLOW_LINES_VIEW,
     MONTHLY_FLOW_SUMMARY_VIEW,
     MONTHLY_FLOW_VIEW,
+    ONE_OFF_SUMMARY_COLUMNS,
     SPEND_CUBE_DEFINITION,
     SPEND_CUBE_DIMENSIONS,
     SPEND_CUBE_VIEW,
@@ -318,6 +319,9 @@ FLOW_FIELD_SCOPES = {
     "income_total": "수입. 정기/비정기/이자·소액 구분 근거가 아직 없어 income_undetermined 한 줄",
     "total_outflow": "총지급 = 약정 지급 + 수시 지출 + 미정 (환불 차감, 대출 포함)",
     "living_spend": "생활 지출 = total_outflow − committed_loan_total (대출 제외)",
+    "one_off_total": "총지급 중 일회성. 유효 일회성 줄의 게시월 순지출",
+    "ongoing_outflow": "경상 지급 = total_outflow − one_off_total",
+    "ongoing_living_spend": "경상 생활 지출 = living_spend − one_off_total",
     "committed_total": (
         "약정 지급 = 대출 연결 + 할부 연결 + 사람이 등록한 정기 지급 묶음"
         "(recurring_commitments)에 속한 지출 (T056, vw_transaction_nature)"
@@ -385,6 +389,7 @@ _MONTH_INT_FIELDS = (
     "transfer_internal_move_net",
     "transfer_undecided_net",
     "transfer_undecided_activity_total",
+    *ONE_OFF_SUMMARY_COLUMNS,
 )
 
 

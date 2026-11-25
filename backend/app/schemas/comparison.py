@@ -242,6 +242,22 @@ class TwelveMonthWindowBasis(BaseModel):
     ) = None
 
 
+OneOffMode = Literal["exclude", "include"]
+
+
+class OneOffContributionItem(BaseModel):
+    event_id: int
+    name: str
+    amount: int
+
+
+class OneOffContributionReference(BaseModel):
+    mode: OneOffMode
+    target_total: int | None
+    target_events: list[OneOffContributionItem]
+    baseline_values: list[ComparisonValue]
+
+
 class ContributionResponse(BaseModel):
     contract: MetricContract
     comparison: ComparisonBasis
@@ -254,6 +270,7 @@ class ContributionResponse(BaseModel):
         description="이 보기(전체·보호·조정 가능) 월 합계의 기준 기간 중앙값."
     )
     change_total: int | None
+    one_off: OneOffContributionReference
     items: list[ContributionItem] = Field(
         description="월 단위 비교(cadence=monthly). 금액 기여 절댓값 순."
     )

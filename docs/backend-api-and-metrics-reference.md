@@ -2319,3 +2319,16 @@ T056 확인 보완: 이행 약정은 `attributes_confirmed_at`으로 사용자�
 `vw_monthly_flow_summary`의 `month_status` 뒤에 일회성 순지출 합계
 `one_off_total`, `total_outflow - one_off_total`인 `ongoing_outflow`,
 `living_spend - one_off_total`인 `ongoing_living_spend`를 붙인다.
+
+월 흐름 비교의 경상 기준값은 월별 차감으로 얻은 값의 중앙값이다. 일회성
+지출만 있는 달의 경상 값은 0이다. 자료 없는 달의 대상 금액은 null이다.
+변화 기여의 `one_off=exclude`는 대상, 기준 및 12개월 창의 모든 집계에
+같은 제외 조건을 적용한다. `include`로 총지출 비교를 선택할 수 있다.
+`one_off.target_events`와 `baseline_values`는 카테고리·조정 가능성·경과일
+조건을 그대로 사용한 순액 참고값이다.
+
+연간성 월 환산은 첫 월별 집계에 앞서 일회성 줄을 제외한다. 한도 대비는
+전체 실적과 동일한 차이를 사용하며 그중 일회성 순액을 `one_off_amount`로
+제공한다. 사후 검토의 구매 후보와 거래처·카테고리 합계는 구매 순액을
+사용하며 일회성 구매를 제외한다. 카테고리 이상은 환불 게시월에 귀속된
+유효 일회성 줄을 대상과 기준 양쪽에서 제외한다.

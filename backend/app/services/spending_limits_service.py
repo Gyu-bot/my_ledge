@@ -132,7 +132,11 @@ async def _annual_equivalents(
                 ),
             )
         )
-        .where(lines.c.type == EXPENSE, lines.c.period.between(start, end))
+        .where(
+            lines.c.type == EXPENSE,
+            lines.c.period.between(start, end),
+            lines.c.one_off_event_id.is_(None),
+        )
         .group_by(major, minor, lines.c.period, commitment.c.id, commitment.c.label)
         .cte("annual_source_months")
     )
@@ -279,6 +283,7 @@ async def read_spending_reference(
         for revision in revisions:
             latest[(revision.target_kind, revision.target_value)] = revision
     actuals: dict[tuple[str, str], int] = {}
+    one_off_amounts: dict[tuple[str, str], int] = {}
     if has_actual:
         for kind, dimension in (
             ("category", "effective_category_major"),
@@ -294,6 +299,16 @@ async def read_spending_reference(
             )
             for row in cube.rows:
                 actuals[(kind, getattr(row, dimension) or "")] = row.amount
+            lines = FLOW_LINES_VIEW
+            key = lines.c[dimension]
+            amounts = await db.execute(
+                select(key, func.sum(-lines.c.amount))
+                .where(lines.c.period == period, lines.c.one_off_event_id.is_not(None))
+                .group_by(key)
+            )
+            for value, amount in amounts:
+                target = (kind, value or "")
+                one_off_amounts[target] = one_off_amounts.get(target, 0) + int(amount)
     targets = (
         set(actuals)
         | set(latest)
@@ -315,6 +330,9 @@ async def read_spending_reference(
                     else value or "미분류"
                 ),
                 actual_amount=actual,
+                one_off_amount=one_off_amounts.get((kind, value), 0)
+                if has_actual
+                else None,
                 limit_amount=limit_amount,
                 limit_revision_id=revision.id if revision else None,
                 effective_from_period=revision.effective_from_period
@@ -353,7 +371,7 @@ async def read_spending_reference(
         scope="과거 유효 KRW 지출(환불 차감, 대출 포함). 대분류와 조정 가능성은 겹치는 두 보기이며 합산하지 않습니다.",
         rules={
             **flow.basis.rules,
-            "annual_like": "대상 마감월로 끝나는 완전한 12개월 창에서 월 순지출이 양수인 달이 정확히 1~2개인 유효 대분류·소분류 쌍(observed_pattern). null·빈 소분류는 소분류 없음 쌍으로 묶음. 월중 시작 첫 달·자료 없는 달을 포함한 창은 판정하지 않음. T057 기여 목록은 변경하지 않음.",
+            "annual_like": "대상 마감월로 끝나는 완전한 12개월 창에서 일회성을 먼저 제외한 월 순지출이 양수인 달이 정확히 1~2개인 유효 대분류·소분류 쌍(observed_pattern). null·빈 소분류는 소분류 없음 쌍으로 묶음. 월중 시작 첫 달·자료 없는 달을 포함한 창은 판정하지 않음. T057 기여 목록은 변경하지 않음.",
             "registered_yearly_commitment": "사람이 cycle=yearly로 지정한 약정(기존 이행 묶음을 편집한 경우 포함)에 흐름표가 귀속한 지출 줄을 약정 ID·유효 대분류·소분류별로 별도 표시. 주기·분류를 자동 지정하지 않으며 관측된 12개월 순액을 제공(0·음수도 환불 순액 그대로).",
             "annual_deduplication": "전체 쌍의 양수 순지출 월 수로 패턴을 판정한 뒤, 등록 연간 약정에 귀속된 구매·환불 줄을 패턴 금액에서 제외. 남은 지출 줄이 없으면 쌍을 생략. 줄이 남으면 0·음수 순액도 그대로 표시. 약정 항목은 같은 줄을 한 번만 포함.",
             "annual_list": "12개월 순액 내림차순, 대분류·소분류·source·약정 ID 순으로 동률 해소. 전체 목록 반환, 제한·잘림 없음. observed_periods는 각 항목의 차감 후 월 순액이 양수인 달을 오름차순으로 표시.",
@@ -363,7 +381,8 @@ async def read_spending_reference(
         },
         field_scopes={
             "data.total_outflow": "선택 월의 기존 월 흐름표 총지급(진행월은 관측 누적).",
-            "data.comparisons[].actual_amount": "선택 월의 SQL 지출 큐브 순액. 자료 있는 달의 거래 없는 대상은 0원.",
+            "data.comparisons[].actual_amount": "선택 월의 SQL 지출 큐브 순액(일회성 포함). 자료 있는 달의 거래 없는 대상은 0원.",
+            "data.comparisons[].one_off_amount": "같은 대상·월의 실적 중 일회성 순액.",
             "data.annual_items": "window_start_period~window_end_period의 관측 패턴 쌍과 사람이 등록한 연간 약정별 관측 순액. 한도 비교와 별도.",
         },
         assumptions=[

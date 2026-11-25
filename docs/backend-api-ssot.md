@@ -360,6 +360,22 @@ Every route requires `X-API-Key` (reads included). Transfer purposes are written
 - 12-month window: an item whose net spend is positive in only 1–2 of the 12 months ending at the target (all 12 months with data) is `cadence=annual_like` and compared as the 12-month total vs the preceding 12-month total (`twelve_month_items`). The baseline window must be fully covered and on/after the baseline start date, otherwise its baseline is null with `baseline_window_unavailable_reason`.
 - Historical analytics migration (the category/anomaly GETs and dashboard are now removed): `spending-anomalies` uses the contract baseline (field `baseline_avg` now holds the median; anomaly score formula unchanged; `baseline_months` default 6); `category-mom` adds per-item `baseline_amount`/`baseline_change_amount` and `comparison`, and its `previous_*` fields compare the same elapsed days whenever the target month is in progress; `monthly-cashflow.savings_rate`, `fixed-cost-trend.fixed_ratio` and dashboard `monthly_cashflow.savings_rate` are null for in-progress months. Details and what is not yet migrated: [backend-api-and-metrics-reference.md](backend-api-and-metrics-reference.md#comparison-contract-t057).
 
+### Ongoing outflow and comparisons (T067)
+
+- `/metrics/monthly-flow` and `/read/monthly-flow` append `one_off_total`,
+  `ongoing_outflow` and `ongoing_living_spend`. Comparison appends the same
+  measures and takes the median of the monthly values after subtraction.
+- `/read/comparison/contributions` and `/metrics/comparison/contributions`
+  accept `one_off=exclude|include` (default `exclude`). The `one_off` block
+  carries target event net amounts and baseline-month amounts at the same
+  scope, including the same elapsed days for an in-progress month.
+- `/read/one-off-events` shares the event list in the authenticated read
+  envelope and is listed in `/read/index`.
+- `/read/spending-reference` removes one-off lines before annual pattern
+  aggregation. Spending-limit actuals include one-off with the subset in
+  `one_off_amount`. `/read/review-items` removes one-off from both detectors'
+  input and aggregate amounts.
+
 ### Net Worth Reconciliation (T061)
 
 - Identity (plan 2.5): `net_worth_change = residual + loan_balance_decrease + investment_valuation_change + unexplained_difference`, exact on the returned integers (each snapshot total is rounded to the won before differencing). `unexplained_difference` is left as its own item and never filled with estimated items; it is `null` only when an item cannot be computed (`snapshot_dates_mismatched`, `transactions_not_covered`).
