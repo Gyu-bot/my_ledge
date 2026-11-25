@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -16,7 +16,7 @@ from app.models.asset_snapshot import AssetSnapshot
 from app.models.investment import Investment
 from app.models.loan import Loan
 from app.models.transaction import Transaction, TransactionSourceLifecycleStatus
-from app.parsers.snapshots import parse_snapshots
+from app.parsers.snapshots import CashflowBenchmarkRow, parse_snapshots
 from app.parsers.transactions import TransactionRow, parse_transactions
 from app.services.metric_views import METRIC_CURRENCY
 from app.services.transaction_source_lifecycle_service import (
@@ -63,6 +63,7 @@ class CashflowBenchmarkMismatch:
     expected_amount: Decimal
     db_amount: Decimal
     delta: Decimal
+    source_amount: Decimal | None = None
 
 
 @dataclass(slots=True)
@@ -160,6 +161,7 @@ async def verify_open_workbook_parity(
         cashflow_benchmarks=await _verify_cashflow_benchmark_parity(
             db_session,
             parsed_snapshots.cashflow_benchmarks,
+            parsed_transactions,
         ),
     )
 
@@ -306,7 +308,8 @@ async def _verify_loan_parity(
 
 async def _verify_cashflow_benchmark_parity(
     db_session: AsyncSession,
-    expected_rows: list[dict[str, object]],
+    expected_rows: list[CashflowBenchmarkRow],
+    parsed_transactions: list[TransactionRow],
 ) -> CashflowBenchmarkParityReport:
     if not expected_rows:
         return CashflowBenchmarkParityReport(
@@ -316,6 +319,13 @@ async def _verify_cashflow_benchmark_parity(
         )
 
     periods = sorted({str(row["period"]) for row in expected_rows})
+    source_expense_net: defaultdict[tuple[str, str], int] = defaultdict(int)
+    for row in parsed_transactions:
+        if row["type"] == "지출" and row["currency"].upper() == METRIC_CURRENCY:
+            period = f"{row['date']:%Y-%m}"
+            category_major = row["category_major"] or "미분류"
+            source_expense_net[period, category_major] -= row["amount"]
+
     start_date = _period_start(periods[0])
     end_date = _period_end(periods[-1])
     result = await db_session.execute(
@@ -342,14 +352,18 @@ async def _verify_cashflow_benchmark_parity(
 
     mismatches: list[CashflowBenchmarkMismatch] = []
     for row in expected_rows:
-        key = (
-            str(row["period"]),
-            str(row["transaction_type"]),
-            str(row["category_major"]),
-        )
-        expected_amount = Decimal(row["amount"])
+        key = (row["period"], row["transaction_type"], row["category_major"])
+        expected_amount = row["amount"]
+        source_amount = None
+        if key[1] == "지출" and expected_amount > 0:
+            source_net = source_expense_net.get((key[0], key[2]), 0)
+            if source_net < 0:
+                # BankSalad can display a refund surplus as a positive magnitude.
+                # Postings supply the sign; the sheet still supplies the magnitude.
+                expected_amount = -expected_amount
+                source_amount = Decimal(source_net)
         db_amount = actual_by_key.get(key, Decimal("0"))
-        if db_amount != expected_amount:
+        if db_amount != expected_amount or source_amount not in (None, expected_amount):
             mismatches.append(
                 CashflowBenchmarkMismatch(
                     period=key[0],
@@ -358,6 +372,7 @@ async def _verify_cashflow_benchmark_parity(
                     expected_amount=expected_amount,
                     db_amount=db_amount,
                     delta=db_amount - expected_amount,
+                    source_amount=source_amount,
                 )
             )
 

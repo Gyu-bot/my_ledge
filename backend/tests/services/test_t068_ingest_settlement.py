@@ -272,20 +272,24 @@ async def test_legacy_upload_api_preserves_partial_transaction_result(
     ).read_bytes() == stream.getvalue()
 
 
-async def test_parity_uses_source_category_currency_and_posting_refund_sign(db_session):
+def _workbook_with_expense_benchmark(rows, benchmark_amount):
     period = DAY.strftime("%Y-%m")
-    wb = load_workbook(
-        BytesIO(workbook([row("purchase"), row("refund", amount=20, seconds=1)]))
-    )
+    wb = load_workbook(BytesIO(workbook(rows)))
     snap = wb["뱅샐현황"]
     snap.insert_rows(1, 4)
     snap["B1"] = "2.현금흐름현황"
     snap["B2"], snap["E2"] = "항목", period
     snap["B3"] = "월수입 총계"
-    snap["B4"], snap["E4"] = "기타", 80
+    snap["B4"], snap["E4"] = "기타", benchmark_amount
     stream = BytesIO()
     wb.save(stream)
-    data = stream.getvalue()
+    return stream.getvalue()
+
+
+async def test_parity_uses_source_category_currency_and_posting_refund_sign(db_session):
+    data = _workbook_with_expense_benchmark(
+        [row("purchase"), row("refund", amount=20, seconds=1)], 80
+    )
     await import_transactions_from_workbook(db_session, data, "benchmark.xlsx", DAY)
     purchase = await db_session.scalar(
         select(Transaction).where(Transaction.description == "purchase")
@@ -321,4 +325,52 @@ async def test_parity_uses_source_category_currency_and_posting_refund_sign(db_s
         80,
         90,
         10,
+    )
+
+
+@pytest.mark.parametrize(
+    ("benchmark_amount", "db_refund", "expected_mismatch"),
+    [
+        pytest.param(20, 120, None, id="positive-display"),
+        pytest.param(-20, 120, None, id="signed-display"),
+        pytest.param(20, 80, (-20, 20, 40), id="wrong-db-sign"),
+        pytest.param(25, 120, (-25, -20, 5), id="sheet-differs-from-source"),
+        pytest.param(25, 75, (-25, 25, 50), id="db-matches-wrong-sign"),
+        pytest.param(25, 125, (-25, -25, 0), id="db-matches-inconsistent-sheet"),
+    ],
+)
+async def test_parity_checks_refund_surplus_against_workbook_postings(
+    db_session, benchmark_amount, db_refund, expected_mismatch
+):
+    data = _workbook_with_expense_benchmark(
+        [
+            row("purchase"),
+            row("refund", amount=120, seconds=1, currency="krw"),
+            row("other currency", currency="USD"),
+            row("other category", category_major="unrelated"),
+            row("other month", date=DAY.replace(month=9)),
+        ],
+        benchmark_amount,
+    )
+    await import_transactions_from_workbook(db_session, data, "benchmark.xlsx", DAY)
+    refund = await db_session.scalar(
+        select(Transaction).where(Transaction.description == "refund")
+    )
+    refund.amount = db_refund
+    await db_session.commit()
+
+    report = await verify_import_parity(
+        db_session, data, DAY, transaction_sample_size=0
+    )
+
+    assert report.cashflow_benchmarks.compared_rows == 1
+    if expected_mismatch is None:
+        assert not report.has_mismatches
+        return
+
+    assert report.has_mismatches
+    [mismatch] = report.cashflow_benchmarks.mismatches
+    assert mismatch.source_amount == -20
+    assert (mismatch.expected_amount, mismatch.db_amount, mismatch.delta) == (
+        expected_mismatch
     )

@@ -1624,7 +1624,7 @@ Source: `app.services.source_verification`
 - Transaction parity samples raw imported rows and accepts the upload fallback match for one-minute timestamp drift.
 - Snapshot parity compares parsed `3.재무현황`, `5.투자현황`, and `6.대출현황` rows against stored snapshot tables.
 - Cashflow benchmark parity reads `2.현금흐름현황` as validation evidence only. It does not persist those values.
-- Cashflow benchmarks use the posting month, transaction type, raw source category and effective imported KRW rows. Refunds offset charges in their posting month. Both import CLIs require `--snapshot-date` and return nonzero after partial or failed imports. The parity CLI reuses the opened workbook, reports differences in `cashflow_benchmarks.mismatches`, and exits nonzero when parity fails. Its report keeps the recorded import outcome.
+- Cashflow benchmarks use the posting month, transaction type, raw source category and effective imported KRW rows. Refunds offset charges in their posting month. When BankSalad displays a refund surplus as a positive magnitude, original workbook postings supply its expense sign. The benchmark magnitude and signed DB sum are checked independently. For these rows a mismatch includes `source_amount`; `delta` remains the DB sum minus the signed benchmark. Both import CLIs require `--snapshot-date` and return nonzero after partial or failed imports. The parity CLI reuses the opened workbook, reports differences in `cashflow_benchmarks.mismatches`, and exits nonzero when parity fails. Its report keeps the recorded import outcome.
 
 ### Search
 
